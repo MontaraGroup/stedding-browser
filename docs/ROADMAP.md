@@ -13,23 +13,33 @@ below always means: a fresh macOS user account can install the artifact and run 
 without developer tools, without terminal commands, and without reading build docs
 (Windows/Linux equivalents apply from M8/M9 on).
 
-**Where this stands (2026-10-05):** the current release is `v0.2.0-beta.12` on Chromium
-155.0.8059.12: a macOS image (Apple silicon), signed and notarized as every macOS image
-is from beta 10 on, and an unsigned Windows x64 preview. M0–M5 are built and shipped, and
-M6 too except importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8) and
-the VoiceOver pass (`PLAN.md` WIN-3) — the ladder was climbed out of order, chasing
-feedback from real use (`docs/ARC-ROUND2.md`), and each feature's own spec under
-`docs/features/` is the record of what passes. Of M7, the website is done
-(https://stedding.dev, `ysalitrynskyi/stedding.dev`) and so is signing on the Mac;
-automatic updates come next, the Mac first (`BACKLOG.md` S-74). M8 started on
-2026-09-08 with the first Windows build and has its first slice and the keyboard map
-(`docs/features/windows.md` N1–N7): branding, a per-user installer, Arc's keys for
-Windows; little windows, signing, updates and CI are open (`S-56`). M9 has not started,
-and there is no Intel Mac build.
+**Where this stands (2026-10-11):** the current release is `v0.2.0-beta.13` on Chromium
+155.0.8059.12, a Windows x64 preview (unsigned) out first, its macOS image to follow from
+the Mac; until it does, beta 12's macOS image (Apple silicon, signed and notarized, as every
+macOS image is from beta 10 on) is the current one. The ladder was climbed out of order,
+chasing feedback from real use (`docs/ARC-ROUND2.md`), and each feature's own spec under
+`docs/features/` is the record of what passes. In short:
+
+| Milestone | State |
+|---|---|
+| M0 vanilla build | Done |
+| M1 branded build | Done, except the recorded ten-minute idle-network run (`S-50`) |
+| M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins |
+| M3 workspaces (Spaces) | Done, with independent cookie jars per Space (ADR 0019) |
+| M4 command bar | Done (one row, K12, partial); the address row stayed beside it |
+| M5 split view | Partly: Chromium's own split view, with Stedding's verbs on both panes; restoring a split as left (J1) and ⌘W on a split (J3) are open |
+| M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) |
+| M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first (`S-74`) |
+| M8 Windows | A preview with every feature, Arc's keys for Windows and a per-user installer; little windows, signing, updates and CI open (`S-56`) |
+| M9 Linux | Not started; there is no Intel Mac build either |
+| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura, `BACKLOG.md` S-88 to S-101 |
 
 ---
 
 ## M0 — Reproduce a vanilla Chromium build (macOS arm64)
+
+> **Done.** The pin moves by `tooling/sync-chromium` (ADR 0007); the Windows PC
+> builds the same series since 2026-09-08 (M8).
 
 **Goal:** prove we can build stock Chromium from source on macOS arm64, and document it
 so any machine or agent can repeat it without tribal knowledge.
@@ -93,6 +103,10 @@ Acceptance criteria:
 
 ## M2 — Sidebar with vertical tabs (first public pre-alpha)
 
+> **Done**, on Chromium's own vertical tabs (ADR 0010), and well past this scope since:
+> folders (ADR 0013), Arc's pins, the rail, density and text size, and from beta 13 a sidebar
+> that hides completely with the page edge to edge (`docs/features/sidebar.md` Y19).
+
 **Goal:** the Arc-style sidebar replaces the horizontal tab strip. First build we
 publish for strangers to try.
 
@@ -132,6 +146,9 @@ Acceptance criteria:
 
 ## M3 — Workspaces
 
+> **Done** as Spaces (`docs/features/spaces.md`, ADR 0015, ADR 0016), each optionally with
+> cookies of its own (ADR 0019).
+
 **Goal:** separate contexts (work, personal, projects) with their own tab sets.
 
 Scope:
@@ -155,6 +172,11 @@ Acceptance criteria:
 
 ## M4 — Command bar
 
+> **Done** (`docs/features/commandbar.md`; K12, ⌘L's prefilled address, partial). The plan
+> below had the bar replace the address bar; real use kept the address row instead -- the
+> whole address always shown (toolbar T28 to T30) -- and ⌘L opens the bar with the address
+> in it.
+
 **Goal:** a keyboard-first launcher for navigation and browser actions.
 
 Scope:
@@ -163,9 +185,8 @@ Scope:
   tabs and history, navigate to URL, run browser commands (new tab, new workspace,
   toggle sidebar, etc.).
 - Fuzzy matching; ranked results; full keyboard operation.
-- Relationship to the omnibox implemented as specified in `docs/PRODUCT.md` (the
-  command bar replaces the always-visible URL bar); the already-specified decision
-  is recorded in an ADR.
+- Relationship to the omnibox implemented as specified in `docs/PRODUCT.md`. The bar
+  was to replace the always-visible URL bar; the address row stayed (see the note above).
 - Every sidebar and workspace action added so far is reachable from the command bar.
 
 Acceptance criteria:
@@ -178,6 +199,10 @@ Acceptance criteria:
 
 ## M5 — Split view
 
+> **Partly done.** Chromium's own split view, with the sidebar's verbs acting on both panes
+> (`docs/features/splits.md` J4). Open: a split comes back from a restart as two tabs (J1,
+> so the restore criterion below fails), and what ⌘W does on a split is undecided (J3).
+
 **Goal:** two pages side by side in one window.
 
 Scope:
@@ -187,8 +212,8 @@ Scope:
   here; shipping them early would put an unspecified feature through the UX
   completeness gate.
 - Resize divider; swap panes; close one pane back to single view; clear focused-pane
-  indication (keyboard input, shortcuts, and the command bar / compact sidebar URL
-  target the focused pane — there is no always-visible address bar after M4).
+  indication (keyboard input, shortcuts, the address row and the command bar target
+  the focused pane).
 - Split state persists per workspace across restarts.
 
 Acceptance criteria:
@@ -201,6 +226,10 @@ Acceptance criteria:
   fullscreen video.
 
 ## M6 — Settings, import, polish (public beta)
+
+> **Done but for two things:** importing from Chrome, Brave and the new Edge (`PLAN.md`
+> decision 8, Phase 2; Arc, Safari and Firefox import today) and the VoiceOver pass
+> (`PLAN.md` WIN-3). Settings → Stedding reads in sections since beta 13 (settings T13).
 
 **Goal:** everything shipped so far is configurable, discoverable, and complete; a
 Chrome/Arc user can migrate in minutes. First build we call a beta.
@@ -237,6 +266,10 @@ Acceptance criteria:
 
 ## M7 — Signed, notarized, auto-updating; site live
 
+> **Half done.** stedding.dev is live (2026-09-16) and the macOS image is signed and
+> notarized from beta 10 (`S-17`). Automatic updates are next, the Mac first (`S-74`), with
+> the n-1 and rollback gates below.
+
 **Goal:** distribution is production-grade: install with no warnings, update without
 thinking, learn about it at stedding.dev.
 
@@ -268,9 +301,9 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-05):** the preview ships with beta 12 on 155.0.8059.12, and
+**Where this stands (2026-10-11):** the preview ships with beta 13 on 155.0.8059.12, and
 both suites passed with DCHECKs and the dangling-pointer detector on and under
-AddressSanitizer (2026-09-30). A second release on one Chromium number installs as a
+AddressSanitizer (2026-09-30; beta 13's DCHECK run is in its release notes). A second release on one Chromium number installs as a
 repair that needs Stedding closed (`S-72`). The history: the series builds and runs on Windows (round 8,
 patch 0039): the Stedding window with its sidebar, Spaces, folders, the command bar,
 archive and routing, the address row under the window's own caption buttons and
@@ -319,6 +352,42 @@ Acceptance criteria:
 - All shipped features work and pass their acceptance criteria on Linux.
 - The update story for each supported format is documented and tested.
 
+## M10 — Beyond parity
+
+**Goal:** what Arc never had, and what two newer Arc-style browsers showed people want:
+Nook and Aura, read on 2026-10-11 (`docs/COMPETITORS.md`). Their code is not used -- Swift
+on WebKit, under GPL-3.0 and MPL-2.0 -- and their behaviours are rebuilt from written
+descriptions (ADR 0021). M10 runs alongside M8 and M9: each item stands alone, lands behind
+its own spec rows and the quality bar, and its order is `BACKLOG.md`'s. Built-in AI stays
+out (ADR 0020).
+
+Scope, by area (`BACKLOG.md` ids):
+
+- **Privacy:** ad and tracker blocking built in, with a switch per site (`S-88`; its own ADR
+  first: the engine, and filter lists fetched at run time, never built in); tracking
+  parameters stripped from every link opened, not only from a copied one (`S-89`); dark mode
+  for web pages on Chromium's own (`S-100`).
+- **Keyboard:** a web app that binds the same chord gets the first press and Stedding the
+  second (`S-90`); shortcuts the user can change, with a conflict check (`S-91`, the 1.0 item
+  `docs/PRODUCT.md` §12 names).
+- **Tabs:** child tabs under their opener, Back returning to it (`S-92`); Undo after closing
+  tabs (`S-97`); a page open in another window offers "Show here / Go to window" (`S-94`).
+- **Sidebar:** on the right, as a setting (`S-96`); History and Downloads as panels in its
+  column (`S-98`); the mini player for a video you leave (`S-95`); Space colours and icons
+  freely chosen (`S-99`).
+- **Pages:** Peek rebuilt, with little windows, on one primitive: a page that is a full tab
+  but for its place and becomes one without reloading (`S-93`).
+- **Import:** Dia's sidebar and Safari's export file, with Phase 2's Chrome-family importer
+  (`S-101`).
+
+Acceptance criteria:
+
+- Each item meets its feature spec's rows on both supported platforms, with tests that
+  failed before it was built, and the UX completeness definition in `docs/QUALITY.md`.
+- With blocking on, a fresh profile's idle-network list in `docs/PRIVACY.md` gains only the
+  filter-list fetches its ADR names; a site broken by it is fixed by its switch in one click.
+- Nothing in the series derives from Nook's or Aura's files (ADR 0021).
+
 ## 1.0 — Quality gate
 
 **Goal:** nothing new. 1.0 is a claim about quality, not a feature.
@@ -337,7 +406,9 @@ Acceptance criteria:
 ## Out of scope for this ladder
 
 Mobile, built-in AI features, sync services, and paid add-ons are not on the path to
-1.0. Any of them entering the roadmap requires an ADR and a roadmap revision.
+1.0. Any of them entering the roadmap requires an ADR and a roadmap revision. ADR 0020 keeps
+models out for good; the AI features Nook and Aura carry (a sidebar chat, a tab organizer,
+an agent-control server, "Browse for Me") are not taken (ADR 0021).
 
 ## Build order, and why
 
@@ -359,7 +430,7 @@ releases. Listed here so they are visible as future work rather than quietly mis
 
 | Feature | Why deferred | What brings it back |
 |---|---|---|
-| **Boosts** (per-site CSS/JS, Zap) | Extensions already answer it — Stylus, Violentmonkey, uBlock's element picker — and full extension support is a hard requirement we keep regardless. It is also a script host, so it carries security work nothing else here does. | The workflow features ship and meet the quality bar, *and* a threat model exists. The threat model comes first, not alongside. |
+| **Boosts** (per-site CSS/JS, Zap) | Extensions already answer it — Stylus, Violentmonkey, uBlock's element picker — and full extension support is a hard requirement we keep regardless. It is also a script host, so it carries security work nothing else here does. | The workflow features ship and meet the quality bar, *and* a threat model exists. The threat model comes first, not alongside. Aura's editor is the model then: a live preview while typing, a switch per site in the page menu (ADR 0021). |
 | **Easels** (whiteboards) | A drawing application inside a browser, and the single largest item in `PRODUCT.md`. Almost nothing to do with browsing. | Capacity after the features people actually stay in Arc for, or evidence users want it. |
 
 Deferred is not cancelled. Both remain specified in `PRODUCT.md`; see

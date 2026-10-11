@@ -111,6 +111,35 @@ in August 2026. A genuinely novel navigation model, but a niche, closed, paid
 product. Evidence that small teams can ship real browser UX innovation — and of how
 much distribution a solo closed product can't get.
 
+### Nook
+
+Open-source, Arc-style browser for macOS 26 on Apple silicon, in Swift and SwiftUI on
+WebKit (`WKWebView`), GPL-3.0, with its name and icon reserved; an iPhone and iPad version
+is started. Active: about 2,000 stars, 12 releases (v1.2.1 on 2026-10-08), 13 contributors,
+most of the recent work by one person. Chrome extensions run through Apple's WebExtension
+support, so what works is what WebKit supports. What it has that Stedding does not, read on
+2026-10-11: a built-in ad blocker (Brave's adblock-rust) with a "blocked page, continue?"
+screen; tracking parameters stripped from every link opened; child tabs under their opener,
+Back returning to it; a second press of a chord a web app also binds reaching the browser;
+rebindable shortcuts; a video you leave playing moving into the sidebar; Peek and little
+windows as one page that becomes a tab without reloading; "this page is open in another
+window: show here / go to window"; the sidebar on the right; an undo toast; History and
+Downloads in the sidebar; import from Dia and Safari's export file. It also carries AI
+features (a sidebar chat, a tab organizer, an agent-control server) that ADR 0020 keeps out
+of Stedding. The ideas Stedding takes are rebuilt from these descriptions, never from its
+files (ADR 0021; `docs/ROADMAP.md` M10).
+
+### Aura
+
+Open-source Arc-style browser for iPad first (iPhone and visionOS too; the Mac through
+Catalyst), in Swift and SwiftUI on WebKit, MPL-2.0 since 2025-06-06 and archived since then;
+its rewrite has no license. One author, no releases (TestFlight), about 200 stars. Ideas
+worth having: a free colour or gradient per Space and a searchable icon picker, per-site CSS
+("Boosts") written in a side panel with a live preview, dark mode forced on web pages, the
+sidebar on the right. Not to copy: it sends every keystroke to Google's suggestions whatever
+the engine, logs API keys, and blocks every third-party script. Rebuilt from descriptions
+only (ADR 0021).
+
 ## Summary table
 
 | Browser | Engine | Arc-style workflow UI | Open source | License | Chrome extensions | Status (2026-08) |
@@ -125,10 +154,12 @@ much distribution a solo closed product can't get.
 | Floorp | Gecko | Partial | Yes | MPL-2.0 | No (Firefox add-ons) | Active |
 | SigmaOS | WebKit | Partial (tasks) | No | — | Yes (vendor claim) | Active |
 | Horse | Chromium | No (Trails) | No | — | Yes (recent) | Active, paid |
+| Nook | WebKit | Yes | Yes | GPL-3.0 | Partial (WebKit's support) | Active (2026-10), macOS 26 only |
+| Aura | WebKit | Yes (iPad first) | Yes | MPL-2.0 | No | Archived (2025) |
 | **Stedding** | Chromium | Yes (goal) | Yes | BSD-3-Clause | Yes (hard req.) | Beta (2026-10): signed macOS image, unsigned Windows preview |
 
 Competitor claims in this document were fact-checked against vendor sources on
-2026-08-30. Rival products move; treat anything here as needing a re-check before it
+2026-08-30; Nook and Aura were read from their repositories on 2026-10-11. Rival products move; treat anything here as needing a re-check before it
 is quoted, and prefer the vendor's own site over this table.
 
 ### The competitor this table omits: Chromium itself
