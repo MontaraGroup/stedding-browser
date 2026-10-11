@@ -18,21 +18,28 @@ without developer tools, without terminal commands, and without reading build do
 the Mac; until it does, beta 12's macOS image (Apple silicon, signed and notarized, as every
 macOS image is from beta 10 on) is the current one. The ladder was climbed out of order,
 chasing feedback from real use (`docs/ARC-ROUND2.md`), and each feature's own spec under
-`docs/features/` is the record of what passes. In short:
+`docs/features/` is the record of what passes. `PLAN.md` is the finish-or-cut pass over the
+features of M2 to M6 that the 2026-09-26 audit asked for; its items keep their own ids there
+and are not repeated here. In short, with every open `BACKLOG.md` id under the milestone it
+belongs to:
 
-| Milestone | State |
-|---|---|
-| M0 vanilla build | Done |
-| M1 branded build | Done, except the recorded ten-minute idle-network run (`S-50`) |
-| M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins |
-| M3 workspaces (Spaces) | Done, with independent cookie jars per Space (ADR 0019) |
-| M4 command bar | Done (one row, K12, partial); the address row stayed beside it |
-| M5 split view | Partly: Chromium's own split view, with Stedding's verbs on both panes; restoring a split as left (J1) and ⌘W on a split (J3) are open |
-| M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) |
-| M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first (`S-74`) |
-| M8 Windows | A preview with every feature, Arc's keys for Windows and a per-user installer; little windows, signing, updates and CI open (`S-56`) |
-| M9 Linux | Not started; there is no Intel Mac build either |
-| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura, `BACKLOG.md` S-88 to S-101 |
+| Milestone | State | Open in `BACKLOG.md` |
+|---|---|---|
+| M0 vanilla build | Done | -- |
+| M1 branded build | Done, except the recorded ten-minute idle-network run and two calls to Google a fresh profile makes unasked; Safe Browsing does not work without a key | `S-50`, `S-54`, `S-67`, `S-75` |
+| M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins | `S-65` (fixed; the owner's confirmation), `S-107` (folders in the pinned run), `S-111`, `S-112`, `S-114`, `S-115` |
+| M3 workspaces (Spaces) | Done, with independent cookie jars per Space (ADR 0019) | `S-70`, `S-126` |
+| M4 command bar | Done but K12 (⌘L's prefilled address, partial); the address row stayed beside it | `S-104`, `S-108`, `S-109`, `S-116`, `S-127` |
+| M5 split view | Partly: Chromium's own split view, with Stedding's verbs on both panes; a split comes back whole after a restart (J1); ⌘W on a split (J3), a pin joining a split (J5) and ⌘1–9 counting a split once (J2) are open | `S-102`, `S-113` |
+| M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) | `S-48`, `S-51`, `S-57`, `S-69`, `S-77`, `S-79`, `S-103`, `S-110`, `S-117` |
+| M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first | `S-74`, `S-49`, `S-59` |
+| M8 Windows | A preview with every feature, Arc's keys for Windows and a per-user installer; little windows, signing, updates and CI open | `S-56`, `S-55`, `S-71`, `S-72`, `S-81` |
+| M9 Linux | Not started; there is no Intel Mac build either | -- |
+| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura | `S-88` to `S-101`, `S-118` to `S-125` |
+| 1.0 quality gate | Not reached | `S-61` (the rows `docs/PRODUCT.md` marks [1.0] that no milestone names: the Library, the mini player), `S-66`, `S-106`, `S-128`, `S-129` (spec rows short of a test or a look) |
+
+Outside the ladder: `S-47` (a capture probe), `S-58` (the Mac's disk) and `S-105` (beta 13's
+macOS image, a release step).
 
 ---
 
@@ -175,7 +182,8 @@ Acceptance criteria:
 > **Done** (`docs/features/commandbar.md`; K12, ⌘L's prefilled address, partial). The plan
 > below had the bar replace the address bar; real use kept the address row instead -- the
 > whole address always shown (toolbar T28 to T30) -- and ⌘L opens the bar with the address
-> in it.
+> in it. With the address row hidden (a setting, off by default), the row's extension
+> actions, media button and page info are not in the bar yet (toolbar T13, `S-104`).
 
 **Goal:** a keyboard-first launcher for navigation and browser actions.
 
@@ -200,8 +208,11 @@ Acceptance criteria:
 ## M5 — Split view
 
 > **Partly done.** Chromium's own split view, with the sidebar's verbs acting on both panes
-> (`docs/features/splits.md` J4). Open: a split comes back from a restart as two tabs (J1,
-> so the restore criterion below fails), and what ⌘W does on a split is undecided (J3).
+> (`docs/features/splits.md` J4). A split comes back whole after a restart through Chromium's
+> own restore, and a pair the user unsplit stays apart (`RestoreTest.TheSidebarComesBack`,
+> J1). Open (`BACKLOG.md` S-102): what ⌘W does on a split (J3, undecided), whether a Space pin
+> that joins a split leaves the pinned run (J5), ⌘1–9 counting a split once (J2), and the
+> criteria below checked by hand. No ring is drawn around the panes (J6).
 
 **Goal:** two pages side by side in one window.
 
@@ -228,8 +239,10 @@ Acceptance criteria:
 ## M6 — Settings, import, polish (public beta)
 
 > **Done but for two things:** importing from Chrome, Brave and the new Edge (`PLAN.md`
-> decision 8, Phase 2; Arc, Safari and Firefox import today) and the VoiceOver pass
-> (`PLAN.md` WIN-3). Settings → Stedding reads in sections since beta 13 (settings T13).
+> decision 8, Phase 2; Arc, Safari and Firefox import today on the Mac, and Arc is the Mac's
+> alone, `S-81`) and the VoiceOver pass (`PLAN.md` WIN-3). Two planned rows of the Arc import
+> are open too: Arc's splits and archived items, and a 400-tab import inside the budgets
+> (`S-103`). Settings → Stedding reads in sections since beta 13 (settings T13).
 
 **Goal:** everything shipped so far is configurable, discoverable, and complete; a
 Chrome/Arc user can migrate in minutes. First build we call a beta.
@@ -301,10 +314,11 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-11):** the preview ships with beta 13 on 155.0.8059.12, and
-both suites passed with DCHECKs and the dangling-pointer detector on and under
-AddressSanitizer (2026-09-30; beta 13's DCHECK run is in its release notes). A second release on one Chromium number installs as a
-repair that needs Stedding closed (`S-72`). The history: the series builds and runs on Windows (round 8,
+**Where this stands (2026-10-11):** the preview ships with beta 13 on 155.0.8059.12. Both
+suites passed with DCHECKs and the dangling-pointer detector on and under AddressSanitizer
+on 2026-09-30, on the series before patches 0058 and 0059; those two have had no such run
+yet (`S-106`). A second release on one Chromium number installs as a repair that needs
+Stedding closed (`S-72`). The history: the series builds and runs on Windows (round 8,
 patch 0039): the Stedding window with its sidebar, Spaces, folders, the command bar,
 archive and routing, the address row under the window's own caption buttons and
 measured to the Mac's geometry. Since 2026-09-09: branding -- the name, the icon,
@@ -379,6 +393,20 @@ Scope, by area (`BACKLOG.md` ids):
   but for its place and becomes one without reloading (`S-93`).
 - **Import:** Dia's sidebar and Safari's export file, with Phase 2's Chrome-family importer
   (`S-101`).
+- **Smaller things from Nook** (a second read of its code, 2026-10-11): the site's controls
+  in one panel from the address row (`S-118`); clear a site's cookies and reload (`S-119`);
+  folder verbs (`S-120`); a pin's home address edited by hand (`S-121`); mute and picture in
+  picture by key (`S-122`); a resize bar on the sidebar's edge and a double click to reset
+  it (`S-123`); the page flush against the window with the sidebar open (`S-124`); a handful
+  of small conveniences (`S-125`).
+
+The same read found Arc behaviour that `docs/PRODUCT.md` puts at 1.0 with no item until
+then; those sit under their own milestones above, not here: folders in the pinned run
+(`S-107`), inline completion and Site Search in the command bar (`S-108`, `S-109`), loading
+only the selected tab at launch (`S-110`), tabs sleeping on a timer (`S-111`), the tab
+selected after a close (`S-112`), a split made by dragging a row onto the page (`S-113`), and
+routing rules edited in Settings (`S-126`). What was read and left out, and why, is in ADR
+0021.
 
 Acceptance criteria:
 

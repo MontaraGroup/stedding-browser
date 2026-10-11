@@ -37,6 +37,20 @@ web app's own shortcut list from its own documentation).
   updates and the open defects. M10 runs alongside M8 and M9: each item is independent, lands behind its own spec
   row and the quality bar, and none is a condition of 1.0 except shortcut customisation,
   which `docs/PRODUCT.md` §12 already put there.
+- **A second, closer read of Nook's code the same day** added S-118 to S-125 to M10 (the
+  smaller things), detail to S-74 and S-88 to S-101, and items for Arc behaviour that
+  `docs/PRODUCT.md` already put at 1.0 with no item yet (S-107 to S-117, S-126). It also
+  read these and left them out:
+  - YouTube and social-site tweaks (hiding Shorts and sponsored posts, SponsorBlock): a
+    script host per site, the reason Boosts are deferred, and extensions already do it.
+  - The cookie and cache inspector and its "high-risk" score: Chromium's site data pages
+    cover it, and its logic is wrong.
+  - The address field in the sidebar: the address row stays on the page card (toolbar T1
+    to T5).
+  - Daily sidebar backups: cut by the owner on 2026-09-26 (import I17, I19).
+  - Essentials and history of their own per Space: essentials are shared across Spaces
+    (spaces B6, ADRs 0015 and 0019).
+  - Drag previews that change shape, and trackpad haptics: little value for the work.
 
 ## Consequences
 

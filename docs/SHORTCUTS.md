@@ -2,9 +2,10 @@
 
 Every shortcut Stedding adds or changes, on both platforms. The same list is inside
 the browser at **Settings → Stedding → Shortcuts**, generated from the keyboard tables
-the browser itself uses, so its keys are those of the version you run. Two of its
-descriptions are behind this page: it still lists Peek's two keys, though Peek is off,
-and it calls ⌘1–⌘9 the first nine rows, though ⌘9 is the last one (`BACKLOG.md` S-82).
+the browser itself uses, so its keys are those of the version you run. In beta 12, the
+current macOS image, two of its descriptions are behind this page: it still lists Peek's
+two keys, though Peek is off, and it calls ⌘1–⌘9 the first nine rows, though ⌘9 is the
+last one. Beta 13 corrects both (`BACKLOG.md` S-82).
 
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
@@ -20,8 +21,9 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Pin the tab in its Space, or unpin it | ⌘D | Ctrl+D |
 | Clear: close the Space's unpinned tabs | ⇧⌘K | Ctrl+Shift+K |
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
-| In a little window: send the page into a split of your window | ⇧⌘O | — |
-| In a little window: close it | Esc | — |
+| In a little window (macOS): move the page into your window as a tab | ⌘O | — |
+| In a little window (macOS): send the page into a split of your window | ⇧⌘O | — |
+| In a little window (macOS): close it. By a reading of the code the bare key does not reach the window yet (`PLAN.md` CMD-15) | Esc | — |
 
 ## Tabs and the bar
 
@@ -29,7 +31,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 |---|---|---|
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
 | Open the bar in actions mode (⇥ in an empty bar does the same) | ⇧⌘P | Ctrl+Shift+P |
-| Select the address with the URL selected | ⌘L | Ctrl+L |
+| Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
 | Jump to one of the first eight rows you can see, or to the last one with 9 (hold ⌘ / Ctrl a moment to see the numbers) | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
 | Next tab / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+PgDn / Ctrl+PgUp |
 | Next tab down the sidebar / previous tab up the sidebar | ⌥⌘↓ / ⌥⌘↑ | Ctrl+Alt+↓ / Ctrl+Alt+↑ |
@@ -58,6 +60,9 @@ its menu item; only the key moves.
 
 | Chord | Stedding | Chromium had |
 |---|---|---|
+| ⌘T / Ctrl+T | Open the command bar | New Tab |
+| ⌘L / Ctrl+L | Open the command bar with the page's address | Focus the address bar |
+| ⌘W / Ctrl+W on a pinned tab | Put it to sleep | Close Tab |
 | ⌘S / Ctrl+S | Collapse or expand the sidebar | Save Page As… (now ⇧⌘S / Ctrl+Shift+S) |
 | ⌘D / Ctrl+D | Pin the tab in its Space | Bookmark This Tab… (keeps its menu row) |
 | ⇧⌘D / Ctrl+Shift+D | Show or hide the address row | Bookmark All Tabs… (keeps its menu row) |
@@ -70,7 +75,7 @@ its menu item; only the key moves.
 | ⇧⌘K / Ctrl+Shift+K | Clear the Space | unbound |
 
 Independent session is not a shortcut: it is a check item on the Space chip
-menu, a toggle on each Space in Settings → Stedding, and an **Independent
+menu, a toggle on each Space in Settings → Stedding → Spaces, and an **Independent
 Session** row in the command bar (⇧⌘P). Off by default.
 
 ## Notes
@@ -89,4 +94,6 @@ Session** row in the command bar (⇧⌘P). Off by default.
   graphics drivers install; turn that off in the driver if the two collide. A keyboard
   whose AltGr types a character with one of the Ctrl+Alt chords may see the character
   instead inside a text field.
-- Remapping shortcuts yourself is not available yet (planned for 1.0).
+- Remapping shortcuts yourself is not available yet; it is planned for 1.0 (`BACKLOG.md`
+  S-91).
+- Chromium's tab-group chords are removed, with the tab-group rows of the menus.

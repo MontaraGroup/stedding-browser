@@ -87,6 +87,10 @@ The Chromium tree lives **outside** this repository and is never committed here.
 | Chromium source | `~/chromium/src` | `$CHROMIUM_SRC` |
 | depot_tools git cache | `~/chromium/.git-cache` | `$GIT_CACHE_PATH` |
 
+The defaults are the Mac's. On Windows nothing is defaulted: `STEDDING_CHROMIUM_SRC` names
+the checkout's `src`, the bash tooling takes `CHROMIUM_ROOT` as a POSIX path (`/c/...`), and
+there is no git cache (`docs/HANDOFF.md`, "The Windows build").
+
 ### The pinned version
 
 `tooling/chromium-version` is the single source of truth for what upstream version we
@@ -239,7 +243,8 @@ pin, upstream commits mixed in — is refused.
 |---|---|---|
 | `release` | Day-to-day development, and every published image so far | Optimised, no symbols, single binary, no PGO or LTO. **Never quote performance numbers from this config.** |
 | `debug` | Debugging Chromium and our patches | Component build: one target relinks a small library, not the browser. |
-| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet (`tooling/publish-release` packages `release`); which configuration should ship is TBD. |
+| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet: every image so far is `release` on the Mac or `win-release` on Windows. Which configuration should ship is TBD (`PLAN.md` PLT-9, REPO-13). |
+| `vanilla` | The vanilla half of a performance comparison | Identical to `official`, built from the checkout detached at the pin with the branding reverted, so the patch series is the only difference (`docs/perf/README.md`). |
 | `win-release` | The Windows build and its installer | The Mac's `release` on the other platform: non-component, no symbols, no PGO (ADR 0018). |
 | `win-asan` | AddressSanitizer runs of the lifetime tests (PLAN.md TAB-7, TAB-8, TAB-9, SPC-1 to SPC-3, WIN-1, WEB-2) | `is_asan`, line-table symbols so a report names functions. Test targets only; the Mac has no counterpart. |
 | `win-checks` | The dangling-pointer detector with DCHECKs on (the same items, and WIN-2) | Release code with `dcheck_always_on` and BackupRefPtr; needs `--enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr` at run time. Test targets only. |
@@ -249,9 +254,9 @@ The full args, with the reasoning for each, are in `tooling/args/`. The three sa
 and check configurations are throwaway: build the test targets, run the tests, delete
 the output directory (trap 54 has the memory and disk costs of a build on this machine).
 
-`autoninja` selects Chromium's build executor. Which one it resolves to on this
-configuration, and whether `cc_wrapper=ccache` measurably helps on macOS, is recorded
-below once measured.
+`autoninja` selects Chromium's build executor, which at this pin is siso on both platforms
+(`docs/HANDOFF.md`, traps 1 and 54). Whether `cc_wrapper=ccache` measurably helps on macOS
+has not been measured (TBD).
 
 ### Codecs
 
@@ -465,9 +470,9 @@ features that users expect from a real product just to make a purity claim.
   lists, Widevine for DRM playback). Today every component comes from Google, as in
   stock Chromium; which ones to mirror, proxy or remove is decided before 1.0.
 - **Default search, suggestions, spellcheck, translate, DNS/preconnect defaults:**
-  privacy-preserving defaults per `PRIVACY.md`. Not yet true that nothing phones home
-  out of the box: a fresh profile checks Google's account list and registers with
-  Google's push service (`PRIVACY.md`, the recorded run; BACKLOG S-54, S-67).
+  privacy-preserving defaults per `PRIVACY.md`. A fresh profile does not yet keep to
+  what the user asked for: it checks Google's account list and registers with Google's
+  push service unasked (`PRIVACY.md`, the recorded run; BACKLOG S-54, S-67).
 
 Ungoogled-Chromium is prior art we learn from, but our bar is different: it optimizes
 for maximal removal and accepts breakage; we optimize for a polished product with
@@ -553,8 +558,9 @@ macOS distribution for real users requires an Apple Developer ID, **code signing
 notarization** — without them, Gatekeeper blocks the app. Signing landed for the Mac
 with beta 10 (2026-10-01): every macOS image since is signed with the Developer ID,
 notarized and stapled, then put through `tooling/package-dmg` and
-`tooling/publish-release`. Betas 1–9 shipped unsigned, with the Gatekeeper bypass in
-their notes. Windows is not code-signed yet (`BACKLOG.md` S-56).
+`tooling/publish-release`. The macOS images of betas 1 to 8 shipped unsigned, with the
+Gatekeeper bypass in their notes (beta 9 had no macOS image). Windows is not code-signed yet
+(`BACKLOG.md` S-56).
 
 **Signing** runs Chromium's own signer (`chrome/installer/mac/signing`, built into
 `out/<config>/Stedding Packaging` by `chrome/installer/mac:mac`) through
@@ -611,18 +617,24 @@ magnitude more disk and hours of compute. Even a bare source checkout exceeds th
 default runner disk. Pretending otherwise produces a CI that is always red or always
 skipped.
 
-Plan: **self-hosted or cloud macOS builders** (own Apple-silicon hardware, or a Mac
-cloud provider) for real builds — provider and topology are an open decision. It was
-written here as "ADR before M1"; M1 is long past and the ADR does not exist, so it is
-tracked as `BACKLOG.md` `S-49` rather than left as a deadline that has already gone by.
-It costs money, which makes it the owner's call. Until it lands, nothing automated
-verifies the product, and hosted CI earns its keep with what it *can* do:
+Plan: **self-hosted or cloud builders** for real builds (own hardware or a cloud provider;
+macOS for the Mac's image, and Windows since the port) — provider and topology are an open
+decision. It was written here as "ADR before M1"; M1 is long past and the ADR does not
+exist, so it is tracked as `BACKLOG.md` `S-49` rather than left as a deadline that has
+already gone by. It costs money, which makes it the owner's call. Until it lands, every
+build, test run and release is made by hand on the two machines (the Windows PC and the
+Mac), nothing automated verifies the product, and hosted CI earns its keep with what it
+*can* do (`.github/workflows/`):
 
-- Lint and test the tooling scripts (shellcheck, dry runs against fixtures).
-- Docs checks: markdown lint, internal link validation, ADR format.
-- Patch hygiene: series is contiguous, numbered, each patch has a header.
-- Patch-apply dry runs against the pinned source — requires a cached partial checkout
-  or runs on the self-hosted builder; mechanism TBD with the builder ADR.
+- `checks`: `tooling/check-shell` (shellcheck at the pinned version, bash syntax),
+  `tooling/check-repo` (links, ADR format, the patch series' numbering and headers, no
+  machine paths, the traps, the tests specs cite, line endings), and `tooling/check-pin
+  --self-test`.
+- `series`: the series applies to the pin, by `tooling/apply-patches --check` against the
+  pinned tree fetched at depth 1 and cached under the pin, with no build
+  (`docs/HANDOFF.md`, "What needs which machine").
+- `upstream`: a scheduled `tooling/check-pin` that opens a tracking issue while the pin is
+  behind stable and closes it when it is current again.
 
 ## Rejected alternatives
 

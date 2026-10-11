@@ -3,8 +3,9 @@
 Stedding ships as beta pre-releases on the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). Each
 release carries a file for each platform it was built for, and a SHA-256 checksum for
-each. When the newest release has no file for your platform, take it from the one before:
-beta 11 is the macOS image only.
+each. Not every release has both: take the newest one with a file for your platform.
+Beta 13 is the Windows installer until its macOS image is added; until then the current
+macOS image is beta 12's.
 
 The macOS image is signed with the project's Developer ID and notarized by Apple from
 beta 10 on, so it opens like any other app. The Windows installer is **not code-signed
@@ -46,7 +47,8 @@ it was. If another browser is using the old folder at that moment, Stedding asks
 first: **Quit**, close the other browser and open Stedding again to bring the profile
 across, or **Start a New Profile** and leave the old one where it is. Keep the old
 folder until you have checked that your tabs and Spaces came across. **Export Space…**
-in Settings → Stedding writes a Space to a file you can keep or move to another machine.
+in Settings → Stedding → Spaces writes a Space to a file you can keep or move to another
+machine.
 
 Saved passwords are encrypted with a key kept in the macOS keychain under the name
 "Stedding Safe Storage". Builds up to beta 8 used the item "Chromium Safe Storage"; a

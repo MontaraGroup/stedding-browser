@@ -131,8 +131,8 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 
 - The pin and the series: `tooling/dev status`. The Windows PC is the development machine
   since 2026-09-29; the Mac holds the Mac-only checks (`PLAN.md` lists which).
-- The work order: `PLAN.md`. Phase 0 is the proof that what exists works; its status block
-  says what each item still waits on.
+- The work order: `PLAN.md`. Phase 0 is the proof that what exists works; "Where Phase 0
+  stands", at the end of its Phase 0, says what each open item still waits on.
 - What is released: `docs/release-notes/` has one file per release; `gh release list` is
   the truth. The site (`stedding.dev`) reads the same list.
 - What is open: `BACKLOG.md`, by id.
@@ -145,7 +145,8 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 | `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | The user-facing pages the README links: installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
 | `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch |
 | `docs/features/` | One spec per feature; numbered behaviours, each with its test id. The definition of done |
-| `BACKLOG.md` | The one list of open work, by id. Other docs cite ids |
+| `PLAN.md` | The order of work until its Phase 1 is done: the 2026-09-26 audit's items by phase, the owner's decisions, dated status blocks |
+| `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids |
 | `docs/HANDOFF.md` | Where things live, the fast path, dev parameters, the traps already paid for (with an index) |
 | `docs/PROJECT-LOG.md` | What was built, round by round, with the evidence. History, not instructions |
 | `docs/VISION.md` | Why this exists, values, explicit non-goals |

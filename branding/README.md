@@ -47,7 +47,7 @@ That is why the explanations live in this README rather than in the file itself.
 
 ## Generated, not authored
 
-Everything except `BRANDING` and `win/` is produced by:
+`logo/`, `public/`, `mac/` and the top level of `product_logo/` are produced by:
 
 ```bash
 python3 tooling/brand/generate.py
@@ -55,12 +55,15 @@ python3 tooling/brand/generate.py
 
 from the single geometry definition in `tooling/brand/mark.py`; `win/` by
 `python3 tooling/brand/win_icons.py` from that run's 256 px logo. Do not hand-edit
-the SVGs, PNGs, `app.icns` or `Assets.car` — change the mark and re-run. Hand-
-edited derivatives drift apart from each other; generated ones cannot.
+those SVGs, PNGs, `app.icns` or `Assets.car` — change the mark and re-run. Hand-
+edited derivatives drift apart from each other; generated ones cannot. The script does
+not write `BRANDING`, `product_logo/scaled_100/` and `scaled_200/`,
+`vector_icons/chrome_product.icon` or `webui_images/chrome_logo_dark.svg`: those are
+kept by hand and follow the mark when it changes.
 
-`public/` is a drop-in web brand folder (favicons, social card, logo variants)
-and `public/_preview.html` shows every asset, with the small sizes at actual
-size. `public/README.md` has the palette and the reasoning.
+`public/` is a drop-in web brand folder: favicons, the social card, and the icon and
+logo variants in SVG and PNG. The palette is at the top of `tooling/brand/mark.py`, and
+`docs/BRAND.md` gives the reasoning.
 
 ## The macOS icon needs three files, not one
 
@@ -71,17 +74,13 @@ compiled asset catalog:
 |---|---|
 | `mac/app.icns` | older macOS, some tooling |
 | `mac/Assets.car` | modern macOS — compiled from `mac/Assets.xcassets` with `actool` |
-| `mac/AppIcon.icon` | macOS 26's vector format, authored in Icon Composer |
+| `mac/AppIcon.icon` | macOS 26's layered format, normally authored in Icon Composer; `generate.py` writes ours |
 
 ## Status
 
-`BRANDING`, `app.icns` and `Assets.car` are real and applied.
-
-**`AppIcon.icon` is still Chromium's.** It is macOS 26's new vector icon format,
-which is authored in Icon Composer rather than generated from an SVG, so ours
-does not exist yet. `tooling/apply-branding` reports it as absent on every run
-rather than substituting a placeholder — a placeholder icon is exactly the kind
-of thing that survives to a release.
+Every asset in the table above is ours and applied, `mac/AppIcon.icon` included:
+`generate.py` writes it as a JSON manifest over two SVG layers, the arch and the hearth,
+and leaves the material, shadow and glass to macOS.
 
 ## Reverting
 

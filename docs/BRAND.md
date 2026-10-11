@@ -51,32 +51,22 @@ it is wrong on the website.
 
 ## Taglines
 
-Chosen with the website (stedding.dev, 2026-09-16): **"Your haven on the web."**, with
-**"A quiet place to get things done."** as the second. The candidates as they were
-weighed:
-
-1. **"Your haven on the web."** — The name's meaning in five words. Warm,
-   direct, works even for readers who have never met the name.
-2. **"The web, on your terms."** — Leads with control rather than shelter.
-   Broader, but less distinctive; many privacy products could say it.
-3. **"Where the web can't track you back."** — Concrete and slightly pointed;
-   states the privacy promise as a fact about the place.
-4. **"A quiet place to get things done."** — Leads with the workflow product
-   (calm UI, workspaces, focus) rather than privacy. Honest about what daily
-   use actually feels like.
-5. **"Out of reach. In control."** — The haven metaphor and the control value
-   in four words. Strongest as a short mark next to the logo; too clipped to
-   stand entirely alone.
-
-The website leads with **"Your haven on the web"** and keeps **"A quiet place to get
-things done"** for where the workflow features are the subject.
+Chosen with the website (stedding.dev, 2026-09-16): **"Your haven on the web."** leads,
+and **"A quiet place to get things done."** is kept for where the workflow features are
+the subject. The first is the name's meaning in five words; the second is honest about
+what daily use feels like.
 
 ## Visual direction
 
-The logo and palette exist: the mark is generated from one geometry file by
-`tooling/brand/mark.py` into `branding/`, and the palette — sand by day, a blue-to-plum
-gradient by night — is patch 0007's. Neither has an ADR yet. The notes below are the
-direction they came from.
+The mark and the palette exist. The mark is generated from one geometry file,
+`tooling/brand/mark.py`, into `branding/` (an arch over a hearth); its colours are slate
+`#2F4858`, cream `#F2E9DE`, amber `#E8B04B` and ink `#1C2B33`, deliberately not blue,
+since every Chromium browser is blue. The browser's own chrome is sand by day and a
+blue-to-plum gradient by night, each Space's colour tinting the sidebar (patch 0007). How
+the assets are made and applied is `branding/README.md`. Neither the mark nor the palette
+has an ADR.
+
+The rules any new visual work keeps:
 
 - **Mood: quiet and settled.** The name means a settled, kept place. Calm,
   grounded, unhurried. The opposite of neon gradients, glassy chrome, and
@@ -85,13 +75,11 @@ direction they came from.
   stone. Abstract geometry derived from these beats literal illustration —
   and material from anyone else's work is ruled out entirely (see trademark
   hygiene).
-- **Palette.** Deep greens, stone grays, warm off-whites; sparing accent
-  color. Must hold up in both light and dark UI themes, since the browser
-  chrome is where the brand lives daily.
+- **Both themes.** Everything holds up in light and dark, since the browser chrome
+  is where the brand lives daily.
 - **Typography.** A clear, unremarkable-in-the-best-way sans-serif for UI and
   docs. Nothing decorative in the product; any display face is for the website
-  only. Specific faces: TBD, but license terms must permit open-source
-  redistribution.
+  only, and its licence must permit open-source redistribution.
 - **Iconography.** Simple, geometric, legible at 16 px. The app icon must read
   at dock size next to Chrome, Arc, and Firefox without shouting.
 
@@ -119,8 +107,8 @@ anyone else's brand or work.
   the names of the copyright holder or contributors to endorse or promote
   derived products without written permission. Anyone may fork the code — that
   is the point of the license — but a fork may not market itself as endorsed
-  by, or pass itself off as, Stedding. Guidance for fork naming will live in
-  `CONTRIBUTING.md`.
+  by, or pass itself off as, Stedding. Written guidance for naming a fork does not
+  exist yet.
 - **Registration status: TBD.** No trademark registration has been filed as of
   2026-08-30. Whether and where to file is an open question; the decision gets
   an ADR when it is made.

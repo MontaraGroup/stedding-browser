@@ -18,13 +18,13 @@ Everything under `docs/`, grouped by who it is for.
 |---|---|
 | [VISION.md](VISION.md) | Why this exists, values, explicit non-goals |
 | [ROADMAP.md](ROADMAP.md) | Milestones from zero to 1.0, with acceptance criteria and where each stands |
-| [PRODUCT.md](PRODUCT.md) | The full feature specification: sidebar, Spaces, split view, command bar, settings, import |
+| [PRODUCT.md](PRODUCT.md) | The full feature specification, Arc parity and what goes beyond it, each feature with its home |
 | [COMPETITORS.md](COMPETITORS.md) | Arc, Dia, Zen, Helium, Vivaldi, Brave, Thorium — and the gap Stedding fills |
 | [EVIDENCE.md](EVIDENCE.md) | What Arc switchers actually ask for, with counts |
 | [NAMING.md](NAMING.md) | How the name was chosen |
 | [BRAND.md](BRAND.md) | Name meaning, voice, taglines, trademark hygiene |
 | [QUALITY.md](QUALITY.md) | The "ready-to-use" bar: performance budgets, release checklist |
-| [UI-SPEC.md](UI-SPEC.md) | The measured match to Arc's interface, item by item |
+| [UI-SPEC.md](UI-SPEC.md) | The measured match to Arc's interface: the targets and the values Stedding ships |
 | [ARC-ROUND2.md](ARC-ROUND2.md) | The ledger of what real use turned up on each build, round by round, and what changed |
 | [../BACKLOG.md](../BACKLOG.md) | The one list of open work |
 
@@ -38,14 +38,15 @@ Everything under `docs/`, grouped by who it is for.
 | [AGENT-LOOP.md](AGENT-LOOP.md) | The working procedure: ask once, order of evidence, supervise long jobs, one pass finds everything, then the loop for one change |
 | [PROJECT-LOG.md](PROJECT-LOG.md) | What was built, round by round, with the evidence: history, not instructions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Fork strategy, the build, patch management, branding, updater, signing, measured numbers |
-| [features/](features/) | One specification per feature; each behaviour has a test. The definition of done |
+| [features/](features/) | One specification per feature: each behaviour, its test and whether it is built, partial or planned. The definition of done |
 | [decisions/](decisions/) | Architecture decision records |
-| [IMPLEMENTATION.md](IMPLEMENTATION.md) | How each feature is built and what upstream already provides |
 | [ROUND6-PLAN.md](ROUND6-PLAN.md) | Round 6, the Zen-mods review: the plan and how each part landed |
-| [perf/](perf/) | The performance harness and the first vanilla comparison |
+| [perf/](perf/) | How to measure the performance budgets, and the one comparison so far (2026-09-02, Chromium 153; nothing current) |
 | [../tooling/README.md](../tooling/README.md) | The build, capture and release scripts |
 | [../branding/README.md](../branding/README.md) | The mark, the palette, and how the assets are generated |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) · [../SECURITY.md](../SECURITY.md) | How to contribute; how to report a vulnerability |
 
-`images/` holds the captures the docs show; `tooling/check-geometry` re-measures the
-ones the interface spec depends on.
+`images/` holds the captures the docs show, each from the build it was taken on: the
+`ui-*.png` measurements are beta 7's, the Windows captures beta 5's, and the README's
+`readme/` captures mostly beta 8's. `tooling/check-geometry` re-measures the ones the
+interface spec depends on.

@@ -5,10 +5,10 @@ Status: **withdrawn**. The throwaway Space was cut in patch 0055 (owner decision
 A Space whose partition is in-memory. Close wipes it. Not a persistent intern.
 No model (ADR 0020).
 
-Nothing in the browser opens a throwaway Space yet. The command-bar row that did
-was withdrawn on 2026-09-18: a Space it made was written to the registry and came
-back after a restart with a fresh, empty jar (T2 is not built), and its tabs would
-have been session-restored into the shared jar. The row returns with T2.
+Nothing in the browser opens a throwaway Space. The command-bar row that did was
+withdrawn on 2026-09-18: a Space it made was written to the registry and came back
+after a restart with a fresh, empty jar, and its tabs would have been
+session-restored into the shared jar. The rest went in patch 0055.
 
 ## Behaviours
 

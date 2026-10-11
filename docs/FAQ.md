@@ -48,6 +48,16 @@ Not yet. New versions appear on the Releases page. The in-app updater is designe
 (it checks GitHub Releases, sends no identifier) and comes next, now that the Mac image is
 signed (`S-74`).
 
+**What is planned after that?**
+The rest of the Windows port (little windows, signing, updates), then Linux. Alongside
+them, things Arc never had: ad and tracker blocking built in, tracking parameters
+stripped from every link you open, web apps keeping their own shortcuts, shortcuts you
+can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player,
+Peek rebuilt, and import from Dia. Arc's own features still to come include folders
+inside the pinned list and Collapse Pinned Tabs. The order is [BACKLOG.md](../BACKLOG.md)
+(`S-88` to `S-101` and `S-107` to `S-126`); the milestone for what is past Arc is M10 in
+[ROADMAP.md](ROADMAP.md).
+
 **Does it run on Intel Macs? On Linux?**
 Not yet. Today: macOS on Apple silicon and Windows x64 (a preview). Linux is the next
 platform after the Windows port is complete ([ROADMAP.md](ROADMAP.md)).
@@ -58,10 +68,11 @@ Yes. The welcome flow offers it, and Settings → Default browser does it at any
 ## Using it
 
 **How do I move from Arc?**
-Start Stedding: the welcome flow's **Move everything from Arc** brings over Spaces,
-the essentials row, pinned tabs, folders, tabs, history and passwords, from Arc's
+On a Mac, start Stedding: the welcome flow's **Move everything from Arc** brings over
+Spaces, the essentials row, pinned tabs, folders, tabs, history and passwords, from Arc's
 files on your disk. Passwords need one macOS keychain prompt. You can run it again
-later from Settings → Stedding → Import from Arc…; nothing is duplicated.
+later from Settings → Stedding → Spaces → Import from Arc; nothing is duplicated. On
+Windows, Stedding does not read Arc's files yet (`S-81`).
 
 **Can the sidebar get out of the way completely?**
 Yes. Settings → Stedding → Sidebar → **When the sidebar closes: Hide it completely**.
@@ -73,8 +84,13 @@ sets the tab rows' height, the text size and the sidebar's width.
 
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Bookmarks you import stay bookmarks, in the bookmark
-manager; the command bar's "Turn Bookmarks into Pinned Tabs" makes them pinned tabs
-and folders in your first Space whenever you want.
+manager, and Chromium's bookmark bar still opens with ⇧⌘B (Ctrl+Shift+B). The command
+bar's "Turn Bookmarks into Pinned Tabs" makes them pinned tabs and folders in your first
+Space whenever you want; after that the bookmark bar no longer shows.
+
+**Where is Peek?**
+Switched off. It opened a link from a pinned tab over the window, but its page came out
+blank, so it is off until it is rebuilt together with little windows (`S-93`).
 
 **What happens to tabs I do not close?**
 Unpinned tabs nobody has looked at for 12 hours (a setting) move to the Archived view
@@ -83,8 +99,8 @@ click. Pinned tabs never archive; ⌘W puts a pinned tab to sleep instead of clo
 
 **Is there sync?**
 No service, by design: there is no account anywhere in the product. Instead a Space
-can be exported as a file (Settings → Stedding → Export Space…) and imported on
-another machine.
+can be exported as a file (Settings → Stedding → Spaces → Export Space…) and imported on
+another machine with **Import sidebar…** next to it.
 
 **Do my extensions work?**
 Yes. It is Chromium; extensions install from the Chrome Web Store as in Chrome.
@@ -100,11 +116,11 @@ never reaches Stedding. Quit Arc once you have moved over, or split from a tab's
 right-click menu (**New Split View with Current Tab**).
 
 **How do I get the old Chromium tab menu back?**
-Settings → Stedding has a switch for Chromium's full context menus. Stedding's short
+Settings → Stedding → Pages and menus: turn off **Short context menus**. Stedding's short
 menus are the default.
 
 **Can I be signed into the same site twice?**
-Yes. Right-click a Space chip (or open Settings → Stedding) and turn on
+Yes. Right-click a Space chip (or open Settings → Stedding → Spaces) and turn on
 **Independent session**. That Space keeps its own cookies, cache and site data;
 a second isolated Space can use a different account on the same site. Essentials
 (the top pinned row, visible in every Space) stay on the shared jar, as do
@@ -120,8 +136,9 @@ Independent Session**; deleting the Space clears it too.
 **Does it send anything to Google, or to you?**
 No telemetry, no crash reports, no experiment downloads, no identifiers. Google's
 sign-in and services are removed from the interface. Google is still contacted for what
-Chromium itself does: component updates, Safe Browsing lists and network time, and two
-calls being removed (`S-54`, `S-67`). The Chrome Web Store is contacted only when you
+Chromium itself does: component updates, Safe Browsing list requests and network time,
+and two calls being removed (`S-54`, `S-67`). The Safe Browsing requests carry no API
+key and are refused, so Safe Browsing does not protect you in these builds (`S-75`). The Chrome Web Store is contacted only when you
 install or update an extension. [PRIVACY.md](PRIVACY.md) lists the connections and
 records what a fresh profile actually contacted; anything else is a bug.
 

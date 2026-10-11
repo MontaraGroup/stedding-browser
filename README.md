@@ -10,12 +10,12 @@
 <p align="center">
   <b>An open-source, Arc-style web browser built on Chromium.</b><br>
   A sidebar with vertical tabs, Spaces, folders and pinned tabs, a command bar,
-  and one-click import from Arc.<br>
+  and one-click import from Arc on the Mac.<br>
   macOS (Apple silicon) and Windows. No telemetry. BSD-3-Clause.
 </p>
 
 <p align="center">
-  <a href="https://github.com/ysalitrynskyi/stedding-browser/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ysalitrynskyi/stedding-browser?include_prereleases&label=download&color=2F4858"></a>
+  <a href="https://github.com/ysalitrynskyi/stedding-browser/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/ysalitrynskyi/stedding-browser?include_prereleases&label=download&color=2F4858"></a>
   <a href="LICENSE"><img alt="License: BSD-3-Clause" src="https://img.shields.io/badge/license-BSD--3--Clause-E8B04B"></a>
   <img alt="Platforms: macOS and Windows" src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-1C2B33">
   <img alt="Chromium 155" src="https://img.shields.io/badge/Chromium-155%20stable-2F4858">
@@ -49,15 +49,15 @@ rebuilds that way of working on ground you control.
 - **Built on Chromium stable** as a small, documented patch series, so it keeps up with
   Chromium's security releases and runs the extensions you already use.
 - **Private by default.** No telemetry, no experiments, no Google sign-in or AI
-  surfaces, tracker-blocking defaults switched on, the search engine of your choice
+  surfaces, third-party cookies blocked, the search engine of your choice
   (DuckDuckGo until you choose).
 - **Made for technical users** who want a modern, keyboard-driven browser without
   trusting anyone's servers.
 
 Every screenshot in this README is a capture taken by the project's own tooling: most
 on beta 8, the rail and the welcome flow's keys on beta 11 and 12, Windows on beta 5.
-Every claim below is backed by a test or a measured capture (see
-[docs/features/](docs/features/)).
+Each feature's specification, with what is built, partial or still planned and the test
+behind each behaviour, is in [docs/features/](docs/features/).
 
 ## Download
 
@@ -65,7 +65,7 @@ The current release is **0.2.0 beta 13**, built on Chromium 155.0.8059.12 (stabl
 preview, with the macOS image of beta 13 to follow from the Mac; until then the current macOS
 image is beta 12's, signed and notarized. Get them from
 [stedding.dev](https://stedding.dev/#download) or the
-[Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases/latest):
+[Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases):
 
 | Platform | File | Notes |
 |---|---|---|
@@ -84,10 +84,10 @@ Not available yet: Intel Macs and Linux. See [Status and roadmap](#status-and-ro
 **Spaces.** Each Space is a set of tabs with its own colour, icon and pinned sites.
 Switch with the chips at the bottom of the sidebar, with ⌃1–⌃9, or, on a Mac, with a
 two-finger swipe across the sidebar. A Space
-you leave puts its tabs to sleep; sites can be routed so they always open in the right
-Space. Turn on **Independent session** on a Space (chip menu, or Settings → Stedding)
-and that Space keeps its own cookies: you can be signed into the same site with a
-different account in another Space. Essentials stay shared. Off by default. **Clear
+can put its tabs to sleep once you leave it (a setting, off by default); sites can be
+routed so they always open in the right Space. Turn on **Independent session** on a
+Space (chip menu, or Settings → Stedding → Spaces) and that Space keeps its own cookies:
+you can be signed into the same site with a different account in another Space. Essentials stay shared. Off by default. **Clear
 Independent Session** on the chip menu signs that Space out of everything at once.
 
 ![Four Spaces in the switcher at the bottom of the sidebar, each with its own colour](docs/images/readme/spaces.png)
@@ -130,7 +130,7 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 
 **Sidebar and tabs**
 - Vertical tabs at Arc's proportions: an essentials row above every Space, the Space's
-  pinned sites, a Clear line, then the tabs. Three density presets and a text size.
+  pinned sites, a Clear line, then the tabs. Three tab row heights and a text size.
 - Rename a tab in place, select several and act on them together, hold ⌘ to number
   the rows and jump with ⌘1–⌘8 (⌘9 is the last row).
 - Sleeping tabs: ⌘W puts a pinned tab to sleep instead of losing it; ⌃⇥ walks the
@@ -218,8 +218,8 @@ tabs, browsing history and saved passwords. Each is a checkbox, all checked by d
 - Nothing leaves your machine: the importer reads Arc's own files on disk.
 - Passwords need one macOS keychain prompt, because that is where Arc keeps its key.
 - Imported tabs are created asleep, so a big sidebar costs nothing until you open one.
-- You can run it again later from **Settings → Stedding → Import from Arc…** or from
-  the command bar; a second run never duplicates what is already there.
+- You can run it again later from **Settings → Stedding → Spaces → Import from Arc** or
+  from the command bar; a second run never duplicates what is already there.
 - On Windows, Stedding does not read Arc's files yet (`S-81`).
 
 ![The welcome flow's import step: everything from Arc in one click](docs/images/readme/welcome-import.png)
@@ -237,9 +237,12 @@ Privacy here is a set of defaults, not a mode. Out of the box:
 - **No Google account surfaces.** No sign-in, no Google services in the omnibox, no AI
   sections in Settings. You pick the search engine at first start (DuckDuckGo until
   you do); search suggestions are off until you turn them on.
-- **Tracker-blocking defaults on:** third-party cookies blocked, HTTPS-first, Global
+- **Protective defaults on:** third-party cookies blocked, HTTPS-first, Global
   Privacy Control sent, quiet permission prompts, Chromium's ad-measurement APIs off.
+  Ad and tracker blocking built in is planned (`S-88`); until then an extension does it.
 - **Private windows** in their own colours, with the same defaults.
+- **Safe Browsing does not protect you in these builds:** its list updates need a Google
+  API key the builds do not carry, so they are refused (`S-75`).
 
 [docs/PRIVACY.md](docs/PRIVACY.md) lists the network connections the browser makes and
 records what a fresh profile actually contacted; two Google calls on that record are
@@ -257,12 +260,12 @@ and what comes next:
 | | State |
 |---|---|
 | macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 12's, signed and notarized as every macOS image is from beta 10 on; beta 13's follows from the Mac |
-| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites also run clean with DCHECKs (beta 10) and under AddressSanitizer (beta 9's tree) |
+| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and under AddressSanitizer (2026-09-30) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
-| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia (`S-88` to `S-101`) |
+| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (`S-88` to `S-101`, `S-118` to `S-125`) |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
 Known limits in the current builds: no automatic updates yet, and the Windows installer is
@@ -291,7 +294,8 @@ series and its checksum is published beside it, so you can check what you downlo
 the Chrome Web Store as usual.
 
 **Does it talk to Google?** For what Chromium itself does: component updates, Safe
-Browsing lists and network time, and two calls still being removed (`S-54`, `S-67`).
+Browsing list requests (refused without a key, so Safe Browsing does not work) and
+network time, and two calls still being removed (`S-54`, `S-67`).
 There is no telemetry, no sign-in and no experiment downloads; the Web Store is
 contacted only when you install or update an extension. The connections are listed in
 [docs/PRIVACY.md](docs/PRIVACY.md).

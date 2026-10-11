@@ -1,5 +1,14 @@
 # Round 6 — Zen mods and beyond: the plan
 
+> **History.** The record of round 6 (2026-09-04 and 05), kept because the patches of that
+> round (0016–0036), most feature specs and ADRs 0016 and 0017 cite its parts by id (R6-nn,
+> D1–D11). It is not a list of work: what is still open from it is a row in its feature's
+> spec under `docs/features/`, and the order of work is `PLAN.md` and `BACKLOG.md`. Some
+> things it planned were cut on 2026-09-26 (`PLAN.md`, decision 4: the sidebar backups of
+> R6-29 and the little window's idle close of R6-30 among them), the Space sleep timer's
+> default of 15 minutes became Never (decision 3), and Peek is off until it is rebuilt
+> (decision 2).
+
 Date: 2026-09-04. Status: **complete** (2026-09-05): every wave landed as patches 0016–0036; the landing note under each part says what changed on the way. Backlog row: `S-44` (done).
 
 This is the plan for round 6 of Stedding: the round that mines the 77 community mods

@@ -2,11 +2,10 @@
 
 Thanks for your interest. The project ships **betas** for macOS (Apple silicon), signed
 and notarized, and an unsigned **Windows preview**, built from a patch series on
-Chromium stable (see [README.md](README.md) and [docs/ROADMAP.md](docs/ROADMAP.md)): M0
-through M6 are built; of M7, the website and Mac signing are done and automatic updates
-are next (`BACKLOG.md` S-74); M8 (Windows) lacks little windows, signing and updates
-(`S-56`); Linux has not started. `tooling/dev status` prints the live counts. That shapes what kinds of
-contributions are useful right now.
+Chromium stable (see [README.md](README.md)). Where each milestone stands is the table
+at the top of [docs/ROADMAP.md](docs/ROADMAP.md), the open work is
+[BACKLOG.md](BACKLOG.md), and `tooling/dev status` prints the live counts. That shapes
+what kinds of contributions are useful right now.
 
 ## What helps now
 
@@ -21,15 +20,17 @@ contributions are useful right now.
 - **Documentation PRs.** Fixes and improvements to anything in `docs/`, this file, or
   the README: factual errors, unclear wording, broken links, missing considerations.
   Small focused PRs are easiest to review.
-- **Design input.** The feature spec (`docs/PRODUCT.md`) and privacy defaults
-  (`docs/PRIVACY.md`) are living documents until code freezes them into behavior.
+- **Design input.** The feature spec (`docs/PRODUCT.md`), the ideas past Arc parity
+  (`docs/ROADMAP.md` M10) and the privacy defaults (`docs/PRIVACY.md`) are living
+  documents until code freezes them into behavior.
 
 - **Build tooling.** `tooling/` runs on macOS arm64 and, through `tooling/win/`, on
   Windows x64. Fixes to the scripts, and reports of what breaks on a machine unlike
   the reference one, are useful now. Run `tooling/check-repo` and `tooling/check-shell`
-  before opening a PR; CI runs those two, `tooling/check-pin --self-test`, and
-  `tooling/apply-patches --check` when `patches/` changes. Note that macOS ships bash
-  3.2, so the scripts must work there.
+  before opening a PR. CI (`.github/workflows/`) runs those two and
+  `tooling/check-pin --self-test` on every change, `tooling/apply-patches --check` when
+  `patches/` or the pin changes and weekly, and `tooling/check-pin` daily against
+  Chromium stable. Note that macOS ships bash 3.2, so the scripts must work there.
 
 ## Browser code
 
@@ -56,7 +57,9 @@ carries the dev parameters and the traps already paid for.
 - **Do not copy code from other browsers into this repository.** Studying how another
   project solved something is encouraged; transcribing its implementation is not. The
   licences differ in ways that matter: this project is BSD-3-Clause (ADR 0002), while
-  Zen Browser is MPL-2.0 and Vivaldi's UI is proprietary. MPL-2.0 is file-level
+  Zen Browser and Aura are MPL-2.0, Nook is GPL-3.0 and Vivaldi's UI is proprietary.
+  The ideas taken from Nook and Aura are rebuilt from written descriptions, without
+  opening their files (ADR 0021). MPL-2.0 is file-level
   copyleft — a file containing MPL code stays MPL and its source must be distributed —
   so pasting it here would either breach the licence or force those files out of the
   BSD core we committed to. Chromium itself is the exception and the reason: it is

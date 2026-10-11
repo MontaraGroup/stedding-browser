@@ -1,8 +1,8 @@
 # Vision
 
 Stedding Browser is a fully open-source, Chromium-based desktop browser with an
-Arc-style interface: a sidebar with vertical tabs, workspaces, split view, and a
-command bar. It is built for technical users who want privacy, control, and a
+Arc-style interface: a sidebar with vertical tabs, Spaces (workspaces), split view,
+and a command bar. It is built for technical users who want privacy, control, and a
 modern, productive UI — without betting their daily workflow on a company's
 pivot, acquisition, or monetization plan.
 
@@ -31,6 +31,9 @@ Look at the alternatives and there is a gap:
   conventional Chrome.
 - Helium (de-Googled) and Thorium (performance-focused) are minimal Chromium
   forks that keep Chrome's UI; neither rethinks the interface.
+- Nook and Aura, newer open-source Arc-style browsers, are built on WebKit for
+  Apple's platforms under copyleft licences, so they carry no Chrome extensions
+  and no Windows build; Aura is archived.
 
 A fuller comparison lives in `docs/COMPETITORS.md`. The short version: **no
 fully open, permissively licensed Chromium browser carries the Arc workflow
@@ -45,7 +48,7 @@ never gave anyone.
 
 A minimal patch-set fork of Chromium stable (the Brave/Helium model, not a hard
 fork), with the UI work kept as high in the stack as possible so tracking
-upstream stays cheap. Full Chrome extension compatibility is a hard
+upstream stays as cheap as it can be. Full Chrome extension compatibility is a hard
 requirement. macOS first, then Windows, then Linux.
 
 The product bar is fixed: every milestone ends in something installable, and
@@ -56,10 +59,10 @@ not ship. Details in `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, and
 ## Values
 
 **User control.** The browser answers to the person using it. Defaults are
-opinionated, but everything meaningful is configurable, and nothing phones home
-to ask permission. Your profile, your data, your machine.
+opinionated, and everything meaningful is configurable: nothing has to ask a server
+for permission. Your profile, your data, your machine.
 
-**Privacy by default.** No telemetry unless you turn it on. Privacy protections
+**Privacy by default.** No telemetry by default, and none in the builds to turn on. Privacy protections
 are product features with the same quality bar as everything else, not
 checkbox settings buried three menus deep. Concrete commitments are in
 `docs/PRIVACY.md`.
@@ -87,7 +90,7 @@ foundation nobody can take away.
 
 It is not, at least initially, aimed at users who want a browser that manages
 itself. Stedding is opinionated and rewards investment. The defaults will be
-good, but the payoff is in the workspaces, the command bar, and the keyboard.
+good, but the payoff is in the Spaces, the command bar, and the keyboard.
 
 ## Non-goals
 
@@ -100,16 +103,16 @@ presence on it is.
 - **No ads or sponsored placements, ever.** No sponsored tiles, no paid default
   shortcuts, no affiliate-injected results, no "partner" content. The new tab
   page belongs to the user.
-- **No AI gimmicks bolted on.** Any AI-assisted feature must be opt-in,
-  clearly labeled, and off by default. Nothing sends page content or browsing
-  data to a model without an explicit action by the user. Dia exists for people
-  who want an AI browser; Stedding is not that. ADR 0020: no bundled model, no
-  command-bar chat, no intern that holds a Space's cookies.
+- **No AI gimmicks bolted on.** Stedding ships no bundled model: no command-bar
+  chat, no agent that holds a Space's cookies (ADR 0020). Any later feature that
+  sends page content or browsing data to a model needs an ADR of its own, and is
+  opt-in, clearly labelled and off by default. Dia exists for people who want an
+  AI browser; Stedding is not that.
 - **No mobile, initially.** Desktop (macOS, Windows, Linux) is the whole scope
   until 1.0 is shipped and stable. A mobile browser is a different product with
   different constraints, and doing it badly would violate the quality bar.
 - **Not a Chrome re-skin.** Stedding is an opinionated workflow browser. The
-  point is the sidebar, workspaces, split view, and command bar — a different
+  point is the sidebar, Spaces, split view, and command bar — a different
   way of working. If a change merely recolors Chrome, it is not worth a patch.
 
 ## What success looks like

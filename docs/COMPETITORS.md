@@ -123,8 +123,12 @@ screen; tracking parameters stripped from every link opened; child tabs under th
 Back returning to it; a second press of a chord a web app also binds reaching the browser;
 rebindable shortcuts; a video you leave playing moving into the sidebar; Peek and little
 windows as one page that becomes a tab without reloading; "this page is open in another
-window: show here / go to window"; the sidebar on the right; an undo toast; History and
-Downloads in the sidebar; import from Dia and Safari's export file. It also carries AI
+window: show here / go to window"; the sidebar on the right; closed tabs reopened from a
+stack kept across launches; History and Downloads in the sidebar; import from Dia and
+Safari's export file. A second read of its code the same day added smaller things: inline
+completion and Tab-to-search chips in its command bar, folders inside the pinned list, a
+launch that loads only the last tab, tabs that sleep on a timer, one panel of site
+controls, and folder and pin verbs. It also carries AI
 features (a sidebar chat, a tab organizer, an agent-control server) that ADR 0020 keeps out
 of Stedding. The ideas Stedding takes are rebuilt from these descriptions, never from its
 files (ADR 0021; `docs/ROADMAP.md` M10).

@@ -8,6 +8,10 @@ These gates apply per release. The roadmap (`docs/ROADMAP.md`) says when each ga
 starts applying; from that point it applies to every subsequent release. 1.0 requires
 all of them green on all supported platforms.
 
+Several gates below have no tooling or record yet, and each says so. Until it has
+both, such a gate is a target, not a check, and no release may be described as
+passing it.
+
 ## Performance budgets (relative to vanilla Chromium)
 
 Measured with `tooling/measure/harness.py all --sites local` against a vanilla build at
@@ -18,12 +22,12 @@ Stedding is Chromium plus patches, so performance is measured as **overhead rela
 vanilla Chromium at the same pinned version, same build configuration, same hardware**.
 Absolute numbers depend on hardware and are not promised; the overhead budgets are.
 
-Baselines land in two steps. At **M0** the *vanilla* Chromium numbers are measured on
-the reference configuration and committed (machine model, OS version, Chromium version,
-method, and raw numbers) — that is the "compared to what?". At **M1** Stedding is
-measured against them at the same pin, and the overhead figures those budgets are
-actually written against become real. Until each step happens its values are **TBD**. Re-measured whenever the Chromium base version changes and
-on each new platform (M8, M9).
+The budgets are re-measured whenever the Chromium base version changes and on each new
+platform (M8, M9). The one measurement so far is from 2026-09-02, on the Mac: the series
+of 8 patches as it was then, on 153.0.8010.12, in the `official` configuration, against
+vanilla Chromium at the same pin (`docs/perf/README.md`). The pin and the series have
+moved since and nothing has been re-measured, so no current build has a number. The
+harness takes a macOS app bundle; Windows has no measurement yet (`docs/ROADMAP.md` M8).
 
 | Metric | Method | Budget vs. vanilla |
 |---|---|---|
@@ -85,10 +89,13 @@ budget is changed by ADR with the reasoning on record.
   crash rate — we do not fabricate one. The gate is local and reproducible: a scripted
   8-hour soak (tab churn across workspaces, splits, command bar use, restarts) completes
   with zero browser-process crashes, and any UI-process crash reported by a user with
-  reproduction steps is a release blocker until fixed or shown to be upstream.
+  reproduction steps is a release blocker until fixed or shown to be upstream. No
+  soak script exists yet.
 - **No data loss on crash:** kill all browser processes (`SIGKILL`) during active use;
-  on relaunch, session restore recovers all workspaces, tabs, splits, and sidebar
-  state as of a few seconds before the kill. Tested before every release.
+  on relaunch, session restore recovers all Spaces, tabs, splits, and sidebar
+  state as of a few seconds before the kill. To be tested before every release; there
+  is no script or record of it yet. Restarts and restores are covered by browser tests
+  with `PRE_` steps and by real use (`docs/features/spaces.md` B9).
 - **No data loss on upgrade:** covered under update safety below.
 - Chromium's own recovery surfaces ("Restore pages?") must work, not be patched into
   a broken state.
@@ -106,21 +113,23 @@ them is not shipped, regardless of merge state.
    discoverable in settings search and the command bar.
 3. **Edge cases handled:** 0 items, 1 item, hundreds of items; extreme window sizes;
    fullscreen; multiple windows and displays; RTL text where user content is shown.
-4. **Empty states** designed — a new workspace, an empty sidebar, no command bar
+4. **Empty states** designed — a new Space, an empty sidebar, no command bar
    matches — with wording per `docs/BRAND.md`, never a blank panel.
 5. **Interruptions survive:** the feature behaves sanely across restart, crash
    recovery, and update.
-6. **Documented:** covered in the feature spec (`docs/PRODUCT.md`) and release notes.
+6. **Documented:** covered in the feature's spec (`docs/features/`), the user pages it
+   changes (README, SHORTCUTS, FAQ) and the release notes.
 
 The verification is a written checklist pass per feature per release, recorded with
-the release.
+the release. No release has stored one yet; each feature spec's rows and their tests
+are the record so far.
 
 ## Accessibility
 
-- **VoiceOver:** every Stedding surface (sidebar, workspaces, command bar, split
+- **VoiceOver:** every Stedding surface (sidebar, Spaces, command bar, split
   controls, settings) is navigable and operable with VoiceOver: elements have correct
   roles and labels, focus is announced, no unreachable controls. Verified by a scripted
-  VoiceOver walkthrough per release.
+  VoiceOver walkthrough per release. Not yet done for any release (`PLAN.md` WIN-3).
 - **Full keyboard navigation:** every action available by mouse is available by
   keyboard; focus is always visible; no focus traps. Verified by completing the UX
   walkthrough with the mouse disconnected.
@@ -134,7 +143,7 @@ the release.
 Applies from M7 (first auto-updating release) onward.
 
 - **n-1 upgrade tested:** before publishing version N, a machine running N-1 with a
-  populated profile (workspaces, splits, pinned tabs, extensions, passwords) receives
+  populated profile (Spaces, splits, pinned tabs, extensions, passwords) receives
   the update through the real update channel, applies it, and relaunches with all
   state intact. This test is part of the release checklist, not optional.
 - **Skip-version upgrade:** the updater handles a user who missed releases (oldest
@@ -166,17 +175,20 @@ Applies from M7 (first auto-updating release) onward.
 - **Network conduct:** each release re-runs the M1-style network audit — every request
   from a fresh profile at first run and idle matches the documented list in
   `docs/PRIVACY.md`. An unexplained endpoint is a release blocker.
-- **Signed releases only** (from M7): every published artifact is signed (and
-  notarized on macOS); checksums published with the release.
+- **Signed releases only** (from M7; on Windows from M8): every published artifact is
+  signed (and notarized on macOS); checksums published with the release. The macOS image
+  is signed and notarized from beta 10; the Windows installer is not signed yet
+  (`BACKLOG.md` S-56).
 - Vulnerability reports handled per `SECURITY.md`.
 
 ## Release checklist
 
-- Codec licence terms recorded per `decisions/0008-proprietary-codecs.md` (a superseding ADR) before any public 1.0 release.
-
 Every public release, from M7 on, ships only after each item is checked off and the
 completed checklist is stored with the release records. Pre-M7 releases use the
-applicable subset.
+applicable subset. So far each beta's release notes record what was checked ("How it
+was checked"); no complete checklist has been stored with a release yet. Before any
+public 1.0 release, the codec licence terms are recorded per
+`decisions/0008-proprietary-codecs.md` (in a superseding ADR).
 
 1. Chromium base is current stable, or the divergence is stated in release notes.
 2. Full patch series applies cleanly; build is reproducible from the documented steps.

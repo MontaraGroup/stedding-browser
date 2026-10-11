@@ -1,6 +1,6 @@
 # Feature: Independent Space sessions
 
-Status: **S1–S9, S11–S13, S17, S19–S26 built** (with the open findings in PLAN.md; S24 and S25, Delete browsing data and the garbage collection reaching every Space's jar, are out from beta 9, on the Mac from beta 10); **S10 partial; S16 partial, model only**; **S14, S15, S18 withdrawn** (ADR 0019). Patches: 0046 (S1–S12), 0047 (S13–S17), the 2026-09-18 audit (S18–S19).
+Status: **S1–S9, S11–S13, S17, S19–S26 built** (with the open findings in PLAN.md); **S10 partial; S16 partial, model only**; **S14, S15, S18 withdrawn** (ADR 0019). Patches: 0046 (S1–S12), 0047 (S13–S17), 0049 (the 2026-09-18 audit, S19), 0057 (S20–S26, `PLAN.md` SPC-8 to SPC-13).
 Owner docs: `docs/decisions/0019-space-sessions-are-storage-partitions.md`,
 `docs/PRODUCT.md` §2, `docs/features/spaces.md`, `docs/features/windows.md` G5.
 
@@ -19,7 +19,7 @@ Chromium already shards cookies, cache, localStorage, IndexedDB and service
 workers by `StoragePartition`. An isolated Space's tabs are created in a
 non-default partition named by that Space's `profile_id`. A Space with an empty
 `profile_id` uses the profile's default partition, which is what every Space
-does today.
+does until its isolation is turned on (S2).
 
 Isolation is a property of the Space at tab creation. `window.open` inherits
 the opener's partition. Essentials are in every Space (spaces B6) and stay on

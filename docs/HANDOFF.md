@@ -10,9 +10,10 @@ The long form of each step is `docs/AGENT-LOOP.md`; the numbers behind it are fr
 of 2026-09-29 to 30.
 
 1. **Orient, five minutes.** `tooling/dev status`; the top of `PLAN.md`; `BACKLOG.md`.
-2. **Ask the operator once** for the things you would find out hours in: may you drive the
-   screen and keyboard, may you push and release when done, what may you delete, is the
-   machine yours overnight, is there a setting only they may flip.
+2. **Ask the operator once** for the things you would find out hours in; the list is
+   `docs/AGENT-LOOP.md`, "Ask once, up front" (the screen and keyboard, push and release,
+   what to delete, the machine overnight, a setting only they may flip, their own Stedding
+   closed for the installer test).
 3. **Use the product** before any long job: launch it on a fresh profile, click through the
    first launch, light and dark, the gestures the specs name (`tooling\win\drive.ps1` on
    Windows; `tooling/drive` on the Mac). Half an hour, and it finds what the suites do not.
@@ -40,23 +41,25 @@ Sixty-odd traps follow. Read the one for the topic in front of you, not the list
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70 |
-| The working loop and the series | 9, 13, 14, 17, 22, 28, 50, 51 |
-| Driving and capturing the window | 3, 10, 11, 12, 15, 18, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65 |
-| What a test can and cannot prove | 2, 31, 46, 48, 55, 58, 60, 66, 68, 69 |
+| The working loop and the series | 5, 9, 13, 14, 17, 22, 28, 50, 51 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71 |
 | Release and signing | 44, 47, 49, 62 |
-| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 35, 39, 41, 43, 60 |
+| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60 |
 
 ## Where things live
 
 - This repo: docs, tooling,
   the patch series in `patches/`, branding. Public; never commit secrets or
   machine paths.
-- The Chromium checkout: `/Users/Shared/chromium/src`, pinned to
-  `tooling/chromium-version`, on branch `stedding-work`. The patch series in
-  `patches/` is generated FROM that branch by `tooling/update-patches` — the
-  branch is the source of truth while working; the patches are the durable
-  artifact.
+- The Chromium checkout: on the Mac `/Users/Shared/chromium/src` (recorded in
+  `.stedding-local`); on the PC wherever `STEDDING_CHROMIUM_SRC` points ("The Windows
+  build"). Each is pinned to `tooling/chromium-version`, on branch `stedding-work`. The
+  patch series in `patches/` is generated FROM that branch by `tooling/update-patches` —
+  the branch is the source of truth while working; the patches are the durable
+  artifact. A series exported on one machine is applied on the other with
+  `tooling/apply-patches`, and built there before the release that carries it (trap 44).
 - Build output on the Mac: `out/release` (proprietary codecs on). `out/official` is
   built only for a performance baseline (`tooling/dev build official chrome`) and is
   not there now (never quote numbers from `release`; `docs/QUALITY.md`). On the PC:
@@ -75,9 +78,12 @@ The procedure is `docs/AGENT-LOOP.md`; the command is `tooling/dev`. Short form:
 
 ```bash
 # 1. spec the behaviour in docs/features/<feature>.md, write the failing test
-# 2. edit code in /Users/Shared/chromium/src (on stedding-work) -- never while a build runs
-tooling/dev test spaces               # builds unit_tests, runs the feature's filter
+# 2. edit code in the checkout (on stedding-work) -- never while a build runs
+tooling/dev test spaces               # the Mac: builds unit_tests, runs the feature's filter
+#   Windows: tooling\win\build-until-done.ps1 -Targets unit_tests,stedding_browser_tests,
+#   then tooling/dev test spaces --no-build
 tooling/dev capture --features 'SteddingArcStyleWindow:extra_spaces/2/pin_tabs/1'
+#   (the Mac; on Windows tooling\win\capture.ps1, or drive.ps1 for real use)
 # look at the capture. measure pixels, don't eyeball.
 # 3. commit in the checkout with Why:/Removable when: footers -- a fix to an existing
 #    feature is a fixup into that feature's commit (git commit --fixup=<sha>, then
@@ -92,7 +98,8 @@ tooling/dev status                    # the numbers for any doc you touch
 `tooling/verify-build --app .../Stedding.app` checks rendering, codecs (H.264
 decodes real frames), and navigation.
 
-The capture step has two tools. `tooling/capture-state --out <prefix> --features
+On the Mac the capture step has two tools (Windows has its own, "The Windows build",
+step 5). `tooling/capture-state --out <prefix> --features
 'SteddingArcStyleWindow:...' [switches] [URLs]` launches a fresh profile in the state
 the params describe, photographs every window the process owns by window id (a
 dialog is `<prefix>-2.png`), quits through the AppleEvent and reports an abort: no
@@ -309,7 +316,7 @@ private window has.
     `GIT_EDITOR=true git rebase --continue`, and only then `git stash pop` the
     branding files. Check `git status` shows no non-branding changes at the end.
 
-23. **Small things that cost a build each:** the shell here is zsh, which does not
+23. **Small things that cost a build each:** the Mac's shell is zsh, which does not
     word-split an unquoted `$var` (pipe file lists through `xargs`); `tooling/dev`
     and `tooling/check-repo` are relative to the repo root, so a subshell that `cd`s
     into the checkout must call them by absolute path; a bar action gated on an
@@ -358,8 +365,8 @@ private window has.
     under lldb is never key for the harness.** A `drive-window.py` run against a
     browser started by `lldb --batch` could not activate it; every synthetic key
     went to the frontmost app, which was the operator's chat (2026-09-05). The
-    input-free path covers almost everything: `tooling/capture-ui` (a window
-    capture by id, no focus change) with feature params for the state
+    input-free path covers almost everything: `tooling/capture-state` (a window
+    capture by id, no focus change; `tooling/capture-ui` forwards to it) with feature params for the state
     (`folder_tabs/N` does exist, whatever trap 25 says; `pin_tabs/N`,
     `extra_spaces/N`, `space_pin_tabs/N`, `drift_tabs/N`; the collapsed rail is
     a profile preference, `vertical_tabs.collapsed_state`, seeded into a fresh
@@ -607,9 +614,10 @@ private window has.
     signature is the cause: the linker gives each Mach-O an ad-hoc signature, the
     bundle has no sealed resources, and Gatekeeper reports that on a quarantined
     app as damage (`codesign --verify --deep --strict`: "code has no resources but
-    signature indicates they must be present"). Until `S-17`, the install step is
+    signature indicates they must be present"). Until `S-17` the install step was
     `xattr -dr com.apple.quarantine` on the one app, after the checksum
-    (`docs/INSTALL.md`). Before a release is announced, run `syspolicy_check
+    (`docs/INSTALL.md`); every macOS image from beta 10 on is signed and notarized, and
+    needs none. Before a release is announced, run `syspolicy_check
     distribution` on the app that goes into the image: anything short of a pass
     means the notes carry the unsigned paragraph, and the paragraph is one that was
     tried on a downloaded copy.
@@ -821,8 +829,9 @@ private window has.
     onto a Space chip landed, Alt+digit and Ctrl+Alt+arrows switch Spaces, the clean-link and
     Markdown keys write the clipboard, the page screenshot key writes a PNG and an image on
     the clipboard, a video's full-screen button works and Esc leaves it. The wording and the
-    light-mode text are fixed (patches 0057 and 0042); the other three are
-    in `BACKLOG.md` (S-68 to S-70). Rule: use the build before the long
+    light-mode text are fixed (patches 0057 and 0042); the other three went to
+    `BACKLOG.md`: S-68 (fixed in patch 0057), S-69 (its gutter half fixed in 0059) and
+    S-70. Rule: use the build before the long
     runs, with `tooling\win\drive.ps1` (`docs/AGENT-LOOP.md`, "Order of evidence").
 
 59. **A disconnected remote-desktop session fails the tests that need an active window.** At
@@ -1031,21 +1040,15 @@ path (`/c/...`). Then:
 
 ## Open items
 
-`PLAN.md` sets the order until Phase 1 is done. `BACKLOG.md` keeps its ids.
-The owner answered section 2 on 2026-09-26 (the decisions are at the top of
-`PLAN.md`): horizontal tabs stay and must not crash, Peek starts off, the
-Space sleep timer starts at Never, the listed cuts are approved, ⌘9 is the
-last row, collapsing the active tab's folder keeps that tab, deleting the
-active Space switches to a neighbour, Chrome/Brave/Edge import is documented
-honestly now and built in Phase 2 (a first attempt landed early in patch 0055 and
-was withdrawn on 2026-09-28: it read the source browser's live databases and its
-keychain item regardless of the choices made), little windows get no Space commands.
-Beta 13 (pin 155.0.8059.12, 2026-10-11) is the current Windows installer: patch 0059,
-the operator's pass on beta 12 (the hidden sidebar, pins, the resize edge, the settings
-sections), built, used and released from the PC. Its macOS image is the Mac's to add after
-the Mac's own pass on 0059, which it has not built; until then beta 12's DMG (2026-10-02,
-signed and notarized) is the current macOS image. Beta 11 was the Mac's alone. `S-56` (the Windows port), `S-58` (disk) and `S-74` (automatic
-updates, next) stay.
+`PLAN.md` sets the order until Phase 1 is done: its top says how to read it, the owner's
+decisions of 2026-09-26 head it, and "Where Phase 0 stands" lists what each open Phase 0
+item waits on. Everything else open is `BACKLOG.md`, in priority order. This file keeps no
+list of its own.
+
+Beta 13 (2026-10-11) is the current Windows installer: patch 0059, built, used and released
+from the PC. Its macOS image is the Mac's to add after the Mac's own pass on 0059, which it
+has not built (`S-105`); until then beta 12's DMG (2026-10-02, signed and notarized) is the
+current macOS image.
 
 ## Release channel
 
@@ -1067,17 +1070,11 @@ image joins the same release from the Windows PC: `tooling\win\build-until-done.
 the installed build (docs/QUALITY.md, release checklist 13), the checksum pasted under
 *Windows* in the notes, commit, push, `tooling/publish-release` from Git for Windows -- whichever
 platform publishes first creates the release, the other uploads into it and the
-notes are refreshed (ADR 0018). Beta 5's Windows preview went first, on
-2026-09-09, and beta 6 followed from Windows on 2026-09-10 with round 9; the Mac
-added the DMG to beta 6 the same day (beta 5 stays Windows-only) -- after a
-re-sync of the checkout, a sweep of every Stedding filter and the upstream suites
-of trap 31, and the captures the README shows -- and `publish-release` uploaded
-into the existing release and refreshed the notes with the checksum. Beta 9 (2026-09-30) went out from Windows alone; beta 10 went out from Windows the same day
-and the Mac added its signed, notarized DMG on 2026-10-01. Beta 12's installer was built,
-tested and published on the PC from the Mac over SSH, with the browser suite in a
-temporary task in the operator's session (traps 67, 68). A Windows release on the same
-Chromium number as the installed one installs as a repair and needs Stedding closed
-(trap 62). Beta 13 went out from Windows first (2026-10-11), the Mac to add its DMG.
+notes are refreshed (ADR 0018). Which platform went first for each beta is in
+`docs/PROJECT-LOG.md` and the notes. A Windows
+release on the same Chromium number as the installed one installs as a repair and needs
+Stedding closed (trap 62). The PC can be driven from the Mac over SSH, with the browser
+suite in a temporary task in the operator's session (traps 67, 68), as beta 12 was.
 After `publish-release`, nothing is needed on the site: its scheduled rebuild
 (every six hours) reads the release list, pre-releases included. To see the new
 version at once, `gh workflow run rebuild.yml -R ysalitrynskyi/stedding.dev`

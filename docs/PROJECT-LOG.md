@@ -39,7 +39,10 @@ with the real pointer and keyboard, and fixed what that use found before calling
   DIP past the window at fractional scales, mixed selections, two Mac paths); all fixed.
 - **Tests**: unit 822 of 822; browser 170 of 171, the one failure a focus race at typing into a
   page's field (`SleepInUseTest`), which passed alone three times out of three. No DCHECK or sanitizer build of
-  0059; the Mac has not built it.
+  0059 (`S-106`); the Mac has not built it (`S-105`).
+- **Beta 13** (2026-10-11): the Windows installer of this series, run as the user as a repair
+  over the installed beta 12 before it was cut (`docs/release-notes/v0.2.0-beta.13.md`); the
+  macOS image is the Mac's to add after its own pass.
 
 ## 2026-10-02 -- round 11 seen live, and beta 11
 
@@ -315,6 +318,10 @@ met (cold +2.3%, warm −2.0%, memory +0.0% over vanilla).
 
 ## The hand-over note of 2026-09-28 (as it stood)
 
+*Since: the sanitizer runs were done on the PC on 2026-09-30 and the Mac-only migration and
+keychain checks on 2026-10-01 (above); releases resumed with beta 9; and real input is used
+with the operator's yes through a guarded driver (`docs/HANDOFF.md`, trap 27), where this
+note says never to inject input while someone is at the machine.*
 
 Until Phase 1 of `PLAN.md` is done, `PLAN.md` sets the order of work; after it,
 `BACKLOG.md` does. `v0.2.0-beta.4` is out (unsigned, 2026-09-05): rounds

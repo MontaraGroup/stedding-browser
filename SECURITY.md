@@ -39,7 +39,7 @@ Anything in one of those builds is in scope:
 - The contents of this repository, including documentation that would lead a user into
   an unsafe configuration.
 
-Two things about the current builds that are not vulnerabilities, because they are
+Three things about the current builds that are not vulnerabilities, because they are
 documented properties of a beta:
 
 - **The Windows installer is not code-signed** (`BACKLOG.md` S-56). SmartScreen asks
@@ -49,6 +49,9 @@ documented properties of a beta:
   beta stays on the Chromium version it was cut from until it is replaced by hand. The
   pin is watched daily (`.github/workflows/upstream.yml`, `tooling/check-pin`) and the
   rebase timetable is in `docs/QUALITY.md`.
+- **Safe Browsing does not protect.** The builds carry no Google API key, so the list
+  updates are refused and no site gets a warning page (`docs/PRIVACY.md`, `BACKLOG.md`
+  S-75).
 
 Vulnerabilities in upstream Chromium should be reported to the
 [Chromium security team](https://www.chromium.org/Home/chromium-security/reporting-security-bugs/),
@@ -57,13 +60,15 @@ ours.
 
 ## Supported versions
 
-Only the most recent pre-release is supported. Older betas are superseded on the day a
-new one is published and receive no fixes; there is no long-term support line, and
+Only the newest pre-release for each platform is supported: some releases carry one
+platform's image only, so the newest macOS image and the newest Windows installer can
+come from different betas. Older betas are superseded on the day a newer one for their
+platform is published and receive no fixes; there is no long-term support line, and
 there will not be one before 1.0.
 
 | Version | Supported |
 |---|---|
-| Latest pre-release on [Releases](https://github.com/ysalitrynskyi/stedding-browser/releases) | Yes |
-| Any earlier pre-release | No — install the latest |
+| The newest pre-release on [Releases](https://github.com/ysalitrynskyi/stedding-browser/releases) with an image for your platform | Yes |
+| Any earlier pre-release | No — install the newest |
 
 `VERSION` at the repository root is the version this tree builds.

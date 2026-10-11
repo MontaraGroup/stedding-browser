@@ -134,8 +134,8 @@ research  →  spec  →  failing test  →  implement  →  build  →  test  �
 ```
 
 1. **Research the seam, read-only.** Find the upstream machinery to reuse before writing
-   anything (`docs/IMPLEMENTATION.md` is the precedent: every feature there names the
-   files it edits and their churn). Measure churn before touching a file:
+   anything, and name the files the change edits and their churn. Measure churn before
+   touching a file:
    `git log --oneline --since=1.year -- <file> | wc -l`. Anything over ~150 is a file
    we avoid; put the code in a new file under a Stedding directory and call it from one
    hunk.
@@ -158,9 +158,11 @@ research  →  spec  →  failing test  →  implement  →  build  →  test  �
    directory (`STEDDING_TEST_OUT=win-checks` or `win-asan`) the same command runs with the
    detector on and prints the digest.
 6. **Use it, and capture if it is visual.** Launch the build and do the thing (above). For
-   pixels, `tooling/dev capture --assert tooling/probes/window.json` checks every probe in
-   the spec; measure, do not eyeball. `tooling/capture-state` photographs any state a
-   feature param can recreate without input. A spec row that says "live" names its steps.
+   pixels on the Mac, `tooling/dev capture --assert tooling/probes/window.json` checks every
+   probe in the spec, and `tooling/capture-state` photographs any state a feature param can
+   recreate without input; on Windows `tooling\win\capture.ps1` and `drive.ps1`'s
+   window-only shot (`docs/HANDOFF.md`, "The Windows build"). Measure, do not eyeball. A spec
+   row that says "live" names its steps.
 7. **Patch.** Commit in the checkout with the `Why:` / `Removable when:` footers. A fix to an
    existing feature is folded into that feature's commit (`tooling/fold-fix <commit> <files>`
    with the fix in the tree: no other file's modification time changes, so nothing else
