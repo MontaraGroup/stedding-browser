@@ -1,7 +1,7 @@
 # Feature: Page card
 
-Status: **U1, U3–U8 built; U2 partial** (round 6, `docs/ROUND6-PLAN.md` R6-05, R6-06).
-Owner docs: `docs/UI-SPEC.md`. Patch: 0017.
+Status: **U1, U3–U9 built; U2 partial** (round 6, `docs/ROUND6-PLAN.md` R6-05, R6-06; U9 patch 0060, not released, BACKLOG S-125).
+Owner docs: `docs/UI-SPEC.md`. Patches: 0017, 0060 (U9).
 
 The content card is one surface: the link status bubble is a pill inside it, the find
 bar takes the dialog colours and the card's right edge, and split panes carry no ring
@@ -15,7 +15,8 @@ bar takes the dialog colours and the card's right edge, and split panes carry no
 | U2 | The pill never touches the card edge at any window size, including immersive fullscreen. | capture at 1400×880 and in ⌃⌘F | partial · verified at 1400×880 (pill 8 DIP from the card edges); immersive fullscreen moves the window to its own macOS desktop, which the capture harness cannot photograph |
 | U3 | `kColorFindBarBackground` / `Foreground` / `MatchCount` / `ButtonIcon*` map to the dialog colours the command bar uses (commandbar K6), so the ⌘F bubble follows light, dark and the Space tint. | a colour probe on a ⌘F capture, dark and light | built |
 | U4 | The find bubble's right edge aligns with the content card's right edge (the `card_gutter`, toolbar T2). | probe | built |
-| U5 | No position, width, checkbox or hide settings: Arc has one placement for each and shows the hovered link. | spec row | built |
+| U5 | No position, width or checkbox settings: Arc has one placement for each and shows the hovered link. Since patch 0060 one switch turns the hovered link's address off (U9). | spec row | built |
 | U6 | `kColorMultiContentsViewActiveContentOutline` and `InactiveContentOutline` map to the row-text tint at 0x18 (the selected-row value) so light, dark and Space tint follow; no Material ring. | a probe on a split capture at the pane edge: no Material outline luma | built |
 | U7 | The 3 px highlight (`ContentsContainerOutline::UpdateState(is_active, is_highlighted)`) stays for the drag-and-drop target only. | existing split browsertests unchanged | built |
 | U8 | The inactive pane's mini toolbar is captured against Arc in the same pass and left alone unless it clashes (a separate row if it changes). | capture | built |
+| U9 | "Show a link's address on hover" (`stedding.page.show_link_address`, profile, on by default; Settings > Stedding > Pages and menus, after the animation switch, settings T16): off, a hovered link's address stays out of the pill (U1), while a page's loading status still shows there. The window's web-contents delegate hands the pill no address while it is off (`BrowserWebContentsDelegate::UpdateTargetURL`) and reads the setting at every hover, so a change takes effect at the next one. The command bar has the preference's on/off row, "Link address on hover: On / Off" (commandbar K9). | browser: `DefaultsTest.TheLinkAddressShowsUntilTheSwitchTurnsItOff` (on in a fresh profile; off, a hovered link shows no pill; on again, it does); unit: `SteddingPrefsTest.EveryPreferenceRegistersWithItsDefault` (on) | built |

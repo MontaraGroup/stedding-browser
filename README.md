@@ -135,8 +135,10 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
   the rows and jump with ⌘1–⌘8 (⌘9 is the last row).
 - Sleeping tabs: ⌘W puts a pinned tab to sleep instead of losing it; ⌃⇥ walks the
   Space's most recent tabs.
-- Auto-archive: unpinned tabs nobody has looked at for 12 hours (a setting) move to an
-  **Archived** view, searchable by day and Space, restorable with a click.
+- Auto-archive: unpinned tabs nobody has looked at for a time you set move to an
+  **Archived** view, searchable by day and Space, restorable with a click. Beta 13
+  archives after 12 hours by default; from the next release nothing is archived until you
+  choose a time (6 hours to 7 days).
 - Split view: ⌥⌘N splits the current tab with a new one; the panes move, pin and sleep
   together.
 
@@ -265,7 +267,7 @@ and what comes next:
 | Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
-| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (`S-88` to `S-101`, `S-118` to `S-125`) |
+| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (`S-88` to `S-101`, `S-118` to `S-125`). Undo after closing tabs and several of the smaller items are built for the next release |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
 Known limits in the current builds: no automatic updates yet, and the Windows installer is

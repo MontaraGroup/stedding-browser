@@ -6,6 +6,85 @@ This file was the "State of the project" section of `AGENTS.md` until 2026-09-30
 unchanged, and is where the dated record goes from now on: an agent opening the repo cold
 should not have to read four hundred lines of rounds to learn the rules.
 
+## 2026-10-11 -- the operator's round after beta 13 (patch 0060, not released)
+
+After beta 13 the operator asked that auto-archive not run by default, a welcome step to ask
+about it and the like, ten backlog items that are not hard, built and tested together, and a
+fix for the address row's hover. All of it is one new patch, 0060 (the operator-round
+exception in `patches/README.md`). Nothing of it is released; the next release carries it.
+
+- **Auto-archive off by default** (S-130; archive A6, settings T2 and T8, commandbar K17):
+  `stedding.archive.idle_hours` defaults to 0, Never, where it was 12, and a 7-day choice joins
+  Settings, the command bar's row and the welcome step. A profile that never changed the
+  setting stops archiving on update; one that chose a time keeps it.
+- **A sixth welcome step, "Choose how Stedding behaves"** (S-131; welcome W12), after Light or
+  dark: archive (Never by default, up to 7 days), what the sidebar does when it closes (Shrink
+  to icons by default, or Hide it completely), and a Space's sleep after you leave it (Never by
+  default, up to an hour). It shows the current values and writes each choice at once.
+- **The search engines' marks** (S-77): each engine in the welcome flow's first step shows its
+  initial on a colour, Stedding's own drawing; nothing is fetched. A public Chromium checkout
+  ships no engine images, so every engine had drawn the default globe.
+- **The sidebar**: "Page flush against the window" in Settings → Stedding → Sidebar, off by
+  default, for no gutter and square corners beside an open sidebar (S-124; sidebar Y23,
+  settings T15); a thin bar along the edge after a rest, and a double click or tap there for
+  the default width (S-123, Y22); a middle click on the sidebar's empty ground opens the
+  command bar (part of S-125, Y24).
+- **Tabs and media**: Ctrl+M mutes or unmutes the selected rows, both panes of a split, and
+  Ctrl+Alt+Shift+P toggles picture in picture on the page's video when its media session offers
+  it (S-122; tabs R29, commandbar K25, player Mp5). After a user's close, of one tab or many, a
+  toast offers Undo, which reopens exactly those in their Space and folder; none for archive
+  sweeps, window closes, pages that close themselves or extensions; a switch in Settings →
+  Stedding → Tabs turns it off (S-97; tabs R25 to R28 and R30, settings T17).
+- **Folders and pins**: Ctrl+Shift+E collapses every folder of the Space while one is open,
+  else expands them all; a folder header's menu gains New Tab in Folder and Alphabetize; a
+  collapsed header shows its tab count (S-120; folders F30 to F33, menus M7). Edit Pinned
+  Address… on a pin's or an essential's menu, and a middle click sends a pin home (S-121; pins
+  H15 and H16, menus M7 and M8).
+- **The command bar**: inline completion to a site from history (S-108, K23); Clear Site
+  Cookies and Reload, Ctrl+Alt+Shift+R, in the Space's own jar when it has an independent
+  session (S-119; K24, sessions S27); Close Duplicate Tabs, listed only while the Space has a
+  duplicate (part of S-125, K26). Also from S-125, a switch for the link address shown at the
+  window's corner on hover (page U9, settings T16); S-125 stays open for its other parts.
+- **The address row's hover** (S-132, toolbar T34), the operator's report: with the address
+  gathered on the page's middle in a field that takes the row, hovering painted the field's
+  translucent colour twice, a lighter pill whose rounded edge cut through the first letter, and
+  the band began at the row's far left where nothing is. Now the band runs from the chip to the
+  page actions and the address paints no pill of its own; while editing, Chromium's whole field
+  stands (`AddressBandTest.*`).
+- **Seen on the release build with the real pointer and keyboard** (Windows): the six welcome
+  steps with the engines' marks, the behaviour step fitting with Never chosen, and "1 day" and
+  "Hide it completely" written to the profile and shown in Settings; the flush page on, then
+  off again; the address row's band from the chip to the star, with no pill; the edge's bar, a
+  drag from 328 to 398 px and a double click back to 328; Ctrl+W's toast with Undo; the command
+  bar's "Mute Tab" and "Clear Site Cookies and Reload" rows with their keys, and no Close
+  Duplicate Tabs without a duplicate; a middle click on the sidebar's ground opening the bar,
+  a non-client press that no test reaches.
+- **Not checked live**: picture in picture by its key, the Edit Pinned Address dialog, the
+  folder verbs and the count, Clear Site Cookies on a real signed-in site, inline completion
+  with real history. The Mac has built none of 0060.
+- **Found by that use, and fixed**: Chromium's toasts sat half over the line under the address
+  row, which is thinner than Chromium's toolbar, so the Undo toast hid the address for 8 s
+  after every close. In the Stedding window a toast now sits in the page under the row, as in
+  full screen (S-133, toolbar T35), and the toast was seen there afterwards.
+- **Found by the suites, and fixed**: after Alphabetize, and after any move inside a folder, the
+  drawn rows kept their old order: the folder's view lays its rows out in view order, while a
+  move reorders only the node's children; the folder now puts its rows in the folder's order
+  before it lays out (folders F31). The address band's own test kept a pointer to the window
+  past its end (the dangling-pointer detector). `RenameFieldWatcherTest`'s field had no
+  accessible name, which the accessibility paint check stops whenever its window paints in
+  time (a latent test fault, folded into patch 0057). The right-to-left edge test failed once
+  on the release build and passed three times out of three alone.
+- **Found, not fixed**: skipping the welcome flow's engine step leaves no default chosen, and
+  Chromium's own "Choose your search engine" dialog then opens over the first page with a
+  globe for every engine (S-134, for the owner; `PLAN.md` WEB-13, WEB-F41).
+- **Tooling**: `-Wunsafe-buffer-usage` stops a test that indexes a plain C array in a loop
+  (trap 73); the DCHECK build ran out of commit at 22 jobs and built at 16 (trap 74).
+- **Tests**: one build of everything, then the suites in one pass on both builds. The first
+  pass found one compile error (trap 73) and four faults (above); the second, after the fixes:
+  on the release build 882 of 882 unit tests and 209 of 209 browser tests, and the same 882 and
+  209 on the DCHECK build with the dangling-pointer detector, with no DCHECK or dangling report.
+  No ASan run (`S-106`), and nothing of 0060 on a Mac.
+
 ## 2026-10-10 and 11 -- the operator's pass on beta 12: the hidden sidebar (patch 0059)
 
 The operator asked for a third sidebar form and named three faults; the PC built each, used it

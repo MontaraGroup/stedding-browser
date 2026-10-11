@@ -20,8 +20,9 @@ macOS image is from beta 10 on) is the current one. The ladder was climbed out o
 chasing feedback from real use (`docs/ARC-ROUND2.md`), and each feature's own spec under
 `docs/features/` is the record of what passes. `PLAN.md` is the finish-or-cut pass over the
 features of M2 to M6 that the 2026-09-26 audit asked for; its items keep their own ids there
-and are not repeated here. In short, with every open `BACKLOG.md` id under the milestone it
-belongs to:
+and are not repeated here. Patch 0060, built and in test but in no release yet, closes twelve
+`BACKLOG.md` ids and three parts of `S-125` (BACKLOG's Done table). In short, with every open
+`BACKLOG.md` id under the milestone it belongs to:
 
 | Milestone | State | Open in `BACKLOG.md` |
 |---|---|---|
@@ -29,13 +30,13 @@ belongs to:
 | M1 branded build | Done, except the recorded ten-minute idle-network run and two calls to Google a fresh profile makes unasked; Safe Browsing does not work without a key | `S-50`, `S-54`, `S-67`, `S-75` |
 | M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins | `S-65` (fixed; the owner's confirmation), `S-107` (folders in the pinned run), `S-111`, `S-112`, `S-114`, `S-115` |
 | M3 workspaces (Spaces) | Done, with independent cookie jars per Space (ADR 0019) | `S-70`, `S-126` |
-| M4 command bar | Done but K12 (⌘L's prefilled address, partial); the address row stayed beside it | `S-104`, `S-108`, `S-109`, `S-116`, `S-127` |
+| M4 command bar | Done but K12 (⌘L's prefilled address, partial); the address row stayed beside it | `S-104`, `S-109`, `S-116`, `S-127` |
 | M5 split view | Partly: Chromium's own split view, with Stedding's verbs on both panes; a split comes back whole after a restart (J1); ⌘W on a split (J3), a pin joining a split (J5) and ⌘1–9 counting a split once (J2) are open | `S-102`, `S-113` |
-| M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) | `S-48`, `S-51`, `S-57`, `S-69`, `S-77`, `S-79`, `S-103`, `S-110`, `S-117` |
+| M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) | `S-48`, `S-51`, `S-57`, `S-69`, `S-79`, `S-103`, `S-110`, `S-117`, `S-134` |
 | M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first | `S-74`, `S-49`, `S-59` |
 | M8 Windows | A preview with every feature, Arc's keys for Windows and a per-user installer; little windows, signing, updates and CI open | `S-56`, `S-55`, `S-71`, `S-72`, `S-81` |
 | M9 Linux | Not started; there is no Intel Mac build either | -- |
-| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura | `S-88` to `S-101`, `S-118` to `S-125` |
+| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura; seven of them, and three parts of `S-125`, built since patch 0060 (unreleased) | `S-88` to `S-96`, `S-98` to `S-101`, `S-118`, `S-125` |
 | 1.0 quality gate | Not reached | `S-61` (the rows `docs/PRODUCT.md` marks [1.0] that no milestone names: the Library, the mini player), `S-66`, `S-106`, `S-128`, `S-129` (spec rows short of a test or a look) |
 
 Outside the ladder: `S-47` (a capture probe), `S-58` (the Mac's disk) and `S-105` (beta 13's
@@ -385,7 +386,8 @@ Scope, by area (`BACKLOG.md` ids):
   second (`S-90`); shortcuts the user can change, with a conflict check (`S-91`, the 1.0 item
   `docs/PRODUCT.md` §12 names).
 - **Tabs:** child tabs under their opener, Back returning to it (`S-92`); Undo after closing
-  tabs (`S-97`); a page open in another window offers "Show here / Go to window" (`S-94`).
+  tabs (`S-97`, built since patch 0060, unreleased); a page open in another window offers
+  "Show here / Go to window" (`S-94`).
 - **Sidebar:** on the right, as a setting (`S-96`); History and Downloads as panels in its
   column (`S-98`); the mini player for a video you leave (`S-95`); Space colours and icons
   freely chosen (`S-99`).
@@ -398,12 +400,14 @@ Scope, by area (`BACKLOG.md` ids):
   folder verbs (`S-120`); a pin's home address edited by hand (`S-121`); mute and picture in
   picture by key (`S-122`); a resize bar on the sidebar's edge and a double click to reset
   it (`S-123`); the page flush against the window with the sidebar open (`S-124`); a handful
-  of small conveniences (`S-125`).
+  of small conveniences (`S-125`). `S-119` to `S-124` and three of `S-125`'s conveniences
+  are built since patch 0060 (unreleased).
 
 The same read found Arc behaviour that `docs/PRODUCT.md` puts at 1.0 with no item until
 then; those sit under their own milestones above, not here: folders in the pinned run
-(`S-107`), inline completion and Site Search in the command bar (`S-108`, `S-109`), loading
-only the selected tab at launch (`S-110`), tabs sleeping on a timer (`S-111`), the tab
+(`S-107`), inline completion (built since patch 0060) and Site Search in the command bar
+(`S-108`, `S-109`), loading only the selected tab at launch (`S-110`), tabs sleeping on a
+timer (`S-111`), the tab
 selected after a close (`S-112`), a split made by dragging a row onto the page (`S-113`), and
 routing rules edited in Settings (`S-126`). What was read and left out, and why, is in ADR
 0021.

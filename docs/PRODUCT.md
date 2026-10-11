@@ -65,8 +65,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
   Space title, drawn as cards. Arc caps them at 12; Stedding's Arc importer takes twelve
   and nothing else caps them (`features/import.md` I11). Distinct from Pinned Tabs; a
   spec that conflates the two gets the model wrong (`features/spaces.md` B6).
-- **Unpinned Tabs** **[1.0]** — below the divider, auto-archived when idle (§11). `⇧⌘K`
-  clears them as a set (`features/spaces.md` B20).
+- **Unpinned Tabs** **[1.0]** — below the divider, auto-archived when idle once the user
+  picks a time (§11). `⇧⌘K` clears them as a set (`features/spaces.md` B20).
 - **Folders** **[1.0]** — group tabs; **tabs in folders do not auto-archive**. Folders
   nest; rename, move and delete from the header's menu; drag a tab in. A collection type
   in the tab tree, not a tab group (ADR 0013; `features/folders.md`). Folders inside the
@@ -85,7 +85,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
   takes Option-click as the reset (above).
 - **Audio indicator and mute** **[1.0]** — click to mute; right-click mutes a tab that is
   not playing; an essentials card keeps its favicon and badges the sound
-  (`features/tabs.md` R18). Muting by key, from inside a Split View too: `S-122`.
+  (`features/tabs.md` R18). `⌃M` (Ctrl+M on Windows) mutes or unmutes the selected tabs,
+  from inside a Split View too (R29).
 - **Collapse Pinned Tabs** **[1.0]** — hide the pinned list without hiding the sidebar;
   needs a named Space (`S-114`).
 - **Previews on hover** **[post-1.0]** — hovering a pinned tab glances the site: recent
@@ -111,7 +112,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
 - **Reopen closed tab** **[1.0]** — `⇧⌘T`, Chromium's.
 - **Child tabs** **[M10]** — a link opened in a new tab sits under its opener, and Back
   returns to it (`S-92`).
-- **Undo after closing tabs** **[M10]** — a toast with Undo (`S-97`).
+- **Undo after closing tabs** **[M10]** — after a close, a toast with Undo that reopens those
+  tabs in their Space and folder; a setting turns it off (`features/tabs.md` R25–R28, R30).
 - **The sidebar on the right** **[M10]** — a setting (`S-96`).
 
 ## 2. Spaces
@@ -169,7 +171,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
 - **Site Search** **[1.0]** — a search engine's keyword, then the query, searches that site
   directly, from Chromium's own keywords and their `%s` templates (K18). `@Space` narrows
   the list to a Space (K19). Tab after a site's name turning it into a search chip, and the
-  sites edited in Settings: `S-109`. Inline completion to a site from history: `S-108`.
+  sites edited in Settings: `S-109`. Typing completes to a site from history, the rest
+  selected (`features/commandbar.md` K23).
 - **Full URL in Toolbar** **[1.0]** — the address row above, on by default; `⇧⌘D` shows or
   hides it on its own, and a setting hides it with the sidebar (`features/toolbar.md`
   T8–T12).
@@ -264,7 +267,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 
 - **Mini Player / Picture-in-Picture** **[1.0]** — a video player inside the page card
   (`features/player.md`); following you into the sidebar when you leave the tab is
-  **[M10]** (`S-95`).
+  **[M10]** (`S-95`). `⌥⇧⌘P` puts the page's video in picture in picture and brings it back
+  (Mp5).
 - **Audio Player** **[1.0]** — playback controls for a tab playing sound, none for a muted
   one (`features/player.md` Mp3).
 - **Downloads** **[1.0]** — Chromium's downloads, with the progress ring on the sidebar's
@@ -293,10 +297,11 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 
 ## 11. Archive, history, search
 
-- **Auto Archive** **[1.0]** — idle unpinned tabs archive after **12 hours by default**,
-  reset by viewing the tab; nothing pinned, in a folder or in use is archived. Arc does not
-  let you turn it off; Stedding does (Never, 6 hours, 12 hours, 1 day, 3 days;
-  `features/archive.md`).
+- **Auto Archive** **[1.0]** — idle unpinned tabs archive after a set time, reset by viewing
+  the tab; nothing pinned, in a folder or in use is archived. Arc archives after 12 hours by
+  default and does not let you turn it off. Stedding's is off (Never) by default since patch
+  0060, and offers 6 hours, 12 hours, 1 day, 3 days and 7 days; the welcome flow asks
+  (`features/archive.md` A6, `features/welcome.md` W12).
 - **View and restore the archive** **[1.0]** — the Archived view, by day and Space and
   searchable, and archived tabs in the command bar (archive A7–A11).
 - **History** **[1.0]** — `⌘Y`, Chromium's.
@@ -337,11 +342,16 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
 - **Web apps keep their own keys**: the first press goes to the page, a second to
   Stedding (`S-90`).
 - **Dark mode for web pages**, on Chromium's own (`S-100`).
-- **Smaller things seen in Nook**: the site's controls in one panel (`S-118`), clear a
-  site's cookies and reload (`S-119`), folder verbs (`S-120`), a pin's home address edited
-  by hand (`S-121`), mute and picture in picture by key (`S-122`), the sidebar's edge
-  showing where to drag (`S-123`), the page flush against the window (`S-124`), and small
-  conveniences (`S-125`).
+- **Smaller things seen in Nook**: the site's controls in one panel (`S-118`) and the rest
+  of the small conveniences (`S-125`). Built since patch 0060: clear a site's cookies and
+  reload (`features/commandbar.md` K24, `features/sessions.md` S27), folder verbs
+  (`features/folders.md` F30–F33), a pin's home address edited by hand and a middle click
+  that sends a pin home (`features/pins.md` H15, H16), mute and picture in picture by key
+  (`features/tabs.md` R29, `features/player.md` Mp5), the sidebar's edge showing where to
+  drag and a double click that resets its width (`features/sidebar.md` Y22), the page
+  flush against the window (Y23), and three of the conveniences: Close Duplicate Tabs
+  (commandbar K26), a middle click on the sidebar's ground that opens the command bar
+  (sidebar Y24) and a switch for the link address shown on hover (`features/page.md` U9).
 
 ---
 
@@ -360,7 +370,8 @@ honest target until that is revisited is **parity minus Boosts and Easels**.
 ## Where we deliberately differ
 
 - **No account, ever.** Arc requires one.
-- **Auto Archive can be turned off**, and little windows are never closed for idling.
+- **Auto Archive is off until you pick a time** (since patch 0060), and little windows are
+  never closed for idling.
 - **An address row with the whole address**, where Arc has none.
 - **Bookmarks stay**, beside pinned tabs.
 - **Chromium's horizontal tabs stay one switch away.**

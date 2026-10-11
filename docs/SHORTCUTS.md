@@ -7,6 +7,12 @@ current macOS image, two of its descriptions are behind this page: it still list
 two keys, though Peek is off, and it calls ⌘1–⌘9 the first nine rows, though ⌘9 is the
 last one. Beta 13 corrects both (`BACKLOG.md` S-82).
 
+Four keys on this page come with the next release and are not in beta 13: muting a tab
+(⌃M / Ctrl+M), all folders at once (⇧⌘E / Ctrl+Shift+E), clearing a site's cookies
+(⌥⇧⌘R / Ctrl+Alt+Shift+R) and picture in picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). From the next
+release the list in the browser also names Reopen Closed Tab (⇧⌘T / Ctrl+Shift+T),
+Chromium's own key, which works in every version.
+
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
 ## Sidebar and Spaces
@@ -38,7 +44,10 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Most recent tab of the Space (hold ⌃ / Ctrl to see the five most recent) | ⌃⇥ | Ctrl+Tab |
 | Most recent tabs, the other way round | ⌃⇧⇥ | Ctrl+Shift+Tab |
 | Move the row down / up (a folder beside it is one row) | ⌥⇧⌘↓ / ⌥⇧⌘↑ | Ctrl+Alt+Shift+↓ / ↑ |
+| Collapse the Space's folders, or expand them all when none is open | ⇧⌘E | Ctrl+Shift+E |
 | Split the current tab with a new one | ⌥⌘N | Alt+Shift+N |
+| Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
+| Reopen closed tabs, one at a time, each in its Space and folder (the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
 | Put a pinned tab to sleep (instead of closing it) | ⌘W | Ctrl+W |
 
 ## Page
@@ -47,9 +56,11 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 |---|---|---|
 | Copy the link, without its tracking parameters | ⇧⌘C | Ctrl+Shift+C |
 | Copy the link as Markdown | ⌥⇧⌘C | Ctrl+Alt+Shift+C |
+| Clear the site's cookies and reload the page (only cookies; in a Space with its own session, only that Space's) | ⌥⇧⌘R | Ctrl+Alt+Shift+R |
 | Screenshot the page as shown | ⇧⌘2 | Ctrl+Shift+2 |
 | Screenshot a region you drag out | ⌥⇧⌘2 | Ctrl+Alt+Shift+2 |
 | Screenshot the whole document | ⇧⌘1 | Ctrl+Shift+1 |
+| Play the page's video in picture in picture, or bring it back (once the video has played with sound) | ⌥⇧⌘P | Ctrl+Alt+Shift+P |
 
 Screenshots go to Downloads as PNG and to the clipboard.
 
@@ -74,6 +85,10 @@ its menu item; only the key moves.
 | ⌥⌘↓ / ⌥⌘↑ | Next / previous tab in the sidebar | Focus the next / previous pane (now F6 / ⇧F6) |
 | ⇧⌘K / Ctrl+Shift+K | Clear the Space | unbound |
 
+The four keys of the next release (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
+Ctrl+Alt+Shift+P and Ctrl+Alt+Shift+R) were free in Chromium on both platforms, so they move
+none of its keys.
+
 Independent session is not a shortcut: it is a check item on the Space chip
 menu, a toggle on each Space in Settings → Stedding → Spaces, and an **Independent
 Session** row in the command bar (⇧⌘P). Off by default.
@@ -83,6 +98,7 @@ Session** row in the command bar (⇧⌘P). Off by default.
 - **macOS:** ⌃1–⌃9 are also Mission Control's "Switch to Desktop N" once a second
   desktop exists, and macOS takes them first. The Spaces menu in the menu bar keeps
   the commands reachable.
+- **macOS:** muting a tab is ⌃M, not ⌘M: ⌘M still minimizes the window.
 - **macOS:** a clipboard manager that owns ⇧⌘C system-wide (Maccy does by default)
   takes it before the browser does; the File menu row always works.
 - **macOS:** while Arc is running it takes ⌥⌘N from every app for its Little Arc window,

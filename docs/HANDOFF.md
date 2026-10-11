@@ -40,13 +40,13 @@ Seventy-odd traps follow. Read the one for the topic in front of you, not the li
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 28, 50, 51 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62 |
-| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72 |
+| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
 
 ## Where things live
 
@@ -153,7 +153,8 @@ overlay at startup. `drag_tabs_to_spaces` — on by default.
 All exist because pinning/folders/⌘T are UI gestures a headless harness cannot
 perform; a param that recreates the state IS the test surface. Two switches do the
 same for windows: `--stedding-welcome[=<step>]` forces the welcome flow (on a named
-step: `search`, `import`, `appearance`, `default`, `keys`), and `tooling/capture-state
+step: `search`, `import`, `appearance`, `behaviour`, `default`, `keys`; `behaviour` since
+patch 0060), and `tooling/capture-state
 --seed collapsed` writes the collapsed-rail preference (`vertical_tabs.collapsed_state`)
 into the fresh profile; `--seed grey-dark` writes dark mode with Customize Chrome's Grey
 (`browser.theme.color_scheme2` 2, `browser.theme.is_grayscale2`), the colour key a
@@ -992,6 +993,41 @@ private window has.
     the destructor's body, or declare it after the widget so it goes first. Only a
     `win-checks` build sees this.
 
+73. **`-Wunsafe-buffer-usage` is an error in this Chromium: a test that indexes a plain C
+    array in a loop does not compile.** All of `chrome/` but a few exempt directories is
+    checked for unsafe buffer use (`build/config/unsafe_buffers_paths.txt` in the
+    checkout) and warnings are errors, so `kRows[i]` over a `constexpr int kRows[]` stopped the first build of patch
+    0060 (2026-10-11, `FolderViewTest.HeaderMenuOffersNewTabAndAlphabetize`). Declare the
+    table as a `std::array`, or `constexpr auto kRows = std::to_array<int>({...})`, whose
+    `operator[]` is checked, or loop with a range `for` when the index is not needed.
+
+74. **The DCHECK build at the supervisor's default of 22 jobs ran out of commit on the PC.**
+    Trap 54's cap is not one number: it depends on what else holds memory. On 2026-10-11 the
+    `win-checks` build of patch 0060 at 22 jobs (`build-until-done.ps1`'s default) failed 22
+    steps after 28 minutes, the compiler dying on a signal on 20 objects, most in files the
+    round had not touched: the commit charge had run out, with about 10 GB of the 53 GB
+    limit free at idle. A rerun at `-Jobs 16` finished it in five minutes. A compiler killed
+    on a signal in several unrelated files is memory, not the code: read the commit charge
+    at idle and in the progress line before choosing `-Jobs`, and give `win-checks` 16 or
+    fewer when most of the limit is taken before the build starts.
+
+75. **A row container that lays out in view order draws a reorder only if it reorders its
+    views.** `TabCollectionNode` adds each child's view at the end and, on a move, reorders
+    only its list of children; Chromium's own containers lay out from that list
+    (`GetDirectChildren()`), but `FolderView` used a `BoxLayout`, which follows view order. So
+    a folder sorted by Alphabetize kept drawing its old order while every model check passed
+    (2026-10-11, found by a browser test that read the drawn rows' bounds). `FolderView` now
+    puts its rows in the node's order before it lays out. Any new container that lays out by
+    view order needs the same, and its test must read drawn bounds, not the model.
+
+76. **`Drive-Find` takes the first big window of the process, which can be a dialog.** On a
+    fresh profile the welcome flow's dialog is a `Chrome_WidgetWin_1` wider than 300 px, so the
+    driver attached to it; when the flow finished, every shot said "the window is not on
+    screen" and UI Automation failed on a dead handle (2026-10-11). Launch with
+    `--no-first-run` unless the flow is the subject, and call `Drive-Find` again after a
+    dialog closes. Chromium's own search engine chooser (S-134) takes the window the same way
+    after a skipped engine step.
+
 ## The Windows build
 
 Git for Windows for the bash tooling, PowerShell for the rest, Visual Studio's own
@@ -1057,7 +1093,8 @@ list of its own.
 Beta 13 (2026-10-11) is the current Windows installer: patch 0059, built, used and released
 from the PC. Its macOS image is the Mac's to add after the Mac's own pass on 0059, which it
 has not built (`S-105`); until then beta 12's DMG (2026-10-02, signed and notarized) is the
-current macOS image.
+current macOS image. Patch 0060, the operator's round after beta 13, is not released; the
+next release carries it (`docs/PROJECT-LOG.md`).
 
 ## Release channel
 
