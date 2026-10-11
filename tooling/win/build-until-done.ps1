@@ -13,6 +13,8 @@ budget) over and over. build.ps1's exit code says what happened:
   2  stopped by the budget      -> the next chunk resumes where it stopped (siso keeps what it built)
   3  stopped, nothing moving    -> stuck, exit 3: read build.log
   1  a step failed              -> exit 1, with the distinct failing steps
+  (throws, before building)     -> exit 6, with its message: a browser from the output
+                                   directory still running, which would hold chrome.dll
 
 What the budget does and does not mean: it is a dead-man's switch, not a schedule. It kills
 the steps in flight, so each stop costs those steps' minutes; a long chunk wastes less than
@@ -79,8 +81,15 @@ $repeats = 0
 Say ("start: {0}, targets {1}, {2} jobs, chunks of {3} min, at most {4}" -f $Config, ($Targets -join ","), $Jobs, $ChunkMinutes, $MaxChunks)
 for ($chunk = 1; $chunk -le $MaxChunks; $chunk++) {
   Say "chunk $chunk"
-  & (Join-Path $PSScriptRoot "build.ps1") -Config $Config -Targets $Targets -KeepGoing -Jobs $Jobs -BudgetMinutes $ChunkMinutes
-  $code = $LASTEXITCODE
+  # build.ps1 throws before building when something is in the way (a browser from this output
+  # directory still running holds chrome.dll); without the catch the supervisor died with no
+  # finish line, and a waiter waited for one that never came.
+  try {
+    & (Join-Path $PSScriptRoot "build.ps1") -Config $Config -Targets $Targets -KeepGoing -Jobs $Jobs -BudgetMinutes $ChunkMinutes
+    $code = $LASTEXITCODE
+  } catch {
+    Finish 6 "build.ps1 refused to start: $($_.Exception.Message)"
+  }
   $elapsed = [int]((Get-Date) - $started).TotalMinutes
   if ($code -eq 0) { Finish 0 "done: built $($Targets -join ', ') in out\$Config after $chunk chunk(s), $elapsed min" }
   if ($code -eq 3) { Finish 3 "stuck: no step finished and no compiler running at the end of chunk $chunk; read $buildLog" }

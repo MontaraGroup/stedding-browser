@@ -73,6 +73,7 @@ public static class StedDrive {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int s);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc p, IntPtr l);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
@@ -284,6 +285,14 @@ function Drive-Type([string]$Text) {
 # ---- looking ---------------------------------------------------------------------------------
 
 function Drive-WindowRect { $r = New-Object StedDrive+RECT; [void][StedDrive]::GetWindowRect($script:Drive.Hwnd, [ref]$r); return $r }
+# The window as it is drawn. GetWindowRect includes the invisible resize border, about 7 px on
+# each side on Windows 10 and 11: a pointer at its edge + 1 is on that border, where no view
+# hears it (docs/HANDOFF.md, trap 69). Aim at the window's own edges with these bounds.
+function Drive-VisibleRect {
+  $r = New-Object StedDrive+RECT
+  if ([StedDrive]::DwmGetWindowAttribute($script:Drive.Hwnd, 9, [ref]$r, 16) -ne 0) { return (Drive-WindowRect) }
+  return $r
+}
 
 # A PNG of the window's rectangle (and the menus and bubbles beside it), only while the browser is in
 # front. A view crop of a picture: screen x = $script:Drive.ShotOrigin[0] + x in the picture.
