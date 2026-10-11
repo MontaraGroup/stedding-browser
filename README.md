@@ -103,9 +103,11 @@ it; ⌥-click the favicon, or choose **Reset to Pinned Page**, and you are back.
 
 ![Nested folders and pinned tabs in the sidebar](docs/images/readme/folders.png)
 
-**The rail.** ⌘S collapses the sidebar to a column of icons; hover to peek at it. The
-address row stays; a setting hides it with the sidebar, and ⇧⌘D shows or hides it on
-its own.
+**The rail, or nothing at all.** ⌘S collapses the sidebar to a column of icons; hover to
+peek at it. Or set it to hide completely (Settings → Stedding → Sidebar): ⌘S then gives
+the page the whole window, edge to edge, and the pointer at the window's left edge slides
+the sidebar back over it. The address row stays; a setting hides it with the sidebar, and
+⇧⌘D shows or hides it on its own.
 
 ![The sidebar collapsed to a rail of icons, the address row still across the top in the page's colour](docs/images/readme/rail.png)
 

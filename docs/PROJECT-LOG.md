@@ -6,6 +6,37 @@ This file was the "State of the project" section of `AGENTS.md` until 2026-09-30
 unchanged, and is where the dated record goes from now on: an agent opening the repo cold
 should not have to read four hundred lines of rounds to learn the rules.
 
+## 2026-10-10 and 11 -- the operator's pass on beta 12: the hidden sidebar (patch 0059)
+
+The operator asked for a third sidebar form and named three faults; the PC built each, used it
+with the real pointer and keyboard, and fixed what that use found before calling it done.
+
+- **The hidden form** (`docs/features/sidebar.md` Y19): "When the sidebar closes: Shrink to
+  icons / Hide it completely" (`stedding.sidebar.closed_form`). Hidden, the strip takes no width
+  and the page card no gutter or corner, the address row runs edge to edge, and the pointer
+  resting at the window's leading edge slides the sidebar in over the page. The command bar has
+  "Show Sidebar", "Collapse Sidebar to Icons" and "Hide Sidebar" (K22).
+- **Pins** (pins H14): a pin joins the end of the run; an unpin goes to the top of the tabs under
+  the Clear line instead of splitting the run, which showed the pins below it as unpinned.
+- **The resize edge** (Y18): the handle reaches over the 6 DIP gutter to the card's edge.
+- **Settings** (settings T13, T14): the page in sections, Sidebar first; the width, tab row
+  height and text size were already there, mid-list.
+- **Found by using it, fixed**: the hidden strip's rows painted over the page (child layers its
+  bounds did not clip); an empty band under the rail's toggle, older than this round, from a
+  hidden combo button still counted (Y20); the selected row's globe at 1.4:1 in dark (S-73, Y21);
+  Chromium 155's Ctrl+Shift+L in the toggle's tooltip and the bar (S-87); F11 and a video's full
+  screen keeping the card's gutter (S-69's gutter half, toolbar T33). From the backlog: S-82,
+  S-83.
+- **Tooling**: the build supervisor ends with SUPERVISOR_EXIT=6 when `build.ps1` refuses to
+  start (trap 70); `Drive-VisibleRect` for aiming at a window's real edge (trap 69); a firewall
+  prompt holding the foreground is the operator's to answer (trap 71).
+- **A review before the cut** read the diff and found eight faults, none a crash (the edge
+  opening a sidebar F11 hid, right to left on the wrong side, two macOS full-screen layouts, a
+  DIP past the window at fractional scales, mixed selections, two Mac paths); all fixed.
+- **Tests**: unit 822 of 822; browser 170 of 171, the one failure a focus race at typing into a
+  page's field (`SleepInUseTest`), which passed alone three times out of three. No DCHECK or sanitizer build of
+  0059; the Mac has not built it.
+
 ## 2026-10-02 -- round 11 seen live, and beta 11
 
 Patch 0058 (the owner's report on beta 10) had passed its tests without anyone looking at

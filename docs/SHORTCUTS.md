@@ -12,7 +12,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
 | Action | macOS | Windows |
 |---|---|---|
-| Collapse the sidebar to icons, or bring it back | ⌘S | Ctrl+S |
+| Close the sidebar, to icons or hidden completely (Settings → Stedding → Sidebar), or bring it back | ⌘S | Ctrl+S |
 | Show or hide the address row on its own | ⇧⌘D | Ctrl+Shift+D |
 | Jump to Space 1 to 9 | ⌃1 – ⌃9 | Alt+1 – Alt+9 |
 | Next Space / previous Space | ⌥⌘→ / ⌥⌘← | Ctrl+Alt+→ / Ctrl+Alt+← |

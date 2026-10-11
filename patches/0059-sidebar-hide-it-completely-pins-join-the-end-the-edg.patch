@@ -1,0 +1,2705 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 11 Oct 2026 01:41:40 -0400
+Subject: sidebar: hide it completely, pins join the end, the edge resizes
+
+The operator's pass on beta 12 asked for a third sidebar form and named
+three faults; each is built here and was seen working on the real
+window, and what that use found is fixed too.
+
+- A third form (sidebar Y19). "When the sidebar closes: Shrink to
+  icons / Hide it completely" (stedding.sidebar.closed_form) decides
+  what Ctrl+S, the toggle and dragging the edge closed leave. Hidden,
+  the strip takes no width (CollapsedWidthNow) and the page card keeps
+  no gutter and no rounded corner (SteddingCardGutter, read by the
+  card, the address row, the window's bar and the frame's caption
+  buttons): the page and the row run edge to edge. The pointer resting
+  at the window's leading edge slides the sidebar in over the page by
+  expand-on-hover's float; leaving it slides it away. While closed or
+  sliding, the strip clips its rows, which painted over the page from
+  layers of their own. The command bar has Show Sidebar, Collapse
+  Sidebar to Icons and Hide Sidebar.
+- Space pins (pins H14). A new pin joins the end of the pinned run; an
+  unpin goes to the top of the tabs under the Clear line. A pin went to
+  the top of the run, and an unpin from its middle split it, so the
+  pins below it were laid out under the line as ordinary tabs.
+- The resize edge (sidebar Y18). The handle reaches over the card's
+  gutter to the card's edge through the strip's event targeters; it
+  stopped a gutter short of the edge a person aims at.
+- Settings (T13, T14). The Stedding page reads in sections, Sidebar
+  first, with the new choice, the width, the tab row height (the
+  density, renamed) and the text size together.
+- Found by using it: the rail's toggle sat over an empty band, because
+  the hidden combo's buttons were still counted (Y20); a strip drawn
+  open while closed by state keeps the open top row; the selected
+  row's default globe was the light scheme's on the dark sidebar, a
+  translucent row read by its own channels (S-73, Y21); the toggle's
+  tooltip and the command bar named Chromium 155's Ctrl+Shift+L, now
+  unbound (S-87); a page's own full screen and F11 with no address row
+  kept the card's gutter (S-69, toolbar T33).
+- Found by reading the diff before the cut: the edge reveals only a
+  sidebar the window shows and only if the pointer is still there; right
+  to left, the edge and the handle's reach are the right-hand ones; in
+  macOS full screen a visible sidebar keeps its gutter and a hidden one
+  insets nothing; a strip of no width never puts the page past the
+  window's edge; a selection's tabs already pinned or unpinned stay put.
+- From the backlog: the screenshot toast says "Show in folder" off the
+  Mac (S-83); the shortcut list drops Peek's rows while Peek is off and
+  says the ninth row chord goes to the last row (S-82).
+
+Why: the operator's requests on beta 12, and the faults found while
+building them; each has its behaviour id and a test.
+Removable when: never; this is Stedding's sidebar.
+---
+ chrome/app/stedding_strings.grdp              |  13 +-
+ .../api/settings_private/prefs_util.cc        |   2 +
+ chrome/browser/favicon/favicon_utils.cc       |  23 +-
+ .../browser/favicon/favicon_utils_unittest.cc |  19 +
+ .../settings/stedding_page/stedding_page.css  |  16 +
+ .../stedding_page/stedding_page.html.ts       | 245 ++++++-----
+ chrome/browser/ui/accelerator_table.cc        |   5 +-
+ chrome/browser/ui/browser_actions.cc          |   8 +-
+ .../browser/ui/spaces/arc_sidebar_importer.cc |  17 +-
+ chrome/browser/ui/spaces/space_commands.cc    |   9 +-
+ chrome/browser/ui/spaces/space_model.cc       |  45 +-
+ chrome/browser/ui/spaces/space_model.h        |  11 +-
+ .../ui/spaces/space_model_window_unittest.cc  |  56 +++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   7 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   4 +
+ chrome/browser/ui/stedding/tab_menu_verbs.cc  |  13 +-
+ chrome/browser/ui/tabs/BUILD.gn               |   2 +
+ chrome/browser/ui/tabs/tab_favicon_theming.cc |  33 +-
+ .../ui/tabs/tab_favicon_theming_unittest.cc   |  71 ++++
+ .../ui/views/commandbar/command_bar_view.cc   |  51 ++-
+ .../commandbar/command_bar_view_unittest.cc   |  16 +-
+ .../ui/views/frame/browser_frame_view_win.cc  |   5 +-
+ .../views/frame/browser_native_widget_mac.mm  |   6 +-
+ chrome/browser/ui/views/frame/browser_view.cc |   2 +-
+ .../layout/browser_view_tabbed_layout_impl.cc |  12 +-
+ .../layout/stedding_browser_view_layout.cc    |  56 ++-
+ .../ui/views/frame/multi_contents_view.cc     |   6 +-
+ .../views/frame/stedding_window_background.cc |  19 +-
+ .../frame/vertical_tab_strip_region_view.cc   | 297 ++++++++++++-
+ .../frame/vertical_tab_strip_region_view.h    |  48 +++
+ .../vertical_tab_strip_top_container.cc       |  15 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  27 +-
+ .../settings/stedding_shortcuts_handler.cc    |  18 +-
+ .../stedding_shortcuts_handler_unittest.cc    |  18 +
+ chrome/test/stedding/BUILD.gn                 |   1 +
+ .../test/stedding/command_bar_browsertest.cc  |  38 ++
+ .../stedding/sidebar_forms_browsertest.cc     | 398 ++++++++++++++++++
+ 38 files changed, 1421 insertions(+), 212 deletions(-)
+ create mode 100644 chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
+ create mode 100644 chrome/test/stedding/sidebar_forms_browsertest.cc
+
+diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
+index d54143532062a..5a9e282f25e41 100644
+--- a/chrome/app/stedding_strings.grdp
++++ b/chrome/app/stedding_strings.grdp
+@@ -93,9 +93,16 @@
+   <message name="IDS_STEDDING_CAPTURE_TOAST_BODY" desc="Toast text after a screenshot was copied to the clipboard and saved to the Downloads folder.">
+     Copied · Saved to Downloads
+   </message>
+-  <message name="IDS_STEDDING_CAPTURE_TOAST_BUTTON" desc="The toast button that reveals the saved screenshot in the Finder.">
+-    Show in Finder
+-  </message>
++  <if expr="is_macosx">
++    <message name="IDS_STEDDING_CAPTURE_TOAST_BUTTON" desc="Mac: The toast button that reveals the saved screenshot in the Finder.">
++      Show in Finder
++    </message>
++  </if>
++  <if expr="not is_macosx">
++    <message name="IDS_STEDDING_CAPTURE_TOAST_BUTTON" desc="The toast button that reveals the saved screenshot in the system's file manager, in Chromium's own download wording.">
++      Show in folder
++    </message>
++  </if>
+   <message name="IDS_STEDDING_ROUTED_TOAST_BODY" desc="Toast text after a new tab was moved to the Space its site is routed to. SPACE is that Space's name.">
+     Opened in <ph name="SPACE">$1<ex>Work</ex></ph>
+   </message>
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index f1baa8bf2dc6a..56ca03342e6d2 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -334,6 +334,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kNumber;
+   (*s_allowlist)[stedding::prefs::kSidebarHoverDelayMs] =
+       settings_api::PrefType::kNumber;
++  (*s_allowlist)[stedding::prefs::kSidebarClosedForm] =
++      settings_api::PrefType::kNumber;
+   (*s_allowlist)[::prefs::kEnableQuietGeolocationPermissionUi] =
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHttpsFirstBalancedMode] =
+diff --git a/chrome/browser/favicon/favicon_utils.cc b/chrome/browser/favicon/favicon_utils.cc
+index d318340b3d2c1..c881a88fa419d 100644
+--- a/chrome/browser/favicon/favicon_utils.cc
++++ b/chrome/browser/favicon/favicon_utils.cc
+@@ -20,6 +20,7 @@
+ #include "content/public/browser/navigation_entry.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/resource/resource_bundle.h"
++#include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/color_analysis.h"
+@@ -103,12 +104,30 @@ gfx::Image GetDefaultFavicon() {
+       ui::NativeTheme::PreferredColorScheme::kDark);
+ }
+ 
++namespace {
++
++// Stedding (BACKLOG S-73): whether the background behind a default favicon
++// is dark. A translucent background is read over the frame it sits on: the
++// dark sidebar's active row is a light tint at 14% over a dark ground, and
++// read as light by its own channels it took the light scheme's dark globe,
++// about 1.4:1 against the row.
++bool IsDarkBehind(const ui::ColorProvider* provider, ui::ColorId bg_color) {
++  SkColor background = provider->GetColor(bg_color);
++  if (SkColorGetA(background) != SK_AlphaOPAQUE) {
++    background = color_utils::GetResultingPaintColor(
++        background, provider->GetColor(ui::kColorFrameActive));
++  }
++  return color_utils::IsDark(background);
++}
++
++}  // namespace
++
+ ui::ImageModel GetDefaultFaviconModel(ui::ColorId bg_color) {
+   return ui::ImageModel::FromImageGenerator(
+       base::BindRepeating(
+           [](ui::ColorId bg_color, const ui::ColorProvider* provider) {
+             return *GetDefaultFaviconForColorScheme(
+-                        color_utils::IsDark(provider->GetColor(bg_color)))
++                        IsDarkBehind(provider, bg_color))
+                         .ToImageSkia();
+           },
+           bg_color),
+@@ -122,7 +141,7 @@ ui::ImageModel GetDefaultFaviconModel(
+           [](const base::RepeatingCallback<ui::ColorId()>& resolver,
+              const ui::ColorProvider* provider) {
+             return *GetDefaultFaviconForColorScheme(
+-                        color_utils::IsDark(provider->GetColor(resolver.Run())))
++                        IsDarkBehind(provider, resolver.Run()))
+                         .ToImageSkia();
+           },
+           std::move(bg_color_id_resolver)),
+diff --git a/chrome/browser/favicon/favicon_utils_unittest.cc b/chrome/browser/favicon/favicon_utils_unittest.cc
+index 29c56c23f0e79..b344f129f3a48 100644
+--- a/chrome/browser/favicon/favicon_utils_unittest.cc
++++ b/chrome/browser/favicon/favicon_utils_unittest.cc
+@@ -140,6 +140,25 @@ TEST_F(DefaultFaviconModelTest, UsesCorrectIcon_LightBackground_Custom) {
+                   .BackedBySameObjectAs(favicon_image));
+ }
+ 
++// Stedding (BACKLOG S-73): a translucent background is read over the frame
++// it sits on. The dark sidebar's active row is a light tint over a dark
++// ground; read as light by its own channels, it took the dark globe.
++TEST_F(DefaultFaviconModelTest, ATranslucentBackgroundIsReadOverTheFrame) {
++  const auto initializer = [&](ui::ColorProvider* provider,
++                               const ui::ColorProviderKey& key) {
++    ui::ColorMixer& mixer = provider->AddMixer();
++    mixer[ui::kColorFrameActive] = {kDarkColor};
++    mixer[ui::kColorBubbleBackground] = {SkColorSetA(kLightColor, 0x24)};
++  };
++  AddInitializer(base::BindRepeating(initializer));
++  auto* color_provider =
++      GetColorProvider(ui::ColorProviderKey::ColorMode::kDark);
++  const auto favicon_image = GetDefaultFaviconModel(ui::kColorBubbleBackground)
++                                 .Rasterize(color_provider);
++  EXPECT_TRUE(GetDefaultFaviconForColorScheme(/*is_dark=*/true)
++                  .BackedBySameObjectAs(favicon_image));
++}
++
+ TEST_F(DefaultFaviconModelTest, UsesCorrectIcon_DarkBackground_Custom) {
+   // Flip the background for a new color id such that it is light in dark mode
+   // and vice versa.
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.css b/chrome/browser/resources/settings/stedding_page/stedding_page.css
+index 10a7f9eef25d8..38ca01ee8374a 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.css
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.css
+@@ -13,6 +13,22 @@
+   padding-bottom: 8px;
+ }
+ 
++/* settings T13: the page's sections, Sidebar first. */
++.section-header {
++  align-items: flex-end;
++  min-height: 0;
++  padding-bottom: 8px;
++  padding-top: 24px;
++}
++
++.section-header h2 {
++  margin: 0;
++}
++
++.section-header + .hr {
++  border-top: none;
++}
++
+ .space-row {
+   align-items: center;
+   gap: 12px;
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 71f8cea22bbbd..2a08ec813d19f 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -16,70 +16,23 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       $i18n{steddingPageIntro}
+     </div>
+   </div>
+-  <settings-toggle-button
+-      id="sidebarExpandOnHover"
+-      class="hr"
+-      pref-key="vertical_tabs.expand_on_hover"
+-      label="$i18n{steddingSidebarHoverLabel}"
+-      sub-label="$i18n{steddingSidebarHoverSubLabel}">
+-  </settings-toggle-button>
+-  ${isWindows ? '' : html`
+-  <settings-toggle-button
+-      id="littleWindow"
+-      class="hr"
+-      pref-key="stedding.little.enabled"
+-      label="$i18n{steddingLittleLabel}"
+-      sub-label="$i18n{steddingLittleSubLabel}">
+-  </settings-toggle-button>`}
+-  <settings-toggle-button
+-      id="hideAddressRow"
+-      class="hr"
+-      pref-key="stedding.toolbar.hide_with_sidebar"
+-      label="$i18n{steddingHideAddressRowLabel}"
+-      sub-label="$i18n{steddingHideAddressRowSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="animate"
+-      class="hr"
+-      pref-key="stedding.ui.animate"
+-      label="$i18n{steddingAnimateLabel}"
+-      sub-label="$i18n{steddingAnimateSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="pinsCloseSleeps"
+-      class="hr"
+-      pref-key="stedding.pins.close_sleeps"
+-      label="$i18n{steddingPinsCloseSleepsLabel}"
+-      sub-label="$i18n{steddingPinsCloseSleepsSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="copyStripTracking"
+-      class="hr"
+-      pref-key="stedding.copy.strip_tracking"
+-      label="$i18n{steddingCopyStripLabel}"
+-      sub-label="$i18n{steddingCopyStripSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="menusShort"
+-      class="hr"
+-      pref-key="stedding.menus.short"
+-      label="$i18n{steddingMenusShortLabel}"
+-      sub-label="$i18n{steddingMenusShortSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="holdCmdNumbers"
+-      class="hr"
+-      pref-key="stedding.sidebar.hold_cmd_numbers"
+-      label="$i18n{steddingHoldCmdNumbersLabel}"
+-      sub-label="$i18n{steddingHoldCmdNumbersSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="ctrlTabMru"
+-      class="hr"
+-      pref-key="stedding.tabs.ctrl_tab_mru"
+-      label="$i18n{steddingCtrlTabMruLabel}"
+-      sub-label="$i18n{steddingCtrlTabMruSubLabel}">
+-  </settings-toggle-button>
++  <div class="cr-row section-header" id="sidebarHeader">
++    <h2 class="cr-title-text">$i18n{steddingSidebarTitle}</h2>
++  </div>
++  <div class="hr settings-box">
++    <div class="start" id="sidebarClosedFormLabel">
++      <div class="label">$i18n{steddingClosedFormLabel}</div>
++      <div class="secondary">$i18n{steddingClosedFormSubLabel}</div>
++    </div>
++    <settings-dropdown-menu id="sidebarClosedForm"
++        pref-key="stedding.sidebar.closed_form"
++        label="$i18n{steddingClosedFormLabel}"
++        .menuOptions="${[
++          {value: 0, name: '$i18n{steddingClosedFormIcons}'},
++          {value: 1, name: '$i18n{steddingClosedFormHidden}'},
++        ]}">
++    </settings-dropdown-menu>
++  </div>
+   <div class="hr settings-box">
+     <div class="start" id="sidebarWidthLabel">
+       <div class="label">$i18n{steddingSidebarWidthLabel}</div>
+@@ -92,7 +45,7 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         label-min="126" label-max="480">
+     </settings-slider>
+   </div>
+-  <div class="settings-box continuation">
++  <div class="hr settings-box">
+     <div class="start" id="sidebarDensityLabel">
+       <div class="label">$i18n{steddingDensityLabel}</div>
+       <div class="secondary">$i18n{steddingDensitySubLabel}</div>
+@@ -107,7 +60,7 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         ]}">
+     </settings-dropdown-menu>
+   </div>
+-  <div class="settings-box continuation">
++  <div class="hr settings-box">
+     <div class="start" id="sidebarTextSizeLabel">
+       <div class="label">$i18n{steddingTextSizeLabel}</div>
+       <div class="secondary">$i18n{steddingTextSizeSubLabel}</div>
+@@ -124,6 +77,60 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         ]}">
+     </settings-dropdown-menu>
+   </div>
++  <settings-toggle-button
++      id="sidebarExpandOnHover"
++      class="hr"
++      pref-key="vertical_tabs.expand_on_hover"
++      label="$i18n{steddingSidebarHoverLabel}"
++      sub-label="$i18n{steddingSidebarHoverSubLabel}">
++  </settings-toggle-button>
++  <div class="hr settings-box">
++    <div class="start" id="hoverDelayLabel">
++      <div class="label">$i18n{steddingHoverDelayLabel}</div>
++      <div class="secondary">$i18n{steddingHoverDelaySubLabel}</div>
++    </div>
++    <settings-dropdown-menu id="hoverDelayMs"
++        pref-key="stedding.sidebar.hover_delay_ms"
++        label="$i18n{steddingHoverDelayLabel}"
++        .menuOptions="${[
++          {value: 0, name: '$i18n{steddingHoverDelayChromium}'},
++          {value: 1000, name: '$i18n{steddingHoverDelay1s}'},
++          {value: 2000, name: '$i18n{steddingHoverDelay2s}'},
++          {value: 5000, name: '$i18n{steddingHoverDelay5s}'},
++        ]}">
++    </settings-dropdown-menu>
++  </div>
++  <settings-toggle-button
++      id="hideAddressRow"
++      class="hr"
++      pref-key="stedding.toolbar.hide_with_sidebar"
++      label="$i18n{steddingHideAddressRowLabel}"
++      sub-label="$i18n{steddingHideAddressRowSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="holdCmdNumbers"
++      class="hr"
++      pref-key="stedding.sidebar.hold_cmd_numbers"
++      label="$i18n{steddingHoldCmdNumbersLabel}"
++      sub-label="$i18n{steddingHoldCmdNumbersSubLabel}">
++  </settings-toggle-button>
++  <div class="cr-row section-header" id="tabsHeader">
++    <h2 class="cr-title-text">$i18n{steddingTabsTitle}</h2>
++  </div>
++  <settings-toggle-button
++      id="pinsCloseSleeps"
++      class="hr"
++      pref-key="stedding.pins.close_sleeps"
++      label="$i18n{steddingPinsCloseSleepsLabel}"
++      sub-label="$i18n{steddingPinsCloseSleepsSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="ctrlTabMru"
++      class="hr"
++      pref-key="stedding.tabs.ctrl_tab_mru"
++      label="$i18n{steddingCtrlTabMruLabel}"
++      sub-label="$i18n{steddingCtrlTabMruSubLabel}">
++  </settings-toggle-button>
+   <div class="hr settings-box">
+     <div class="start" id="archiveLabel">
+       <div class="label">$i18n{steddingArchiveLabel}</div>
+@@ -141,7 +148,7 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         ]}">
+     </settings-dropdown-menu>
+   </div>
+-  <div class="settings-box continuation">
++  <div class="hr settings-box">
+     <div class="start" id="archiveKeepLabel">
+       <div class="label">$i18n{steddingArchiveKeepLabel}</div>
+       <div class="secondary">$i18n{steddingArchiveKeepSubLabel}</div>
+@@ -172,29 +179,59 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         ]}">
+     </settings-dropdown-menu>
+   </div>
+-  <div class="hr settings-box">
+-    <div class="start" id="hoverDelayLabel">
+-      <div class="label">$i18n{steddingHoverDelayLabel}</div>
+-      <div class="secondary">$i18n{steddingHoverDelaySubLabel}</div>
+-    </div>
+-    <settings-dropdown-menu id="hoverDelayMs"
+-        pref-key="stedding.sidebar.hover_delay_ms"
+-        label="$i18n{steddingHoverDelayLabel}"
+-        .menuOptions="${[
+-          {value: 0, name: '$i18n{steddingHoverDelayChromium}'},
+-          {value: 1000, name: '$i18n{steddingHoverDelay1s}'},
+-          {value: 2000, name: '$i18n{steddingHoverDelay2s}'},
+-          {value: 5000, name: '$i18n{steddingHoverDelay5s}'},
+-        ]}">
+-    </settings-dropdown-menu>
++  <div class="cr-row section-header" id="pagesHeader">
++    <h2 class="cr-title-text">$i18n{steddingPagesTitle}</h2>
+   </div>
+-  <div class="hr cr-row" id="privacyHeader">
++  <settings-toggle-button
++      id="copyStripTracking"
++      class="hr"
++      pref-key="stedding.copy.strip_tracking"
++      label="$i18n{steddingCopyStripLabel}"
++      sub-label="$i18n{steddingCopyStripSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="menusShort"
++      class="hr"
++      pref-key="stedding.menus.short"
++      label="$i18n{steddingMenusShortLabel}"
++      sub-label="$i18n{steddingMenusShortSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="animate"
++      class="hr"
++      pref-key="stedding.ui.animate"
++      label="$i18n{steddingAnimateLabel}"
++      sub-label="$i18n{steddingAnimateSubLabel}">
++  </settings-toggle-button>
++  ${isWindows ? '' : html`
++  <settings-toggle-button
++      id="littleWindow"
++      class="hr"
++      pref-key="stedding.little.enabled"
++      label="$i18n{steddingLittleLabel}"
++      sub-label="$i18n{steddingLittleSubLabel}">
++  </settings-toggle-button>`}
++  <settings-toggle-button
++      id="newTabHint"
++      class="hr"
++      pref-key="stedding.new_tab.show_hint"
++      label="$i18n{steddingNewTabHintLabel}"
++      sub-label="$i18n{steddingNewTabHintSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="newTabShortcuts"
++      class="hr"
++      pref-key="stedding.new_tab.show_shortcuts"
++      label="$i18n{steddingNewTabShortcutsLabel}"
++      sub-label="$i18n{steddingNewTabShortcutsSubLabel}">
++  </settings-toggle-button>
++  <div class="cr-row section-header" id="privacyHeader">
+     <div class="flex">
+-      <div class="label">$i18n{steddingPrivacyTitle}</div>
++      <h2 class="cr-title-text">$i18n{steddingPrivacyTitle}</h2>
+       <div class="secondary">$i18n{steddingPrivacyIntro}</div>
+     </div>
+   </div>
+-  <div class="settings-box continuation">
++  <div class="hr settings-box">
+     <div class="start" id="cookiesLabel">
+       <div class="label">$i18n{steddingCookiesLabel}</div>
+       <div class="secondary">$i18n{steddingCookiesSubLabel}</div>
+@@ -211,14 +248,14 @@ export function getHtml(this: SettingsSteddingPageElement) {
+   </div>
+   <settings-toggle-button
+       id="httpsFirst"
+-      class="continuation"
++      class="hr"
+       pref-key="https_first_balanced_mode_enabled"
+       label="$i18n{steddingHttpsFirstLabel}"
+       sub-label="$i18n{steddingHttpsFirstSubLabel}">
+   </settings-toggle-button>
+   <settings-toggle-button
+       id="ownErrorPages"
+-      class="continuation"
++      class="hr"
+       pref-key="alternate_error_pages.enabled"
+       inverted
+       label="$i18n{steddingErrorPagesLabel}"
+@@ -226,26 +263,26 @@ export function getHtml(this: SettingsSteddingPageElement) {
+   </settings-toggle-button>
+   <settings-toggle-button
+       id="globalPrivacyControl"
+-      class="continuation"
++      class="hr"
+       pref-key="stedding.privacy.gpc"
+       label="$i18n{steddingGpcLabel}"
+       sub-label="$i18n{steddingGpcSubLabel}">
+   </settings-toggle-button>
+   <settings-toggle-button
+       id="quietNotifications"
+-      class="continuation"
++      class="hr"
+       pref-key="profile.content_settings.enable_quiet_permission_ui.notifications"
+       label="$i18n{steddingQuietNotificationsLabel}"
+       sub-label="$i18n{steddingQuietNotificationsSubLabel}">
+   </settings-toggle-button>
+   <settings-toggle-button
+       id="quietLocation"
+-      class="continuation"
++      class="hr"
+       pref-key="profile.content_settings.enable_quiet_permission_ui.geolocation"
+       label="$i18n{steddingQuietLocationLabel}"
+       sub-label="$i18n{steddingQuietLocationSubLabel}">
+   </settings-toggle-button>
+-  <div class="settings-box continuation">
++  <div class="hr settings-box">
+     <div class="start">
+       <div class="label">$i18n{steddingSandboxLabel}</div>
+       <div class="secondary">$i18n{steddingSandboxSubLabel}</div>
+@@ -253,18 +290,18 @@ export function getHtml(this: SettingsSteddingPageElement) {
+   </div>
+   <settings-toggle-button
+       id="searchSuggest"
+-      class="continuation"
++      class="hr"
+       pref-key="search.suggest_enabled"
+       label="$i18n{steddingSuggestLabel}"
+       sub-label="$i18n{steddingSuggestSubLabel}">
+   </settings-toggle-button>
+-  <div class="hr cr-row" id="spacesHeader">
++  <div class="cr-row section-header" id="spacesHeader">
+     <div class="flex">
+-      <div class="label">$i18n{steddingSpacesTitle}</div>
++      <h2 class="cr-title-text">$i18n{steddingSpacesTitle}</h2>
+       <div class="secondary">$i18n{steddingSpacesIntro}</div>
+     </div>
+   </div>
+-  <div class="settings-box continuation" id="externalDefault">
++  <div class="hr settings-box" id="externalDefault">
+     <div class="flex">
+       <div class="label">$i18n{steddingExternalDefaultLabel}</div>
+       <div class="secondary">$i18n{steddingExternalDefaultSubLabel}</div>
+@@ -362,24 +399,10 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         $i18n{steddingImportArcButton}
+       </cr-button>
+     </div>` : ''}
+-  <settings-toggle-button
+-      id="newTabHint"
+-      class="hr"
+-      pref-key="stedding.new_tab.show_hint"
+-      label="$i18n{steddingNewTabHintLabel}"
+-      sub-label="$i18n{steddingNewTabHintSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="newTabShortcuts"
+-      class="hr"
+-      pref-key="stedding.new_tab.show_shortcuts"
+-      label="$i18n{steddingNewTabShortcutsLabel}"
+-      sub-label="$i18n{steddingNewTabShortcutsSubLabel}">
+-  </settings-toggle-button>
+   ${this.hasShortcutReference_ ? html`
+-  <div class="hr cr-row" id="shortcutsHeader">
++  <div class="cr-row section-header" id="shortcutsHeader">
+     <div class="flex">
+-      <div class="label">$i18n{steddingShortcutsTitle}</div>
++      <h2 class="cr-title-text">$i18n{steddingShortcutsTitle}</h2>
+       <div class="secondary">$i18n{steddingShortcutsIntro}</div>
+     </div>
+   </div>` : ''}
+diff --git a/chrome/browser/ui/accelerator_table.cc b/chrome/browser/ui/accelerator_table.cc
+index 2dc7c37cd9813..2cec266013af6 100644
+--- a/chrome/browser/ui/accelerator_table.cc
++++ b/chrome/browser/ui/accelerator_table.cc
+@@ -174,8 +174,9 @@ const AcceleratorMapping kAcceleratorMap[] = {
+     {ui::VKEY_F11, ui::EF_NONE, IDC_FULLSCREEN},
+     {ui::VKEY_M, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
+      IDC_SHOW_AVATAR_MENU},
+-    {ui::VKEY_L, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
+-     IDC_TOGGLE_VERTICAL_TABS_COLLAPSE},
++    // Stedding: no Ctrl+Shift+L for the sidebar (Chromium 155's chord): its
++    // chord is Ctrl+S, as in Arc, and with two the command bar and the menus
++    // named Ctrl+Shift+L, the first in the table (real use, 2026-10-10).
+     // Stedding: Ctrl+Shift+K clears the Space's unpinned tabs (spaces B20);
+     // Ctrl+Shift+C copies the page's link without its tracking parameters
+     // (copy-link L1; Inspect keeps F12 and Ctrl+Shift+I); Ctrl+Shift+2 and
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index 83b50c9d0440e..eb13ccbdc2ad6 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -1131,8 +1131,12 @@ void BrowserActions::InitializeChromeMenuActions() {
+               },
+               bwi))
+           .SetActionId(kActionToggleCollapseVertical)
+-          .SetAccelerator(ui::Accelerator(
+-              ui::VKEY_L, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR))
++          // Stedding: the sidebar's chord is Cmd+S / Ctrl+S, as in Arc
++          // (accelerator_table.cc, accelerators_cocoa.mm); the toggle's
++          // tooltip named Chromium 155's Ctrl+Shift+L, which Stedding does not
++          // bind (real use, 2026-10-10).
++          .SetAccelerator(
++              ui::Accelerator(ui::VKEY_S, ui::EF_PLATFORM_ACCELERATOR))
+           .SetEnabled(false)
+           .Build());
+ 
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+index bcee570ea1ebe..ac48ac8ca64bf 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+@@ -765,12 +765,11 @@ ArcImportResult ApplyArcImport(BrowserWindowInterface* browser,
+       }
+       const SpaceId id = space->id();
+       if (options.pinned) {
+-        // The loose tabs of the pinned run are Space-pinned last to first,
+-        // since a pin moves its tab to the top of the run.
+-        std::vector<tabs::TabInterface*> loose =
+-            InsertNodes(ctx, arc_space.pinned, id, nullptr);
+-        for (auto it = loose.rbegin(); it != loose.rend(); ++it) {
+-          model->SetSpacePinned(*it, true);
++        // The loose tabs of the pinned run are Space-pinned in order, since
++        // a pin joins the end of the run (pins H14).
++        for (tabs::TabInterface* const tab :
++             InsertNodes(ctx, arc_space.pinned, id, nullptr)) {
++          model->SetSpacePinned(tab, true);
+         }
+       }
+       if (options.unpinned) {
+@@ -797,10 +796,8 @@ ArcImportResult ImportNodesAsPins(
+   ctx.open_tabs = OpenTabIds(tabs);
+   SpaceModel::ScopedRoutingPause no_routing(model);
+   const SpaceId space = model->active_id();
+-  std::vector<tabs::TabInterface*> loose =
+-      InsertNodes(ctx, nodes, space, nullptr);
+-  for (auto it = loose.rbegin(); it != loose.rend(); ++it) {
+-    model->SetSpacePinned(*it, true);
++  for (tabs::TabInterface* const tab : InsertNodes(ctx, nodes, space, nullptr)) {
++    model->SetSpacePinned(tab, true);
+   }
+   ids.Save();
+   return result;
+diff --git a/chrome/browser/ui/spaces/space_commands.cc b/chrome/browser/ui/spaces/space_commands.cc
+index 08414a84798cc..bd509b8a4dd14 100644
+--- a/chrome/browser/ui/spaces/space_commands.cc
++++ b/chrome/browser/ui/spaces/space_commands.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/spaces/space_commands.h"
+ 
++#include <algorithm>
+ #include <vector>
+ 
+ #include "chrome/app/chrome_command_ids.h"
+@@ -132,7 +133,13 @@ void ToggleSpacePinOnActiveTab(BrowserWindowInterface* browser) {
+   // The active tab's state decides the direction; every selected row takes
+   // it (tabs R22).
+   const bool pin = !model->IsSpacePinned(tab);
+-  for (tabs::TabInterface* each : SelectedTabs(browser)) {
++  // Pins join the end of the run and unpins go to the top of the tabs under
++  // it, so the rows keep their order when unpinned last first (pins H14).
++  std::vector<tabs::TabInterface*> selected = SelectedTabs(browser);
++  if (!pin) {
++    std::ranges::reverse(selected);
++  }
++  for (tabs::TabInterface* each : selected) {
+     if (!each->IsPinned()) {
+       model->SetSpacePinned(each, pin);
+     }
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 15fbb3747a61e..aeb2e93573c2f 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -1916,9 +1916,35 @@ void SpaceModel::SetSpacePinned(tabs::TabInterface* tab, bool pinned) {
+   }
+ }
+ 
++void SpaceModel::MoveToSpacePinBoundary(tabs::TabInterface* tab) {
++  const int index = tab_strip_model_->GetIndexOfTab(tab);
++  if (index == TabStripModel::kNoTab || tab->IsPinned()) {
++    return;
++  }
++  // The end of the run of Space-pinned tabs at the top of the unpinned block,
++  // `tab` counted in it wherever it is, so an unpin from the middle of the
++  // run lands past the pins that stay.
++  int end = tab_strip_model_->IndexOfFirstNonPinnedTab();
++  while (end < tab_strip_model_->count()) {
++    const tabs::TabInterface* const each = tab_strip_model_->GetTabAtIndex(end);
++    if (each != tab && !IsSpacePinned(each)) {
++      break;
++    }
++    ++end;
++  }
++  // The index the tab ends up at once it has left its own place.
++  const int to = index < end ? end - 1 : end;
++  if (to != index) {
++    tab_strip_model_->MoveWebContentsAt(index, to, false);
++  }
++}
++
+ void SpaceModel::SetSpacePinnedOnOneTab(tabs::TabInterface* tab,
+                                         bool pinned,
+                                         bool move) {
++  // A selection takes the active tab's direction (tabs R22); a tab already
++  // that way stays where it is.
++  const bool changes = IsSpacePinned(tab) != pinned;
+   if (pinned) {
+     // The page pinned is the home page (pins H1); a re-pin keeps the home.
+     // The entry is what makes the tab a pin, so a page that is no home
+@@ -1928,18 +1954,19 @@ void SpaceModel::SetSpacePinnedOnOneTab(tabs::TabInterface* tab,
+       space_pin_homes_[tab->GetHandle()] =
+           stedding::IsAllowedPinHome(page) ? page : GURL();
+     }
+-    // A Space-pinned tab lives at the top of the unpinned block, directly
+-    // under the Clear line, so pinning moves it there.
+-    if (tab_strip_model_ && move) {
+-      const int index = tab_strip_model_->GetIndexOfTab(tab);
+-      const int first_unpinned = tab_strip_model_->IndexOfFirstNonPinnedTab();
+-      if (index != TabStripModel::kNoTab && index != first_unpinned) {
+-        tab_strip_model_->MoveWebContentsAt(index, first_unpinned, false);
+-      }
+-    }
+   } else {
+     space_pin_homes_.erase(tab->GetHandle());
+   }
++  // pins H14: the Space-pinned tabs are the run at the top of the unpinned
++  // block, over the Clear line. A new pin joins the end of that run, as in
++  // Arc, and an unpinned tab leaves it for the top of the tabs under the
++  // line. Until 2026-10-10 a pin went to the top of the run, so each new pin
++  // pushed the others down, and an unpin stayed where it was, which split the
++  // run: the sidebar lays out every row after the first unpinned one under
++  // the line, so the pins below it showed as unpinned tabs (operator).
++  if (tab_strip_model_ && move && changes) {
++    MoveToSpacePinBoundary(tab);
++  }
+   // The sidebar draws the Clear line under the Space-pinned run, so a pin
+   // change is a layout change.
+   observers_.Notify(&Observer::OnTabSpaceChanged, tab);
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index 01f5c3b0aadeb..c0748e3a34bbe 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -348,9 +348,11 @@ class SpaceModel : public TabStripModelObserver,
+   std::vector<std::pair<std::string, std::string>> SessionExtraDataForTab(
+       const tabs::TabInterface* tab,
+       const SpaceId& id) const;
+-  // Pinning also moves the tab to the top of the unpinned block, directly
+-  // under the Clear line, which is where a Space-pinned tab lives (B17);
+-  // every caller (menu, Cmd-D) gets the same result.
++  // Pinning also moves the tab to the end of the run of Space-pinned tabs at
++  // the top of the unpinned block, over the Clear line, which is where a
++  // Space-pinned tab lives (B17); unpinning moves it to the top of the tabs
++  // under the line (pins H14). Every caller (menu, Cmd-D) gets the same
++  // result. To unpin several tabs in their order, unpin the last first.
+   void SetSpacePinned(tabs::TabInterface* tab, bool pinned);
+ 
+   // The home URL of a pinned tab (either tier), or nothing for an unpinned
+@@ -391,6 +393,9 @@ class SpaceModel : public TabStripModelObserver,
+   // One tab's share of SetSpaceForTab and SetSpacePinned (splits J4).
+   void SetSpaceForOneTab(tabs::TabInterface* tab, const SpaceId& id);
+   void SetSpacePinnedOnOneTab(tabs::TabInterface* tab, bool pinned, bool move);
++  // pins H14: moves `tab` to the boundary of the Space-pinned run: its end
++  // for a pin, the first place past it for an unpinned tab.
++  void MoveToSpacePinBoundary(tabs::TabInterface* tab);
+ 
+   // sessions S8, S9: after a move or a pin, put the tab on the jar its Space
+   // (or the essentials default) requires. Posted so it does not re-enter the
+diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+index 2d67e90a054ba..78052dd165cde 100644
+--- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+@@ -656,6 +656,62 @@ TEST_F(SpaceWindowTest, CmdDTogglesSpacePin) {
+   EXPECT_FALSE(model().IsSpacePinned(first));
+ }
+ 
++// pins H14: a new pin joins the END of the pinned run, as in Arc, and an
++// unpinned tab leaves the run for the top of the tabs under the Clear line,
++// so the pins after it stay above the line. Until 2026-10-10 every pin went
++// to the top of the run, and an unpin from its middle split it: the sidebar
++// showed the pins below as unpinned rows (operator).
++TEST_F(SpaceWindowTest, PinsJoinTheEndOfTheRunAndUnpinsLeaveIt) {
++  tabs::TabInterface* const d = OpenTab();
++  tabs::TabInterface* const c = OpenTab();
++  tabs::TabInterface* const b = OpenTab();
++  tabs::TabInterface* const a = OpenTab();
++  // OpenTab inserts at the front: a, b, c, d.
++  const auto order = [this] {
++    std::vector<tabs::TabInterface*> out;
++    for (int i = 0; i < tabs().count(); ++i) {
++      out.push_back(tabs().GetTabAtIndex(i));
++    }
++    return out;
++  };
++  ASSERT_EQ((std::vector<tabs::TabInterface*>{a, b, c, d}), order());
++
++  model().SetSpacePinned(c, true);
++  model().SetSpacePinned(a, true);
++  model().SetSpacePinned(d, true);
++  EXPECT_EQ((std::vector<tabs::TabInterface*>{c, a, d, b}), order())
++      << "each pin joins the end of the run, in the order it was pinned";
++
++  model().SetSpacePinned(a, false);
++  EXPECT_EQ((std::vector<tabs::TabInterface*>{c, d, a, b}), order())
++      << "an unpinned tab leaves the run for the top of the tabs under it";
++  EXPECT_TRUE(model().IsSpacePinned(c));
++  EXPECT_TRUE(model().IsSpacePinned(d));
++
++  // Cmd-D on a selection of two pins unpins both, and they keep their order
++  // under the line.
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(c));
++  tabs().ExtendSelectionTo(tabs().GetIndexOfTab(d));
++  spaces::ToggleSpacePinOnActiveTab(browser());
++  EXPECT_FALSE(model().IsSpacePinned(c));
++  EXPECT_FALSE(model().IsSpacePinned(d));
++  EXPECT_EQ((std::vector<tabs::TabInterface*>{c, d, a, b}), order());
++
++  // A selection takes the active tab's direction (tabs R22), so the model is
++  // asked to unpin tabs that are not pinned and to pin pins; such a tab stays
++  // where it is. The unpinned last row went to the top of the unpinned tabs,
++  // and a pin pinned again to the end of the run.
++  model().SetSpacePinned(b, false);
++  EXPECT_EQ((std::vector<tabs::TabInterface*>{c, d, a, b}), order())
++      << "an unpinned tab asked to unpin stays put";
++  model().SetSpacePinned(c, true);
++  model().SetSpacePinned(d, true);
++  ASSERT_EQ((std::vector<tabs::TabInterface*>{c, d, a, b}), order());
++  model().SetSpacePinned(c, true);
++  EXPECT_EQ((std::vector<tabs::TabInterface*>{c, d, a, b}), order())
++      << "a pin asked to pin keeps its place in the run";
++}
++
+ // B28: an essentials (Chromium-pinned) tab sits above every Space; Cmd-D on
+ // it changes nothing.
+ TEST_F(SpaceWindowTest, CmdDOnAnEssentialIsANoOp) {
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 5caef1efe5ea1..4257629aaec1c 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -31,6 +31,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // form tabs. A 15-minute default discarded those.
+   registry->RegisterIntegerPref(kSpaceSleepMinutes, 0);
+   registry->RegisterIntegerPref(kSidebarHoverDelayMs, 2000);
++  registry->RegisterIntegerPref(kSidebarClosedForm, kSidebarClosedToIcons);
+   registry->RegisterBooleanPref(kMenusShort, true);
+   registry->RegisterBooleanPref(kHoldCmdNumbers, true);
+   registry->RegisterBooleanPref(kCtrlTabMru, true);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 91457b1ec018d..09772824f25a6 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -78,6 +78,13 @@ inline constexpr char kHoldCmdNumbers[] = "stedding.sidebar.hold_cmd_numbers";
+ // expands; a click in the rail starts the wait again. Zero keeps Chromium's
+ // own timing (350 ms, sooner with its velocity heuristic).
+ inline constexpr char kSidebarHoverDelayMs[] = "stedding.sidebar.hover_delay_ms";
++// sidebar Y19: what a closed sidebar leaves -- 0, the rail of icons
++// (Chromium's collapsed strip); 1, nothing: the page takes the window edge to
++// edge, and the pointer at the window's leading edge slides the sidebar in
++// over the page. Cmd-S and the sidebar's toggle close it to this form.
++inline constexpr char kSidebarClosedForm[] = "stedding.sidebar.closed_form";
++inline constexpr int kSidebarClosedToIcons = 0;
++inline constexpr int kSidebarClosedHidden = 1;
+ // switcher X1, X5: Ctrl-Tab walks the active Space's most recent tabs; off,
+ // it walks the sidebar in order.
+ inline constexpr char kCtrlTabMru[] = "stedding.tabs.ctrl_tab_mru";
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index cb32901aa0dd5..7387bb29efc7a 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -28,6 +28,10 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+     EXPECT_FALSE(service.GetBoolean(name)) << name;
+   }
+   EXPECT_EQ(0, service.GetInteger(kSpaceSleepMinutes));
++  // sidebar Y19: a closed sidebar is the rail of icons until the user
++  // chooses to hide it completely.
++  ASSERT_TRUE(service.FindPreference(kSidebarClosedForm));
++  EXPECT_EQ(kSidebarClosedToIcons, service.GetInteger(kSidebarClosedForm));
+ }
+ 
+ }  // namespace
+diff --git a/chrome/browser/ui/stedding/tab_menu_verbs.cc b/chrome/browser/ui/stedding/tab_menu_verbs.cc
+index 8c1e9cf9c0a95..ff8efdc2253e8 100644
+--- a/chrome/browser/ui/stedding/tab_menu_verbs.cc
++++ b/chrome/browser/ui/stedding/tab_menu_verbs.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/stedding/tab_menu_verbs.h"
+ 
++#include <algorithm>
+ #include <cstddef>
+ #include <memory>
+ #include <vector>
+@@ -209,10 +210,16 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+   switch (command_id) {
+     case TabStripModel::CommandSpacePin:
+     case TabStripModel::CommandSpaceUnpin: {
+-      // The model moves a newly pinned tab under the Clear line itself, so
+-      // the menu and Cmd-D (spaces B21) cannot disagree.
++      // The model moves a pinned or unpinned tab to its place itself, so
++      // the menu and Cmd-D (spaces B21) cannot disagree; unpinned last first,
++      // the rows keep their order (pins H14).
+       const bool pin = command_id == TabStripModel::CommandSpacePin;
+-      for (tabs::TabInterface* const each : selection) {
++      std::vector<tabs::TabInterface*> ordered(selection.begin(),
++                                               selection.end());
++      if (!pin) {
++        std::ranges::reverse(ordered);
++      }
++      for (tabs::TabInterface* const each : ordered) {
+         if (!each->IsPinned()) {
+           space_model->SetSpacePinned(each, pin);
+         }
+diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
+index 23de44ef14fc1..4155a21ba5c37 100644
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -857,6 +857,7 @@ if (!is_android) {
+       "inactive_window_mouse_event_controller_unittest.cc",
+       "split_view_iph_controller_unittest.cc",
+       "tab_collection_storage_unittest.cc",
++      "tab_favicon_theming_unittest.cc",
+       "tab_collection_unittest.cc",
+       "tab_group_deletion_dialog_controller_unittest.cc",
+       "tab_iterator_unittest.cc",
+@@ -878,6 +879,7 @@ if (!is_android) {
+     ]
+ 
+     deps = [
++      ":favicon_theming",
+       ":page_context_eligibility_helper_unit_tests",
+       ":tab_enums",
+       ":tab_group",
+diff --git a/chrome/browser/ui/tabs/tab_favicon_theming.cc b/chrome/browser/ui/tabs/tab_favicon_theming.cc
+index 81bf448b7e43c..5721c176aa554 100644
+--- a/chrome/browser/ui/tabs/tab_favicon_theming.cc
++++ b/chrome/browser/ui/tabs/tab_favicon_theming.cc
+@@ -6,17 +6,40 @@
+ 
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/image/image_skia.h"
+ 
+ namespace tabs {
+ 
++namespace {
++
++// Stedding (BACKLOG S-73): a tab's background as it is seen. A translucent
++// one is read over the frame it sits on: the dark sidebar's active row is a
++// light tint at 14% over a dark ground, and its inactive rows have no fill
++// at all. Read by its own channels the active row counted as white, and a
++// single-colour icon on it -- the default globe -- was masked near-black,
++// about 1.4:1 against the row; the inactive rows counted as black, which
++// gave the icon white on the light sand ground.
++SkColor TabBackground(const ui::ColorProvider& color_provider,
++                      ui::ColorId id) {
++  const SkColor color = color_provider.GetColor(id);
++  if (SkColorGetA(color) == SK_AlphaOPAQUE) {
++    return color;
++  }
++  return color_utils::GetResultingPaintColor(
++      color, color_provider.GetColor(ui::kColorFrameActive));
++}
++
++}  // namespace
++
+ gfx::ImageSkia ThemeFaviconForTab(const gfx::ImageSkia& source,
+                                   const ui::ColorProvider& color_provider) {
+   return favicon::ThemeFavicon(
+       source, color_provider.GetColor(kColorToolbarButtonIcon),
+-      color_provider.GetColor(kColorTabBackgroundActiveFrameActive),
+-      color_provider.GetColor(kColorTabBackgroundInactiveFrameActive));
++      TabBackground(color_provider, kColorTabBackgroundActiveFrameActive),
++      TabBackground(color_provider, kColorTabBackgroundInactiveFrameActive));
+ }
+ 
+ gfx::ImageSkia ThemeMonochromeFaviconForTab(
+@@ -24,9 +47,9 @@ gfx::ImageSkia ThemeMonochromeFaviconForTab(
+     const ui::ColorProvider& color_provider,
+     bool is_active) {
+   return favicon::ThemeMonochromeFavicon(
+-      source, color_provider.GetColor(
+-                  is_active ? kColorTabBackgroundActiveFrameActive
+-                            : kColorTabBackgroundInactiveFrameActive));
++      source, TabBackground(color_provider,
++                            is_active ? kColorTabBackgroundActiveFrameActive
++                                      : kColorTabBackgroundInactiveFrameActive));
+ }
+ 
+ }  // namespace tabs
+diff --git a/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc b/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
+new file mode 100644
+index 0000000000000..374386b113372
+--- /dev/null
++++ b/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
+@@ -0,0 +1,71 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/tabs/tab_favicon_theming.h"
++
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_mixer.h"
++#include "ui/color/color_provider.h"
++#include "ui/color/color_recipe.h"
++#include "ui/gfx/image/image_skia.h"
++
++namespace tabs {
++namespace {
++
++constexpr SkColor kDarkGround = SkColorSetRGB(0x26, 0x2b, 0x3a);
++constexpr SkColor kLightGround = SkColorSetRGB(0xee, 0xe6, 0xd8);
++
++// A grey single-colour icon, like the default globe.
++gfx::ImageSkia GreyIcon() {
++  SkBitmap bitmap;
++  bitmap.allocN32Pixels(16, 16);
++  bitmap.eraseColor(SK_ColorGRAY);
++  return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
++}
++
++SkColor Masked(const gfx::ImageSkia& image) {
++  return image.bitmap()->getColor(8, 8);
++}
++
++// The sidebar's colours: the active row a tint of the text colour over the
++// ground in dark, the white card in light; inactive rows no fill.
++void Fill(ui::ColorProvider& provider, bool dark) {
++  ui::ColorMixer& mixer = provider.AddMixer();
++  mixer[ui::kColorFrameActive] = {dark ? kDarkGround : kLightGround};
++  mixer[kColorTabBackgroundActiveFrameActive] = {
++      dark ? SkColorSetA(SK_ColorWHITE, 0x24) : SK_ColorWHITE};
++  mixer[kColorTabBackgroundInactiveFrameActive] = {SK_ColorTRANSPARENT};
++  provider.GenerateColorMapForTesting();
++}
++
++// BACKLOG S-73: a single-colour icon on a translucent row is masked for the
++// row as it is seen, over the frame: light on the dark sidebar's active row,
++// where it came out near-black (about 1.4:1), and dark on the light
++// sidebar's inactive rows, where it came out white.
++TEST(TabFaviconThemingTest, ATranslucentRowIsReadOverTheFrame) {
++  ui::ColorProvider dark;
++  Fill(dark, /*dark=*/true);
++  EXPECT_EQ(SK_ColorWHITE,
++            Masked(ThemeMonochromeFaviconForTab(GreyIcon(), dark, true)))
++      << "the dark sidebar's active row";
++  EXPECT_EQ(SK_ColorWHITE,
++            Masked(ThemeMonochromeFaviconForTab(GreyIcon(), dark, false)))
++      << "the dark sidebar's other rows";
++
++  ui::ColorProvider light;
++  Fill(light, /*dark=*/false);
++  EXPECT_NE(SK_ColorWHITE,
++            Masked(ThemeMonochromeFaviconForTab(GreyIcon(), light, true)))
++      << "the light sidebar's white card";
++  EXPECT_NE(SK_ColorWHITE,
++            Masked(ThemeMonochromeFaviconForTab(GreyIcon(), light, false)))
++      << "the light sidebar's other rows, on the sand ground";
++}
++
++}  // namespace
++}  // namespace tabs
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index 6dac0dc159ab8..68624fe1109ae 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <memory>
++#include <optional>
+ #include <string>
+ #include <utility>
+ 
+@@ -36,6 +37,7 @@
+ #include "chrome/browser/ui/spaces/space_colors.h"
+ #include "chrome/browser/ui/spaces/space_commands.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/browser/ui/spaces/space_query.h"
+ #include "chrome/browser/ui/stedding/sidebar_density.h"
+@@ -386,11 +388,11 @@ void CommandBarView::BuildActions() {
+                               },
+                               base::Unretained(browser_))});
+     }
+-    // sidebar Y4: the density presets.
++    // sidebar Y4: the density presets, by the setting's name (settings T13).
+     for (const auto& [name, value] :
+-         {std::pair{u"Sidebar Density: Comfortable", 0},
+-          std::pair{u"Sidebar Density: Compact", 1},
+-          std::pair{u"Sidebar Density: Dense", 2}}) {
++         {std::pair{u"Tab Row Height: Comfortable", 0},
++          std::pair{u"Tab Row Height: Compact", 1},
++          std::pair{u"Tab Row Height: Dense", 2}}) {
+       actions_.push_back({std::u16string(name), std::u16string(),
+                           base::BindRepeating(
+                               [](int density) {
+@@ -402,6 +404,47 @@ void CommandBarView::BuildActions() {
+                               },
+                               value)});
+     }
++    // sidebar Y19: the sidebar's three forms -- open, a rail of icons,
++    // hidden -- each a row; Cmd-S and the sidebar's toggle close it to the
++    // form last chosen.
++    if (const tabs::VerticalTabStripStateController* const strip_state =
++            tabs::VerticalTabStripStateController::From(browser_);
++        strip_state && strip_state->ShouldDisplayVerticalTabs()) {
++      const bool closed = strip_state->IsCollapsed();
++      const int form = prefs->GetInteger(stedding::prefs::kSidebarClosedForm);
++      const auto sidebar_row = [&](std::u16string title,
++                                   std::optional<int> closed_form) {
++        actions_.push_back(
++            {std::move(title), std::u16string(),
++             base::BindRepeating(
++                 [](BrowserWindowInterface* browser,
++                    std::optional<int> closed_form) {
++                   tabs::VerticalTabStripStateController* const state =
++                       tabs::VerticalTabStripStateController::From(browser);
++                   if (!state) {
++                     return;
++                   }
++                   if (closed_form) {
++                     browser->GetProfile()->GetPrefs()->SetInteger(
++                         stedding::prefs::kSidebarClosedForm, *closed_form);
++                   }
++                   if (state->IsCollapsed() != closed_form.has_value()) {
++                     state->RequestCollapse(closed_form.has_value());
++                   }
++                 },
++                 base::Unretained(browser_), closed_form)});
++      };
++      if (closed) {
++        sidebar_row(u"Show Sidebar", std::nullopt);
++      }
++      if (!closed || form != stedding::prefs::kSidebarClosedToIcons) {
++        sidebar_row(u"Collapse Sidebar to Icons",
++                    stedding::prefs::kSidebarClosedToIcons);
++      }
++      if (!closed || form != stedding::prefs::kSidebarClosedHidden) {
++        sidebar_row(u"Hide Sidebar", stedding::prefs::kSidebarClosedHidden);
++      }
++    }
+     // import I16: bookmarks a profile already holds.
+     actions_.push_back({u"Turn Bookmarks into Pinned Tabs", std::u16string(),
+                         base::BindRepeating(
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+index 29ba163424dc5..bf229c6defaa6 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -26,6 +26,7 @@
+ #include "chrome/browser/ui/stedding/tab_names.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/grit/generated_resources.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/search_engines/template_url.h"
+@@ -36,6 +37,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "ui/base/accelerators/accelerator.h"
++#include "ui/base/l10n/l10n_util.h"
+ #include "ui/events/event.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+ #include "ui/gfx/geometry/rect.h"
+@@ -294,6 +296,14 @@ TEST_F(CommandBarViewTest, ActionTitlesHaveNoMacGlyphsOffTheMac) {
+   EXPECT_TRUE(sleeps);
+   EXPECT_TRUE(cycles);
+ }
++
++// windows N10, screenshot C5 (BACKLOG S-83): the screenshot toast's button
++// names the platform's file manager the way Chromium's downloads do. It said
++// "Show in Finder" on Windows too until 2026-10-10.
++TEST(SteddingStringsTest, TheCaptureToastSaysShowInFolderOffTheMac) {
++  EXPECT_EQ(u"Show in folder",
++            l10n_util::GetStringUTF16(IDS_STEDDING_CAPTURE_TOAST_BUTTON));
++}
+ #endif
+ 
+ // commandbar K9, K10: a command row is listed only while its command is
+@@ -691,16 +701,16 @@ TEST_F(CommandBarViewTest, ShareCoatFiltersToTheActiveSpace) {
+ TEST_F(CommandBarViewTest, DensityActionsSetThePreset) {
+   auto bar = std::make_unique<CommandBarView>(browser());
+   bar->SetModeForTesting(CommandBarView::Mode::kActions);
+-  bar->PrefillForTesting(u"Sidebar Density");
++  bar->PrefillForTesting(u"Tab Row Height");
+   ASSERT_EQ(3u, bar->row_count_for_testing());
+-  EXPECT_EQ(u"Sidebar Density: Comfortable", bar->row_title_for_testing(0));
++  EXPECT_EQ(u"Tab Row Height: Comfortable", bar->row_title_for_testing(0));
+   Down(*bar, 2);
+   EXPECT_TRUE(Enter(*bar));
+   EXPECT_EQ(2, g_browser_process->local_state()->GetInteger(
+                    stedding::prefs::kSidebarDensity));
+   bar = std::make_unique<CommandBarView>(browser());
+   bar->SetModeForTesting(CommandBarView::Mode::kActions);
+-  bar->PrefillForTesting(u"Sidebar Density");
++  bar->PrefillForTesting(u"Tab Row Height");
+   EXPECT_TRUE(Enter(*bar));
+   EXPECT_EQ(0, g_browser_process->local_state()->GetInteger(
+                    stedding::prefs::kSidebarDensity));
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+index 4aa24a696e736..686229e272bbd 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -29,6 +29,7 @@
+ #include "chrome/browser/ui/views/frame/minimize_button_metrics_win.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/new_tab_button.h"
+ #include "chrome/browser/ui/views/tabs/tab.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+@@ -753,7 +754,9 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
+       GetBrowserView()->IsToolbarVisible() &&
+       GetBrowserView()->GetWebAppFrameToolbarPreferredSize().IsEmpty() &&
+       !browser_widget()->IsFullscreen()) {
+-    const int row_top = GetTopInset(false) + stedding::kCardGutter.Get();
++    const int row_top =
++        GetTopInset(false) +
++        VerticalTabStripRegionView::SteddingCardGutter(GetBrowserView());
+     const int row_height = toolbar->GetPreferredSize().height();
+     height = preferred_size.height();
+     y = row_top + std::max(0, (row_height - height) / 2);
+diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+index 455925f121e1f..436efea4d8b34 100644
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -333,9 +333,11 @@ std::optional<int> BrowserNativeWidgetMac::GetGlassFrameWidth() const {
+     return max_width;
+   }
+ 
++  // Stedding (sidebar Y19): a sidebar closed to nothing has no column.
+   const int width =
+-      (controller->IsCollapsed() ? VerticalTabStripRegionView::kCollapsedWidth
+-                                 : controller->GetUncollapsedWidth()) +
++      (controller->IsCollapsed()
++           ? VerticalTabStripRegionView::ClosedWidthOf(browser_view_)
++           : controller->GetUncollapsedWidth()) +
+       corner_padding;
+   return std::min(width, max_width);
+ }
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index 5ad02451f0aaa..d46d1cbb52585 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1229,7 +1229,7 @@ gfx::Rect BrowserView::GetFindBarBoundingBox() const {
+   // corner, its right edge on the card's, not on the centred location bar's.
+   // The 8 DIP gutter is the card's (MultiContentsView's Stedding inset).
+   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
+-    const int gutter = stedding::kCardGutter.Get();
++    const int gutter = VerticalTabStripRegionView::SteddingCardGutter(this);
+     contents_bounds.Inset(gfx::Insets::TLBR(0, gutter, gutter, gutter));
+     return multi_contents_view_->GetMirroredRect(contents_bounds);
+   }
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index f662e5bb6dce6..46eeba02b0d38 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -830,8 +830,11 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+             gfx::Insets::TLBR(views::Separator::kThickness, 0, 0, 0));
+       }
+ 
+-      const int inset_amount = horizontal_layout.vertical_tab_strip_width -
+-                               GetVerticalTabStripContentOverlap();
++      // Stedding (sidebar Y19): beside a strip of no width the overlap of
++      // fractional scales would put the page a DIP past the window's edge.
++      const int inset_amount =
++          std::max(0, horizontal_layout.vertical_tab_strip_width -
++                          GetVerticalTabStripContentOverlap());
+       params.InsetHorizontal(inset_amount, /*leading=*/true);
+ 
+       // Let the vertical tab strip animate out over the content.
+@@ -841,8 +844,11 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+                 TabStripAnimations::kExpand ||
+             vertical_tab_strip_animation.current_motion ==
+                 TabStripAnimations::kCollapse;
++        // Stedding (sidebar Y19): a sidebar that closes to nothing leaves
++        // the page the whole width.
+         unclipped_contents_region.Inset(gfx::Insets::TLBR(
+-            0, VerticalTabStripRegionView::kCollapsedWidth, 0, 0));
++            0, views().vertical_tab_strip_region_view->CollapsedWidthNow(), 0,
++            0));
+       } else {
+         unclipped_contents_region.Inset(gfx::Insets::TLBR(
+             0, horizontal_layout.vertical_tab_strip_width, 0, 0));
+diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
+index 818a3d9ef0898..a7f071b64e527 100644
+--- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
++++ b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/custom_floating_corner.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h"
+@@ -37,13 +38,28 @@ bool DrawsVerticalStrip(const BrowserViewLayoutDelegate& delegate) {
+ // or without such buttons (macOS: the traffic lights are the leading
+ // exclusion, over the sidebar's column).
+ int TrailingReserve(const BrowserLayoutParams& params,
+-                    bool vertical_strip) {
++                    bool vertical_strip,
++                    int gutter) {
+   if (!vertical_strip || params.trailing_exclusion.IsEmpty()) {
+     return 0;
+   }
+   return std::max(
+       0, base::ClampCeil(params.trailing_exclusion.ContentWithPadding().width()) -
+-             stedding::kCardGutter.Get());
++             gutter);
++}
++
++// sidebar Y19: the sidebar closes to nothing and is closed: the page takes
++// the window edge to edge, the address row included.
++bool SidebarHidden(const BrowserViewLayoutViews& views) {
++  return views.vertical_tab_strip_region_view &&
++         views.vertical_tab_strip_region_view->IsHiddenCompletely();
++}
++
++// The card's gutter now: none while the sidebar is hidden (sidebar Y19) or a
++// page is in a full screen of its own (BACKLOG S-69).
++int CardGutter(const BrowserViewLayoutViews& views) {
++  return VerticalTabStripRegionView::SteddingCardGutter(
++      views::AsViewClass<BrowserView>(views.browser_view.get()));
+ }
+ 
+ }  // namespace
+@@ -144,8 +160,12 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+         delegate().GetImmersiveModeController();
+     if (immersive && immersive->IsEnabled() &&
+         views().vertical_tab_strip_region_view) {
++      // A hidden sidebar is no column at all (sidebar Y19), though its
++      // width of 0 reads like a strip not laid out yet, and it floats over
++      // the page when it slides in.
+       strip_inset =
+-          views().vertical_tab_strip_region_view->width() > 0
++          views().vertical_tab_strip_region_view->IsHiddenCompletely() ? 0
++          : views().vertical_tab_strip_region_view->width() > 0
+               ? views().vertical_tab_strip_region_view->width()
+               : views().vertical_tab_strip_region_view->uncollapsed_width();
+       params.visual_client_area.Inset(gfx::Insets::TLBR(0, strip_inset, 0, 0));
+@@ -154,7 +174,10 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+   // The toolbar row is the top of the content card, so it keeps the card's
+   // side gutters (MultiContentsView's mat inset) and sits the same gutter
+   // below the window's top edge, as the card does at the right and bottom.
+-  const int kCardSideInset = stedding::kCardGutter.Get();
++  // None while the sidebar is hidden completely: the row runs edge to edge
++  // over a page that does (sidebar Y19).
++  const bool hidden = DrawsVerticalStrip(delegate()) && SidebarHidden(views());
++  const int kCardSideInset = CardGutter(views());
+   params.visual_client_area.Inset(
+       gfx::Insets::TLBR(kCardSideInset, kCardSideInset, 0, kCardSideInset));
+   // The exclusion above is skipped with a vertical strip because macOS's
+@@ -165,13 +188,15 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+   // contents give up that much (the bar itself runs on under the buttons:
+   // SteddingWindowBackground::PaintPageBar).
+   if (const int trailing = TrailingReserve(
+-          params, DrawsVerticalStrip(delegate()));
++          params, DrawsVerticalStrip(delegate()), kCardSideInset);
+       trailing > 0) {
+     params.visual_client_area.Inset(gfx::Insets::TLBR(0, 0, 0, trailing));
+   }
++  // With the sidebar hidden nothing else clears macOS's traffic lights, so
++  // the row keeps the exclusion a window without a vertical strip keeps.
+   gfx::Rect result = BrowserViewTabbedLayoutImpl::CalculateTopContainerLayout(
+       layout, std::move(params),
+-      needs_exclusion && !DrawsVerticalStrip(delegate()));
++      needs_exclusion && (!DrawsVerticalStrip(delegate()) || hidden));
+   result.set_x(result.x() - kCardSideInset);
+   result.set_width(result.width() + 2 * kCardSideInset);
+   // The same for the top: the toolbar was placed kCardSideInset down inside
+@@ -280,7 +305,8 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
+                           : nullptr) {
+     toolbar->SetSteddingTrailingReserve(
+         delegate().IsToolbarVisible()
+-            ? TrailingReserve(params, DrawsVerticalStrip(delegate()))
++            ? TrailingReserve(params, DrawsVerticalStrip(delegate()),
++                              CardGutter(views()))
+             : 0);
+   }
+ 
+@@ -300,15 +326,23 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
+   // under it (toolbar T16): a page whose header is not its theme colour
+   // showed the row's colour through its rounded top corners until
+   // 2026-09-05. With the row hidden (T8) the page is the whole card.
+-  const float ours = static_cast<float>(stedding::kContentsCornerRadius.Get());
++  // Square with no gutter -- the sidebar hidden completely (sidebar Y19), a
++  // page in its own full screen (S-69) --: the page meets the window's edges.
++  const float ours =
++      CardGutter(views()) == 0
++          ? 0.f
++          : static_cast<float>(stedding::kContentsCornerRadius.Get());
+   // Under Windows' caption buttons too: the bar runs on to the card's edge
+   // there (toolbar T19), so the card's top-right corner is under it like
+   // the left one.
+   const float top = delegate().IsToolbarVisible() ? 0.f : ours;
+   const gfx::RoundedCornersF current = contents->GetBackgroundRadii();
+-  const gfx::RoundedCornersF merged(top, top,
+-                                    std::max(current.lower_right(), ours),
+-                                    std::max(current.lower_left(), ours));
++  // Hidden, every corner is square, whatever an earlier layout left.
++  const gfx::RoundedCornersF merged =
++      ours == 0.f ? gfx::RoundedCornersF()
++                  : gfx::RoundedCornersF(top, top,
++                                         std::max(current.lower_right(), ours),
++                                         std::max(current.lower_left(), ours));
+   if (merged != current) {
+     contents->SetBackgroundRadii(merged);
+   }
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
+index b75665cbc93f4..54132fe154c95 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+ #include "chrome/browser/ui/views/frame/scrim_view.h"
+ #include "chrome/browser/ui/views/frame/themed_background.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/new_tab_footer/footer_web_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/common/pref_names.h"
+@@ -532,7 +533,10 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+     // No gap under the address row: the row is the top of the card (the
+     // window background paints them as one surface, see
+     // SteddingWindowBackground).
+-    const int gutter = stedding::kCardGutter.Get();
++    // None while the sidebar is hidden completely: the page takes the
++    // window edge to edge (sidebar Y19).
++    const int gutter =
++        VerticalTabStripRegionView::SteddingCardGutter(browser_view_);
+     available_space.Inset(gfx::Insets::TLBR(0, gutter, gutter, gutter));
+   } else if (IsInSplitView()) {
+     available_space.Inset(split_view_insets_);
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.cc b/chrome/browser/ui/views/frame/stedding_window_background.cc
+index 4c4819d635d52..0297de98a3df0 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.cc
++++ b/chrome/browser/ui/views/frame/stedding_window_background.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "third_party/skia/include/core/SkPath.h"
+@@ -146,9 +147,12 @@ namespace {
+ // is what tells them apart (toolbar T15).
+ void PaintBarSurface(gfx::Canvas* canvas,
+                      const gfx::RectF& surface,
+-                     SkColor bar) {
++                     SkColor bar,
++                     bool square = false) {
++  // Square while the sidebar is hidden completely: the row meets the
++  // window's own edges (sidebar Y19).
+   const float radius =
+-      static_cast<float>(stedding::kContentsCornerRadius.Get());
++      square ? 0.f : static_cast<float>(stedding::kContentsCornerRadius.Get());
+   cc::PaintFlags flags;
+   flags.setAntiAlias(true);
+   flags.setColor(bar);
+@@ -233,13 +237,13 @@ void SteddingWindowBackground::PaintPageBar(gfx::Canvas* canvas,
+   // colour (PageBarColorSupplier). Stopping with the contents left the
+   // row's end as a cut corner beside the buttons (operator, 2026-09-08).
+   // On macOS the two edges coincide.
+-  const float bar_right =
+-      card.right() - static_cast<float>(stedding::kCardGutter.Get());
++  const int gutter = VerticalTabStripRegionView::SteddingCardGutter(browser_view);
++  const float bar_right = card.right() - static_cast<float>(gutter);
+   PaintBarSurface(canvas,
+                   gfx::RectF(toolbar.x(), toolbar.y(),
+                              std::max(toolbar.width(), bar_right - toolbar.x()),
+                              card.y() - toolbar.y()),
+-                  bar);
++                  bar, /*square=*/gutter == 0);
+ }
+ 
+ void PaintOverlayPageBar(const ui::PaintContext& context,
+@@ -262,7 +266,10 @@ void PaintOverlayPageBar(const ui::PaintContext& context,
+     return;
+   }
+   ui::PaintRecorder recorder(context, top_container->size());
+-  PaintBarSurface(recorder.canvas(), gfx::RectF(toolbar), *controller->color());
++  PaintBarSurface(
++      recorder.canvas(), gfx::RectF(toolbar), *controller->color(),
++      /*square=*/VerticalTabStripRegionView::SteddingCardGutter(browser_view) ==
++          0);
+ }
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index b703183d30017..f71cb05a50415 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -27,9 +27,10 @@
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+-#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
++#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
+ #include "chrome/browser/ui/singleton_tabs.h"
+@@ -51,6 +52,7 @@
+ #include "chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+ #include "chrome/browser/ui/views/frame/shadow_frame_view.h"
+@@ -106,6 +108,7 @@
+ #include "ui/views/layout/layout_types.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/view_targeter.h"
+ #include "ui/views/view_utils.h"
+ #include "chrome/browser/ui/stedding/motion.h"
+ #include "base/memory/raw_ref.h"
+@@ -137,6 +140,11 @@ END_METADATA
+ constexpr int kResizeAreaWidth = 12;
+ constexpr int kCollapsedResizeAreaWidth = 2;
+ constexpr int kKeyboardResizeWidth = 50;
++// sidebar Y19: how near the window's leading edge the pointer slides a
++// hidden sidebar in, and how long it rests there first, so a pointer
++// crossing the edge on its way elsewhere does not open it.
++constexpr int kLeadingEdgeWidth = 6;
++constexpr base::TimeDelta kLeadingEdgeRevealDelay = base::Milliseconds(100);
+ constexpr int kSnapDistance = 15;
+ 
+ // sidebar Y8: how far past the rail's own width the strip still wears the
+@@ -176,6 +184,23 @@ class VerticalTabStripRegionView::CmdHoldObserver : public ui::EventObserver {
+   const raw_ptr<VerticalTabStripRegionView> view_;
+ };
+ 
++// sidebar Y19: every pointer move in the window, the page's included, which
++// is where the leading edge is while the sidebar takes no width.
++class VerticalTabStripRegionView::LeadingEdgeObserver
++    : public ui::EventObserver {
++ public:
++  explicit LeadingEdgeObserver(VerticalTabStripRegionView* view)
++      : view_(view) {}
++  ~LeadingEdgeObserver() override = default;
++
++  void OnEvent(const ui::Event& event) override {
++    view_->OnWindowPointerMoved();
++  }
++
++ private:
++  const raw_ptr<VerticalTabStripRegionView> view_;
++};
++
+ // spaces B31: tints the window from the active Space's colour, so the chrome
+ // around the page says which Space you are in without being read. It moved
+ // here from SpaceTabVisibilityController, which is built with the tab strip
+@@ -388,6 +413,19 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+   resize_area_->GetViewAccessibility().SetName(
+       l10n_util::GetStringUTF16(IDS_VERTICAL_RESIZE_AREA));
+   resize_area_->GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
++  if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    // sidebar Y18: the handle reaches over the card's gutter (ResizeHandle-
++    // Reach), so it answers for points past the strip's own edge.
++    SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
++    resize_area_->SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
++    // sidebar Y19: a closed strip takes its closed form's width.
++    closed_form_registrar_.Init(
++        browser_view->browser()->GetProfile()->GetPrefs());
++    closed_form_registrar_.Add(
++        stedding::prefs::kSidebarClosedForm,
++        base::BindRepeating(&VerticalTabStripRegionView::OnClosedFormChanged,
++                            base::Unretained(this)));
++  }
+ 
+   state_controller_->SetDelegate(this);
+   target_collapse_state_ = state_controller_->GetState();
+@@ -744,6 +782,12 @@ void VerticalTabStripRegionView::AddedToWidget() {
+     cmd_hold_monitor_ = views::EventMonitor::CreateWindowMonitor(
+         cmd_hold_observer_.get(), widget->GetNativeWindow(),
+         {ui::EventType::kKeyPressed, ui::EventType::kKeyReleased});
++    if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++      leading_edge_observer_ = std::make_unique<LeadingEdgeObserver>(this);
++      leading_edge_monitor_ = views::EventMonitor::CreateWindowMonitor(
++          leading_edge_observer_.get(), widget->GetNativeWindow(),
++          {ui::EventType::kMouseMoved});
++    }
+   }
+   paint_as_active_subscription_ =
+       GetWidget()->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+@@ -767,6 +811,9 @@ void VerticalTabStripRegionView::RemovedFromWidget() {
+   HideNumberBadges();
+   cmd_hold_monitor_.reset();
+   cmd_hold_observer_.reset();
++  leading_edge_timer_.Stop();
++  leading_edge_monitor_.reset();
++  leading_edge_observer_.reset();
+   if (GetFocusManager()) {
+     GetFocusManager()->RemoveFocusChangeListener(&focus_listener_);
+   }
+@@ -801,10 +848,26 @@ void VerticalTabStripRegionView::Layout(PassKey) {
+       background()) {
+     if (auto* const ground = background()->AsA<CustomCornersBackground>()) {
+       ground->SetVisible(state_controller_->IsCollapsed() &&
+-                         width() > kCollapsedWidth);
++                         width() > CollapsedWidthNow());
+     }
+   }
+ 
++  // sidebar Y19: closed to nothing, the strip's rows and buttons -- several on
++  // layers of their own, which its bounds do not clip -- painted past its
++  // edge over the page: the rail's glyphs stood in a column at the window's
++  // edge and the toggle over Back (real use, 2026-10-10). It clips them
++  // while it is closed and while it slides in or out; resting open over the
++  // page it does not, so the shadow at its edge shows.
++  if (layer()) {
++    const bool animating =
++        BrowserAnimationController::From(browser_view()->browser())
++            ->IsAnimating(TabStripAnimations::kVerticalTabStrip);
++    layer()->SetMasksToBounds(
++        CollapsedWidthNow() == 0 &&
++        (animating ||
++         (state_controller_->IsCollapsed() && !is_expanded_on_hover_)));
++  }
++
+   // Manually position the resize area as it overlaps views handled by the flex
+   // layout.
+   resize_area_->SetBoundsRect(gfx::Rect(bounds().right() - resize_area_width_,
+@@ -831,7 +894,7 @@ views::View* VerticalTabStripRegionView::GetDefaultFocusableChild() {
+ gfx::Size VerticalTabStripRegionView::GetMinimumSize() const {
+   auto min_size = BaseTabStripRegionView::GetMinimumSize();
+   min_size.set_width((state_controller_->IsCollapsed() || IsAnimatingSize())
+-                         ? kCollapsedWidth
++                         ? CollapsedWidthNow()
+                          : kUncollapsedMinWidth);
+   return min_size;
+ }
+@@ -843,12 +906,14 @@ gfx::Size VerticalTabStripRegionView::CalculatePreferredSize(
+       BrowserAnimationController::From(browser_view()->browser());
+   const auto motion =
+       controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip);
++  // sidebar Y19: from no width at all when the sidebar closes to nothing.
++  const int collapsed_width = CollapsedWidthNow();
+   const int expand_amount =
+-      std::max(0, target_collapse_state_.uncollapsed_width - kCollapsedWidth);
++      std::max(0, target_collapse_state_.uncollapsed_width - collapsed_width);
+   const double expand_percent =
+       *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
+                                    TabStripAnimations::kTabStripWidth);
+-  size.set_width(kCollapsedWidth +
++  size.set_width(collapsed_width +
+                  (motion == TabStripAnimations::kExpand
+                       ? std::floor<double>
+                       : std::ceil<double>)(expand_amount * expand_percent));
+@@ -1056,8 +1121,9 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
+   }
+ 
+   if (done_resizing) {
+-    resize_area_->SetVisible(!state_controller_->IsCollapsed() ||
+-                             !state_controller_->IsExpandOnHoverEnabled());
++    resize_area_->SetVisible((!state_controller_->IsCollapsed() ||
++                              !state_controller_->IsExpandOnHoverEnabled()) &&
++                             !IsHiddenCompletely());
+     base::RecordAction(base::UserMetricsAction(
+         new_state.collapsed ? "VerticalTabs_TabStrip_ResizeToCollapsed"
+                             : "VerticalTabs_TabStrip_ResizeToUncollapsed"));
+@@ -1503,6 +1569,15 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
+   // the collapsing state.
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
+   UpdateInteriorMargin(collapsed);
++  // sidebar Y19: closing to nothing and opening from it take the page card's
++  // gutters away and give them back; the card lays them out itself.
++  if (CollapsedWidthNow() == 0 && browser_view()) {
++    leading_edge_timer_.Stop();
++    if (views::View* const contents = browser_view()->multi_contents_view()) {
++      contents->InvalidateLayout();
++    }
++    browser_view()->SchedulePaint();
++  }
+ 
+   // Stedding: a width set elsewhere (the settings slider writes the
+   // preference, the state controller applies it) reaches the view here. The
+@@ -1518,9 +1593,10 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
+     }
+   }
+ 
+-  resize_area_->SetVisible(!collapsed ||
+-                           !state_controller_->IsExpandOnHoverEnabled() ||
+-                           resize_area_->is_resizing());
++  resize_area_->SetVisible(
++      (!collapsed || !state_controller_->IsExpandOnHoverEnabled() ||
++       resize_area_->is_resizing()) &&
++      !(collapsed && CollapsedWidthNow() == 0));
+ 
+   resize_area_width_ = collapsed ? kCollapsedResizeAreaWidth : kResizeAreaWidth;
+ 
+@@ -1585,8 +1661,9 @@ gfx::Rect VerticalTabStripRegionView::GetTabStripDraggableBounds() const {
+ }
+ 
+ void VerticalTabStripRegionView::OnExpandOnHoverEnabledChanged(bool enabled) {
+-  resize_area_->SetVisible(!state_controller_->IsCollapsed() || !enabled ||
+-                           resize_area_->is_resizing());
++  resize_area_->SetVisible((!state_controller_->IsCollapsed() || !enabled ||
++                            resize_area_->is_resizing()) &&
++                           !IsHiddenCompletely());
+   UpdateExpandOnHoverState();
+ }
+ 
+@@ -1638,9 +1715,13 @@ void VerticalTabStripRegionView::UpdateExpandOnHoverState(
+     return;
+   }
+ 
++  // sidebar Y19: a sidebar hidden completely slides in from the leading
++  // edge whatever the expand-on-hover switch says -- it is the way back to
++  // it with the pointer -- and stays while the pointer is on it.
++  const bool hidden = CollapsedWidthNow() == 0;
+   const bool should_expand =
+       !suppress_expand_on_hover_ &&
+-      state_controller_->IsExpandOnHoverEnabled() &&
++      (state_controller_->IsExpandOnHoverEnabled() || hidden) &&
+       (hovered.value_or(IsMouseHovered()) ||
+        (GetFocusManager() && Contains(GetFocusManager()->GetFocusedView())));
+ 
+@@ -1669,6 +1750,18 @@ void VerticalTabStripRegionView::UpdateExpandOnHoverState(
+   // heuristic that opens sooner still, made every visit to the rail an
+   // opening (operator, 2026-09-09). A click in the rail starts the wait
+   // again (ClickEventHandler). Zero keeps Chromium's timing below.
++  // A hidden sidebar has no rail to rest on: the leading edge's own short
++  // rest opens it (sidebar Y19), never the rail's pause.
++  if (hidden) {
++    if (!expand_on_hover_timer_.IsRunning()) {
++      expand_on_hover_timer_.Start(
++          FROM_HERE, kLeadingEdgeRevealDelay,
++          base::BindOnce(&VerticalTabStripRegionView::AnimateExpandOnHover,
++                         base::Unretained(this),
++                         /*expand=*/true));
++    }
++    return;
++  }
+   const base::TimeDelta stedding_delay = SteddingHoverDelay();
+   if (!stedding_delay.is_zero()) {
+     if (!expand_on_hover_timer_.IsRunning()) {
+@@ -1819,6 +1912,184 @@ base::TimeDelta VerticalTabStripRegionView::SteddingHoverDelay() const {
+                       stedding::prefs::kSidebarHoverDelayMs)));
+ }
+ 
++bool VerticalTabStripRegionView::IsHiddenCompletely() const {
++  return state_controller_->IsCollapsed() && CollapsedWidthNow() == 0;
++}
++
++int VerticalTabStripRegionView::CollapsedWidthNow() const {
++  if (!base::FeatureList::IsEnabled(stedding::kArcStyleWindow) ||
++      !browser_view() || !browser_view()->browser() ||
++      !state_controller_->ShouldDisplayVerticalTabs()) {
++    return kCollapsedWidth;
++  }
++  return browser_view()->browser()->GetProfile()->GetPrefs()->GetInteger(
++             stedding::prefs::kSidebarClosedForm) ==
++                 stedding::prefs::kSidebarClosedHidden
++             ? 0
++             : kCollapsedWidth;
++}
++
++// static
++int VerticalTabStripRegionView::SteddingCardGutter(
++    const BrowserView* browser_view) {
++  if (browser_view) {
++    const VerticalTabStripRegionView* const strip = StripOf(browser_view);
++    // A page in a full screen of its own -- a video's button, the Fullscreen
++    // API -- takes the screen edge to edge too: the card's gutters left a
++    // band of the window's ground on three sides of it (BACKLOG S-69). So
++    // does a full screen with neither the address row nor a sidebar drawn:
++    // F11 on Windows hides both, and the gutters and the rounded corners
++    // stayed around the page on four sides (real use, 2026-10-10). macOS's
++    // full screen keeps the sidebar, and its gutters with it, whether or not
++    // the row shows.
++    const bool strip_drawn = strip && strip->GetVisible() && strip->width() > 0;
++    if (browser_view->GetWidget() && browser_view->GetWidget()->IsFullscreen() &&
++        !browser_view->IsToolbarVisible() && !strip_drawn) {
++      return 0;
++    }
++    // The lookup takes a mutable window; nothing here changes it.
++    if (BrowserWindowInterface* const browser =
++            const_cast<BrowserView*>(browser_view)->browser()) {
++      ExclusiveAccessManager* const access =
++          ExclusiveAccessManager::From(browser);
++      if (access && access->fullscreen_controller()->IsTabFullscreen()) {
++        return 0;
++      }
++    }
++    if (strip && strip->IsHiddenCompletely()) {
++      return 0;
++    }
++  }
++  return stedding::kCardGutter.Get();
++}
++
++// static
++const VerticalTabStripRegionView* VerticalTabStripRegionView::StripOf(
++    const BrowserView* browser_view) {
++  if (browser_view) {
++    for (const views::View* const child : browser_view->children()) {
++      if (const auto* const strip =
++              views::AsViewClass<VerticalTabStripRegionView>(child)) {
++        return strip;
++      }
++    }
++  }
++  return nullptr;
++}
++
++// static
++int VerticalTabStripRegionView::ClosedWidthOf(const BrowserView* browser_view) {
++  const VerticalTabStripRegionView* const strip = StripOf(browser_view);
++  return strip ? strip->CollapsedWidthNow() : kCollapsedWidth;
++}
++
++bool VerticalTabStripRegionView::DoesIntersectRect(
++    const views::View* target,
++    const gfx::Rect& rect) const {
++  gfx::Rect bounds = target->GetLocalBounds();
++  // sidebar Y18: the edge a person reads as the sidebar's is the page
++  // card's, past the gutter, so the handle reaches to it: a press on that
++  // edge resizes. It stopped at the strip's own edge until 2026-10-10, so
++  // the cursor changed only a few DIP short of the card (operator). Local
++  // coordinates are physical, left to right on screen: the card is on the
++  // strip's right, or on its left in a right-to-left layout.
++  if ((target == this || target == resize_area_) &&
++      resize_area_->GetVisible()) {
++    const int reach = ResizeHandleReach();
++    if (base::i18n::IsRTL()) {
++      bounds.set_x(bounds.x() - reach);
++    }
++    bounds.set_width(bounds.width() + reach);
++  }
++  return bounds.Intersects(rect);
++}
++
++int VerticalTabStripRegionView::ResizeHandleReach() const {
++  return SteddingCardGutter(browser_view());
++}
++
++void VerticalTabStripRegionView::OnClosedFormChanged() {
++  // An open strip is the same in either form; a closed one takes the new
++  // form's width, and the page card its gutters (sidebar Y19).
++  leading_edge_timer_.Stop();
++  if (state_controller_->IsCollapsed() && is_expanded_on_hover_) {
++    AnimateExpandOnHover(/*expand=*/false);
++  }
++  resize_area_->SetVisible(
++      (!state_controller_->IsCollapsed() ||
++       !state_controller_->IsExpandOnHoverEnabled()) &&
++      !IsHiddenCompletely());
++  PreferredSizeChanged();
++  if (browser_view()) {
++    browser_view()->InvalidateLayout();
++    if (views::View* const contents = browser_view()->multi_contents_view()) {
++      contents->InvalidateLayout();
++    }
++    browser_view()->SchedulePaint();
++  }
++}
++
++bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
++  // Only a hidden sidebar the window shows: in F11 or a page's own full
++  // screen the strip is not drawn at all, and a reveal there left it open
++  // over the page once full screen ended, with no exit to close it.
++  return IsHiddenCompletely() && !is_expanded_on_hover_ && browser_view() &&
++         GetVisible() && browser_view()->GetVisible() && IsFrameActive() &&
++         force_collapse_lock_count_ == 0 && keep_current_state_lock_count_ == 0;
++}
++
++bool VerticalTabStripRegionView::IsAtLeadingEdge(gfx::Point point) const {
++  // `point` is in the browser view's coordinates, which are physical: the
++  // sidebar's edge is the left one, or the right one in a right-to-left
++  // layout.
++  const int width = browser_view()->width();
++  const bool across = base::i18n::IsRTL()
++                          ? point.x() >= width - kLeadingEdgeWidth &&
++                                point.x() < width
++                          : point.x() >= 0 && point.x() < kLeadingEdgeWidth;
++  return across && point.y() >= 0 && point.y() < browser_view()->height();
++}
++
++bool VerticalTabStripRegionView::IsPointerAtLeadingEdge() const {
++  gfx::Point point = display::Screen::Get()->GetCursorScreenPoint();
++  views::View::ConvertPointFromScreen(browser_view(), &point);
++  return IsAtLeadingEdge(point);
++}
++
++void VerticalTabStripRegionView::OnWindowPointerMoved() {
++  if (!CanRevealFromLeadingEdge() || !IsPointerAtLeadingEdge()) {
++    leading_edge_timer_.Stop();
++    return;
++  }
++  if (!leading_edge_timer_.IsRunning()) {
++    leading_edge_timer_.Start(
++        FROM_HERE, kLeadingEdgeRevealDelay,
++        base::BindOnce(&VerticalTabStripRegionView::RevealFromLeadingEdge,
++                       base::Unretained(this)));
++  }
++}
++
++void VerticalTabStripRegionView::RevealFromLeadingEdge() {
++  // Where the pointer is now: only its moves inside the window are heard, so
++  // one that crossed the edge on its way out -- into the next window, or
++  // off the screen -- would otherwise open the sidebar behind it.
++  if (!CanRevealFromLeadingEdge() ||
++      (!reveal_without_pointer_for_testing_ && !IsPointerAtLeadingEdge())) {
++    return;
++  }
++  AnimateExpandOnHover(/*expand=*/true);
++}
++
++void VerticalTabStripRegionView::OnPointerAtForTesting(gfx::Point point) {
++  if (!CanRevealFromLeadingEdge() || !IsAtLeadingEdge(point)) {
++    leading_edge_timer_.Stop();
++    return;
++  }
++  reveal_without_pointer_for_testing_ = true;
++  RevealFromLeadingEdge();
++  reveal_without_pointer_for_testing_ = false;
++}
++
+ // static
+ bool VerticalTabStripRegionView::IsRailWidth(int width) {
+   return width <= kCollapsedWidth + kRailFormMargin;
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index 7665a77aaae20..c8cd7841e8acc 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -32,10 +32,12 @@
+ #include "ui/events/event_handler.h"
+ #include "ui/events/event_observer.h"
+ #include "ui/gfx/geometry/point.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/views/accessible_pane_view.h"
+ #include "ui/views/controls/resize_area_delegate.h"
+ #include "ui/views/event_monitor.h"
+ #include "ui/views/focus/focus_manager.h"
++#include "ui/views/view_targeter_delegate.h"
+ 
+ class BrowserView;
+ 
+@@ -68,6 +70,7 @@ class FlexLayout;
+ class VerticalTabStripRegionView final
+     : public BaseTabStripRegionView,
+       public views::ResizeAreaDelegate,
++      public views::ViewTargeterDelegate,
+       public OmniboxTabHelper::Observer,
+       public tabs::VerticalTabStripStateController::Delegate {
+   METADATA_HEADER(VerticalTabStripRegionView, BaseTabStripRegionView)
+@@ -185,6 +188,9 @@ class VerticalTabStripRegionView final
+   }
+ 
+   views::ResizeArea* resize_area_for_testing() { return resize_area_; }
++  VerticalTabStripTopContainer* top_button_container_for_testing() {
++    return top_button_container_;
++  }
+   tabs::VerticalTabStripState target_collapse_state_for_testing() {
+     return target_collapse_state_;
+   }
+@@ -197,6 +203,26 @@ class VerticalTabStripRegionView final
+   // glyphs, no labels (sidebar Y8).
+   static bool IsRailWidth(int width);
+ 
++  // sidebar Y19: the sidebar is closed and closes to nothing (the user's
++  // stedding.sidebar.closed_form): the strip takes no width, the page card
++  // keeps no gutter, and the pointer at the window's leading edge slides the
++  // sidebar in over the page.
++  bool IsHiddenCompletely() const;
++  // The strip's closed width, at both ends of the collapse and expand
++  // animations: the rail's, or none when the sidebar closes to nothing.
++  int CollapsedWidthNow() const;
++  // The page card's gutter in `browser_view` now: the card_gutter parameter,
++  // or none while its sidebar is hidden completely (sidebar Y19) or nothing
++  // but the page is drawn in full screen (toolbar T33).
++  static int SteddingCardGutter(const BrowserView* browser_view);
++  // `browser_view`'s strip, if it has one, and its closed width.
++  static const VerticalTabStripRegionView* StripOf(
++      const BrowserView* browser_view);
++  static int ClosedWidthOf(const BrowserView* browser_view);
++  // sidebar Y19: the pointer at `point`, in the browser view's coordinates,
++  // as the window's monitor hears it, with the rest there already over.
++  void OnPointerAtForTesting(gfx::Point point);
++
+  private:
+   // Since VerticalTabStripRegionView inherits from AccessiblePaneView, which is
+   // a FocusChangeListener, we need to have a separate focus listener to avoid
+@@ -297,6 +323,28 @@ class VerticalTabStripRegionView final
+   // sidebar Y11: the pause before the rail expands on hover, from the
+   // profile; zero means Chromium's own timing.
+   base::TimeDelta SteddingHoverDelay() const;
++  // views::ViewTargeterDelegate: the resize handle reaches over the card's
++  // gutter to the page card's edge, the edge a person sees (sidebar Y18).
++  bool DoesIntersectRect(const views::View* target,
++                         const gfx::Rect& rect) const override;
++  // How far past the strip's edge the handle reaches: the card's gutter.
++  int ResizeHandleReach() const;
++  // sidebar Y19: the closed form changed; a closed strip takes its new width.
++  void OnClosedFormChanged();
++  PrefChangeRegistrar closed_form_registrar_;
++  // sidebar Y19: pointer moves anywhere in the window, so a hidden sidebar
++  // hears the pointer reach the window's leading edge over the page, where no
++  // view of the strip's is.
++  class LeadingEdgeObserver;
++  std::unique_ptr<LeadingEdgeObserver> leading_edge_observer_;
++  std::unique_ptr<views::EventMonitor> leading_edge_monitor_;
++  base::OneShotTimer leading_edge_timer_;
++  void OnWindowPointerMoved();
++  void RevealFromLeadingEdge();
++  bool CanRevealFromLeadingEdge() const;
++  bool IsAtLeadingEdge(gfx::Point point) const;
++  bool IsPointerAtLeadingEdge() const;
++  bool reveal_without_pointer_for_testing_ = false;
+   // The gutter's worth of interior margin the collapsed strip carries
+   // (sidebar Y6), for the button containers' margins in ApplyRailForm.
+   int rail_left_ = 0;
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+index 1d0c53c24c9be..8a7ea766d0fb3 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+@@ -104,7 +104,15 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+                   views::LayoutOrientation::kHorizontal)
+               .width() >= available_width ||
+       available_width < VerticalTabStripRegionView::kCollapseSnapWidth ||
+-      is_collapsed) {
++      // Stedding (sidebar Y8, Y19): the stack is the rail's, by the width
++      // being drawn. Drawn open over the page -- the rail expanded on hover,
++      // a hidden sidebar slid in from the window's edge -- the strip is
++      // collapsed by state but its top row is the open sidebar's: stacked,
++      // the buttons left an empty band some 70 DIP tall above the rows (real
++      // use, 2026-10-10).
++      (is_collapsed &&
++       (!base::FeatureList::IsEnabled(stedding::kArcStyleWindow) ||
++        VerticalTabStripRegionView::IsRailWidth(available_width)))) {
+     combo_button_orientation_ = views::LayoutOrientation::kVertical;
+     int current_y = 0;
+ 
+@@ -164,7 +172,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+       current_y += pref_size.height();
+     }
+ 
+-    if (combo_button_) {
++    // Stedding hides the whole combo (its constructor above); its buttons
++    // stay visible inside it, and counting them gave the rail an empty band
++    // of the combo's height under the toggle (real use, 2026-10-10).
++    if (combo_button_ && combo_button_->GetVisible()) {
+       // In the case that neither of the combo button components are visible, we
+       // do not want to add any extra padding to the top container.
+       bool start_button_visible = combo_button_->start_button() &&
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 8af1f77d2121c..6ea3c196a6c8d 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -685,6 +685,21 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+     return other;
+ #endif
+   };
++  // The page's sections (settings T13).
++  html_source->AddString("steddingSidebarTitle", "Sidebar");
++  html_source->AddString("steddingTabsTitle", "Tabs");
++  html_source->AddString("steddingPagesTitle", "Pages and menus");
++  // sidebar Y19.
++  html_source->AddString("steddingClosedFormLabel", "When the sidebar closes");
++  html_source->AddString(
++      "steddingClosedFormSubLabel",
++      base::StrCat({key("\u2318S", "Ctrl+S"),
++                    " and the sidebar\u2019s button close it this way. "
++                    "Hidden, the page fills the window; touch the "
++                    "window\u2019s left edge with the pointer and the "
++                    "sidebar slides back over it."}));
++  html_source->AddString("steddingClosedFormIcons", "Shrink to icons");
++  html_source->AddString("steddingClosedFormHidden", "Hide it completely");
+   html_source->AddString("steddingSidebarWidthLabel", "Sidebar width");
+   html_source->AddString("steddingSidebarWidthSubLabel",
+                          "Dragging the sidebar's edge sets the same value.");
+@@ -757,10 +772,11 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingExported", "Written to $1");
+   html_source->AddString("steddingExportFailed", "Nothing was written.");
+   // sidebar Y1, Y2.
+-  html_source->AddString("steddingDensityLabel", "Sidebar density");
++  html_source->AddString("steddingDensityLabel", "Tab row height");
+   html_source->AddString(
+       "steddingDensitySubLabel",
+-      "Comfortable is Arc\u2019s measure; Compact and Dense fit more rows.");
++      "Comfortable is Arc\u2019s measure; Compact and Dense fit more rows. "
++      "Every window follows.");
+   html_source->AddString("steddingDensityComfortable", "Comfortable");
+   html_source->AddString("steddingDensityCompact", "Compact");
+   html_source->AddString("steddingDensityDense", "Dense");
+@@ -832,7 +848,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingArchiveKeep7d", "7 days");
+   // sidebar Y11.
+   html_source->AddString("steddingHoverDelayLabel",
+-                         "Open the collapsed sidebar on hover");
++                         "Open the icons on hover");
+   html_source->AddString(
+       "steddingHoverDelaySubLabel",
+       "How long the pointer rests on the rail before it opens; a click in "
+@@ -912,8 +928,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "Expand the collapsed sidebar when the pointer rests on it");
+   html_source->AddString(
+       "steddingSidebarHoverSubLabel",
+-      base::StrCat({"With the sidebar collapsed (", key("\u2318S", "Ctrl+S"),
+-                    "), hovering its edge slides it out."}));
++      "With the sidebar shrunk to icons, resting the pointer on them slides "
++      "it out. A hidden sidebar always comes back from the window\u2019s "
++      "edge.");
+   html_source->AddString("steddingNewTabShortcutsLabel",
+                          "Show most-visited shortcuts on the new tab page");
+   html_source->AddString("steddingNewTabShortcutsSubLabel",
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+index c3063f0cbf835..c89c596ee7927 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+@@ -14,7 +14,6 @@
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/ui/accelerator_table.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
+-#include "chrome/browser/ui/views/peek/peek_accelerators.h"
+ #include "ui/base/accelerators/accelerator.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+@@ -136,7 +135,8 @@ std::vector<ShortcutGroup> ShortcutReference() {
+   ShortcutGroup& sidebar = groups.emplace_back();
+   sidebar.title = u"Sidebar and Spaces";
+   Add(sidebar, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
+-      u"Collapse the sidebar to icons, or bring it back");
++      u"Close the sidebar, to icons or hidden as Settings say, or bring it "
++      u"back");
+   Add(sidebar, IDC_STEDDING_TOGGLE_ADDRESS_ROW,
+       u"Show or hide the address row on its own");
+   Add(sidebar, IDC_STEDDING_LITTLE_PROMOTE_SPLIT,
+@@ -165,9 +165,11 @@ std::vector<ShortcutGroup> ShortcutReference() {
+     const std::u16string first = ChordFor(IDC_SELECT_TAB_0);
+     const std::u16string last = ChordFor(IDC_SELECT_LAST_TAB);
+     if (!first.empty() && !last.empty()) {
++      // tabs R10, R11: the first eight rows, and the last for the ninth
++      // chord (BACKLOG S-82: it read "the first nine rows").
+       AddChord(tabs, base::StrCat({first, u" – ", last}),
+-               base::StrCat({u"Jump to one of the first nine rows you can "
+-                             u"see; hold ",
++               base::StrCat({u"Jump to one of the first eight rows you can "
++                             u"see, or the last; hold ",
+                              kRowsKey, u" a moment to see the numbers"}));
+     }
+   }
+@@ -186,10 +188,8 @@ std::vector<ShortcutGroup> ShortcutReference() {
+   AddChord(tabs, ChordForKey(IDC_MOVE_TAB_PREVIOUS, ui::VKEY_UP),
+            u"Move the row up");
+   Add(tabs, IDC_NEW_SPLIT_TAB, u"Split the current tab with a new one");
+-  AddChord(tabs, PeekPromoteAccelerator().GetShortcutText(),
+-           u"Turn a peek into a tab");
+-  AddChord(tabs, PeekSplitAccelerator().GetShortcutText(),
+-           u"Turn a peek into a split");
++  // No Peek rows while Peek is withdrawn (PLAN.md decision 2, BACKLOG S-82);
++  // they come back with it.
+ 
+   ShortcutGroup& page = groups.emplace_back();
+   page.title = u"Page";
+@@ -203,7 +203,7 @@ std::vector<ShortcutGroup> ShortcutReference() {
+   ShortcutGroup& diverges = groups.emplace_back();
+   diverges.title = u"Where Stedding differs from Chromium";
+   Add(diverges, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
+-      u"Collapse or expand the sidebar", u"Save Page As…");
++      u"Close or open the sidebar", u"Save Page As…");
+   Add(diverges, IDC_SAVE_PAGE, u"Save Page As…", u"unbound");
+   Add(diverges, IDC_STEDDING_TOGGLE_SPACE_PIN, u"Pin the tab in its Space",
+       u"Bookmark This Tab… (keeps its menu row, loses the key)");
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
+index abd7a39e5eb81..6a700abe44d6a 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
+@@ -169,5 +169,23 @@ TEST(ShortcutReferenceTest, ArcsSplitKeyNoteIsPresent) {
+ }
+ #endif
+ 
++// BACKLOG S-82: the list keeps step with the product. No row offers Peek
++// while it is withdrawn (PLAN.md decision 2), and the row chords say the
++// ninth goes to the last row (tabs R10, R11), not to the ninth.
++TEST(ShortcutReferenceTest, TheListMatchesTheProduct) {
++  bool rows = false;
++  for (const ShortcutGroup& group : ShortcutReference()) {
++    for (const ShortcutRow& row : group.rows) {
++      EXPECT_EQ(std::u16string::npos, row.what.find(u"peek"))
++          << base::UTF16ToUTF8(row.what);
++      EXPECT_EQ(std::u16string::npos, row.what.find(u"first nine"))
++          << base::UTF16ToUTF8(row.what);
++      rows |= row.what.find(u"first eight rows you can see, or the last") !=
++              std::u16string::npos;
++    }
++  }
++  EXPECT_TRUE(rows);
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index fa42e47a8ab37..58b92f1f8807f 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -34,6 +34,7 @@ test("stedding_browser_tests") {
+     "search_default_browsertest.cc",
+     "settings_spaces_browsertest.cc",
+     "sidebar_click_browsertest.cc",
++    "sidebar_forms_browsertest.cc",
+     "sidebar_rail_browsertest.cc",
+     "sidebar_test_util.cc",
+     "sidebar_test_util.h",
+diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
+index 2a3b051eafc98..cece1a72f0106 100644
+--- a/chrome/test/stedding/command_bar_browsertest.cc
++++ b/chrome/test/stedding/command_bar_browsertest.cc
+@@ -27,7 +27,9 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/common/pref_names.h"
+@@ -306,6 +308,42 @@ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, EveryRowRunsInAPrivateWindow) {
+ // query are the typed text, the tabs and the archived tabs, and nothing else;
+ // the omnibox's own row for the typed text duplicates the first and is
+ // dropped.
++// sidebar Y19: the sidebar's three forms are rows of the bar. Hide Sidebar
++// closes it to nothing, Collapse Sidebar to Icons to the rail, Show Sidebar
++// opens it; each row is offered only where it changes something.
++IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, TheSidebarsFormsAreRows) {
++  tabs::VerticalTabStripStateController* const state =
++      tabs::VerticalTabStripStateController::From(browser());
++  ASSERT_TRUE(state && state->ShouldDisplayVerticalTabs());
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  {
++    stedding::CommandBarView* const bar = Palette(browser());
++    ASSERT_TRUE(bar);
++    Type(bar, u"Sidebar");
++    const std::vector<std::u16string> titles = Titles(bar);
++    EXPECT_TRUE(std::ranges::contains(titles, std::u16string(u"Hide Sidebar")));
++    EXPECT_TRUE(std::ranges::contains(
++        titles, std::u16string(u"Collapse Sidebar to Icons")));
++    EXPECT_FALSE(std::ranges::contains(titles, std::u16string(u"Show Sidebar")))
++        << "the sidebar is open";
++    bar->Close();
++    base::RunLoop().RunUntilIdle();
++  }
++
++  Run(browser(), u"Hide Sidebar");
++  ASSERT_TRUE(base::test::RunUntil([&]() { return state->IsCollapsed(); }));
++  EXPECT_EQ(stedding::prefs::kSidebarClosedHidden,
++            prefs->GetInteger(stedding::prefs::kSidebarClosedForm));
++
++  Run(browser(), u"Collapse Sidebar to Icons");
++  EXPECT_TRUE(state->IsCollapsed());
++  EXPECT_EQ(stedding::prefs::kSidebarClosedToIcons,
++            prefs->GetInteger(stedding::prefs::kSidebarClosedForm));
++
++  Run(browser(), u"Show Sidebar");
++  ASSERT_TRUE(base::test::RunUntil([&]() { return !state->IsCollapsed(); }));
++}
++
+ class CommandBarKeysTest : public CommandBarActionsTest {
+  protected:
+   // A tab titled `title`, on screen.
+diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
+new file mode 100644
+index 0000000000000..2527263f32290
+--- /dev/null
++++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
+@@ -0,0 +1,398 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// The sidebar's third form and its edge (sidebar Y18, Y19; the operator's
++// pass on beta 12, 2026-10-10). Closed to nothing, the sidebar takes no
++// width and the page card no gutter or rounded corner: the page and the
++// address row run edge to edge, and the pointer at the window's leading edge
++// slides the sidebar in over the page, which does not move. Open or as the
++// rail, the handle that resizes the sidebar reaches over the card's gutter
++// to the card's edge, the edge a person reads as the sidebar's.
++
++#include "base/command_line.h"
++#include "base/i18n/base_i18n_switches.h"
++#include "base/i18n/rtl.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/run_until.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/animation/browser_animation_controller.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/contents_web_view.h"
++#include "chrome/browser/ui/views/frame/multi_contents_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
++#include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_delegate.h"
++#include "content/public/test/browser_test.h"
++#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/compositor/layer.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/rounded_corners_f.h"
++#include "ui/views/controls/button/button.h"
++#include "ui/views/controls/resize_area.h"
++#include "ui/views/test/views_test_utils.h"
++#include "ui/views/widget/widget.h"
++
++namespace {
++
++class SidebarFormsTest
++    : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
++ protected:
++  BrowserView* browser_view() {
++    return BrowserView::GetBrowserViewForBrowser(browser());
++  }
++  VerticalTabStripRegionView* region() {
++    return browser_view()->vertical_tab_strip_region_view_for_testing();
++  }
++  tabs::VerticalTabStripStateController* controller() {
++    return tabs::VerticalTabStripStateController::From(browser());
++  }
++  PrefService* prefs() { return browser()->GetProfile()->GetPrefs(); }
++  views::View* root() { return browser_view()->GetWidget()->GetRootView(); }
++
++  bool Animating() {
++    return BrowserAnimationController::From(browser())->IsAnimating(
++        TabStripAnimations::kVerticalTabStrip);
++  }
++  void Settle() {
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !Animating(); }));
++    views::test::RunScheduledLayout(browser_view()->GetWidget());
++  }
++
++  // `view`'s bounds in the root view's coordinates.
++  gfx::Rect InRoot(views::View* view) {
++    return views::View::ConvertRectToTarget(view, root(),
++                                            view->GetLocalBounds());
++  }
++  gfx::Rect Page() { return InRoot(browser_view()->contents_web_view()); }
++  gfx::Rect Strip() { return InRoot(region()); }
++  gfx::Rect Row() { return InRoot(browser_view()->toolbar()); }
++  gfx::Rect Window() { return InRoot(browser_view()); }
++
++  // The open sidebar's top row, measured before a test closes it.
++  int open_top_height_ = 0;
++
++  // The leading edge of the browser view, at mid height, in its own
++  // physical coordinates: the left, or the right in a right-to-left layout.
++  gfx::Point LeadingEdge() {
++    return gfx::Point(
++        base::i18n::IsRTL() ? browser_view()->width() - 2 : 2,
++        browser_view()->height() / 2);
++  }
++
++  void CloseTo(int form) {
++    prefs()->SetInteger(stedding::prefs::kSidebarClosedForm, form);
++    if (!controller()->IsCollapsed()) {
++      controller()->RequestCollapse(true);
++    }
++    Settle();
++    ASSERT_TRUE(controller()->IsCollapsed());
++  }
++};
++
++// sidebar Y19: closed to nothing, the strip takes no width and the page card
++// keeps no gutter and no rounded corner: page and address row run from the
++// window's leading edge to its trailing one, and down to its bottom. Opened
++// again, the strip, the gutters and the corners come back.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, HiddenTheWindowIsThePage) {
++  AppendTab();
++  Settle();
++  const int gutter = stedding::kCardGutter.Get();
++  const gfx::Rect open_page = Page();
++  ASSERT_GT(Strip().width(), 0);
++  ASSERT_EQ(Strip().right() + gutter, open_page.x())
++      << "open, the card sits a gutter past the sidebar";
++
++  CloseTo(stedding::prefs::kSidebarClosedHidden);
++  EXPECT_TRUE(region()->IsHiddenCompletely());
++  EXPECT_EQ(0, region()->width()) << "the strip takes no width";
++  EXPECT_EQ(Window().x(), Page().x()) << "the page starts at the window's edge";
++  EXPECT_EQ(Window().right(), Page().right());
++  EXPECT_EQ(Window().bottom(), Page().bottom());
++  EXPECT_EQ(Window().x(), Row().x()) << "so does the address row";
++  EXPECT_EQ(gfx::RoundedCornersF(),
++            browser_view()->multi_contents_view()->GetBackgroundRadii())
++      << "no rounded corner on the card";
++
++  // The rail is the other closed form: back to its width and the gutters.
++  prefs()->SetInteger(stedding::prefs::kSidebarClosedForm,
++                      stedding::prefs::kSidebarClosedToIcons);
++  Settle();
++  EXPECT_FALSE(region()->IsHiddenCompletely());
++  EXPECT_EQ(VerticalTabStripRegionView::kCollapsedWidth, region()->width());
++  EXPECT_EQ(Strip().right() + gutter, Page().x());
++
++  // Ctrl+S (or Cmd+S) opens it from either form, gutters and all.
++  prefs()->SetInteger(stedding::prefs::kSidebarClosedForm,
++                      stedding::prefs::kSidebarClosedHidden);
++  Settle();
++  ASSERT_EQ(0, region()->width());
++  chrome::ExecuteCommand(browser(), IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
++  Settle();
++  EXPECT_FALSE(controller()->IsCollapsed());
++  EXPECT_EQ(open_page, Page()) << "the page is back where it was";
++  EXPECT_NE(gfx::RoundedCornersF(),
++            browser_view()->multi_contents_view()->GetBackgroundRadii());
++
++  // And closes it to the chosen form.
++  chrome::ExecuteCommand(browser(), IDC_TOGGLE_VERTICAL_TABS_COLLAPSE);
++  Settle();
++  EXPECT_TRUE(region()->IsHiddenCompletely());
++  EXPECT_EQ(Window().x(), Page().x());
++}
++
++// sidebar Y19: hidden, the pointer at the window's leading edge slides the
++// sidebar in over the page, which stays where it is, and leaving the sidebar
++// slides it away again. No expand-on-hover switch is needed: it is the way
++// back to a hidden sidebar with the pointer.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheLeadingEdgeSlidesItInOverThePage) {
++  AppendTab();
++  Settle();
++  open_top_height_ = region()->top_button_container_for_testing()->height();
++  controller()->SetExpandOnHoverEnabled(false);
++  CloseTo(stedding::prefs::kSidebarClosedHidden);
++  const gfx::Rect page = Page();
++  ASSERT_EQ(Window().x(), page.x());
++  // Hidden, the strip clips its rows and buttons, several on layers of their
++  // own: they painted past its edge over the page, the rail's glyphs in a
++  // column and the toggle over Back (real use, 2026-10-10).
++  EXPECT_TRUE(region()->layer()->GetMasksToBounds());
++
++  // A point away from the edge does nothing; one within it slides the
++  // sidebar in.
++  const int middle = browser_view()->height() / 2;
++  region()->OnPointerAtForTesting(gfx::Point(40, middle));
++  EXPECT_FALSE(region()->is_expanded_on_hover());
++  region()->OnPointerAtForTesting(gfx::Point(2, middle));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return region()->is_expanded_on_hover() && !Animating(); }));
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  EXPECT_GT(region()->width(), VerticalTabStripRegionView::kCollapsedWidth)
++      << "the sidebar slides in at its open width";
++  EXPECT_EQ(page, Page()) << "over the page, which does not move";
++  EXPECT_TRUE(controller()->IsCollapsed()) << "and stays closed by state";
++  EXPECT_FALSE(region()->layer()->GetMasksToBounds())
++      << "resting open over the page, its edge's shadow shows";
++  // Drawn open, its top row is the open sidebar's, not the rail's stack:
++  // stacked, the buttons left an empty band some 70 DIP tall.
++  views::View* const top = region()->top_button_container_for_testing();
++  EXPECT_LE(top->height(), open_top_height_)
++      << "the top row as tall as the open sidebar's";
++
++  const gfx::Point centre = region()->GetLocalBounds().CenterPoint();
++  region()->OnMouseExited(ui::MouseEvent(ui::EventType::kMouseExited, centre,
++                                         centre, base::TimeTicks::Now(),
++                                         ui::EF_NONE, ui::EF_NONE));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return !region()->is_expanded_on_hover() && !Animating(); }));
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  EXPECT_EQ(0, region()->width()) << "leaving it slides it away";
++}
++
++// sidebar Y18: the handle that resizes the sidebar answers on the card's
++// gutter, right up to the card's edge, and not on the page. It stopped at
++// the strip's own edge, a gutter short of the edge a person aims at.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheHandleReachesTheCardsEdge) {
++  AppendTab();
++  Settle();
++  views::View* const handle = region()->resize_area_for_testing();
++  ASSERT_TRUE(handle->GetVisible());
++  const int y = Page().CenterPoint().y();
++  for (int x = Strip().right() - 4; x < Page().x(); ++x) {
++    EXPECT_EQ(handle, root()->GetEventHandlerForPoint(gfx::Point(x, y)))
++        << "x " << x << ": strip ends at " << Strip().right()
++        << ", the card starts at " << Page().x();
++  }
++  EXPECT_NE(handle,
++            root()->GetEventHandlerForPoint(gfx::Point(Page().x() + 1, y)))
++      << "the page itself is the page's";
++
++  // The rail with expand-on-hover off keeps a handle, on its gutter too.
++  controller()->SetExpandOnHoverEnabled(false);
++  CloseTo(stedding::prefs::kSidebarClosedToIcons);
++  ASSERT_TRUE(handle->GetVisible());
++  for (int x = Strip().right(); x < Page().x(); ++x) {
++    EXPECT_EQ(handle, root()->GetEventHandlerForPoint(gfx::Point(x, y)))
++        << "rail, x " << x;
++  }
++
++  // Hidden there is no handle at all.
++  CloseTo(stedding::prefs::kSidebarClosedHidden);
++  EXPECT_FALSE(handle->GetVisible());
++  EXPECT_NE(handle, root()->GetEventHandlerForPoint(gfx::Point(1, y)));
++}
++
++// BACKLOG S-69: a page in a full screen of its own -- a video's button, the
++// Fullscreen API -- takes the screen edge to edge: no card gutter around it,
++// no rounded corner. The gutter left a band of the window's ground on three
++// sides of a full-screen video (Windows, 2026-09-30). Leaving full screen
++// gives the card its gutters back.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, APageInItsOwnFullScreenIsEdgeToEdge) {
++  AppendTab();
++  Settle();
++  ASSERT_EQ(stedding::kCardGutter.Get(),
++            VerticalTabStripRegionView::SteddingCardGutter(browser_view()));
++  content::WebContents* const contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  contents->GetDelegate()->EnterFullscreenModeForTab(
++      contents->GetPrimaryMainFrame(), {});
++  ui_test_utils::FullscreenWaiter(browser(), {.tab_fullscreen = true}).Wait();
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++
++  EXPECT_EQ(0, VerticalTabStripRegionView::SteddingCardGutter(browser_view()));
++  EXPECT_EQ(Window().x(), Page().x());
++  EXPECT_EQ(Window().right(), Page().right());
++  EXPECT_EQ(Window().bottom(), Page().bottom());
++  EXPECT_EQ(gfx::RoundedCornersF(),
++            browser_view()->multi_contents_view()->GetBackgroundRadii());
++
++  contents->GetDelegate()->ExitFullscreenModeForTab(contents);
++  ui_test_utils::FullscreenWaiter(
++      browser(), ui_test_utils::FullscreenWaiter::kNoFullscreen)
++      .Wait();
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  EXPECT_EQ(stedding::kCardGutter.Get(),
++            VerticalTabStripRegionView::SteddingCardGutter(browser_view()));
++  EXPECT_EQ(Strip().right() + stedding::kCardGutter.Get(), Page().x());
++}
++
++// The same for a full screen of the window's own with no address row: F11 on
++// Windows and Linux hides the sidebar and the row, and the page's card kept
++// its gutters and rounded corners on four sides. Where full screen keeps the
++// row (macOS), the card keeps its gutters.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, AFullScreenWithNoRowIsEdgeToEdge) {
++  AppendTab();
++  Settle();
++  ui_test_utils::ToggleFullscreenModeAndWait(browser());
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  if (browser_view()->IsToolbarVisible()) {
++    EXPECT_EQ(stedding::kCardGutter.Get(),
++              VerticalTabStripRegionView::SteddingCardGutter(browser_view()));
++  } else {
++    EXPECT_EQ(0,
++              VerticalTabStripRegionView::SteddingCardGutter(browser_view()));
++    EXPECT_EQ(Window().x(), Page().x());
++    EXPECT_EQ(Window().y(), Page().y());
++    EXPECT_EQ(Window().right(), Page().right());
++    EXPECT_EQ(Window().bottom(), Page().bottom());
++    EXPECT_EQ(gfx::RoundedCornersF(),
++              browser_view()->multi_contents_view()->GetBackgroundRadii());
++  }
++  ui_test_utils::ToggleFullscreenModeAndWait(browser());
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  EXPECT_EQ(stedding::kCardGutter.Get(),
++            VerticalTabStripRegionView::SteddingCardGutter(browser_view()));
++}
++
++// The rail's toggle sits directly over its rows. Stedding hides the combo of
++// tab-search and tab-group buttons, and the rail's stacked top still counted
++// the combo's buttons, which stay visible inside it: an empty band of the
++// combo's height lay under the toggle (real use, 2026-10-10).
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheRailHasNoBandUnderItsToggle) {
++  AppendTab();
++  CloseTo(stedding::prefs::kSidebarClosedToIcons);
++  views::View* const top = region()->top_button_container_for_testing();
++  views::View* const toggle =
++      region()->top_button_container_for_testing()->GetCollapseButton();
++  ASSERT_TRUE(toggle && toggle->GetVisible());
++  EXPECT_LE(top->height(), toggle->bounds().bottom() + 12)
++      << "the top container ends just under the toggle; it is "
++      << top->height() << " DIP tall around a toggle ending at "
++      << toggle->bounds().bottom();
++}
++
++// The toggle's tooltip names the chord the sidebar answers to: Cmd+S or
++// Ctrl+S, as in Arc. It named Chromium 155's Ctrl+Shift+L, which Stedding
++// does not bind, and the command bar showed that chord too (real use,
++// 2026-10-10).
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheToggleNamesTheSidebarsChord) {
++  AppendTab();
++  Settle();
++  ui::Accelerator accelerator;
++  ASSERT_TRUE(browser_view()->GetAccelerator(IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
++                                             &accelerator));
++  EXPECT_EQ(ui::VKEY_S, accelerator.key_code());
++  auto* const toggle = static_cast<views::Button*>(
++      region()->top_button_container_for_testing()->GetCollapseButton());
++  const std::u16string tooltip = toggle->GetTooltipText();
++  EXPECT_NE(std::u16string::npos, tooltip.find(accelerator.GetShortcutText()))
++      << base::UTF16ToUTF8(tooltip);
++  EXPECT_EQ(std::u16string::npos, tooltip.find(u"L)"))
++      << base::UTF16ToUTF8(tooltip);
++}
++
++// The edge opens only a hidden sidebar the window shows. In a page's own
++// full screen the strip is not drawn; a reveal there left the sidebar open
++// over the page once full screen ended, with no mouse exit to close it.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheEdgeDoesNothingInFullScreen) {
++  AppendTab();
++  CloseTo(stedding::prefs::kSidebarClosedHidden);
++  content::WebContents* const contents =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  contents->GetDelegate()->EnterFullscreenModeForTab(
++      contents->GetPrimaryMainFrame(), {});
++  ui_test_utils::FullscreenWaiter(browser(), {.tab_fullscreen = true}).Wait();
++  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  region()->OnPointerAtForTesting(LeadingEdge());
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(region()->is_expanded_on_hover());
++  contents->GetDelegate()->ExitFullscreenModeForTab(contents);
++  ui_test_utils::FullscreenWaiter(
++      browser(), ui_test_utils::FullscreenWaiter::kNoFullscreen)
++      .Wait();
++}
++
++// Right to left the sidebar is on the right: the handle reaches over the
++// gutter on its left to the card's edge, and the window's right edge slides
++// a hidden sidebar in. Both were the left-to-right sides until a review
++// read them (2026-10-11).
++class SidebarFormsRtlTest : public SidebarFormsTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    SidebarFormsTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII(switches::kForceUIDirection,
++                                    switches::kForceDirectionRTL);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(SidebarFormsRtlTest, TheHandleAndTheEdgeAreMirrored) {
++  ASSERT_TRUE(base::i18n::IsRTL());
++  AppendTab();
++  Settle();
++  views::View* const handle = region()->resize_area_for_testing();
++  ASSERT_TRUE(handle->GetVisible());
++  const int y = Page().CenterPoint().y();
++  ASSERT_LT(Page().right(), Strip().x()) << "the sidebar on the right";
++  for (int x = Page().right(); x < Strip().x() + 4; ++x) {
++    EXPECT_EQ(handle, root()->GetEventHandlerForPoint(gfx::Point(x, y)))
++        << "x " << x << ": the card ends at " << Page().right()
++        << ", the strip starts at " << Strip().x();
++  }
++  EXPECT_NE(handle,
++            root()->GetEventHandlerForPoint(gfx::Point(Page().right() - 2, y)));
++
++  CloseTo(stedding::prefs::kSidebarClosedHidden);
++  region()->OnPointerAtForTesting(
++      gfx::Point(2, browser_view()->height() / 2));
++  EXPECT_FALSE(region()->is_expanded_on_hover()) << "not the left edge";
++  region()->OnPointerAtForTesting(LeadingEdge());
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return region()->is_expanded_on_hover() && !Animating(); }));
++}
++
++}  // namespace

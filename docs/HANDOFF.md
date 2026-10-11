@@ -39,11 +39,11 @@ Sixty-odd traps follow. Read the one for the topic in front of you, not the list
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70 |
 | The working loop and the series | 9, 13, 14, 17, 22, 28, 50, 51 |
 | Driving and capturing the window | 3, 10, 11, 12, 15, 18, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65 |
-| What a test can and cannot prove | 2, 31, 46, 48, 55, 58, 60, 66, 68 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68 |
+| What a test can and cannot prove | 2, 31, 46, 48, 55, 58, 60, 66, 68, 69 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71 |
 | Release and signing | 44, 47, 49, 62 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 35, 39, 41, 43, 60 |
 
@@ -951,6 +951,28 @@ private window has.
     the product. The click fixtures run at scale 1 off the Mac
     (`stedding::test::ForceScaleOneForEventGenerator`); a new fixture that clicks through the
     generator calls it too. `TabDropTest` hands its events to the root view and is not affected.
+
+69. **A pointer at "the window's edge" from `GetWindowRect` is outside the window.** On
+    Windows 10 and 11 the rectangle includes the invisible resize border, about 7 px on each
+    side: a pointer moved to its left + 1 sits on that border, where the frame answers HTLEFT
+    and no view hears the move. The first test of the hidden sidebar's edge said "it does not
+    open" for exactly that reason (2026-10-10). Aim at the visible bounds,
+    `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)`, which `Drive-VisibleRect` in
+    `tooling\win\drive.ps1` returns; in a maximized window the screen's edge is the client's.
+
+70. **The build supervisor stops with SUPERVISOR_EXIT=6 when `build.ps1` refuses to start.**
+    `build.ps1` throws before building when a browser from the output directory is still
+    running (it would hold `chrome.dll` and the link would fail). The supervisor used to die
+    with it and write no finish line, so a waiter waited for one that never came
+    (2026-10-10). Stop your own test browsers by profile path before a build; never the
+    operator's.
+
+71. **A Windows Security prompt holds the foreground, and `drive.ps1` refuses every input
+    while it does.** A firewall prompt (`PickerHost.exe FirewallNotificationDialogServer`)
+    appeared during a run and every step was refused ("the foreground window is not the
+    browser under test"), which is the guard doing its job (2026-10-10). Answering it changes
+    a security setting: that is the operator's. Say so in one line and work on what needs no
+    screen until it is gone.
 
 ## The Windows build
 

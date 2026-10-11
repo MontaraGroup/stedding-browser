@@ -63,6 +63,14 @@ the essentials row, pinned tabs, folders, tabs, history and passwords, from Arc'
 files on your disk. Passwords need one macOS keychain prompt. You can run it again
 later from Settings → Stedding → Import from Arc…; nothing is duplicated.
 
+**Can the sidebar get out of the way completely?**
+Yes. Settings → Stedding → Sidebar → **When the sidebar closes: Hide it completely**.
+Then ⌘S (Ctrl+S on Windows) hides it and the page fills the window, with no border.
+Move the pointer to the window's left edge and the sidebar slides back over the
+page; ⌘S brings it back for good. The command bar's actions (⇧⌘P) have "Hide
+Sidebar", "Collapse Sidebar to Icons" and "Show Sidebar". The same Sidebar section
+sets the tab rows' height, the text size and the sidebar's width.
+
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Bookmarks you import stay bookmarks, in the bookmark
 manager; the command bar's "Turn Bookmarks into Pinned Tabs" makes them pinned tabs

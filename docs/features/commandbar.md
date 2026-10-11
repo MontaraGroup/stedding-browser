@@ -1,6 +1,6 @@
 # Feature: Command bar
 
-Status: **K1–K11, K13–K21 built**; **K12 partial** (round 6, `docs/ROUND6-PLAN.md` R6-11, patch 0022).
+Status: **K1–K11, K13–K22 built**; **K12 partial** (round 6, `docs/ROUND6-PLAN.md` R6-11, patch 0022).
 Owner docs: `docs/PRODUCT.md` ("Command bar"). Patch: `0005`.
 
 ⌘T opens a bar over the page. It lists open tabs from every Space, then the omnibox's own
@@ -34,6 +34,7 @@ On Windows every chord below is the Mac's with ⌘ read as Ctrl and ⌥⌘ as Ct
 | K19 | `@Work rust` filters open and archived rows to Spaces whose name starts with that prefix. History stays profile-wide. | `SpaceQueryTest.AtSpacePrefixFiltersOpenAndArchived` | built |
 | K20 | The bar is never wider than the page card it sits over less 16 DIP each side. In a window of 1035 DIP with the sidebar open the card is about 670 and the bar's own 744 ran past the window's right edge, its right corner cut flat (backlog S-68, found 2026-09-30 with the real pointer). It follows the window while it is open and takes its own width back when the window widens; the field and the rows stretch to it. | browser: `CommandBarTest.TheBarStaysInsideANarrowWindow` | built |
 | K21 | What the bar opens goes into the active tab when that tab is a New Tab page with nothing behind it and nothing loading -- the first window's, or one "+ New Tab" made -- and is not pinned, as Arc does; any other tab keeps its page and the bar opens a new one. The bar opened a second tab beside the empty one and left it in the list (S-78, 2026-10-02). | `CommandBarViewTest.AnUntouchedNewTabTakesWhatIsTyped` (the empty tab takes the page; the next choice opens a tab) | built |
+| K22 | The sidebar's forms are rows: "Show Sidebar" while it is closed, "Collapse Sidebar to Icons" and "Hide Sidebar" wherever they change something (sidebar Y19). The two closing rows also make their form the one ⌘S and the sidebar's toggle close to. Only with a sidebar: not with horizontal tabs. | browser: `CommandBarActionsTest.TheSidebarsFormsAreRows`, and `CommandBarActionsTest.EveryRowRunsInANormalWindow` runs each | built |
 
 ## Notes from the live check (2026-09-05)
 
