@@ -38,8 +38,11 @@ with the real pointer and keyboard, and fixed what that use found before calling
   opening a sidebar F11 hid, right to left on the wrong side, two macOS full-screen layouts, a
   DIP past the window at fractional scales, mixed selections, two Mac paths); all fixed.
 - **Tests**: unit 822 of 822; browser 170 of 171, the one failure a focus race at typing into a
-  page's field (`SleepInUseTest`), which passed alone three times out of three. No DCHECK or sanitizer build of
-  0059 (`S-106`); the Mac has not built it (`S-105`).
+  page's field (`SleepInUseTest`), which passed alone three times out of three. Then the DCHECK
+  build with the dangling-pointer detector (`out\win-checks`): 822 unit tests passed, and three
+  browser tests stopped on one fault, the welcome dialog holding its page's view past its widget
+  (folded into patch 0015, trap 72); after the fix all 171 passed, and on the release build all
+  822 unit tests and all 171 browser tests passed. No ASan run of 0058 and 0059 yet (`S-106`); the Mac has not built 0059 (`S-105`).
 - **Beta 13** (2026-10-11): the Windows installer of this series, run as the user as a repair
   over the installed beta 12 before it was cut (`docs/release-notes/v0.2.0-beta.13.md`); the
   macOS image is the Mac's to add after its own pass.

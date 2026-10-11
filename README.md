@@ -260,7 +260,7 @@ and what comes next:
 | | State |
 |---|---|
 | macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 12's, signed and notarized as every macOS image is from beta 10 on; beta 13's follows from the Mac |
-| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and under AddressSanitizer (2026-09-30) |
+| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs (beta 13's series, 2026-10-11) and under AddressSanitizer (2026-09-30) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |
 | Windows: little windows, signing, updates | Open (`S-56`) |

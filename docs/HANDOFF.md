@@ -36,17 +36,17 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Sixty-odd traps follow. Read the one for the topic in front of you, not the list.
+Seventy-odd traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 28, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71 |
 | Release and signing | 44, 47, 49, 62 |
-| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60 |
+| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72 |
 
 ## Where things live
 
@@ -982,6 +982,15 @@ private window has.
     browser under test"), which is the guard doing its job (2026-10-10). Answering it changes
     a security setting: that is the operator's. Say so in one line and work on what needs no
     screen until it is gone.
+
+72. **A `raw_ptr` to a view inside a widget you own dangles when your object goes.** A dialog
+    delegate that owns its widget (`CLIENT_OWNS_WIDGET`, a `std::unique_ptr<views::Widget>`
+    member) and keeps a `raw_ptr` to a view in that widget's tree frees the view while its
+    members are destroyed, and the `raw_ptr`, released after, still points at it. Nothing used
+    it, so the release build never crashed; the dangling-pointer detector stopped three welcome
+    flow tests on it (2026-10-11, `WelcomeDialog`, fixed in patch 0015). Null such a pointer in
+    the destructor's body, or declare it after the widget so it goes first. Only a
+    `win-checks` build sees this.
 
 ## The Windows build
 

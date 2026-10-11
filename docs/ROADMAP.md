@@ -316,8 +316,8 @@ Acceptance criteria:
 
 **Where this stands (2026-10-11):** the preview ships with beta 13 on 155.0.8059.12. Both
 suites passed with DCHECKs and the dangling-pointer detector on and under AddressSanitizer
-on 2026-09-30, on the series before patches 0058 and 0059; those two have had no such run
-yet (`S-106`). A second release on one Chromium number installs as a repair that needs
+on 2026-09-30, and with DCHECKs and the detector again on the series through patch 0059 on
+2026-10-11, after one fix; ASan has not run on 0058 and 0059 yet (`S-106`). A second release on one Chromium number installs as a repair that needs
 Stedding closed (`S-72`). The history: the series builds and runs on Windows (round 8,
 patch 0039): the Stedding window with its sidebar, Spaces, folders, the command bar,
 archive and routing, the address row under the window's own caption buttons and
