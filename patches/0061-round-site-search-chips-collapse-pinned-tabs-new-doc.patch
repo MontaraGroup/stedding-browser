@@ -1,0 +1,2823 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 11 Oct 2026 14:38:39 -0400
+Subject: round: Site Search chips, Collapse Pinned Tabs, New Documents
+
+Three more items on the operator's word, built together.
+
+Site Search (S-109, commandbar K27): typing a search engine's keyword,
+name or domain offers "Search <name>", Tab makes a chip and only that
+engine's rows show; the @bookmarks and @history scopes need their whole
+keyword, so short prefixes keep Tab for the actions and "@" stays the
+Space filter. The list is Chromium's own search engine settings; no AI
+scopes (ADR 0020).
+
+Collapse Pinned Tabs (S-114, pins H17): from the Space menu or the bar,
+per Space, kept in the registry across a restart; the pins hide by the
+one row rule and the selected pin keeps its row.
+
+New Documents (S-116, commandbar K28): bar rows for eleven services'
+blank documents through their .new addresses.
+
+Why: the operator asked for the next three; each has its behaviour id
+and tests.
+Removable when: never; these are Stedding's own behaviours.
+---
+ chrome/browser/ui/spaces/space.h              |   7 +
+ chrome/browser/ui/spaces/space_model.cc       |  89 ++-
+ chrome/browser/ui/spaces/space_model.h        |  22 +
+ .../browser/ui/spaces/space_model_unittest.cc |  82 +++
+ .../ui/spaces/space_model_window_unittest.cc  |  85 +++
+ chrome/browser/ui/spaces/space_registry.cc    |  13 +
+ chrome/browser/ui/spaces/space_registry.h     |   5 +
+ .../ui/spaces/space_registry_unittest.cc      |  44 ++
+ chrome/browser/ui/stedding/BUILD.gn           |  10 +
+ chrome/browser/ui/stedding/new_documents.cc   |  38 ++
+ chrome/browser/ui/stedding/new_documents.h    |  30 +
+ .../ui/stedding/new_documents_unittest.cc     |  79 +++
+ chrome/browser/ui/views/commandbar/BUILD.gn   |   3 +
+ .../ui/views/commandbar/command_bar_view.cc   | 407 ++++++++++++-
+ .../ui/views/commandbar/command_bar_view.h    |  51 +-
+ .../commandbar/command_bar_view_unittest.cc   | 562 ++++++++++++++++++
+ .../ui/views/spaces/space_switcher_view.cc    |  25 +
+ .../spaces/space_tab_visibility_controller.cc |  26 +-
+ .../spaces/space_tab_visibility_controller.h  |   7 +-
+ .../tabs/browser_tab_strip_controller.cc      |  15 +-
+ .../tabs/common/stedding_tab_row_rules.cc     |   6 +
+ .../tabs/common/stedding_tab_row_rules.h      |   8 +
+ .../common/stedding_tab_row_rules_unittest.cc |  18 +
+ .../common/unpinned_tab_container_view.cc     |   8 +
+ .../tabs/common/unpinned_tab_container_view.h |   8 +
+ .../unpinned_tab_container_view_layout.cc     |  11 +-
+ chrome/test/stedding/BUILD.gn                 |   1 +
+ .../test/stedding/command_bar_browsertest.cc  |  79 +++
+ .../test/stedding/pinned_run_browsertest.cc   | 222 +++++++
+ 29 files changed, 1936 insertions(+), 25 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/new_documents.cc
+ create mode 100644 chrome/browser/ui/stedding/new_documents.h
+ create mode 100644 chrome/browser/ui/stedding/new_documents_unittest.cc
+ create mode 100644 chrome/test/stedding/pinned_run_browsertest.cc
+
+diff --git a/chrome/browser/ui/spaces/space.h b/chrome/browser/ui/spaces/space.h
+index 792cef375d79a..d9fdeed26942a 100644
+--- a/chrome/browser/ui/spaces/space.h
++++ b/chrome/browser/ui/spaces/space.h
+@@ -51,12 +51,19 @@ class Space {
+   const std::string& icon() const { return icon_; }
+   void SetIcon(std::string icon);
+ 
++  // pins H17: the Space's pinned run is collapsed (Collapse Pinned Tabs, from
++  // the Space menu or the command bar). Its pins are hidden in the sidebar
++  // but for the selected one; the state is kept with the name and colour.
++  bool pins_collapsed() const { return pins_collapsed_; }
++  void set_pins_collapsed(bool collapsed) { pins_collapsed_ = collapsed; }
++
+  private:
+   const SpaceId id_;
+   std::string name_;
+   SkColor color_;
+   bool color_chosen_ = false;
+   std::string icon_;
++  bool pins_collapsed_ = false;
+ };
+ 
+ }  // namespace spaces
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 26c8daa46897f..ad34ae3f58d6f 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -187,12 +187,13 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+   // Teach this window's tab strip that a tab outside the active Space is a tab
+   // the user cannot see. Tab traversal and the choice of which tab to activate
+   // next both consult this, so no keystroke lands on a tab from another Space
+-  // (B7). Unretained is safe: the predicate is cleared when the strip goes
+-  // away (OnTabStripModelDestroyed) and the model outlives the strip's use of
+-  // it otherwise.
++  // (B7). A pin of a collapsed run is one too (pins H17): the same predicate,
++  // so there is one rule (B33). Unretained is safe: the predicate is cleared
++  // when the strip goes away (OnTabStripModelDestroyed) and the model
++  // outlives the strip's use of it otherwise.
+   tab_strip_model_->SetHiddenTabPredicate(base::BindRepeating(
+       [](SpaceModel* model, const tabs::TabInterface* tab) {
+-        return !model->IsTabInActiveSpace(tab);
++        return model->HidesTab(tab);
+       },
+       base::Unretained(this)));
+   // B4: a close never leaves another Space's tab on screen. Unretained for
+@@ -314,6 +315,7 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+       RegistryEntry entry(space->id(), space->name(), space->color());
+       entry.icon = space->icon();
+       entry.color_chosen = space->color_chosen();
++      entry.pins_collapsed = space->pins_collapsed();
+       registry_->AddExisting(entry);
+     }
+   }
+@@ -328,6 +330,8 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+   spaces_.clear();
+   std::vector<SpaceId> added;
+   std::vector<SpaceId> changed;
++  // pins H17: Spaces whose pinned run was collapsed or expanded.
++  std::vector<SpaceId> pins_toggled;
+   for (const RegistryEntry& entry : registry_->entries()) {
+     auto it = std::ranges::find_if(old, [&](const std::unique_ptr<Space>& s) {
+       return s && s->id() == entry.id;
+@@ -344,11 +348,16 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+       if (differs) {
+         changed.push_back(entry.id);
+       }
++      if (space->pins_collapsed() != entry.pins_collapsed) {
++        space->set_pins_collapsed(entry.pins_collapsed);
++        pins_toggled.push_back(entry.id);
++      }
+       spaces_.push_back(std::move(*it));
+     } else {
+       auto space = std::make_unique<Space>(entry.id, entry.name, entry.color);
+       space->SetIcon(entry.icon);
+       space->set_color_chosen(entry.color_chosen);
++      space->set_pins_collapsed(entry.pins_collapsed);
+       spaces_.push_back(std::move(space));
+       added.push_back(entry.id);
+     }
+@@ -437,8 +446,13 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+     RebindTabsInSpace(id);
+     observers_.Notify(&Observer::OnSpaceMetadataChanged, id);
+   }
++  // pins H17: collapsed or expanded, in this window or another; the rows of
++  // this window follow.
++  for (const SpaceId& id : pins_toggled) {
++    observers_.Notify(&Observer::OnSpacePinsCollapsedChanged, id);
++  }
+   if (added.empty() && removed.empty() && changed.empty() &&
+-      jar_moved.empty()) {
++      jar_moved.empty() && pins_toggled.empty()) {
+     // An order change: the switcher rebuilds on any metadata change.
+     observers_.Notify(&Observer::OnSpaceMetadataChanged, active_id_);
+   }
+@@ -1830,6 +1844,67 @@ bool SpaceModel::IsSpacePinned(const tabs::TabInterface* tab) const {
+   return tab && space_pin_homes_.contains(tab->GetHandle());
+ }
+ 
++bool SpaceModel::ArePinsCollapsed(const SpaceId& id) const {
++  const auto it = std::ranges::find_if(
++      spaces_,
++      [&id](const std::unique_ptr<Space>& s) { return s->id() == id; });
++  return it != spaces_.end() && (*it)->pins_collapsed();
++}
++
++void SpaceModel::SetPinsCollapsed(const SpaceId& id, bool collapsed) {
++  if (registry_) {
++    // The registry's change comes back through SyncWithRegistry in every
++    // window, which tells the observers there and writes the session.
++    registry_->SetPinsCollapsed(id, collapsed);
++    return;
++  }
++  Space* const space = GetSpace(id);
++  if (!space || space->pins_collapsed() == collapsed) {
++    return;
++  }
++  space->set_pins_collapsed(collapsed);
++  observers_.Notify(&Observer::OnSpacePinsCollapsedChanged, id);
++  SaveToSession();
++}
++
++bool SpaceModel::HasSpacePins(const SpaceId& id) const {
++  for (const auto& pin : space_pin_homes_) {
++    const tabs::TabInterface* const tab = pin.first.Get();
++    if (!tab || tab->IsPinned()) {
++      continue;
++    }
++    if (const auto it = tab_spaces_.find(pin.first);
++        it != tab_spaces_.end() && it->second == id) {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool SpaceModel::HidesTab(const tabs::TabInterface* tab) const {
++  if (!IsTabInActiveSpace(tab)) {
++    return true;
++  }
++  // pins H17: a pin of the active Space's collapsed run. An essential sits
++  // above every Space and is never one (B6).
++  if (!tab || tab->IsPinned() || !IsSpacePinned(tab) ||
++      !ArePinsCollapsed(active_id_)) {
++    return false;
++  }
++  // The selected pin keeps its row, and so does the pane beside it in a
++  // split: what is on screen stays in the list, as under a collapsed folder
++  // (folders F3).
++  const tabs::TabInterface* const active =
++      tab_strip_model_ ? tab_strip_model_->GetActiveTab() : nullptr;
++  if (!active) {
++    return true;
++  }
++  const bool on_screen =
++      tab == active ||
++      (tab->IsSplit() && tab->GetSplit() == active->GetSplit());
++  return !on_screen;
++}
++
+ namespace {
+ GURL CurrentUrl(const tabs::TabInterface* tab) {
+   content::WebContents* const contents = tab ? tab->GetContents() : nullptr;
+@@ -2101,6 +2176,7 @@ std::string SpaceModel::Serialize() const {
+     entry.Set("icon", space->icon());
+     entry.Set("color", static_cast<int>(space->color()));
+     entry.Set("color_chosen", space->color_chosen());
++    entry.Set("pins_collapsed", space->pins_collapsed());
+     list.Append(std::move(entry));
+   }
+   base::DictValue root;
+@@ -2157,6 +2233,9 @@ void SpaceModel::RestoreFrom(const std::string& data) {
+       space->SetIcon(*icon);
+     }
+     space->set_color_chosen(entry.FindBool("color_chosen").value_or(false));
++    // pins H17: a session from before the state existed is expanded.
++    space->set_pins_collapsed(
++        entry.FindBool("pins_collapsed").value_or(false));
+     restored.push_back(std::move(space));
+   }
+   if (restored.empty()) {
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index a8bb8254db229..c1c4ba1f914b3 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -100,6 +100,9 @@ class SpaceModel : public TabStripModelObserver,
+     // `tab` now belongs to a different Space than it did. Views that filter by
+     // Space refresh on this so a move shows without a switch (B8).
+     virtual void OnTabSpaceChanged(tabs::TabInterface* tab) {}
++    // pins H17: `id`'s pinned run was collapsed or expanded, here or in
++    // another window. Which rows show changes with it (HidesTab).
++    virtual void OnSpacePinsCollapsedChanged(const SpaceId& id) {}
+     // routing D4: `tab` opened in `from` and a route (or the default Space
+     // for links from other apps) moved it to `to`; the window shows a toast
+     // with Undo.
+@@ -391,6 +394,25 @@ class SpaceModel : public TabStripModelObserver,
+   // out of existence.
+   bool IsTabInActiveSpace(const tabs::TabInterface* tab) const;
+ 
++  // pins H17: Collapse Pinned Tabs. While `id`'s pinned run is collapsed its
++  // Space pins are hidden (HidesTab) but for the one on screen; essentials
++  // are never touched, and the Clear line stays. The state is per Space and
++  // persists as the name and colour do: in the registry every window mirrors,
++  // or in the window's session for a window with Spaces of its own. Setting
++  // the state the Space has already changes nothing.
++  bool ArePinsCollapsed(const SpaceId& id) const;
++  void SetPinsCollapsed(const SpaceId& id, bool collapsed);
++  // Whether this window holds a pin of `id` (an essential is not one).
++  bool HasSpacePins(const SpaceId& id) const;
++
++  // The Spaces half of TabStripModel::IsTabHidden, the one rule for which
++  // rows show (spaces B33), which the strip asks through its hidden-tab
++  // predicate: `tab` is in another Space, or it is a pin of the active
++  // Space's collapsed run and neither the active tab nor the other pane of
++  // the active tab's split (pins H17), as a collapsed folder keeps those
++  // (folders F3).
++  bool HidesTab(const tabs::TabInterface* tab) const;
++
+   // TabStripModelObserver:
+   void OnTabStripModelChanged(
+       TabStripModel* tab_strip_model,
+diff --git a/chrome/browser/ui/spaces/space_model_unittest.cc b/chrome/browser/ui/spaces/space_model_unittest.cc
+index ccd5be174d0c2..89581e612eb31 100644
+--- a/chrome/browser/ui/spaces/space_model_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_unittest.cc
+@@ -5,11 +5,13 @@
+ #include "chrome/browser/ui/spaces/space_model.h"
+ 
+ #include <string>
++#include <vector>
+ 
+ #include "base/functional/bind.h"
+ #include "base/test/task_environment.h"
+ #include "base/time/time.h"
+ #include "components/tabs/public/mock_tab_interface.h"
++#include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+ 
+@@ -337,6 +339,86 @@ TEST(SpaceModelTest, RestoreFallsBackWhenTheActiveSpaceIsUnknown) {
+   EXPECT_EQ(model.spaces().front()->id(), model.active_id());
+ }
+ 
++// pins H17: Collapse Pinned Tabs is per Space. A change tells the observers
++// once, the state the Space has already is no change, and the state comes
++// back from the session with the Space. A session written before the state
++// existed reads as expanded.
++TEST(SpaceModelTest, ACollapsedPinnedRunIsPerSpaceAndSurvivesARestart) {
++  class PinsObserver : public SpaceModel::Observer {
++   public:
++    void OnSpacePinsCollapsedChanged(const SpaceId& id) override {
++      changed.push_back(id);
++    }
++    void OnSpaceModelDestroying() override {}
++    std::vector<SpaceId> changed;
++  };
++
++  SpaceModel written;
++  const SpaceId home = written.active_id();
++  const SpaceId work = written.AddSpace("Work", kBlue)->id();
++  EXPECT_FALSE(written.ArePinsCollapsed(work));
++  PinsObserver observer;
++  written.AddObserver(&observer);
++  written.SetPinsCollapsed(work, true);
++  written.SetPinsCollapsed(work, true);
++  written.RemoveObserver(&observer);
++  EXPECT_TRUE(written.ArePinsCollapsed(work));
++  EXPECT_FALSE(written.ArePinsCollapsed(home)) << "one Space, not all";
++  ASSERT_EQ(1u, observer.changed.size()) << "the same state again changes "
++                                            "nothing";
++  EXPECT_EQ(work, observer.changed[0]);
++  EXPECT_FALSE(written.ArePinsCollapsed(SpaceId::GenerateNew()));
++
++  SpaceModel read;
++  read.RestoreFrom(written.Serialize());
++  ASSERT_EQ(2u, read.size());
++  EXPECT_TRUE(read.ArePinsCollapsed(work));
++  EXPECT_FALSE(read.ArePinsCollapsed(home));
++
++  const std::string old_id = SpaceId::GenerateNew().ToString();
++  SpaceModel old;
++  old.RestoreFrom(R"({"spaces":[{"id":")" + old_id +
++                  R"(","name":"Work","icon":"","color":0}]})");
++  ASSERT_EQ(1u, old.size());
++  EXPECT_FALSE(old.ArePinsCollapsed(old.active_id()));
++}
++
++// pins H17, spaces B33: a collapsed run hides the pins of its own Space and
++// nothing else -- not a loose tab, not an essential -- and another Space's
++// collapse leaves this Space's pins alone. A model with no window has no tab
++// on screen, so no pin is kept for being selected (the window test covers
++// that).
++TEST(SpaceModelTest, ACollapsedPinnedRunHidesOnlyThatSpacesPins) {
++  SpaceModel model;
++  const SpaceId home = model.active_id();
++  tabs::MockTabInterface pin;
++  tabs::MockTabInterface loose;
++  tabs::MockTabInterface essential;
++  ON_CALL(essential, IsPinned()).WillByDefault(testing::Return(true));
++  ASSERT_EQ(home, model.SpaceForTab(&pin));
++  ASSERT_EQ(home, model.SpaceForTab(&loose));
++  model.SetSpacePinned(&pin, true);
++  ASSERT_TRUE(model.IsSpacePinned(&pin));
++  const SpaceId work = model.AddSpace("Work", kBlue)->id();
++  EXPECT_TRUE(model.HasSpacePins(home));
++  EXPECT_FALSE(model.HasSpacePins(work));
++
++  EXPECT_FALSE(model.HidesTab(&pin)) << "expanded, the pin shows";
++  model.SetPinsCollapsed(home, true);
++  EXPECT_TRUE(model.HidesTab(&pin));
++  EXPECT_TRUE(model.IsTabInActiveSpace(&pin)) << "it stays in its Space";
++  EXPECT_FALSE(model.HidesTab(&loose));
++  EXPECT_FALSE(model.HidesTab(&essential));
++
++  model.SetPinsCollapsed(home, false);
++  EXPECT_FALSE(model.HidesTab(&pin)) << "expanded again, it shows";
++  model.SetPinsCollapsed(work, true);
++  EXPECT_FALSE(model.HidesTab(&pin)) << "Work's collapse is Work's";
++  model.SetActiveSpace(work);
++  EXPECT_TRUE(model.HidesTab(&pin)) << "another Space's tab, as before";
++  EXPECT_FALSE(model.HidesTab(&essential));
++}
++
+ // commandbar K26: two addresses show the same page when they differ only in
+ // http against https, a leading "www." or one trailing slash. Any other
+ // difference -- the query, the fragment, a port, the path's case, another
+diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+index 81593c1302298..41320885bbc82 100644
+--- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+@@ -794,6 +794,91 @@ TEST_F(SpaceWindowTest, PinsJoinTheEndOfTheRunAndUnpinsLeaveIt) {
+       << "a pin asked to pin keeps its place in the run";
+ }
+ 
++// pins H17, spaces B33: Collapse Pinned Tabs hides the Space's pins through
++// the strip's one rule, TabStripModel::IsTabHidden, but for the one on
++// screen: the selected pin keeps its row, and it alone. The loose tab and
++// the essential stay, tab traversal passes over the hidden pins, and Expand
++// Pinned Tabs brings them back. Nothing is unpinned or moved.
++TEST_F(SpaceWindowTest, ACollapsedPinnedRunHidesItsPinsButTheSelectedOne) {
++  tabs::TabInterface* const essential = OpenTab();
++  tabs().SetTabPinned(tabs().GetIndexOfTab(essential), true);
++  tabs::TabInterface* const loose = OpenTab();
++  tabs::TabInterface* const pin_a = OpenTab();
++  model().SetSpacePinned(pin_a, true);
++  tabs::TabInterface* const pin_b = OpenTab();
++  model().SetSpacePinned(pin_b, true);
++  const auto index = [this](const tabs::TabInterface* tab) {
++    return tabs().GetIndexOfTab(tab);
++  };
++  const auto hidden = [this, &index](const tabs::TabInterface* tab) {
++    return tabs().IsTabHidden(index(tab));
++  };
++  // The essential, the run of two pins, the loose tab.
++  ASSERT_EQ(0, index(essential));
++  ASSERT_EQ(1, index(pin_a));
++  ASSERT_EQ(2, index(pin_b));
++  ASSERT_EQ(3, index(loose));
++  tabs().ActivateTabAt(index(loose));
++  const SpaceId home = model().active_id();
++  ASSERT_TRUE(model().HasSpacePins(home));
++  ASSERT_FALSE(hidden(pin_a));
++
++  model().SetPinsCollapsed(home, true);
++  EXPECT_TRUE(model().ArePinsCollapsed(home));
++  EXPECT_TRUE(hidden(pin_a));
++  EXPECT_TRUE(hidden(pin_b));
++  EXPECT_FALSE(hidden(loose));
++  EXPECT_FALSE(hidden(essential)) << "an essential is not the Space's pin";
++  EXPECT_TRUE(model().IsSpacePinned(pin_a)) << "collapsing unpins nothing";
++  EXPECT_EQ(1, index(pin_a)) << "and moves nothing";
++
++  // Traversal walks the rows on screen: from the loose tab it wraps to the
++  // essential, and from there it passes over both pins.
++  tabs().SelectNextTab();
++  EXPECT_EQ(essential, tabs().GetActiveTab());
++  tabs().SelectNextTab();
++  EXPECT_EQ(loose, tabs().GetActiveTab());
++
++  // The selected pin keeps its row; the other pin stays hidden, and leaving
++  // the pin hides it again.
++  tabs().ActivateTabAt(index(pin_a));
++  EXPECT_FALSE(hidden(pin_a));
++  EXPECT_TRUE(hidden(pin_b));
++  tabs().ActivateTabAt(index(loose));
++  EXPECT_TRUE(hidden(pin_a));
++
++  model().SetPinsCollapsed(home, false);
++  EXPECT_FALSE(model().ArePinsCollapsed(home));
++  EXPECT_FALSE(hidden(pin_a));
++  EXPECT_FALSE(hidden(pin_b));
++}
++
++// pins H17, windows G1: the collapse belongs to the Space, so every window
++// showing it follows, and it is kept in the registry with the Space's name
++// and colour, which is what brings it back after a restart.
++TEST_F(SpaceWindowTest, ACollapsedPinnedRunReachesEveryWindow) {
++  ASSERT_TRUE(model().follows_registry());
++  const SpaceId home = model().active_id();
++  std::unique_ptr<BrowserWindowInterface> second =
++      CreateBrowser(profile(), Browser::TYPE_NORMAL, /*hosted_app=*/false);
++  SpaceModel* const other = SpaceModel::From(second.get());
++  ASSERT_TRUE(other);
++  ASSERT_TRUE(other->GetSpace(home));
++  EXPECT_FALSE(other->ArePinsCollapsed(home));
++
++  model().SetPinsCollapsed(home, true);
++  EXPECT_TRUE(model().ArePinsCollapsed(home));
++  EXPECT_TRUE(other->ArePinsCollapsed(home)) << "collapsed in one, in all";
++  const RegistryEntry* const entry = model().registry()->Find(home);
++  ASSERT_TRUE(entry);
++  EXPECT_TRUE(entry->pins_collapsed);
++
++  other->SetPinsCollapsed(home, false);
++  EXPECT_FALSE(model().ArePinsCollapsed(home));
++  EXPECT_FALSE(model().registry()->Find(home)->pins_collapsed);
++  second->GetTabStripModel()->CloseAllTabs();
++}
++
+ // B28: an essentials (Chromium-pinned) tab sits above every Space; Cmd-D on
+ // it changes nothing.
+ TEST_F(SpaceWindowTest, CmdDOnAnEssentialIsANoOp) {
+diff --git a/chrome/browser/ui/spaces/space_registry.cc b/chrome/browser/ui/spaces/space_registry.cc
+index f01084f2a8625..2801a27ec0b24 100644
+--- a/chrome/browser/ui/spaces/space_registry.cc
++++ b/chrome/browser/ui/spaces/space_registry.cc
+@@ -105,6 +105,16 @@ void SpaceRegistry::SetColor(const SpaceId& id, SkColor color, bool chosen) {
+   }
+ }
+ 
++void SpaceRegistry::SetPinsCollapsed(const SpaceId& id, bool collapsed) {
++  if (RegistryEntry* const entry = FindMutable(id)) {
++    if (entry->pins_collapsed == collapsed) {
++      return;
++    }
++    entry->pins_collapsed = collapsed;
++    Changed();
++  }
++}
++
+ void SpaceRegistry::SetProfileId(const SpaceId& id, std::string profile_id) {
+   if (RegistryEntry* const entry = FindMutable(id)) {
+     if (entry->profile_id == profile_id) {
+@@ -178,6 +188,7 @@ base::ListValue SpaceRegistry::ToValue(
+     dict.Set("color_chosen", entry.color_chosen);
+     dict.Set("profile", entry.profile_id);
+     dict.Set("isolated", entry.isolated);
++    dict.Set("pins_collapsed", entry.pins_collapsed);
+     list.Append(std::move(dict));
+   }
+   return list;
+@@ -206,6 +217,8 @@ std::vector<RegistryEntry> SpaceRegistry::FromValue(
+       entry.icon = *icon;
+     }
+     entry.color_chosen = dict->FindBool("color_chosen").value_or(false);
++    // pins H17: a registry from before the state existed is expanded.
++    entry.pins_collapsed = dict->FindBool("pins_collapsed").value_or(false);
+     if (const std::string* const profile = dict->FindString("profile")) {
+       entry.profile_id = *profile;
+     }
+diff --git a/chrome/browser/ui/spaces/space_registry.h b/chrome/browser/ui/spaces/space_registry.h
+index a973d610bfefc..e707bf3cce0a4 100644
+--- a/chrome/browser/ui/spaces/space_registry.h
++++ b/chrome/browser/ui/spaces/space_registry.h
+@@ -39,6 +39,8 @@ struct RegistryEntry {
+   // Off keeps the token, so on again reattaches the same jar (ADR 0019). A
+   // registry from before the flag existed (beta 7) reads a token as on (S19).
+   bool isolated = false;
++  // pins H17: the Space's pinned run is collapsed, in every window.
++  bool pins_collapsed = false;
+ };
+ 
+ // The profile's Space list -- order, names, icons, colours -- which every
+@@ -76,6 +78,9 @@ class SpaceRegistry : public KeyedService {
+   void SetName(const SpaceId& id, std::string name);
+   void SetIcon(const SpaceId& id, std::string icon);
+   void SetColor(const SpaceId& id, SkColor color, bool chosen);
++  // pins H17: collapses or expands the Space's pinned run. Setting the state
++  // it has already writes nothing and tells nobody.
++  void SetPinsCollapsed(const SpaceId& id, bool collapsed);
+   // sessions S2: `profile_id` is the storage-partition name (ADR 0019) and
+   // `isolated` says whether the Space's tabs use it. EnsureIsolated writes a
+   // random token when there is none and turns the flag on; SetIsolated(id,
+diff --git a/chrome/browser/ui/spaces/space_registry_unittest.cc b/chrome/browser/ui/spaces/space_registry_unittest.cc
+index 4ebcce08261f3..56443911defb5 100644
+--- a/chrome/browser/ui/spaces/space_registry_unittest.cc
++++ b/chrome/browser/ui/spaces/space_registry_unittest.cc
+@@ -124,5 +124,49 @@ TEST(SpaceRegistryTest, TwoIsolatedSpacesGetDifferentIds) {
+   EXPECT_FALSE(registry.Find(b)->profile_id.empty());
+ }
+ 
++// Counts the registry's change notifications.
++class ChangeCounter : public SpaceRegistry::Observer {
++ public:
++  void OnRegistryChanged() override { ++changes; }
++  int changes = 0;
++};
++
++// pins H17: a collapsed pinned run is kept in the preference with its Space,
++// one Space at a time. Setting the state a Space has already, or setting it
++// on a Space that is not there, writes nothing and tells nobody. A registry
++// written before the state existed reads as expanded.
++TEST(SpaceRegistryTest, ACollapsedPinnedRunRoundTrips) {
++  TestingPrefServiceSimple prefs;
++  prefs.registry()->RegisterListPref(stedding::prefs::kSpaceRegistry);
++  SpaceId work = SpaceId::GenerateNew();
++  {
++    SpaceRegistry registry(&prefs);
++    work = registry.Add("Work", SK_ColorBLUE);
++    registry.Add("Play", SK_ColorGREEN);
++    ChangeCounter counter;
++    registry.AddObserver(&counter);
++    registry.SetPinsCollapsed(work, true);
++    registry.SetPinsCollapsed(work, true);
++    registry.SetPinsCollapsed(SpaceId::GenerateNew(), true);
++    registry.RemoveObserver(&counter);
++    EXPECT_EQ(1, counter.changes);
++  }
++  SpaceRegistry again(&prefs);
++  ASSERT_EQ(2u, again.entries().size());
++  ASSERT_TRUE(again.Find(work));
++  EXPECT_TRUE(again.Find(work)->pins_collapsed);
++  EXPECT_FALSE(again.entries()[1].pins_collapsed) << "one Space, not all";
++
++  base::ListValue raw;
++  base::DictValue old;
++  old.Set("id", SpaceId::GenerateNew().ToString());
++  old.Set("name", "Old");
++  old.Set("color", 0);
++  raw.Append(std::move(old));
++  const std::vector<RegistryEntry> entries = SpaceRegistry::FromValue(raw);
++  ASSERT_EQ(1u, entries.size());
++  EXPECT_FALSE(entries[0].pins_collapsed);
++}
++
+ }  // namespace
+ }  // namespace spaces
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 21c1215da4fee..2314b51147f11 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -116,6 +116,14 @@ source_set("media_keys") {
+   ]
+ }
+ 
++# docs/features/commandbar.md K28 (BACKLOG S-116): the services' blank
++# documents the command bar offers. Pure data, so it takes only //base.
++source_set("new_documents") {
++  public = [ "new_documents.h" ]
++  sources = [ "new_documents.cc" ]
++  public_deps = [ "//base" ]
++}
++
+ # docs/features/pins.md H13: which pages a pin may call home, and H15: what a
+ # typed address names. A leaf, so the Space model and the importers apply the
+ # same rule as the pin lifecycle without a dependency cycle through
+@@ -352,6 +360,7 @@ source_set("unit_tests") {
+     "theme/page_theme_color_controller_unittest.cc",
+     "theme/page_top_color_unittest.cc",
+     "motion_unittest.cc",
++    "new_documents_unittest.cc",
+     "pin_lifecycle_unittest.cc",
+     "privacy_defaults_unittest.cc",
+     "private_window_unittest.cc",
+@@ -374,6 +383,7 @@ source_set("unit_tests") {
+     ":menu_rules",
+     "//chrome/browser/ui/spaces:router",
+     ":motion",
++    ":new_documents",
+     ":pin_home",
+     ":pin_lifecycle",
+     ":pin_home_dialog",
+diff --git a/chrome/browser/ui/stedding/new_documents.cc b/chrome/browser/ui/stedding/new_documents.cc
+new file mode 100644
+index 0000000000000..860828d6db796
+--- /dev/null
++++ b/chrome/browser/ui/stedding/new_documents.cc
+@@ -0,0 +1,38 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/new_documents.h"
++
++#include <array>
++
++#include "base/containers/span.h"
++
++namespace stedding {
++
++namespace {
++
++// commandbar K28: the services' own new-document addresses. Each opens a
++// blank document in the service, signed in or asking to sign in, the way the
++// address typed by hand would.
++constexpr auto kNewDocuments = std::to_array<NewDocument>({
++    {u"New Google Doc", "https://docs.new"},
++    {u"New Google Sheet", "https://sheets.new"},
++    {u"New Google Slides", "https://slides.new"},
++    {u"New Google Form", "https://forms.new"},
++    {u"New Notion Page", "https://notion.new"},
++    {u"New Figma Design File", "https://figma.new"},
++    {u"New GitHub Repository", "https://repo.new"},
++    {u"New GitHub Gist", "https://gist.new"},
++    {u"New Word Document", "https://word.new"},
++    {u"New Excel Workbook", "https://excel.new"},
++    {u"New PowerPoint", "https://powerpoint.new"},
++});
++
++}  // namespace
++
++base::span<const NewDocument> NewDocuments() {
++  return kNewDocuments;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/new_documents.h b/chrome/browser/ui/stedding/new_documents.h
+new file mode 100644
+index 0000000000000..58ee3b3cf1716
+--- /dev/null
++++ b/chrome/browser/ui/stedding/new_documents.h
+@@ -0,0 +1,30 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_NEW_DOCUMENTS_H_
++#define CHROME_BROWSER_UI_STEDDING_NEW_DOCUMENTS_H_
++
++#include <string_view>
++
++#include "base/containers/span.h"
++
++namespace stedding {
++
++// One service's blank document, as the command bar offers it
++// (docs/features/commandbar.md K28; BACKLOG S-116).
++struct NewDocument {
++  // The row's title, exactly as the command bar draws it.
++  std::u16string_view title;
++  // The service's own new-document address: opening it makes a blank
++  // document there. Always https, and nothing of what was typed goes with it.
++  std::string_view url;
++};
++
++// Every service's blank document, in the order the command bar lists them.
++// Pure data: no profile and no window, so it can be tested without either.
++base::span<const NewDocument> NewDocuments();
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_NEW_DOCUMENTS_H_
+diff --git a/chrome/browser/ui/stedding/new_documents_unittest.cc b/chrome/browser/ui/stedding/new_documents_unittest.cc
+new file mode 100644
+index 0000000000000..36e98d3ae4382
+--- /dev/null
++++ b/chrome/browser/ui/stedding/new_documents_unittest.cc
+@@ -0,0 +1,79 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/new_documents.h"
++
++#include <array>
++#include <set>
++#include <string>
++#include <string_view>
++#include <utility>
++
++#include "base/containers/span.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++#include "url/url_constants.h"
++
++namespace stedding {
++namespace {
++
++// commandbar K28: every row opens a service's bare new-document address over
++// https -- a ".new" name, no path, query, fragment, port or user -- so a row
++// can only ever ask the service for a blank document.
++TEST(NewDocumentsTest, EveryAddressIsAnHttpsNewDocumentAddress) {
++  ASSERT_FALSE(NewDocuments().empty());
++  for (const NewDocument& document : NewDocuments()) {
++    SCOPED_TRACE(document.url);
++    const GURL url(document.url);
++    ASSERT_TRUE(url.is_valid());
++    EXPECT_TRUE(url.SchemeIs(url::kHttpsScheme));
++    EXPECT_TRUE(url.host().ends_with(".new"));
++    EXPECT_EQ("/", url.path());
++    EXPECT_FALSE(url.has_query());
++    EXPECT_FALSE(url.has_ref());
++    EXPECT_FALSE(url.has_port());
++    EXPECT_FALSE(url.has_username());
++  }
++}
++
++// commandbar K28: no two rows share a title, so typing a title finds one row,
++// and no two open the same address.
++TEST(NewDocumentsTest, TitlesAndAddressesAreUnique) {
++  std::set<std::u16string_view> titles;
++  std::set<std::string_view> urls;
++  for (const NewDocument& document : NewDocuments()) {
++    EXPECT_FALSE(document.title.empty()) << document.url;
++    EXPECT_TRUE(titles.insert(document.title).second) << document.url;
++    EXPECT_TRUE(urls.insert(document.url).second) << document.url;
++  }
++}
++
++// commandbar K28 (BACKLOG S-116): the services, their titles and their order,
++// as the spec names them.
++TEST(NewDocumentsTest, TheListIsTheSpecs) {
++  static constexpr auto kExpected =
++      std::to_array<std::pair<std::u16string_view, std::string_view>>({
++          {u"New Google Doc", "https://docs.new/"},
++          {u"New Google Sheet", "https://sheets.new/"},
++          {u"New Google Slides", "https://slides.new/"},
++          {u"New Google Form", "https://forms.new/"},
++          {u"New Notion Page", "https://notion.new/"},
++          {u"New Figma Design File", "https://figma.new/"},
++          {u"New GitHub Repository", "https://repo.new/"},
++          {u"New GitHub Gist", "https://gist.new/"},
++          {u"New Word Document", "https://word.new/"},
++          {u"New Excel Workbook", "https://excel.new/"},
++          {u"New PowerPoint", "https://powerpoint.new/"},
++      });
++  const base::span<const NewDocument> documents = NewDocuments();
++  ASSERT_EQ(kExpected.size(), documents.size());
++  for (size_t i = 0; i < kExpected.size(); ++i) {
++    EXPECT_EQ(std::u16string(kExpected[i].first),
++              std::u16string(documents[i].title));
++    EXPECT_EQ(GURL(kExpected[i].second), GURL(documents[i].url));
++  }
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
+index fa17387bbf145..a1951187b8071 100644
+--- a/chrome/browser/ui/views/commandbar/BUILD.gn
++++ b/chrome/browser/ui/views/commandbar/BUILD.gn
+@@ -28,6 +28,7 @@ source_set("commandbar") {
+     "//chrome/browser/ui/stedding:prefs",
+     "//chrome/browser/ui/stedding:sleep_tabs",
+     "//chrome/browser/ui/stedding:media_keys",
++    "//chrome/browser/ui/stedding:new_documents",
+     "//chrome/browser/ui/stedding:tab_names",
+     "//chrome/browser/ui/tabs:tab_strip",
+     "//chrome/browser/ui/views/peek",
+@@ -54,11 +55,13 @@ source_set("unit_tests") {
+     "//chrome/browser/ui",
+     "//chrome/browser/ui/spaces",
+     "//chrome/browser/ui/stedding:address_row",
++    "//chrome/browser/ui/stedding:new_documents",
+     "//chrome/browser/ui/stedding:prefs",
+     "//chrome/browser/ui/stedding:tab_names",
+     "//chrome/browser/ui/tabs:tab_enums",
+     "//components/omnibox/browser",
+     "//components/prefs",
++    "//components/search_engines",
+     "//components/tabs:public",
+     "//content/public/browser",
+     "//ui/base",
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index c06dfc34a4345..b9bc0ea6b210b 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -44,6 +44,7 @@
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/browser/ui/spaces/space_query.h"
+ #include "chrome/browser/ui/stedding/media_keys.h"
++#include "chrome/browser/ui/stedding/new_documents.h"
+ #include "chrome/browser/ui/stedding/sidebar_density.h"
+ #include "chrome/browser/ui/stedding/sleep_tabs.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
+@@ -63,8 +64,10 @@
+ #include "components/omnibox/browser/autocomplete_match_type.h"
+ #include "components/omnibox/browser/autocomplete_result.h"
+ #include "components/prefs/pref_service.h"
++#include "components/search_engines/search_terms_data.h"
+ #include "components/search_engines/template_url.h"
+ #include "components/search_engines/template_url_service.h"
++#include "components/search_engines/template_url_starter_pack_data.h"
+ #include "components/sessions/core/tab_restore_service.h"
+ #include "components/url_formatter/url_formatter.h"
+ #include "content/public/browser/navigation_controller.h"
+@@ -80,11 +83,14 @@
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/rect_f.h"
+ #include "ui/gfx/range/range.h"
++#include "ui/views/background.h"
+ #include "ui/views/border.h"
+ #include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/layout/box_layout.h"
++#include "ui/views/view_class_properties.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ 
+@@ -124,6 +130,9 @@ constexpr size_t kMaxTabResults = 4;
+ constexpr size_t kMaxSuggestions = 6;
+ // archive A10: archived rows, after the open tabs.
+ constexpr size_t kMaxArchivedResults = 3;
++// commandbar K28: blank-document rows in tabs mode, after the archived ones;
++// actions mode lists them all.
++constexpr size_t kMaxNewDocumentResults = 4;
+ // Between a row's title and what is drawn at its right.
+ constexpr char16_t kRowSeparator[] = u"   \u2014   ";
+ 
+@@ -188,6 +197,69 @@ bool CompletesToSite(const AutocompleteMatch& match,
+                                           : site == shown_host;
+ }
+ 
++// commandbar K27: one letter names a site only by the whole of its keyword,
++// so Tab after one letter still filters the actions (K13).
++constexpr size_t kMinSiteSearchPrefix = 2;
++
++// commandbar K27 (BACKLOG S-109): whether `site`, one of Chromium's search
++// engines, may be offered as a site search: one the omnibox's keyword mode
++// would use and Settings lists, searching by an address with the query in it.
++bool OffersSiteSearch(const TemplateURL& site,
++                      const TemplateURLService& service) {
++  using template_url_starter_pack_data::StarterPackId;
++  const StarterPackId pack = site.starter_pack_id();
++  // ADR 0020, no bundled model: Gemini, AI Mode and an enterprise search
++  // aggregator's agent, the entries Chromium calls "ask" entries, are never
++  // offered.
++  if (site.is_ask_type() || pack == StarterPackId::kGemini ||
++      pack == StarterPackId::kAiMode) {
++    return false;
++  }
++  // The tabs and page scopes have no page: their addresses are placeholders
++  // the omnibox answers by itself and never opens.
++  if (pack == StarterPackId::kTabs || pack == StarterPackId::kPage) {
++    return false;
++  }
++  // An extension's keyword is answered by the extension, not by a page.
++  if (site.type() == TemplateURL::OMNIBOX_API_EXTENSION) {
++    return false;
++  }
++  // A search sent as a form post cannot be opened as an address.
++  return !site.keyword().empty() && site.CanBeUsedForKeywordMatching() &&
++         !service.HiddenFromLists(&site) &&
++         site.search_url_post_params().empty() &&
++         site.url_ref().SupportsReplacement(service.search_terms_data());
++}
++
++// commandbar K27: how well `typed`, in lower case, names `site`: 0 for the
++// whole of its keyword, 1 for the start of it, 2 for the start of its name,
++// 3 for the start of its domain; nothing when it names none of them.
++std::optional<int> SiteSearchRank(const TemplateURL& site,
++                                  const SearchTermsData& search_terms_data,
++                                  std::u16string_view typed) {
++  const std::u16string keyword = base::ToLowerASCII(site.keyword());
++  if (keyword == typed) {
++    return 0;
++  }
++  if (keyword.starts_with(typed)) {
++    return 1;
++  }
++  if (base::ToLowerASCII(site.short_name()).starts_with(typed)) {
++    return 2;
++  }
++  const GURL search = site.GenerateSearchURL(search_terms_data);
++  const std::u16string host =
++      base::ToLowerASCII(url_formatter::IDNToUnicode(search.host()));
++  std::u16string_view domain = host;
++  if (domain.starts_with(u"www.")) {
++    domain.remove_prefix(4);
++  }
++  if (!domain.empty() && domain.starts_with(typed)) {
++    return 3;
++  }
++  return std::nullopt;
++}
++
+ // The window commands actions mode lists (commandbar K9, K15), in order. A
+ // row shows only while its command is enabled in the window; `in_private`
+ // says whether it belongs in a private window at all.
+@@ -303,13 +375,11 @@ base::AutoReset<views::View*> CommandBarView::SetHostForTesting(
+ void CommandBarView::SetMode(Mode mode) {
+   mode_ = mode;
+   if (mode_ == Mode::kActions) {
++    // K27: commands are not searched on a site; the query is the filter.
++    ClearChip();
+     BuildActions();
+   }
+-  if (field_) {
+-    field_->SetPlaceholderText(mode_ == Mode::kActions
+-                                   ? u"Type a command\u2026"
+-                                   : u"Search or Enter URL\u2026");
+-  }
++  UpdatePlaceholder();
+   // The rows re-read for the text in the field: leaving actions mode shows
+   // the tabs that match it, not the list from before (K14). A completion
+   // showing goes first, so Tab filters the actions by what was typed (K23).
+@@ -321,8 +391,11 @@ void CommandBarView::Prefill(std::u16string text) {
+     return;
+   }
+   // K23: the prefilled text replaces any completion, and is not typed, so
+-  // it does not complete (Cmd-L's address, K12).
++  // it does not complete (Cmd-L's address, K12). K27: nor is it a site's
++  // query.
+   inline_completion_.clear();
++  ClearChip();
++  UpdatePlaceholder();
+   field_->SetText(text);
+   field_->SelectAll(false);
+   text_before_edit_ = text;
+@@ -454,6 +527,27 @@ void CommandBarView::BuildActions() {
+            base::BindRepeating(&spaces::ExpandAllFolders,
+                                base::Unretained(browser_))});
+     }
++    // pins H17: Collapse Pinned Tabs or Expand Pinned Tabs for the active
++    // Space, listed only while it changes something (K16): Collapse while the
++    // Space holds a pin in this window and its run is open, Expand while the
++    // run is collapsed. No chord; the bar closes once it has run.
++    {
++      const spaces::SpaceId space = spaces->active_id();
++      const bool pins_collapsed = spaces->ArePinsCollapsed(space);
++      if (pins_collapsed || spaces->HasSpacePins(space)) {
++        actions_.push_back(
++            {pins_collapsed ? u"Expand Pinned Tabs" : u"Collapse Pinned Tabs",
++             std::u16string(),
++             base::BindRepeating(
++                 [](BrowserWindowInterface* browser, bool collapse) {
++                   if (spaces::SpaceModel* const model =
++                           spaces::SpaceModel::From(browser)) {
++                     model->SetPinsCollapsed(model->active_id(), collapse);
++                   }
++                 },
++                 base::Unretained(browser_), !pins_collapsed)});
++      }
++    }
+     // commandbar K26: only while the active Space shows a page twice (K16:
+     // no row without a target). It has no chord, and the bar closes once it
+     // has run.
+@@ -647,6 +741,15 @@ void CommandBarView::BuildActions() {
+                                   WindowOpenDisposition::NEW_FOREGROUND_TAB);
+                             },
+                             base::Unretained(browser_))});
++    // commandbar K28 (BACKLOG S-116): a row per service's blank document,
++    // each opening the service's own new-document address in a new tab of
++    // the active Space. Normal windows only (K15).
++    for (const NewDocument& document : NewDocuments()) {
++      actions_.push_back({std::u16string(document.title), std::u16string(),
++                          base::BindRepeating(&CommandBarView::OpenNewDocument,
++                                              weak_factory_.GetWeakPtr(),
++                                              GURL(document.url))});
++    }
+ 
+     // One on/off row per Stedding preference, and a cycling row per
+     // dropdown (K17): the bar stays open and the row re-reads.
+@@ -813,13 +916,38 @@ void CommandBarView::BuildContents() {
+   SetLayoutManager(std::make_unique<views::BoxLayout>(
+       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 8));
+ 
++  // K27: the field sits in a row with the site search chip at its start.
++  // The row has the field's height and colour, and the field gives the chip
++  // its width, so without a chip it looks as the field alone did.
++  auto field_row = std::make_unique<views::View>();
++  field_row->SetPreferredSize(gfx::Size(kBarWidth, kFieldHeight));
++  field_row->SetBackground(
++      views::CreateSolidBackground(ui::kColorTextfieldBackground));
++  auto* const row_layout =
++      field_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
++          views::BoxLayout::Orientation::kHorizontal));
++  row_layout->set_cross_axis_alignment(
++      views::BoxLayout::CrossAxisAlignment::kCenter);
++
++  auto chip = std::make_unique<views::Label>();
++  chip->SetFontList(chip->font_list().DeriveWithSizeDelta(kFontSizeDelta - 1));
++  chip->SetAutoColorReadabilityEnabled(false);
++  chip->SetEnabledColor(ui::kColorSysOnTonalContainer);
++  chip->SetBackground(views::CreatePillBackground(ui::kColorSysTonalContainer));
++  chip->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(4, 10)));
++  chip->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 12, 0, 0));
++  chip->SetVisible(false);
++  chip_view_ = field_row->AddChildView(std::move(chip));
++
+   auto field = std::make_unique<CommandBarField>();
+   field->set_controller(this);
+   field->SetPreferredSize(gfx::Size(kBarWidth, kFieldHeight));
+   field->SetBackgroundColor(ui::kColorTextfieldBackground);
+   field->SetFontList(field->GetFontList().DeriveWithSizeDelta(kFontSizeDelta));
+   field->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 12)));
+-  field_ = AddChildView(std::move(field));
++  field_ = field_row->AddChildView(std::move(field));
++  row_layout->SetFlexForView(field_.get(), 1);
++  AddChildView(std::move(field_row));
+ 
+   auto list = std::make_unique<views::ScrollView>();
+   list->SetContents(std::make_unique<views::View>())
+@@ -894,6 +1022,11 @@ void CommandBarView::RemovedFromWidget() {
+ 
+ bool CommandBarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+   if (accelerator.key_code() == ui::VKEY_ESCAPE) {
++    // Escape takes a site search chip away first, the query kept (K27).
++    if (chip_) {
++      LeaveSiteSearch();
++      return true;
++    }
+     // Escape leaves actions mode first; a second closes (K14).
+     if (mode_ == Mode::kActions) {
+       SetMode(Mode::kTabs);
+@@ -928,13 +1061,46 @@ void CommandBarView::UpdateResults(const std::u16string& query,
+   selected_ = 0;
+   rows_.clear();
+   typed_row_.reset();
+-  inline_allowed_ = allow_inline && mode_ == Mode::kTabs && !query_.empty();
++  // K27: a chip's query is a search on its site, never a site to complete.
++  inline_allowed_ =
++      allow_inline && mode_ == Mode::kTabs && !query_.empty() && !chip_;
+   if (mode_ == Mode::kActions) {
+     AddActionRows();
+     RebuildRows();
+     return;
+   }
+ 
++  if (chip_) {
++    // K27: only the chip's site. The query is its search, and the omnibox's
++    // answers bring that site's own suggestions (ShowSuggestions); no tabs,
++    // no archive, no other search.
++    if (!query_.empty()) {
++      rows_.push_back({.kind = RowKind::kTyped,
++                       .title = u"Search " + chip_->name + u" for " + query_,
++                       .url = SiteSearchURL(query_)});
++      typed_row_ = rows_.back();
++    }
++    if (autocomplete_) {
++      if (query_.empty()) {
++        autocomplete_->Stop(AutocompleteStopReason::kClobbered);
++      } else {
++        const ChromeAutocompleteSchemeClassifier scheme_classifier(
++            browser_->GetProfile());
++        // The omnibox's keyword mode: "<keyword> <query>", as the address
++        // bar sends it once Tab has made its own keyword chip.
++        AutocompleteInput input(chip_->keyword + u" " + query_,
++                                metrics::OmniboxEventProto::OTHER,
++                                scheme_classifier);
++        input.set_in_keyword_mode(true);
++        input.set_allow_exact_keyword_match(true);
++        input.set_prevent_inline_autocomplete(true);
++        autocomplete_->Start(input);
++      }
++    }
++    RebuildRows();
++    return;
++  }
++
+   TabStripModel* const tabs = browser_->GetTabStripModel();
+   spaces::SpaceModel* const spaces = spaces::SpaceModel::From(browser_);
+   const spaces::SpaceQuery parsed = spaces::ParseSpaceQuery(query);
+@@ -961,6 +1127,15 @@ void CommandBarView::UpdateResults(const std::u16string& query,
+     // Before the omnibox starts: its first answer can arrive inside Start()
+     // and complete this row (K23).
+     typed_row_ = rows_.back();
++    // K27: a site search the text names is offered under the typed row, so
++    // Enter still does what K7 says; Tab, or Enter on this row, makes the
++    // chip.
++    if (const TemplateURL* const site = SiteSearchFor(query_)) {
++      rows_.push_back({.kind = RowKind::kSiteSearch,
++                       .title = u"Search " + site->short_name(),
++                       .detail = u"Tab",
++                       .keyword = site->keyword()});
++    }
+   }
+ 
+   size_t tab_rows = 0;
+@@ -1030,6 +1205,32 @@ void CommandBarView::UpdateResults(const std::u16string& query,
+     }
+   }
+ 
++  // commandbar K28: text that starts with "new" also offers the services'
++  // blank documents whose title matches it, after the tabs and the archive
++  // and before the suggestions, each drawn with its address. Normal windows
++  // only (K15); actions mode lists them all. A site chip (K27) has already
++  // returned above, so none show under one.
++  if (base::StartsWith(query_, u"new", base::CompareCase::INSENSITIVE_ASCII) &&
++      browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL &&
++      !browser_->GetProfile()->IsOffTheRecord()) {
++    size_t document_rows = 0;
++    for (const NewDocument& document : NewDocuments()) {
++      if (document_rows >= kMaxNewDocumentResults) {
++        break;
++      }
++      const std::u16string title(document.title);
++      if (!Matches(title, query_)) {
++        continue;
++      }
++      const GURL url(document.url);
++      rows_.push_back({.kind = RowKind::kNewDocument,
++                       .title = title,
++                       .detail = base::UTF8ToUTF16(url.host()),
++                       .url = url});
++      ++document_rows;
++    }
++  }
++
+   // The omnibox's own providers -- history, bookmarks, search suggestions --
+   // answer asynchronously through OnResultChanged.
+   if (autocomplete_) {
+@@ -1079,6 +1280,15 @@ void CommandBarView::ShowSuggestions(const AutocompleteResult& result) {
+     if (match.destination_url == typed_destination) {
+       continue;
+     }
++    // K27: with a chip, only its site's searches for other text: no page
++    // from history, no other engine, and no answer for an empty query.
++    if (chip_ && (query_.empty() ||
++                  !AutocompleteMatch::IsSearchType(match.type) ||
++                  base::ToLowerASCII(match.keyword) !=
++                      base::ToLowerASCII(chip_->keyword) ||
++                  match.contents == query_)) {
++      continue;
++    }
+     std::u16string kind = u"History";
+     if (AutocompleteMatch::IsSearchType(match.type)) {
+       kind = u"Search";
+@@ -1165,6 +1375,140 @@ void CommandBarView::AcceptInlineCompletion() {
+   inline_allowed_ = false;
+ }
+ 
++TemplateURLService* CommandBarView::SearchEngines() const {
++  return TemplateURLServiceFactory::GetForProfile(browser_->GetProfile());
++}
++
++const TemplateURL* CommandBarView::SiteSearchFor(
++    const std::u16string& text) const {
++  TemplateURLService* const service = SearchEngines();
++  // One word only: "keyword query" is K18's.
++  if (!service || text.empty() || text.find(u' ') != std::u16string::npos) {
++    return nullptr;
++  }
++  const std::u16string typed = base::ToLowerASCII(text);
++  const TemplateURL* best = nullptr;
++  int best_rank = 0;
++  for (const auto& entry : service->GetTemplateURLs()) {
++    const TemplateURL* const site = entry.get();
++    if (!site || !OffersSiteSearch(*site, *service)) {
++      continue;
++    }
++    const std::optional<int> rank =
++        SiteSearchRank(*site, service->search_terms_data(), typed);
++    if (!rank || (typed.size() < kMinSiteSearchPrefix && *rank != 0)) {
++      continue;
++    }
++    // A scope (@bookmarks, @history) only by the whole of its keyword: by
++    // its name it took "bo" and "hi", and Tab with them, from the actions
++    // (K13). And text that starts with "@" is K19's Space filter until it
++    // spells a whole scope.
++    const bool scope = site->starter_pack_id() !=
++                       template_url_starter_pack_data::StarterPackId::kNone;
++    if ((scope || typed.starts_with(u"@")) && *rank != 0) {
++      continue;
++    }
++    // The closest naming wins; between two, the shorter keyword, as the
++    // omnibox lists keywords shortest first.
++    if (!best || *rank < best_rank ||
++        (*rank == best_rank &&
++         site->keyword().size() < best->keyword().size())) {
++      best = site;
++      best_rank = *rank;
++    }
++  }
++  return best;
++}
++
++const TemplateURL* CommandBarView::OfferedSiteSearch(
++    const std::u16string& keyword) const {
++  TemplateURLService* const service = SearchEngines();
++  if (!service || keyword.empty()) {
++    return nullptr;
++  }
++  const TemplateURL* const site = service->GetTemplateURLForKeyword(keyword);
++  return site && OffersSiteSearch(*site, *service) ? site : nullptr;
++}
++
++GURL CommandBarView::SiteSearchURL(const std::u16string& query) const {
++  TemplateURLService* const service = SearchEngines();
++  const TemplateURL* const site =
++      chip_ ? OfferedSiteSearch(chip_->keyword) : nullptr;
++  if (!service || !site) {
++    return GURL();
++  }
++  return GURL(site->url_ref().ReplaceSearchTerms(
++      TemplateURLRef::SearchTermsArgs(query), service->search_terms_data()));
++}
++
++void CommandBarView::EnterSiteSearch(std::u16string keyword) {
++  const TemplateURL* const site = OfferedSiteSearch(keyword);
++  if (!site || !field_) {
++    return;
++  }
++  chip_ = SiteChip{.keyword = std::move(keyword), .name = site->short_name()};
++  if (chip_view_) {
++    chip_view_->SetText(chip_->name);
++    chip_view_->SetVisible(true);
++  }
++  UpdatePlaceholder();
++  // The typed text named the site; the field is the query now, and a
++  // completion goes with the text it completed (K23).
++  inline_completion_.clear();
++  field_->SetText(std::u16string());
++  text_before_edit_.clear();
++  selection_before_edit_ = field_->GetSelectedRange();
++  UpdateResults(std::u16string(), /*allow_inline=*/false);
++}
++
++void CommandBarView::LeaveSiteSearch() {
++  if (!chip_) {
++    return;
++  }
++  ClearChip();
++  UpdatePlaceholder();
++  // The query stays in the field, as typed text (K7).
++  UpdateResults(query_, /*allow_inline=*/false);
++}
++
++void CommandBarView::ClearChip() {
++  chip_.reset();
++  if (chip_view_) {
++    chip_view_->SetVisible(false);
++    chip_view_->SetText(std::u16string());
++  }
++}
++
++void CommandBarView::UpdatePlaceholder() {
++  if (!field_) {
++    return;
++  }
++  if (chip_) {
++    field_->SetPlaceholderText(u"Search " + chip_->name + u"\u2026");
++    return;
++  }
++  field_->SetPlaceholderText(mode_ == Mode::kActions
++                                 ? u"Type a command\u2026"
++                                 : u"Search or Enter URL\u2026");
++}
++
++bool CommandBarView::CaretAtEnd() const {
++  if (!field_) {
++    return false;
++  }
++  if (!inline_completion_.empty()) {
++    return true;
++  }
++  const gfx::Range& selection = field_->GetSelectedRange();
++  return selection.is_empty() && selection.end() == field_->GetText().size();
++}
++
++std::u16string CommandBarView::site_chip_for_testing() const {
++  return chip_ && chip_view_ && chip_view_->GetVisible()
++             ? std::u16string(chip_view_->GetText())
++             : std::u16string();
++}
++
+ void CommandBarView::RebuildRows() {
+   if (!list_) {
+     return;
+@@ -1337,11 +1681,19 @@ void CommandBarView::RunRow(size_t index) {
+     case RowKind::kArchived:
+       RestoreArchived(row.archived_id);
+       return;
++    case RowKind::kNewDocument:
++      OpenNewDocument(row.url);
++      Close();
++      return;
+     case RowKind::kAction: {
+       const Action action = actions_.at(row.action);
+       Run(action);
+       return;
+     }
++    case RowKind::kSiteSearch:
++      // K27: the bar stays open, with the chip, for the query.
++      EnterSiteSearch(row.keyword);
++      return;
+   }
+ }
+ 
+@@ -1383,6 +1735,21 @@ void CommandBarView::Open(const GURL& url) {
+   Close();
+ }
+ 
++void CommandBarView::OpenNewDocument(const GURL& url) {
++  if (!url.is_valid()) {
++    return;
++  }
++  // commandbar K28: a new foreground tab, which the Space model files under
++  // the active Space as it does every new tab (spaces B1), or an untouched
++  // New Tab page (K21). Cmd-L's bar replaces the open page only with what is
++  // typed (K12), never with a new document.
++  NavigateParams params(browser_, url, ui::PAGE_TRANSITION_TYPED);
++  params.disposition = ActiveTabIsUntouchedNewTab()
++                           ? WindowOpenDisposition::CURRENT_TAB
++                           : WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  Navigate(&params);
++}
++
+ size_t CommandBarView::result_count_for_testing() const {
+   return static_cast<size_t>(
+       std::ranges::count(rows_, RowKind::kTab, &Row::kind));
+@@ -1456,8 +1823,8 @@ void CommandBarView::ContentsChanged(views::Textfield* sender,
+   // typed over or deleted with the edit.
+   inline_completion_.clear();
+   // A leading ">" is the other way into actions mode (K8): the text after it
+-  // is the filter.
+-  if (mode_ == Mode::kTabs && !new_contents.empty() &&
++  // is the filter. With a chip it is part of the site's query (K27).
++  if (mode_ == Mode::kTabs && !chip_ && !new_contents.empty() &&
+       new_contents[0] == u'>') {
+     query_ = new_contents.substr(1);
+     SetMode(Mode::kActions);
+@@ -1513,9 +1880,29 @@ bool CommandBarView::HandleKeyEvent(views::Textfield* sender,
+     AcceptInlineCompletion();
+     return false;
+   }
++  // K27: Backspace in an empty field takes the site search chip away; with
++  // a query it is the field's.
++  if (key == ui::VKEY_BACK && chip_ && field_ && field_->GetText().empty()) {
++    LeaveSiteSearch();
++    return true;
++  }
+   // Tab switches modes and keeps the text as the filter (K8, K13); Shift-Tab
+   // comes back.
+   if (event.key_code() == ui::VKEY_TAB) {
++    // K27: a chip's query is not a filter for the actions, so Tab does
++    // nothing with one. With "Search <site>  Tab" offered and the caret at
++    // the end, Tab makes the chip.
++    if (chip_) {
++      return true;
++    }
++    if (!event.IsShiftDown() && mode_ == Mode::kTabs && CaretAtEnd()) {
++      const auto site =
++          std::ranges::find(rows_, RowKind::kSiteSearch, &Row::kind);
++      if (site != rows_.end()) {
++        EnterSiteSearch(site->keyword);
++        return true;
++      }
++    }
+     if (event.IsShiftDown()) {
+       if (mode_ == Mode::kActions) {
+         SetMode(Mode::kTabs);
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.h b/chrome/browser/ui/views/commandbar/command_bar_view.h
+index 120842202c225..888a0a10dec01 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.h
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.h
+@@ -31,12 +31,15 @@
+ #include "url/gurl.h"
+ 
+ class BrowserWindowInterface;
++class TemplateURL;
++class TemplateURLService;
+ 
+ namespace ui {
+ class AcceleratorProvider;
+ }  // namespace ui
+ 
+ namespace views {
++class Label;
+ class ScrollView;
+ class Textfield;
+ }  // namespace views
+@@ -108,6 +111,9 @@ class CommandBarView : public views::View,
+   std::u16string inline_completion_for_testing() const {
+     return inline_completion_;
+   }
++  // K27: the site the chip at the field's start names, as drawn; empty while
++  // there is no chip.
++  std::u16string site_chip_for_testing() const;
+   views::View* row_view_for_testing(size_t index) { return RowView(index); }
+   bool closing_for_testing() const { return closing_; }
+   // Chords come from the window's accelerator provider (the BrowserView);
+@@ -187,6 +193,11 @@ class CommandBarView : public views::View,
+     kSuggestion,
+     // Runs a command (K9).
+     kAction,
++    // Offers a site search for the typed text; running it makes the chip,
++    // as Tab does (K27).
++    kSiteSearch,
++    // Opens a service's blank document in a new tab (K28).
++    kNewDocument,
+   };
+ 
+   // One row of the list. `rows_` is what the bar draws, what the arrow keys
+@@ -201,10 +212,20 @@ class CommandBarView : public views::View,
+     tabs::TabHandle tab;
+     // kArchived.
+     SessionID archived_id = SessionID::InvalidValue();
+-    // kTyped and kSuggestion.
++    // kTyped, kSuggestion and kNewDocument.
+     GURL url;
+     // kAction: an index into `actions_`.
+     size_t action = 0;
++    // kSiteSearch: the search engine's keyword (K27).
++    std::u16string keyword;
++  };
++
++  // K27: the site search a chip names. The keyword is the key: the engine
++  // is looked up again each time, so an entry removed in Settings while
++  // the bar is open is never used.
++  struct SiteChip {
++    std::u16string keyword;
++    std::u16string name;
+   };
+ 
+   // One thing the user can do (actions mode, commandbar K9).
+@@ -247,6 +268,27 @@ class CommandBarView : public views::View,
+   void DropInlineCompletion();
+   // K23: takes the completed text as typed; the typed row keeps the site.
+   void AcceptInlineCompletion();
++
++  // K27 (BACKLOG S-109): site search, on Chromium's search engines.
++  TemplateURLService* SearchEngines() const;
++  // The site search `text` names by the start of its keyword, its name or
++  // its domain, or null.
++  const TemplateURL* SiteSearchFor(const std::u16string& text) const;
++  // The site search with `keyword`, when it may be offered; else null.
++  const TemplateURL* OfferedSiteSearch(const std::u16string& keyword) const;
++  // Where the chip's site searches for `query`.
++  GURL SiteSearchURL(const std::u16string& query) const;
++  // Makes the chip for `keyword`'s site and empties the field for the query.
++  void EnterSiteSearch(std::u16string keyword);
++  // Takes the chip away; the rows re-read for the text left in the field.
++  void LeaveSiteSearch();
++  // Forgets the chip and hides it, nothing more.
++  void ClearChip();
++  // The field's placeholder for the mode, or for the chip's site.
++  void UpdatePlaceholder();
++  // Whether the caret is at the end of the field. A completion shown counts:
++  // it is the rest of the text, selected after the caret (K23).
++  bool CaretAtEnd() const;
+   // Draws `rows_`.
+   void RebuildRows();
+   // Redraws the text of row `index` without rebuilding the list.
+@@ -274,6 +316,10 @@ class CommandBarView : public views::View,
+   void RestoreArchived(SessionID id);
+   // Opens `url` where typed text goes (TypedDisposition()).
+   void Open(const GURL& url);
++  // K28: opens `url`, a service's new-document address, in a new foreground
++  // tab, or in an untouched New Tab page (K21); never over the page Cmd-L's
++  // bar was opened on.
++  void OpenNewDocument(const GURL& url);
+ 
+   // What Enter does with `text`: where it goes, and whether that is a search.
+   Classification Classify(const std::u16string& text) const;
+@@ -291,6 +337,9 @@ class CommandBarView : public views::View,
+   raw_ptr<ui::AcceleratorProvider> accelerator_provider_for_testing_ = nullptr;
+   std::optional<bool> peek_open_for_testing_;
+   raw_ptr<views::Textfield> field_ = nullptr;
++  // K27: the chip at the field's start, hidden while there is none.
++  raw_ptr<views::Label> chip_view_ = nullptr;
++  std::optional<SiteChip> chip_;
+   raw_ptr<views::ScrollView> list_ = nullptr;
+   std::vector<Row> rows_;
+   std::vector<stedding::ArchivedTab> ArchivedTabs() const;
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+index 0b965c7956c33..634f98518a018 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
+ 
++#include <algorithm>
+ #include <memory>
+ #include <string>
+ #include <tuple>
+@@ -24,6 +25,7 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/new_documents.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
+@@ -38,6 +40,7 @@
+ #include "components/search_engines/template_url.h"
+ #include "components/search_engines/template_url_data.h"
+ #include "components/search_engines/template_url_service.h"
++#include "components/search_engines/template_url_starter_pack_data.h"
+ #include "components/sessions/core/session_id.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -95,6 +98,26 @@ bool HasTitle(CommandBarView& bar, const std::u16string& title) {
+   return false;
+ }
+ 
++// commandbar K28: how many rows are the services' blank documents.
++size_t DocumentRows(CommandBarView& bar) {
++  size_t count = 0;
++  for (const std::u16string& title : Titles(bar)) {
++    if (std::ranges::any_of(NewDocuments(), [&](const NewDocument& document) {
++          return document.title == title;
++        })) {
++      ++count;
++    }
++  }
++  return count;
++}
++
++// The index of the row titled `title`; the row count when there is none.
++size_t RowIndex(CommandBarView& bar, const std::u16string& title) {
++  const std::vector<std::u16string> titles = Titles(bar);
++  return static_cast<size_t>(std::ranges::find(titles, title) -
++                             titles.begin());
++}
++
+ // Enter on the chosen row, through the bar's own key handling.
+ bool Enter(CommandBarView& bar) {
+   return bar.HandleKeyEvent(bar.field_for_testing(), Press(ui::VKEY_RETURN));
+@@ -156,6 +179,50 @@ class CommandBarViewTest : public BrowserWithTestWindowTest {
+     TemplateURLServiceFactory::GetForProfile(profile())->Add(
+         std::make_unique<TemplateURL>(data));
+   }
++
++  // commandbar K27: the profile's search engines, which a unit test's
++  // profile does not have until it asks.
++  TemplateURLService& UseSearchEngines() {
++    TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
++        profile(),
++        base::BindRepeating(&TemplateURLServiceFactory::BuildInstanceFor));
++    return *TemplateURLServiceFactory::GetForProfile(profile());
++  }
++
++  // commandbar K27: an active entry, as one added in
++  // chrome://settings/searchEngines is, or one of the starter pack's scopes.
++  static void AddSiteSearch(
++      TemplateURLService& engines,
++      const std::u16string& name,
++      const std::u16string& keyword,
++      const std::string& url,
++      template_url_starter_pack_data::StarterPackId pack =
++          template_url_starter_pack_data::StarterPackId::kNone) {
++    TemplateURLData data;
++    data.SetShortName(name);
++    data.SetKeyword(keyword);
++    data.SetURL(url);
++    data.is_active = TemplateURLData::ActiveStatus::kTrue;
++    data.starter_pack_id = static_cast<int>(pack);
++    ASSERT_TRUE(engines.Add(std::make_unique<TemplateURL>(data)));
++  }
++
++  // "Zettel": a site search whose keyword, name and domain begin as no other
++  // entry's do.
++  static void AddZettel(TemplateURLService& engines) {
++    AddSiteSearch(engines, u"Zettel", u"zt",
++                  "https://zettel.example/find?q={searchTerms}");
++  }
++
++  // commandbar K27: whether a "Search <site>  Tab" row is listed.
++  static bool OffersASiteSearch(CommandBarView& bar) {
++    for (size_t i = 0; i < bar.row_count_for_testing(); ++i) {
++      if (bar.row_detail_for_testing(i) == u"Tab") {
++        return true;
++      }
++    }
++    return false;
++  }
+ };
+ 
+ // spaces B13: the bar lists tabs from every Space, and choosing one in
+@@ -522,6 +589,134 @@ TEST_F(CommandBarViewTest, CloseDuplicateTabsIsListedWhileThereIsACopy) {
+   EXPECT_TRUE(bar->closing_for_testing()) << "the bar closes once it has run";
+ }
+ 
++// commandbar K28 (BACKLOG S-116): actions mode has a row for each service's
++// blank document, titled as the service names it and without a chord. Enter
++// on one opens the service's new-document address in a new foreground tab,
++// which joins the active Space, and closes the bar.
++TEST_F(CommandBarViewTest, NewDocumentRowsOpenInANewTabOfTheActiveSpace) {
++  AddTab(browser(), GURL("https://example.com/"));
++  spaces::Space* const work = model().AddSpace("Work", SK_ColorBLUE);
++  model().SetActiveSpace(work->id());
++  // A page of Work's own, so the active tab is not an untouched New Tab page
++  // (K21).
++  AddTab(browser(), GURL("https://example.org/"));
++  ASSERT_EQ(work->id(), model().SpaceForTab(tabs().GetActiveTab()));
++  const int before = tabs().count();
++
++  auto bar = std::make_unique<CommandBarView>(browser());
++  bar->SetModeForTesting(CommandBarView::Mode::kActions);
++  for (const NewDocument& document : NewDocuments()) {
++    EXPECT_TRUE(HasTitle(*bar, std::u16string(document.title)))
++        << document.url;
++  }
++  bar->ContentsChanged(bar->field_for_testing(), u"new google doc");
++  ASSERT_EQ(1u, bar->row_count_for_testing());
++  EXPECT_EQ(u"New Google Doc", bar->row_title_for_testing(0));
++  EXPECT_TRUE(bar->row_detail_for_testing(0).empty()) << "no chord";
++  EXPECT_TRUE(Enter(*bar));
++  EXPECT_EQ(before + 1, tabs().count());
++  tabs::TabInterface* const opened = tabs().GetActiveTab();
++  ASSERT_TRUE(opened);
++  EXPECT_EQ(GURL("https://docs.new/"), opened->GetContents()->GetVisibleURL());
++  EXPECT_EQ(work->id(), model().SpaceForTab(opened));
++  EXPECT_TRUE(bar->closing_for_testing());
++}
++
++// commandbar K28: in tabs mode, text that starts with "new" also offers the
++// blank documents whose title matches it, after the typed row, at most four,
++// each drawn with its address; Enter on one opens it in a new tab. Text that
++// does not start with "new" offers none, though it matches a title.
++TEST_F(CommandBarViewTest, TypingNewOffersBlankDocuments) {
++  AddTab(browser(), GURL("https://example.com/"));
++  const int before = tabs().count();
++  auto bar = std::make_unique<CommandBarView>(browser());
++
++  TypeInto(*bar, u"new");
++  EXPECT_EQ(4u, DocumentRows(*bar)) << "the first four of the list";
++  EXPECT_TRUE(HasTitle(*bar, u"New Google Doc"));
++  EXPECT_FALSE(HasTitle(*bar, u"New PowerPoint"));
++  EXPECT_EQ(u"new", bar->row_title_for_testing(0)) << "the typed row first";
++
++  TypeInto(*bar, u"New p");
++  ASSERT_EQ(1u, DocumentRows(*bar));
++  const size_t row = RowIndex(*bar, u"New PowerPoint");
++  ASSERT_LT(row, bar->row_count_for_testing());
++  EXPECT_EQ(u"powerpoint.new", bar->row_detail_for_testing(row));
++  Down(*bar, static_cast<int>(row));
++  ASSERT_EQ(row, bar->selected_row_for_testing());
++  EXPECT_TRUE(Enter(*bar));
++  EXPECT_EQ(before + 1, tabs().count());
++  EXPECT_EQ(GURL("https://powerpoint.new/"),
++            tabs().GetActiveWebContents()->GetVisibleURL());
++  EXPECT_TRUE(bar->closing_for_testing());
++
++  auto other = std::make_unique<CommandBarView>(browser());
++  TypeInto(*other, u"google");
++  EXPECT_EQ(0u, DocumentRows(*other));
++  TypeInto(*other, u"news");
++  EXPECT_EQ(0u, DocumentRows(*other));
++}
++
++// commandbar K28, K21, K12: an untouched New Tab page takes the document, as
++// it takes anything the bar opens; Cmd-L's bar opens it in a new tab and
++// leaves the page it was opened on.
++TEST_F(CommandBarViewTest, ANewDocumentNeverReplacesAPage) {
++  AddTab(browser(), GURL("chrome://newtab/"));
++  content::WebContents* const fresh = tabs().GetActiveWebContents();
++  {
++    auto bar = std::make_unique<CommandBarView>(browser());
++    bar->SetModeForTesting(CommandBarView::Mode::kActions);
++    bar->ContentsChanged(bar->field_for_testing(), u"new notion page");
++    ASSERT_EQ(1u, bar->row_count_for_testing());
++    EXPECT_TRUE(Enter(*bar));
++  }
++  EXPECT_EQ(1, tabs().count()) << "a second tab beside the empty one";
++  EXPECT_EQ(fresh, tabs().GetActiveWebContents());
++  EXPECT_EQ(GURL("https://notion.new/"), fresh->GetVisibleURL());
++
++  AddTab(browser(), GURL("https://example.com/"));
++  content::WebContents* const page = tabs().GetActiveWebContents();
++  views::View host;
++  const auto scoped_host = CommandBarView::SetHostForTesting(&host);
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_FOCUS_LOCATION));
++  CommandBarView* const bar = CommandBarView::GetOpenBar(&host);
++  ASSERT_TRUE(bar);
++  TypeInto(*bar, u"new f");
++  const size_t row = RowIndex(*bar, u"New Figma Design File");
++  ASSERT_LT(row, bar->row_count_for_testing());
++  Down(*bar, static_cast<int>(row));
++  EXPECT_TRUE(Enter(*bar));
++  EXPECT_EQ(3, tabs().count());
++  EXPECT_EQ(GURL("https://example.com/"), page->GetVisibleURL())
++      << "the page Cmd-L was opened on stays";
++  EXPECT_EQ(GURL("https://figma.new/"),
++            tabs().GetActiveWebContents()->GetVisibleURL());
++}
++
++// commandbar K28, K15: a normal window offers the blank documents; a private
++// window offers none, in either mode.
++TEST_F(CommandBarViewTest, PrivateWindowsOfferNoNewDocuments) {
++  AddTab(browser(), GURL("https://example.com/"));
++  {
++    auto bar = std::make_unique<CommandBarView>(browser());
++    TypeInto(*bar, u"new");
++    EXPECT_GT(DocumentRows(*bar), 0u);
++  }
++  Profile* const otr =
++      profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
++  std::unique_ptr<BrowserWindowInterface> private_window =
++      CreateBrowser(otr, Browser::TYPE_NORMAL, /*hosted_app=*/false);
++  AddTab(private_window.get(), GURL("https://example.com/"));
++  {
++    auto bar = std::make_unique<CommandBarView>(private_window.get());
++    TypeInto(*bar, u"new");
++    EXPECT_EQ(0u, DocumentRows(*bar));
++    bar->SetModeForTesting(CommandBarView::Mode::kActions);
++    EXPECT_EQ(0u, DocumentRows(*bar));
++  }
++  private_window->GetTabStripModel()->CloseAllTabs();
++}
++
+ // commandbar K10: the chord is drawn from the window's accelerator provider.
+ TEST_F(CommandBarViewTest, ActionRowsCarryAccelerators) {
+   AddTab(browser(), GURL("https://example.com/"));
+@@ -1294,6 +1489,53 @@ TEST_F(CommandBarViewTest, FolderRowsCollapseAndExpandTheSpacesFolders) {
+   EXPECT_FALSE(w->collapsed());
+ }
+ 
++// pins H17, commandbar K16: actions mode lists "Collapse Pinned Tabs" while
++// the active Space holds a pin and its run is open, and "Expand Pinned Tabs"
++// while the run is collapsed, never both; with no pin and nothing collapsed,
++// neither. Each row reaches the active Space alone and has no chord.
++TEST_F(CommandBarViewTest, PinnedTabsRowsCollapseAndExpandTheRun) {
++  const std::u16string collapse = u"Collapse Pinned Tabs";
++  const std::u16string expand = u"Expand Pinned Tabs";
++  const auto open_actions = [&]() {
++    auto bar = std::make_unique<CommandBarView>(browser());
++    bar->SetModeForTesting(CommandBarView::Mode::kActions);
++    return bar;
++  };
++  const spaces::SpaceId home = model().active_id();
++  AddTab(browser(), GURL("https://example.com/"));
++  {
++    std::unique_ptr<CommandBarView> bar = open_actions();
++    EXPECT_FALSE(HasTitle(*bar, collapse)) << "no pin, no row";
++    EXPECT_FALSE(HasTitle(*bar, expand));
++  }
++
++  model().SetSpacePinned(tabs().GetActiveTab(), true);
++  AddTab(browser(), GURL("https://example.org/"));
++  spaces::Space* const work = model().AddSpace("Work", SK_ColorBLUE);
++  {
++    std::unique_ptr<CommandBarView> bar = open_actions();
++    EXPECT_TRUE(HasTitle(*bar, collapse));
++    EXPECT_FALSE(HasTitle(*bar, expand)) << "the run is open";
++    bar->ContentsChanged(bar->field_for_testing(), u"collapse pinned tabs");
++    ASSERT_EQ(1u, bar->row_count_for_testing());
++    EXPECT_TRUE(bar->row_detail_for_testing(0).empty()) << "no chord";
++    EXPECT_TRUE(Enter(*bar));
++  }
++  EXPECT_TRUE(model().ArePinsCollapsed(home));
++  EXPECT_FALSE(model().ArePinsCollapsed(work->id()))
++      << "the active Space alone";
++
++  {
++    std::unique_ptr<CommandBarView> bar = open_actions();
++    EXPECT_FALSE(HasTitle(*bar, collapse)) << "the run is collapsed";
++    EXPECT_TRUE(HasTitle(*bar, expand));
++    bar->ContentsChanged(bar->field_for_testing(), u"expand pinned tabs");
++    ASSERT_EQ(1u, bar->row_count_for_testing());
++    EXPECT_TRUE(Enter(*bar));
++  }
++  EXPECT_FALSE(model().ArePinsCollapsed(home));
++}
++
+ }  // namespace
+ 
+ // With no omnibox classifier in the fixture, typed text falls back to a
+@@ -1340,4 +1582,324 @@ TEST_F(CommandBarViewTest, UnknownKeywordStaysADefaultSearch) {
+   EXPECT_NE("notakeyword", result.destination.host());
+ }
+ 
++// commandbar K27 (BACKLOG S-109): the start of a site search entry's name,
++// its keyword or its domain offers "Search <site>  Tab" directly under the
++// typed row, which stays first and chosen (K7). One letter offers it only
++// as a whole keyword, and text with a space is K18's "keyword query".
++TEST_F(CommandBarViewTest, ASiteSearchIsOfferedUnderTheTypedText) {
++  AddZettel(UseSearchEngines());
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++
++  for (const char16_t* typed : {u"zet", u"ZETT", u"zt", u"zettel.ex"}) {
++    SCOPED_TRACE(base::UTF16ToUTF8(typed));
++    TypeInto(*bar, typed);
++    ASSERT_GE(bar->row_count_for_testing(), 2u);
++    EXPECT_EQ(std::u16string(typed), bar->row_title_for_testing(0));
++    EXPECT_EQ(u"Search Zettel", bar->row_title_for_testing(1));
++    EXPECT_EQ(u"Tab", bar->row_detail_for_testing(1));
++    EXPECT_EQ(0u, bar->selected_row_for_testing());
++  }
++  for (const char16_t* typed : {u"z", u"zet rust", u"zq"}) {
++    SCOPED_TRACE(base::UTF16ToUTF8(typed));
++    TypeInto(*bar, typed);
++    EXPECT_FALSE(OffersASiteSearch(*bar));
++  }
++}
++
++// commandbar K27: Tab with the row offered and the caret at the end makes a
++// chip naming the site and empties the field for the query; a completion
++// showing (K23) is the end of the text, and the row stays under the typed
++// row while it shows. Enter on the row does what Tab does. With the caret
++// inside the text Tab filters the actions, as before (K13). With the chip,
++// Tab and a leading ">" belong to the query.
++TEST_F(CommandBarViewTest, TabMakesTheSiteChip) {
++  AddZettel(UseSearchEngines());
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++
++  auto inside = std::make_unique<CommandBarView>(browser());
++  TypeInto(*inside, u"zet");
++  inside->field_for_testing()->SetSelectedRange(gfx::Range(1));
++  EXPECT_TRUE(
++      inside->HandleKeyEvent(inside->field_for_testing(), Press(ui::VKEY_TAB)));
++  EXPECT_EQ(CommandBarView::Mode::kActions, inside->mode_for_testing());
++  EXPECT_TRUE(inside->site_chip_for_testing().empty());
++
++  auto bar = std::make_unique<CommandBarView>(browser());
++  views::Textfield* const field = bar->field_for_testing();
++  TypeInto(*bar, u"zet");
++  bar->SetAutocompleteResultForTesting(ResultOf({SiteMatch(
++      u"zet", u"zettel.example", GURL("https://zettel.example/"))}));
++  ASSERT_EQ(u"zettel.example", field->GetText());
++  ASSERT_GE(bar->row_count_for_testing(), 2u);
++  EXPECT_EQ(u"Search Zettel", bar->row_title_for_testing(1));
++  EXPECT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  EXPECT_EQ(u"Zettel", bar->site_chip_for_testing());
++  EXPECT_EQ(CommandBarView::Mode::kTabs, bar->mode_for_testing());
++  EXPECT_TRUE(field->GetText().empty());
++  EXPECT_TRUE(bar->inline_completion_for_testing().empty());
++  EXPECT_EQ(0u, bar->row_count_for_testing()) << "nothing to search for yet";
++
++  EXPECT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  TypeInto(*bar, u">x");
++  EXPECT_EQ(CommandBarView::Mode::kTabs, bar->mode_for_testing());
++  EXPECT_EQ(u"Zettel", bar->site_chip_for_testing());
++  ASSERT_EQ(1u, bar->row_count_for_testing());
++  EXPECT_EQ(u"Search Zettel for >x", bar->row_title_for_testing(0));
++
++  auto entered = std::make_unique<CommandBarView>(browser());
++  TypeInto(*entered, u"zt");
++  Down(*entered);
++  ASSERT_EQ(1u, entered->selected_row_for_testing());
++  ASSERT_EQ(u"Search Zettel", entered->row_title_for_testing(1));
++  EXPECT_TRUE(Enter(*entered));
++  EXPECT_EQ(u"Zettel", entered->site_chip_for_testing());
++  EXPECT_FALSE(entered->closing_for_testing());
++}
++
++// commandbar K27: with the chip, only the site's rows show: the query as
++// "Search <site> for <query>", no tab and no archived tab, and Enter opens
++// the site's search for the query where the bar's searches go (K21: a tab of
++// its own beside a page).
++TEST_F(CommandBarViewTest, TheChipSearchesItsSiteForTheQuery) {
++  AddZettel(UseSearchEngines());
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++  stedding::SetTabName(browser(), tabs().GetActiveTab(), u"rust book notes");
++  auto bar = std::make_unique<CommandBarView>(browser());
++  bar->SetArchivedSourceForTesting(
++      base::BindRepeating([] {
++        stedding::ArchivedTab old;
++        old.id = SessionID::FromSerializedValue(51);
++        old.title = u"rust book archived";
++        old.url = GURL("https://old.example/");
++        return std::vector<stedding::ArchivedTab>{old};
++      }),
++      base::DoNothing());
++  // The premise: without the chip the text lists them.
++  TypeInto(*bar, u"rust book");
++  ASSERT_EQ(1u, bar->result_count_for_testing());
++  ASSERT_EQ(1u, bar->archived_count_for_testing());
++
++  TypeInto(*bar, u"zet");
++  ASSERT_TRUE(bar->HandleKeyEvent(bar->field_for_testing(),
++                                  Press(ui::VKEY_TAB)));
++  ASSERT_EQ(u"Zettel", bar->site_chip_for_testing());
++  TypeInto(*bar, u"rust book");
++  EXPECT_EQ(0u, bar->result_count_for_testing());
++  EXPECT_EQ(0u, bar->archived_count_for_testing());
++  ASSERT_EQ(1u, bar->row_count_for_testing());
++  EXPECT_EQ(u"Search Zettel for rust book", bar->row_title_for_testing(0));
++
++  EXPECT_TRUE(Enter(*bar));
++  EXPECT_TRUE(bar->closing_for_testing());
++  ASSERT_EQ(2, tabs().count());
++  EXPECT_EQ(GURL("https://zettel.example/find?q=rust+book"),
++            tabs().GetActiveWebContents()->GetVisibleURL());
++}
++
++// commandbar K27: with the chip, the omnibox's answers add only the site's
++// own searches for other text: no page from history, no other engine's
++// suggestion, nothing that repeats the query. And nothing completes the
++// field (K23): the query is a search, not a site.
++TEST_F(CommandBarViewTest, TheChipListsOnlyItsSitesSuggestions) {
++  AddZettel(UseSearchEngines());
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++  views::Textfield* const field = bar->field_for_testing();
++  TypeInto(*bar, u"zet");
++  ASSERT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  ASSERT_EQ(u"Zettel", bar->site_chip_for_testing());
++  TypeInto(*bar, u"rust");
++
++  AutocompleteMatch own(/*provider=*/nullptr, /*relevance=*/1200,
++                        /*deletable=*/false,
++                        AutocompleteMatchType::SEARCH_SUGGEST);
++  own.keyword = u"zt";
++  own.contents = u"rust book";
++  own.destination_url = GURL("https://zettel.example/find?q=rust+book");
++  AutocompleteMatch same = own;
++  same.contents = u"rust";
++  same.destination_url = GURL("https://zettel.example/find?q=rust&from=bar");
++  AutocompleteMatch other = own;
++  other.keyword = u"other.example";
++  other.contents = u"rust lang";
++  other.destination_url = GURL("https://other.example/?q=rust+lang");
++  // A site from history that would complete "rust" without the chip.
++  const AutocompleteMatch visited = SiteMatch(
++      u"rust", u"rust-lang.org", GURL("https://www.rust-lang.org/"));
++  bar->SetAutocompleteResultForTesting(
++      ResultOf({visited, own, same, other}));
++
++  ASSERT_EQ(2u, bar->row_count_for_testing());
++  EXPECT_EQ(u"Search Zettel for rust", bar->row_title_for_testing(0));
++  EXPECT_EQ(u"rust book", bar->row_title_for_testing(1));
++  EXPECT_EQ(u"Search", bar->row_detail_for_testing(1));
++  EXPECT_EQ(u"rust", field->GetText());
++  EXPECT_TRUE(bar->inline_completion_for_testing().empty());
++}
++
++// commandbar K27: Backspace in the empty field takes the chip away, and the
++// bar lists the tabs again; with a query Backspace is the field's. Escape
++// takes the chip away and keeps the query as typed text; a second Escape
++// closes the bar, as before (K14).
++TEST_F(CommandBarViewTest, BackspaceOrEscapeTakesTheChipAway) {
++  AddZettel(UseSearchEngines());
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++  views::Textfield* const field = bar->field_for_testing();
++  TypeInto(*bar, u"zet");
++  ASSERT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  ASSERT_EQ(u"Zettel", bar->site_chip_for_testing());
++
++  TypeInto(*bar, u"r");
++  EXPECT_FALSE(bar->HandleKeyEvent(field, Press(ui::VKEY_BACK)));
++  EXPECT_EQ(u"Zettel", bar->site_chip_for_testing());
++  // The field's own deletion of the query keeps the chip.
++  TypeInto(*bar, u"");
++  EXPECT_EQ(u"Zettel", bar->site_chip_for_testing());
++  EXPECT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_BACK)));
++  EXPECT_TRUE(bar->site_chip_for_testing().empty());
++  EXPECT_EQ(1u, bar->result_count_for_testing());
++
++  TypeInto(*bar, u"zet");
++  ASSERT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  ASSERT_EQ(u"Zettel", bar->site_chip_for_testing());
++  TypeInto(*bar, u"rust");
++  const ui::Accelerator escape(ui::VKEY_ESCAPE, ui::EF_NONE);
++  EXPECT_TRUE(bar->AcceleratorPressed(escape));
++  EXPECT_TRUE(bar->site_chip_for_testing().empty());
++  EXPECT_FALSE(bar->closing_for_testing());
++  EXPECT_EQ(CommandBarView::Mode::kTabs, bar->mode_for_testing());
++  EXPECT_EQ(u"rust", field->GetText());
++  ASSERT_GT(bar->row_count_for_testing(), 0u);
++  EXPECT_EQ(u"rust", bar->row_title_for_testing(0));
++  EXPECT_TRUE(bar->AcceleratorPressed(escape));
++  EXPECT_TRUE(bar->closing_for_testing());
++}
++
++// commandbar K27, ADR 0020 (no bundled model): Chromium's Gemini and AI Mode
++// scopes are never offered, by keyword, name or domain, and Tab with their
++// text filters the actions. Nor are the tabs and page scopes, whose
++// addresses are placeholders with no page. A scope with a page, such as the
++// bookmarks', is offered by the whole of its keyword and then searched like
++// any site.
++TEST_F(CommandBarViewTest, ModelScopesAreNeverOffered) {
++  using template_url_starter_pack_data::StarterPackId;
++  TemplateURLService& engines = UseSearchEngines();
++  AddSiteSearch(engines, u"Gemini", u"@askgemini",
++                "https://gemini.google.com/app?q={searchTerms}",
++                StarterPackId::kGemini);
++  AddSiteSearch(engines, u"AI Mode", u"@askmode",
++                "https://www.google.com/search?udm=50&q={searchTerms}",
++                StarterPackId::kAiMode);
++  AddSiteSearch(engines, u"Open tabs", u"@opentabs",
++                "chrome://tabs/?q={searchTerms}", StarterPackId::kTabs);
++  AddSiteSearch(engines, u"This page", u"@thispage",
++                "chrome://page/?q={searchTerms}", StarterPackId::kPage);
++  AddSiteSearch(engines, u"Marks", u"@marks",
++                "chrome://bookmarks/?q={searchTerms}",
++                StarterPackId::kBookmarks);
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++
++  for (const char16_t* typed :
++       {u"@ask", u"@askmode", u"gemini", u"gemini.google", u"@open", u"open",
++        u"@this", u"this"}) {
++    SCOPED_TRACE(base::UTF16ToUTF8(typed));
++    TypeInto(*bar, typed);
++    EXPECT_FALSE(OffersASiteSearch(*bar));
++  }
++  TypeInto(*bar, u"@askgemini");
++  EXPECT_TRUE(
++      bar->HandleKeyEvent(bar->field_for_testing(), Press(ui::VKEY_TAB)));
++  EXPECT_EQ(CommandBarView::Mode::kActions, bar->mode_for_testing());
++  EXPECT_TRUE(bar->site_chip_for_testing().empty());
++
++  // A scope with a page is offered by the whole of its keyword only: not by
++  // the start of it, which is K19's "@Space" filter, nor by its name, which
++  // took "bo" and "hi" from the actions.
++  auto marks = std::make_unique<CommandBarView>(browser());
++  for (const char16_t* typed : {u"@mar", u"mar", u"marks"}) {
++    SCOPED_TRACE(base::UTF16ToUTF8(typed));
++    TypeInto(*marks, typed);
++    EXPECT_FALSE(OffersASiteSearch(*marks));
++  }
++  TypeInto(*marks, u"@marks");
++  ASSERT_GE(marks->row_count_for_testing(), 2u);
++  EXPECT_EQ(u"Search Marks", marks->row_title_for_testing(1));
++  EXPECT_TRUE(
++      marks->HandleKeyEvent(marks->field_for_testing(), Press(ui::VKEY_TAB)));
++  EXPECT_EQ(u"Marks", marks->site_chip_for_testing());
++  TypeInto(*marks, u"rust");
++  ASSERT_EQ(1u, marks->row_count_for_testing());
++  EXPECT_EQ(u"Search Marks for rust", marks->row_title_for_testing(0));
++}
++
++// commandbar K27: an extension's omnibox keyword is answered by the
++// extension, not by a page, and an engine that searches by form post has no
++// address to open; neither is offered, by keyword or by name.
++TEST_F(CommandBarViewTest, ExtensionAndFormPostEnginesAreNeverOffered) {
++  TemplateURLService& engines = UseSearchEngines();
++  TemplateURLData extension;
++  extension.SetShortName(u"Extkeys");
++  extension.SetKeyword(u"ek");
++  extension.SetURL(
++      "chrome-extension://abcdefghijklmnopabcdefghijklmnop/?q={searchTerms}");
++  ASSERT_TRUE(engines.Add(std::make_unique<TemplateURL>(
++      extension, TemplateURL::OMNIBOX_API_EXTENSION,
++      "abcdefghijklmnopabcdefghijklmnop", base::Time::Now(),
++      /*wants_to_be_default_engine=*/false)));
++  TemplateURLData post;
++  post.SetShortName(u"Postbox");
++  post.SetKeyword(u"pb");
++  post.SetURL("https://postbox.example/find");
++  post.search_url_post_params = "q={searchTerms}";
++  post.is_active = TemplateURLData::ActiveStatus::kTrue;
++  ASSERT_TRUE(engines.Add(std::make_unique<TemplateURL>(post)));
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++
++  for (const char16_t* typed : {u"ek", u"extk", u"pb", u"postb"}) {
++    SCOPED_TRACE(base::UTF16ToUTF8(typed));
++    TypeInto(*bar, typed);
++    EXPECT_FALSE(OffersASiteSearch(*bar));
++  }
++}
++
++// commandbar K27: Cmd-L's prefilled address and Shift-Cmd-P's actions mode
++// each drop the chip. The address is the text to open, and in actions mode
++// the query is the filter for the commands.
++TEST_F(CommandBarViewTest, TheAddressOrThePaletteDropsTheChip) {
++  AddZettel(UseSearchEngines());
++  ASSERT_FALSE(HasFatalFailure());
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++  views::Textfield* const field = bar->field_for_testing();
++
++  TypeInto(*bar, u"zet");
++  ASSERT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  ASSERT_EQ(u"Zettel", bar->site_chip_for_testing());
++  TypeInto(*bar, u"rust");
++  bar->PrefillForTesting(u"https://example.com/");
++  EXPECT_TRUE(bar->site_chip_for_testing().empty());
++  EXPECT_EQ(u"https://example.com/", field->GetText());
++  ASSERT_GT(bar->row_count_for_testing(), 0u);
++  EXPECT_EQ(u"https://example.com/", bar->row_title_for_testing(0));
++
++  TypeInto(*bar, u"zet");
++  ASSERT_TRUE(bar->HandleKeyEvent(field, Press(ui::VKEY_TAB)));
++  ASSERT_EQ(u"Zettel", bar->site_chip_for_testing());
++  TypeInto(*bar, u"rust");
++  bar->SetModeForTesting(CommandBarView::Mode::kActions);
++  EXPECT_TRUE(bar->site_chip_for_testing().empty());
++  EXPECT_EQ(CommandBarView::Mode::kActions, bar->mode_for_testing());
++  EXPECT_EQ(u"rust", field->GetText());
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index c5c88af089efa..5842864681c0f 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -114,6 +114,8 @@ constexpr int kMoveSpaceRightCommand = 202;
+ constexpr int kIsolateSpaceCommand = 203;
+ // sessions S13: wipe the isolated jar, keep the Space.
+ constexpr int kWipeSessionCommand = 204;
++// pins H17: Collapse Pinned Tabs, or Expand Pinned Tabs while collapsed.
++constexpr int kTogglePinsCollapsedCommand = 205;
+ 
+ // The colour choices live in space_colors.h: the welcome flow shows the same
+ // five (welcome W7).
+@@ -525,6 +527,18 @@ void SpaceSwitcherView::BuildMenu(const SpaceId& id) {
+   }
+   menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+   menu_model_->AddItem(kMoveTabHereCommand, u"Move Current Tab Here");
++  // pins H17: the Space's pinned run folds away and comes back. Collapse is
++  // disabled, and says why, while the Space has no pin in this window;
++  // Expand is always there, so a collapse can be undone.
++  const bool pins_collapsed = model_->ArePinsCollapsed(id);
++  menu_model_->AddItem(kTogglePinsCollapsedCommand,
++                       pins_collapsed ? u"Expand Pinned Tabs"
++                                      : u"Collapse Pinned Tabs");
++  if (!pins_collapsed && !model_->HasSpacePins(id)) {
++    menu_model_->SetMinorText(
++        menu_model_->GetIndexOfCommandId(kTogglePinsCollapsedCommand).value(),
++        u"No pinned tabs");
++  }
+   menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+   for (size_t i = 0; i < kSpaceColors.size(); ++i) {
+     // A swatch of the colour beside its name.
+@@ -569,6 +583,12 @@ void SpaceSwitcherView::ExecuteCommand(int command_id, int event_flags) {
+     }
+     return;
+   }
++  if (command_id == kTogglePinsCollapsedCommand) {
++    // pins H17: per Space; the rows follow through the model's observers.
++    model_->SetPinsCollapsed(*menu_space_,
++                             !model_->ArePinsCollapsed(*menu_space_));
++    return;
++  }
+   if (command_id == kIsolateSpaceCommand) {
+     // PLAN.md SPC-9: open pages reload in the other jar; it asks first.
+     SetSpaceIsolatedAfterAsking(&*browser_, *menu_space_,
+@@ -676,6 +696,11 @@ bool SpaceSwitcherView::IsCommandIdEnabled(int command_id) const {
+   if (command_id == kWipeSessionCommand) {
+     return menu_space_ && model_->SpaceIsIsolated(*menu_space_);
+   }
++  if (command_id == kTogglePinsCollapsedCommand) {
++    // pins H17: a collapse needs a pin to hide; an expand is always offered.
++    return menu_space_ && (model_->ArePinsCollapsed(*menu_space_) ||
++                           model_->HasSpacePins(*menu_space_));
++  }
+   return true;
+ }
+ 
+diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
+index 855a24296f3d9..b78c71803d6f0 100644
+--- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
++++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_collection_types.h"
+@@ -193,6 +194,10 @@ void SpaceTabVisibilityController::UpdateSubtree(views::View& parent) {
+       if (const TabCollectionNode* const node = group_view->collection_node()) {
+         group_view->SetVisible(HoldsTabOfActiveSpace(model_, TabsUnder(node)));
+       }
++    } else if (auto* const rows =
++                   views::AsViewClass<UnpinnedTabContainerView>(child)) {
++      // pins H17: the Clear line stays under a collapsed pinned run.
++      rows->SetPinnedRunCollapsed(PinnedRunCollapsed());
+     }
+   }
+ }
+@@ -233,6 +238,11 @@ bool SpaceTabVisibilityController::ShowsRow(
+          !tab_strip_model_->IsTabHidden(index);
+ }
+ 
++bool SpaceTabVisibilityController::PinnedRunCollapsed() const {
++  return model_ && model_->ArePinsCollapsed(model_->active_id()) &&
++         model_->HasSpacePins(model_->active_id());
++}
++
+ void SpaceTabVisibilityController::PostUpdateTabVisibility() {
+   // The tab strip view is an observer too, and which of the two hears first is
+   // not ours to decide; its TabView may not exist yet, and a restored tab's
+@@ -285,6 +295,16 @@ void SpaceTabVisibilityController::OnTabSpaceChanged(tabs::TabInterface* tab) {
+   UpdateTabVisibility();
+ }
+ 
++void SpaceTabVisibilityController::OnSpacePinsCollapsedChanged(
++    const SpaceId& id) {
++  // pins H17: the pin rows of the Space hide or come back at once, and the
++  // Clear line under them stays.
++  if (on_space_changed_) {
++    on_space_changed_.Run();
++  }
++  UpdateTabVisibility();
++}
++
+ void SpaceTabVisibilityController::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+@@ -292,9 +312,9 @@ void SpaceTabVisibilityController::OnTabStripModelChanged(
+   if (tab_strip_model->closing_all()) {
+     return;
+   }
+-  // A collapsed folder keeps the active tab's row, so which rows show changes
+-  // with the active tab. Its row exists already: apply at once, not a frame
+-  // late.
++  // A collapsed folder keeps the active tab's row, and so does a collapsed
++  // pinned run (pins H17), so which rows show changes with the active tab.
++  // Its row exists already: apply at once, not a frame late.
+   if (selection.active_tab_changed()) {
+     UpdateTabVisibility();
+   }
+diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h
+index 0203f9ed15ab5..9bda11da57a17 100644
+--- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h
++++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h
+@@ -29,7 +29,8 @@ namespace spaces {
+ 
+ // The one owner of which sidebar rows show (folders F3, spaces B33). A tab row
+ // shows while TabStripModel::IsTabHidden() is false for its tab: that covers
+-// another Space, a collapsed group and a collapsed folder. A split shows while
++// another Space, a collapsed group, a collapsed folder and a collapsed pinned
++// run (pins H17). A split shows while
+ // one of its panes does. A folder or group shows while a row under it does, or
+ // while its own header is a row of the active Space: it holds a tab of that
+ // Space and, for a folder, no collapsed folder above hides it.
+@@ -70,6 +71,7 @@ class SpaceTabVisibilityController : public SpaceModel::Observer,
+   void OnSpaceRemoved(const SpaceId& id) override;
+   void OnSpaceMetadataChanged(const SpaceId& id) override;
+   void OnTabSpaceChanged(tabs::TabInterface* tab) override;
++  void OnSpacePinsCollapsedChanged(const SpaceId& id) override;
+   void OnSpaceModelDestroying() override;
+ 
+   // Runs after any change the sidebar's chrome (Space title, Clear line)
+@@ -111,6 +113,9 @@ class SpaceTabVisibilityController : public SpaceModel::Observer,
+   void UpdateSubtree(views::View& parent);
+   void UpdateFolder(FolderView& view);
+   bool ShowsRow(const tabs::TabInterface* tab) const;
++  // pins H17: the active Space's pinned run is collapsed and holds a pin in
++  // this window, so the Clear line stays though no pin row may show.
++  bool PinnedRunCollapsed() const;
+   void PostUpdateTabVisibility();
+   void RunPostedUpdate();
+ 
+diff --git a/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc b/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
+index c6eeed3dcef35..ec1b7499bcec3 100644
+--- a/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
++++ b/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
+@@ -179,6 +179,11 @@ class BrowserTabStripController::TabFilterObserver
+   void OnTabSpaceChanged(tabs::TabInterface* tab) override {
+     controller_->ScheduleTabFilterUpdate();
+   }
++  // pins H17: a collapsed pinned run hides its pins here too, as the sidebar
++  // does (spaces B34).
++  void OnSpacePinsCollapsedChanged(const spaces::SpaceId& id) override {
++    controller_->ScheduleTabFilterUpdate();
++  }
+   void OnSpaceModelDestroying() override { space_observation_.Reset(); }
+ 
+   // tabs::TabCollectionObserver:
+@@ -763,10 +768,16 @@ void BrowserTabStripController::OnTabStripModelChanged(
+ 
+   // Stedding: a collapsed folder keeps the active tab, and its split's other
+   // pane, on screen (folders F3), so what the folder filters out follows the
+-  // active tab.
++  // active tab. A collapsed pinned run keeps its selected pin the same way
++  // (pins H17).
+   if (selection.active_tab_changed()) {
+     const bool in_collapsed_folder = InCollapsedFolder(selection.new_tab);
+-    if (in_collapsed_folder || active_tab_in_collapsed_folder_) {
++    const spaces::SpaceModel* const space_model =
++        spaces::SpaceModel::From(browser_view_->browser());
++    const bool pins_collapsed =
++        space_model && space_model->ArePinsCollapsed(space_model->active_id());
++    if (in_collapsed_folder || active_tab_in_collapsed_folder_ ||
++        pins_collapsed) {
+       ScheduleTabFilterUpdate();
+     }
+     active_tab_in_collapsed_folder_ = in_collapsed_folder;
+diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc
+index 24112f4b5cbe1..6dae31f4d7c6f 100644
+--- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc
++++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc
+@@ -47,4 +47,10 @@ bool ShowsDriftDot(const TabRowState& row, bool drifted) {
+   return drifted && (row.pinned || row.narrow);
+ }
+ 
++bool ShowsClearLine(int pinned_rows_shown,
++                    bool pinned_run_collapsed,
++                    int rows_below) {
++  return rows_below > 0 && (pinned_rows_shown > 0 || pinned_run_collapsed);
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h
+index 43f1384f409d7..d8d64008fa2fb 100644
+--- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h
++++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h
+@@ -55,6 +55,14 @@ SkColor SleptTitleColor(SkColor text);
+ bool ShowsDriftSlash(const TabRowState& row, bool drifted);
+ bool ShowsDriftDot(const TabRowState& row, bool drifted);
+ 
++// spaces B17, pins H17: the Clear line divides a Space's pinned run from the
++// rows below it, so it shows only while rows follow, and while the run has a
++// row on screen or is collapsed with pins in it: collapsing the run hides its
++// pins, not the line.
++bool ShowsClearLine(int pinned_rows_shown,
++                    bool pinned_run_collapsed,
++                    int rows_below);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_STEDDING_TAB_ROW_RULES_H_
+diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
+index 283bf581bfc3f..a8accd7b94201 100644
+--- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
++++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
+@@ -143,6 +143,24 @@ TEST(TabRowRulesTest, DriftShowsASlashOnRowsAndADotOnCards) {
+   EXPECT_TRUE(ShowsDriftDot(rail, true));
+ }
+ 
++// spaces B17, pins H17: the Clear line shows between a pinned run and the
++// rows below it. A collapsed run keeps it, with no pin row on screen; with
++// no row below, or no run at all, there is no line.
++TEST(TabRowRulesTest, ACollapsedPinnedRunKeepsTheClearLine) {
++  EXPECT_TRUE(ShowsClearLine(/*pinned_rows_shown=*/2,
++                             /*pinned_run_collapsed=*/false,
++                             /*rows_below=*/3));
++  EXPECT_TRUE(ShowsClearLine(0, /*pinned_run_collapsed=*/true, 3))
++      << "the run is collapsed and no pin is selected";
++  EXPECT_TRUE(ShowsClearLine(1, /*pinned_run_collapsed=*/true, 3))
++      << "the selected pin's row shows above the line";
++  EXPECT_FALSE(ShowsClearLine(0, /*pinned_run_collapsed=*/false, 3))
++      << "nothing pinned";
++  EXPECT_FALSE(ShowsClearLine(2, /*pinned_run_collapsed=*/false, 0));
++  EXPECT_FALSE(ShowsClearLine(0, /*pinned_run_collapsed=*/true, 0))
++      << "no row below the line";
++}
++
+ using ClearLineTest = ChromeViewsTestBase;
+ 
+ // spaces B17, sidebar Y8: in the rail's column the Clear line has no room
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+index f24914ea85ee2..f8d308be3ddb6 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+@@ -122,6 +122,14 @@ void UnpinnedTabContainerView::SetSpaceBoundary(
+   InvalidateLayout();
+ }
+ 
++void UnpinnedTabContainerView::SetPinnedRunCollapsed(bool collapsed) {
++  if (pinned_run_collapsed_ == collapsed) {
++    return;
++  }
++  pinned_run_collapsed_ = collapsed;
++  InvalidateLayout();
++}
++
+ UnpinnedTabContainerView::~UnpinnedTabContainerView() = default;
+ 
+ namespace {
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+index a3957c88c5e75..416d1e9807de9 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+@@ -77,6 +77,12 @@ class UnpinnedTabContainerView
+   views::View* space_boundary_clear_line() { return boundary_clear_line_; }
+   bool IsAnimatingForTesting() const { return layout_manager_->is_animating(); }
+ 
++  // Stedding (pins H17): the Space's pinned run is collapsed while it holds
++  // pins. Its rows are hidden, but the Clear line still divides the run from
++  // the tabs below it; the visibility controller sets this on every pass.
++  void SetPinnedRunCollapsed(bool collapsed);
++  bool pinned_run_collapsed() const { return pinned_run_collapsed_; }
++
+   // Stedding (spaces B37): every row goes straight to its place in the
+   // current layout, with no animation. A Space switch shows and hides rows by
+   // the hundred, and the list slides in as one (B32, B35).
+@@ -108,6 +114,8 @@ class UnpinnedTabContainerView
+ 
+   base::RepeatingCallback<bool(const views::View*)> is_space_pinned_;
+ 
++  bool pinned_run_collapsed_ = false;
++
+   // The available main-axis space allocated by TabStripViewLayout.
+   views::SizeBound available_space_;
+ 
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+index e2d6adcfeb31d..c0d07a0e5ea86 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+@@ -13,6 +13,7 @@
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+@@ -295,9 +296,13 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+     if (clear_line) {
+       const int line_height = clear_line->GetPreferredSize().height();
+       // The line divides a pinned run from the tabs below it; with nothing
+-      // pinned the list simply starts with the "+ New Tab" row.
+-      const bool show = visible_pinned_before_boundary > 0 &&
+-                        visible_unpinned_after_boundary > 0 && line_height > 0;
++      // pinned the list simply starts with the "+ New Tab" row. A collapsed
++      // run keeps its line with no pin row above it (pins H17).
++      const bool show =
++          stedding::ShowsClearLine(visible_pinned_before_boundary,
++                                   tab_container_view->pinned_run_collapsed_,
++                                   visible_unpinned_after_boundary) &&
++          line_height > 0;
+       layouts.child_layouts.emplace_back(
+           clear_line, show,
+           gfx::Rect(horizontal_padding, height, boundary_width,
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 44100bb8ea32c..f15786564183c 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -29,6 +29,7 @@ test("stedding_browser_tests") {
+     "link_drop_browsertest.cc",
+     "little_window_browsertest.cc",
+     "media_keys_browsertest.cc",
++    "pinned_run_browsertest.cc",
+     "private_coat_browsertest.cc",
+     "restore_browsertest.cc",
+     "restored_page_state_browsertest.cc",
+diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
+index d05257e75dceb..ed39a94983c24 100644
+--- a/chrome/test/stedding/command_bar_browsertest.cc
++++ b/chrome/test/stedding/command_bar_browsertest.cc
+@@ -10,11 +10,13 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <memory>
+ #include <string>
+ #include <vector>
+ 
+ #include "base/files/scoped_temp_dir.h"
+ #include "base/run_loop.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/test/run_until.h"
+ #include "base/threading/thread_restrictions.h"
+@@ -22,6 +24,7 @@
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/search_engines/template_url_service_factory.h"
+ #include "chrome/browser/ui/archive/archived_tabs.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_tabstrip.h"
+@@ -36,12 +39,16 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/search_test_utils.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/history/core/browser/history_service.h"
+ #include "components/history/core/browser/history_types.h"
+ #include "components/history/core/test/history_service_test_util.h"
+ #include "components/keyed_service/core/service_access_type.h"
+ #include "components/prefs/pref_service.h"
++#include "components/search_engines/template_url.h"
++#include "components/search_engines/template_url_data.h"
++#include "components/search_engines/template_url_service.h"
+ #include "components/sessions/core/session_id.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+@@ -663,4 +670,76 @@ IN_PROC_BROWSER_TEST_F(CommandBarKeysTest, ASiteFromHistoryCompletesTheField) {
+   }));
+ }
+ 
++// commandbar K27 (BACKLOG S-109), on the profile's own search engines: an
++// entry added as Settings adds one is offered for the start of its name;
++// Tab through the field's own key path makes the chip, Enter searches the
++// site for the query, and Backspace in the empty field takes the chip away.
++// Chromium's Gemini and AI Mode scopes, whichever this build lists, are
++// never offered (ADR 0020).
++IN_PROC_BROWSER_TEST_F(CommandBarKeysTest, ASiteSearchChipThroughTheKeys) {
++  TemplateURLService* const engines =
++      TemplateURLServiceFactory::GetForProfile(browser()->GetProfile());
++  ASSERT_TRUE(engines);
++  search_test_utils::WaitForTemplateURLServiceToLoad(engines);
++  TemplateURLData data;
++  data.SetShortName(u"Chipsite");
++  data.SetKeyword(u"chipsite");
++  // Built as text: a GURL would escape the braces of {searchTerms}.
++  data.SetURL("http://chipsite.test:" +
++              base::NumberToString(embedded_test_server()->port()) +
++              "/title1.html?q={searchTerms}");
++  data.is_active = TemplateURLData::ActiveStatus::kTrue;
++  ASSERT_TRUE(engines->Add(std::make_unique<TemplateURL>(data)));
++  OpenTitled("Home");
++
++  stedding::CommandBarView* bar = OpenBar();
++  ASSERT_TRUE(bar);
++  Type(bar, u"chips");
++  ASSERT_TRUE(std::ranges::contains(Titles(bar),
++                                    std::u16string(u"Search Chipsite")));
++  Press(bar, ui::VKEY_TAB);
++  ASSERT_EQ(u"Chipsite", bar->site_chip_for_testing());
++  EXPECT_TRUE(bar->field_for_testing()->GetText().empty());
++  Type(bar, u"rust");
++  ASSERT_GT(bar->row_count_for_testing(), 0u);
++  EXPECT_EQ(u"Search Chipsite for rust", bar->row_title_for_testing(0));
++  Press(bar, ui::VKEY_RETURN);
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    const GURL url = browser()
++                         ->GetTabStripModel()
++                         ->GetActiveWebContents()
++                         ->GetVisibleURL();
++    return url.host() == "chipsite.test" && url.query() == "q=rust";
++  }));
++  base::RunLoop().RunUntilIdle();
++
++  bar = OpenBar();
++  ASSERT_TRUE(bar);
++  Type(bar, u"chips");
++  Press(bar, ui::VKEY_TAB);
++  ASSERT_EQ(u"Chipsite", bar->site_chip_for_testing());
++  Press(bar, ui::VKEY_BACK);
++  EXPECT_TRUE(bar->site_chip_for_testing().empty());
++  EXPECT_EQ(stedding::CommandBarView::Mode::kTabs, bar->mode_for_testing());
++  bar->Close();
++  base::RunLoop().RunUntilIdle();
++
++  for (const auto& entry : engines->GetTemplateURLs()) {
++    const TemplateURL* const site = entry.get();
++    if (!site->is_ask_type()) {
++      continue;
++    }
++    SCOPED_TRACE(base::UTF16ToUTF8(site->keyword()));
++    bar = OpenBar();
++    ASSERT_TRUE(bar);
++    Type(bar, site->keyword());
++    for (size_t i = 0; i < bar->row_count_for_testing(); ++i) {
++      EXPECT_NE(u"Tab", bar->row_detail_for_testing(i))
++          << base::UTF16ToUTF8(bar->row_title_for_testing(i));
++    }
++    bar->Close();
++    base::RunLoop().RunUntilIdle();
++  }
++}
++
+ }  // namespace
+diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
+new file mode 100644
+index 0000000000000..550f72e8bf633
+--- /dev/null
++++ b/chrome/test/stedding/pinned_run_browsertest.cc
+@@ -0,0 +1,222 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Collapse Pinned Tabs (docs/features/pins.md H17, BACKLOG S-114), Arc's way
++// of putting a Space's pinned run out of sight without hiding the sidebar.
++// The Space menu's row collapses the run: its pin rows leave the sidebar,
++// the selected pin keeps its row and nothing else of the run shows, and the
++// Clear line stays between the run and the tabs below it. Expand Pinned Tabs
++// brings the rows back, and the state is the Space's across a restart.
++
++#include <optional>
++#include <string>
++
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/run_until.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/spaces/space_switcher_view.h"
++#include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/test/browser_test.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/views/test/views_test_utils.h"
++#include "ui/views/view.h"
++#include "ui/views/view_utils.h"
++#include "ui/views/widget/widget.h"
++#include "url/gurl.h"
++#include "url/url_constants.h"
++
++namespace {
++
++// The first view of class T at or under `view`.
++template <typename T>
++T* FindView(views::View* view) {
++  if (T* const found = views::AsViewClass<T>(view)) {
++    return found;
++  }
++  for (views::View* const child : view->children()) {
++    if (T* const found = FindView<T>(child)) {
++      return found;
++    }
++  }
++  return nullptr;
++}
++
++// The Clear line the sidebar draws, with room to be seen, or null.
++ClearTabsSeparator* FindDrawnClearLine(views::View* view) {
++  if (auto* const line = views::AsViewClass<ClearTabsSeparator>(view);
++      line && line->IsDrawn() && line->shows_clear() && line->height() > 0) {
++    return line;
++  }
++  for (views::View* const child : view->children()) {
++    if (ClearTabsSeparator* const found = FindDrawnClearLine(child)) {
++      return found;
++    }
++  }
++  return nullptr;
++}
++
++class PinnedRunTest
++    : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
++ protected:
++  BrowserView* browser_view() {
++    return BrowserView::GetBrowserViewForBrowser(browser());
++  }
++  views::Widget* widget() { return browser_view()->GetWidget(); }
++  spaces::SpaceModel& model() {
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    CHECK(model) << "a normal window has Spaces";
++    return *model;
++  }
++  TabStripModel& tabs() { return *browser()->GetTabStripModel(); }
++
++  tabs::TabInterface* AddBlankTab() {
++    EXPECT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), GURL(url::kAboutBlankURL),
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    return tabs().GetActiveTab();
++  }
++
++  // The Space menu for the active Space, as the sidebar's Space title and the
++  // switcher's chips open it.
++  ui::SimpleMenuModel* SpaceMenu() {
++    spaces::SpaceSwitcherView* const switcher =
++        FindView<spaces::SpaceSwitcherView>(widget()->GetRootView());
++    return switcher ? switcher->BuildMenuForTesting(model().active_id())
++                    : nullptr;
++  }
++  // The index of `menu`'s row titled `label`.
++  static std::optional<size_t> RowOf(ui::SimpleMenuModel* menu,
++                                     const std::u16string& label) {
++    for (size_t i = 0; menu && i < menu->GetItemCount(); ++i) {
++      if (menu->GetLabelAt(i) == label) {
++        return i;
++      }
++    }
++    return std::nullopt;
++  }
++
++  // Runs the Space menu's row titled `label`, as a click on it does.
++  void RunSpaceMenuRow(const std::u16string& label) {
++    ui::SimpleMenuModel* const menu = SpaceMenu();
++    ASSERT_TRUE(menu) << "the sidebar has no Space switcher";
++    const std::optional<size_t> row = RowOf(menu, label);
++    ASSERT_TRUE(row.has_value())
++        << "the Space menu has no row " << base::UTF16ToUTF8(label);
++    ASSERT_TRUE(menu->IsEnabledAt(*row)) << base::UTF16ToUTF8(label);
++    menu->ActivatedAt(*row);
++  }
++
++  // Whether the sidebar draws a row for `tab`, after a layout.
++  bool RowShown(const tabs::TabInterface* tab) {
++    views::test::RunScheduledLayout(widget());
++    return stedding::test::FindDrawnRow(widget()->GetRootView(), tab) !=
++           nullptr;
++  }
++
++  bool ClearLineShown() {
++    views::test::RunScheduledLayout(widget());
++    return FindDrawnClearLine(widget()->GetRootView()) != nullptr;
++  }
++};
++
++// pins H17: Collapse Pinned Tabs in the Space menu hides the pin rows and
++// keeps the Clear line; the selected pin keeps its row, and it alone; Expand
++// Pinned Tabs brings every pin row back.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest,
++                       CollapsingHidesThePinRowsButTheSelectedOne) {
++  tabs::TabInterface* const pin_a = tabs().GetActiveTab();
++  ASSERT_TRUE(pin_a);
++  // With no pin in the Space there is nothing to collapse: the row is there,
++  // disabled, and says why.
++  {
++    ui::SimpleMenuModel* const menu = SpaceMenu();
++    ASSERT_TRUE(menu) << "the sidebar has no Space switcher";
++    const std::optional<size_t> row = RowOf(menu, u"Collapse Pinned Tabs");
++    ASSERT_TRUE(row.has_value());
++    EXPECT_FALSE(menu->IsEnabledAt(*row));
++    EXPECT_EQ(u"No pinned tabs", menu->GetMinorTextAt(*row));
++  }
++  model().SetSpacePinned(pin_a, true);
++  tabs::TabInterface* const pin_b = AddBlankTab();
++  model().SetSpacePinned(pin_b, true);
++  tabs::TabInterface* const loose = AddBlankTab();
++  ASSERT_TRUE(model().IsSpacePinned(pin_a));
++  ASSERT_TRUE(model().IsSpacePinned(pin_b));
++  ASSERT_FALSE(model().IsSpacePinned(loose));
++  ASSERT_EQ(loose, tabs().GetActiveTab());
++  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  ASSERT_TRUE(RowShown(pin_a));
++  ASSERT_TRUE(RowShown(pin_b));
++  ASSERT_TRUE(RowShown(loose));
++  ASSERT_TRUE(ClearLineShown()) << "a pinned run and a tab below it";
++
++  RunSpaceMenuRow(u"Collapse Pinned Tabs");
++  EXPECT_TRUE(model().ArePinsCollapsed(model().active_id()));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return !RowShown(pin_a) && !RowShown(pin_b); }))
++      << "the pin rows leave the sidebar";
++  EXPECT_TRUE(RowShown(loose));
++  EXPECT_TRUE(ClearLineShown()) << "the line stays under a collapsed run";
++  EXPECT_EQ(3, tabs().count()) << "collapsing closes nothing";
++  EXPECT_TRUE(model().IsSpacePinned(pin_a)) << "and unpins nothing";
++
++  // The selected pin keeps its row, and only its row.
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(pin_a));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return RowShown(pin_a); }))
++      << "the selected pin shows";
++  EXPECT_FALSE(RowShown(pin_b)) << "the rest of the run stays hidden";
++  EXPECT_TRUE(ClearLineShown());
++
++  // Leaving the pin puts its row away again.
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(loose));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return !RowShown(pin_a); }));
++
++  RunSpaceMenuRow(u"Expand Pinned Tabs");
++  EXPECT_FALSE(model().ArePinsCollapsed(model().active_id()));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return RowShown(pin_a) && RowShown(pin_b); }))
++      << "every pin row comes back";
++  EXPECT_TRUE(RowShown(loose));
++  EXPECT_TRUE(ClearLineShown());
++}
++
++// pins H17: the collapse is the Space's, kept with its name and colour, so
++// it is there after a restart; a Space that was not collapsed is not.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, PRE_TheCollapseSurvivesARestart) {
++  spaces::Space* const work = model().AddSpace("Work", SK_ColorBLUE);
++  ASSERT_TRUE(work);
++  model().SetPinsCollapsed(work->id(), true);
++  ASSERT_TRUE(model().ArePinsCollapsed(work->id()));
++}
++
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, TheCollapseSurvivesARestart) {
++  std::optional<spaces::SpaceId> work;
++  std::optional<spaces::SpaceId> other;
++  for (const auto& space : model().spaces()) {
++    if (space->name() == "Work") {
++      work = space->id();
++    } else {
++      other = space->id();
++    }
++  }
++  ASSERT_TRUE(work.has_value()) << "the Space came back";
++  EXPECT_TRUE(model().ArePinsCollapsed(*work));
++  ASSERT_TRUE(other.has_value());
++  EXPECT_FALSE(model().ArePinsCollapsed(*other));
++}
++
++}  // namespace

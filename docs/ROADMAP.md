@@ -28,9 +28,9 @@ and are not repeated here. Patch 0060, built and in test but in no release yet, 
 |---|---|---|
 | M0 vanilla build | Done | -- |
 | M1 branded build | Done, except the recorded ten-minute idle-network run and two calls to Google a fresh profile makes unasked; Safe Browsing does not work without a key | `S-50`, `S-54`, `S-67`, `S-75` |
-| M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins | `S-65` (fixed; the owner's confirmation), `S-107` (folders in the pinned run), `S-111`, `S-112`, `S-114`, `S-115` |
+| M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins | `S-65` (fixed; the owner's confirmation), `S-107` (folders in the pinned run), `S-111`, `S-112`, `S-115` |
 | M3 workspaces (Spaces) | Done, with independent cookie jars per Space (ADR 0019) | `S-70`, `S-126` |
-| M4 command bar | Done but K12 (⌘L's prefilled address, partial); the address row stayed beside it | `S-104`, `S-109`, `S-116`, `S-127` |
+| M4 command bar | Done but K12 (⌘L's prefilled address, partial); the address row stayed beside it | `S-104`, `S-127` |
 | M5 split view | Partly: Chromium's own split view, with Stedding's verbs on both panes; a split comes back whole after a restart (J1); ⌘W on a split (J3), a pin joining a split (J5) and ⌘1–9 counting a split once (J2) are open | `S-102`, `S-113` |
 | M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) | `S-48`, `S-51`, `S-57`, `S-69`, `S-79`, `S-103`, `S-110`, `S-117`, `S-134` |
 | M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first | `S-74`, `S-49`, `S-59` |

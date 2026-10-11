@@ -36,7 +36,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Action | macOS | Windows |
 |---|---|---|
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
-| Open the bar in actions mode (⇥ in an empty bar does the same) | ⇧⌘P | Ctrl+Shift+P |
+| Open the bar in actions mode (⇥ in an empty bar does the same; ⇥ after a site's name, from the next release, makes a search chip for that site instead) | ⇧⌘P | Ctrl+Shift+P |
 | Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
 | Jump to one of the first eight rows you can see, or to the last one with 9 (hold ⌘ / Ctrl a moment to see the numbers) | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
 | Next tab / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+PgDn / Ctrl+PgUp |

@@ -43,7 +43,7 @@ Seventy-odd traps follow. Read the one for the topic in front of you, not the li
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 28, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
@@ -1027,6 +1027,16 @@ private window has.
     `--no-first-run` unless the flow is the subject, and call `Drive-Find` again after a
     dialog closes. Chromium's own search engine chooser (S-134) takes the window the same way
     after a skipped engine step.
+
+77. **A test that starts failing between two runs may be the machine: rebuild the last good
+    code before bisecting the new.** On 2026-10-11 three drag tests (`TabDropTest.*`) passed
+    at noon and failed every run an hour later on the release build, with the machine idle, no
+    key held and the cursor parked away. Reverting the new code's one suspect line changed
+    nothing; setting the whole round aside and rebuilding patch 0060's own code (copy the
+    files out, `git checkout HEAD --` them, build, test, copy back and `touch` them so the
+    next build sees them) failed the same three, so the cause was this PC's state, not the
+    round. Do that check first: it costs one incremental build. The remote-desktop display
+    had reconnected many times that day (its display was the seventeenth of the session).
 
 ## The Windows build
 

@@ -6,6 +6,27 @@ This file was the "State of the project" section of `AGENTS.md` until 2026-09-30
 unchanged, and is where the dated record goes from now on: an agent opening the repo cold
 should not have to read four hundred lines of rounds to learn the rules.
 
+## 2026-10-11 -- three more items (patch 0061, not released)
+
+The operator asked for the next three, fast. Three small items in different parts of the code
+were built together without building in between, then built and tested once.
+
+- **Site Search** (S-109, commandbar K27): typing a search engine's keyword, name or domain
+  offers "Search <name> — Tab"; Tab makes a chip and only that engine's rows show. The list is
+  Chromium's own search engine settings. The first cut offered the @bookmarks and @history
+  scopes by name, which took "bo" and "hi", and Tab with them, from the actions, and a leading
+  "@" from the Space filter (K19); the scopes now need their whole keyword.
+- **Collapse Pinned Tabs** (S-114, pins H17): from the Space menu or the command bar, per
+  Space, kept across a restart; the pins hide by the one row rule and the selected pin keeps
+  its row.
+- **New Documents** (S-116, commandbar K28): command bar rows for eleven services' blank
+  documents through their .new addresses, a fixed list as Arc's.
+- **Tests**: one build of both configurations and the suites in one pass, after the Site Search fix: 904 of 904 unit tests and 213 of 213 browser tests on the release build, the same on the DCHECK build with no DCHECK or dangling report. Seen with the real keyboard on the release build: the Bing chip and its search row, the New Documents rows under "new g", and a collapsed run hiding its pin with the Clear line kept, then expanded again.
+- **A machine fault, not the code**: three drag tests (`TabDropTest.*`) began failing on the
+  release build between two runs an hour apart; the same three failed on patch 0060's own code
+  rebuilt for the check, which had passed them at noon, so the cause is this PC's state (trap
+  77), not the round. The DCHECK build passed them in the same round.
+
 ## 2026-10-11 -- the operator's round after beta 13 (patch 0060, not released)
 
 After beta 13 the operator asked that auto-archive not run by default, a welcome step to ask

@@ -87,8 +87,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
   not playing; an essentials card keeps its favicon and badges the sound
   (`features/tabs.md` R18). `⌃M` (Ctrl+M on Windows) mutes or unmutes the selected tabs,
   from inside a Split View too (R29).
-- **Collapse Pinned Tabs** **[1.0]** — hide the pinned list without hiding the sidebar;
-  needs a named Space (`S-114`).
+- **Collapse Pinned Tabs** **[1.0]** — hide the pinned list without hiding the sidebar,
+  from the Space's menu or the command bar, per Space (`features/pins.md` H17).
 - **Previews on hover** **[post-1.0]** — hovering a pinned tab glances the site: recent
   mail, calendar events, open pull requests. Deferred because each site is a bespoke
   integration. The hover affordance itself is **[1.0]**, as a screenshot of the tab with
@@ -170,8 +170,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
   (`features/commandbar.md` K8–K17).
 - **Site Search** **[1.0]** — a search engine's keyword, then the query, searches that site
   directly, from Chromium's own keywords and their `%s` templates (K18). `@Space` narrows
-  the list to a Space (K19). Tab after a site's name turning it into a search chip, and the
-  sites edited in Settings: `S-109`. Typing completes to a site from history, the rest
+  the list to a Space (K19). Tab after a site's name turns it into a search chip, the
+  list being Chromium's own search engine settings (`features/commandbar.md` K27). Typing completes to a site from history, the rest
   selected (`features/commandbar.md` K23).
 - **Full URL in Toolbar** **[1.0]** — the address row above, on by default; `⇧⌘D` shows or
   hides it on its own, and a setting hides it with the sidebar (`features/toolbar.md`
@@ -247,8 +247,9 @@ menu (ADR 0021).
   stay **[1.0]**; they are useful without a canvas.
 - **Arc Notes** **[not applicable]** — Arc removed them in three phases during 2024.
   Parity with a feature its author deleted is not parity.
-- **New Documents** **[1.0]** — a "new note" action that opens the user's chosen service
-  (Notion, Google Docs, Word, Confluence) (`S-116`).
+- **New Documents** **[1.0]** — command bar rows that open a blank document in Google
+  Docs, Sheets, Slides or Forms, Notion, Figma, GitHub, Word, Excel or PowerPoint through
+  their own .new addresses (`features/commandbar.md` K28).
 
 ## 8. Arc Max (AI) — [never]
 
