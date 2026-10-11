@@ -27,6 +27,10 @@ with the real pointer and keyboard, and fixed what that use found before calling
   Chromium 155's Ctrl+Shift+L in the toggle's tooltip and the bar (S-87); F11 and a video's full
   screen keeping the card's gutter (S-69's gutter half, toolbar T33). From the backlog: S-82,
   S-83.
+- **The roadmap** (`docs/ROADMAP.md`): brought up to date (a state table; M5 is partly done, not
+  done; M4's command bar did not replace the address row), and a milestone M10 for ideas read in
+  Nook and Aura, rebuilt and never copied (ADR 0021; `BACKLOG.md` S-88 to S-101;
+  `docs/COMPETITORS.md`).
 - **Tooling**: the build supervisor ends with SUPERVISOR_EXIT=6 when `build.ps1` refuses to
   start (trap 70); `Drive-VisibleRect` for aiming at a window's real edge (trap 69); a firewall
   prompt holding the foreground is the operator's to answer (trap 71).

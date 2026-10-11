@@ -1040,11 +1040,11 @@ active Space switches to a neighbour, Chrome/Brave/Edge import is documented
 honestly now and built in Phase 2 (a first attempt landed early in patch 0055 and
 was withdrawn on 2026-09-28: it read the source browser's live databases and its
 keychain item regardless of the choices made), little windows get no Space commands.
-Beta 12 (pin 155.0.8059.12, 2026-10-02) is the current image on both platforms: the Mac's
-DMG, signed with the Developer ID and notarized, and the Windows installer, an unsigned
-preview built on the PC from commit `abc3cd4` (the tag's series plus a Windows fix to
-the welcome flow and changes to tests) and added the same evening. Beta 11 (the same
-day) was the Mac's alone. `S-56` (the Windows port), `S-58` (disk) and `S-74` (automatic
+Beta 13 (pin 155.0.8059.12, 2026-10-11) is the current Windows installer: patch 0059,
+the operator's pass on beta 12 (the hidden sidebar, pins, the resize edge, the settings
+sections), built, used and released from the PC. Its macOS image is the Mac's to add after
+the Mac's own pass on 0059, which it has not built; until then beta 12's DMG (2026-10-02,
+signed and notarized) is the current macOS image. Beta 11 was the Mac's alone. `S-56` (the Windows port), `S-58` (disk) and `S-74` (automatic
 updates, next) stay.
 
 ## Release channel
@@ -1077,7 +1077,7 @@ and the Mac added its signed, notarized DMG on 2026-10-01. Beta 12's installer w
 tested and published on the PC from the Mac over SSH, with the browser suite in a
 temporary task in the operator's session (traps 67, 68). A Windows release on the same
 Chromium number as the installed one installs as a repair and needs Stedding closed
-(trap 62).
+(trap 62). Beta 13 went out from Windows first (2026-10-11), the Mac to add its DMG.
 After `publish-release`, nothing is needed on the site: its scheduled rebuild
 (every six hours) reads the release list, pre-releases included. To see the new
 version at once, `gh workflow run rebuild.yml -R ysalitrynskyi/stedding.dev`

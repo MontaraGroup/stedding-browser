@@ -61,8 +61,9 @@ Every claim below is backed by a test or a measured capture (see
 
 ## Download
 
-The current release is **0.2.0 beta 12**, built on Chromium 155.0.8059.12 (stable): the macOS image,
-signed and notarized, and a Windows preview. Get them from
+The current release is **0.2.0 beta 13**, built on Chromium 155.0.8059.12 (stable): a Windows
+preview, with the macOS image of beta 13 to follow from the Mac; until then the current macOS
+image is beta 12's, signed and notarized. Get them from
 [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases/latest):
 
@@ -250,17 +251,18 @@ page.
 
 Stedding is an early **beta**. A review of the whole code in September 2026 found many
 defects, some of them in the basics (selecting a tab, the collapsed sidebar, restoring a
-session); betas 9 to 12 carry the fixes so far, and `PLAN.md` lists the rest. What is out
+session); betas 9 to 13 carry the fixes so far, and `PLAN.md` lists the rest. What is out
 and what comes next:
 
 | | State |
 |---|---|
-| macOS (Apple silicon) | Beta releases since 2026-09-01; the current one is beta 12, signed and notarized as every macOS image is from beta 10 on |
+| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 12's, signed and notarized as every macOS image is from beta 10 on; beta 13's follows from the Mac |
 | Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites also run clean with DCHECKs (beta 10) and under AddressSanitizer (beta 9's tree) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
+| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia (`S-88` to `S-101`) |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
 Known limits in the current builds: no automatic updates yet, and the Windows installer is
