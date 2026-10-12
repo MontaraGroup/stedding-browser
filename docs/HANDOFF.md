@@ -1133,11 +1133,12 @@ decisions of 2026-09-26 head it, and "Where Phase 0 stands" lists what each open
 item waits on. Everything else open is `BACKLOG.md`, in priority order. This file keeps no
 list of its own.
 
-Beta 14 carries patches 0060 and 0061, with the Windows installer first, as beta 13 did
-for 0059. The macOS image of either is the Mac's to add after its own pass on 0059 to 0061,
-which it has not built (`S-105`); until then beta 12's DMG (2026-10-02, signed and
-notarized) is the newest macOS image. `docs/PROJECT-LOG.md` has what each patch was seen to
-do.
+Beta 14 carries patches 0060 and 0061 on beta 13's 0059. Its Windows installer was built
+from the tag's commit; its macOS image (2026-10-12, signed and notarized) from the series at
+commit `2e48d01`, with the fixes the Mac's pass found folded into 0059 and 0060. The next
+Windows build picks those up and should run `SidebarFormsTest.*` and `WelcomeFlowTest.*`
+(`PLAN.md`, the Mac's block of 2026-10-12). Beta 13 has no macOS image. `docs/PROJECT-LOG.md`
+has what each patch was seen to do.
 
 ## Release channel
 

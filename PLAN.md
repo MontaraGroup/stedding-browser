@@ -37,6 +37,8 @@ order; the owner's next item there is automatic updates (`S-74`).
 
 > **The PC, 2026-10-11 (patch 0061; beta 14).** On the operator's word, three more items built together: Site Search chips in the command bar (S-109), Collapse Pinned Tabs (S-114) and New Documents (S-116). `docs/PROJECT-LOG.md` has the tests and what was seen.
 
+> **The Mac, 2026-10-12 (beta 14's macOS image; S-105).** The series through 0061 built, tested and used on the Mac. Its pass found the traffic lights on a patch of the window's ground beside the hidden sidebar's address row, and the slid-in sidebar's top row 2 DIP taller than the open one's, both fixed in 0059 (sidebar Y19, Y20); the welcome flow's focus dropped onto the page by a late answer, and toasts 6 DIP over the line under the address row (Chromium's allowance for a shadow the Mac's bubble does not draw), fixed in 0060 (welcome W12, toolbar T35); and four tests that assumed Windows or raced on the Mac (HANDOFF traps 79 to 81). The Y20 and W12 fixes are in code Windows shares: Windows has them with its next build, whose suites should include `SidebarFormsTest.*` and `WelcomeFlowTest.*`. `docs/PROJECT-LOG.md`, 2026-10-12.
+
 > **Status.** Written 2026-09-26, against Chromium 155.0.8059.12 and the series of 52 patches on it. It replaces an earlier draft of this file that came from an unverified pass.
 >
 > **Method.** Sixteen review units read every one of the 405 files the series changes (34.5k lines), each twice, and each pass looked through a correctness lens and a product lens. The reports of medium or higher severity were merged by root cause and checked against the code by separate verifiers. Nothing was built or run, so "confirmed" in this plan means traced in the code at HEAD, not reproduced on a machine.

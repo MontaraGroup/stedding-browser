@@ -7,6 +7,54 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-12 -- the Mac's pass on betas 13 and 14 (beta 14's macOS image)
+
+Betas 13 and 14 went out from the PC with no macOS image (`S-105`). The Mac pulled, applied the
+61 patches, built the release configuration, ran its suites and used the build; its fixes were
+folded into 0059 and 0060, and the signed, notarized DMG joined `v0.2.0-beta.14`.
+
+- **Two faults in the hidden sidebar** (sidebar Y19, Y20; patch 0059). With the sidebar hidden,
+  the address row's page-coloured bar started where the row's contents start, right of the
+  traffic lights, which sat on a patch of the window's dark ground; `PageBarSurface` now starts
+  the bar at the window's edge (`WindowButtonsTest.HiddenTheLightsSitOnTheRowsBar`, red before
+  the fix). The sidebar slid in from the window's edge drew its top row 40 DIP high where the
+  open one is 38: a hidden strip was given no address-row height and fell back to the toolbar
+  buttons' own insets (`SidebarFormsTest.TheLeadingEdgeSlidesItInOverThePage`). The second is
+  in code Windows shares.
+- **The welcome flow's focus** (welcome W12; patch 0060). Every late answer (the Arc check, the
+  importer's list, the default-browser check, an import's progress) redraws the whole flow, and
+  the redraw dropped the keyboard focus onto the page; on the Mac
+  `EachBehaviourChoiceIsWrittenAtOnce` caught it in four runs of five. The redraw now gives the
+  focus back to the same control (`WelcomeFlowTest.ALateAnswerKeepsTheFocus`, red before the
+  fix; then all six welcome tests five times each, 30 of 30).
+- **The toasts' place** (toolbar T35; patch 0060). Seen live: ⌘W's undo toast crossed the line
+  under the address row by 6 DIP. Over the page, Chromium places a toast `kShadowBlur` above its
+  anchor's bottom, the room its border's shadow takes; on the Mac the window server draws the
+  shadow, the border has no inset (measured: the toast's top at 65 against the row's 71), and
+  the toast's body started that much above the row. The toast now starts as far above as its
+  border's own inset, nothing on the Mac; `AddressBandTest.AToastLeavesTheAddressReadable`
+  checks the visible edge, and the live toast sits right under the line.
+- **Tests that assumed Windows or raced on the Mac**: the hidden form's address row starts right
+  of the lights on the Mac; the undo toast was measured while its window was still moving (trap
+  81); a `RunUntil` check that waited inside itself never returned on the Mac (trap 79); a
+  rename test clicked while the rows still grew; and the strings test had no Mac case, so its
+  filter stopped the whole sweep (trap 80).
+- **Tests**: the final build, `tooling/dev test all`: 918 of 918 unit tests, 19 of 19 component
+  tests and 214 of 214 browser tests, no retries, with another job's processes holding the
+  load near 110 (trap 66 did not bite).
+- **Seen live** with the real pointer and keyboard on fresh profiles, on the release build: the hidden form
+  from the command bar, its leading edge in and out, ⌘S, the toggle naming ⌘S, the lights on
+  a themed page's bar; ⌃M, ⌥⇧⌘R (the page's cookie gone at its reload), a folder from the
+  command bar and ⇧⌘E both ways; ⌘W's toast before and after its fix; the welcome flow's
+  behaviour step. Not tried by hand: ⌥⇧⌘P, Site Search, New Documents, Close Duplicate Tabs,
+  Collapse Pinned Tabs, the edge's bar.
+- **Signed and notarized**: Apple accepted the app, `spctl` reads it as a notarized Developer ID
+  app and `syspolicy_check distribution` as ready for distribution; `tooling/verify-build` on
+  the signed app: the page, WebGL, the three codecs and full screen passed; its network check ran
+  offline, because this Mac's outgoing firewall held the new build's first connections for an
+  answer and the check timed out behind it. The DMG's sha256 is `10348451…cc076d`; beta 13's notes now send
+  the Mac to beta 14.
+
 ## 2026-10-12 -- beta 14 released (patches 0060 and 0061)
 
 `v0.2.0-beta.14`, the Windows installer first (unsigned; the Mac adds its image after its own

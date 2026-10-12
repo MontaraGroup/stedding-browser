@@ -61,9 +61,8 @@ behind each behaviour, is in [docs/features/](docs/features/).
 
 ## Download
 
-The current release is **0.2.0 beta 14**, built on Chromium 155.0.8059.12 (stable): a Windows
-preview, with the macOS image of beta 14 to follow from the Mac; until then the current macOS
-image is beta 12's, signed and notarized. Get them from
+The current release is **0.2.0 beta 14**, built on Chromium 155.0.8059.12 (stable): a macOS
+image for Apple silicon, signed and notarized, and a Windows preview. Get them from
 [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases):
 
@@ -133,8 +132,9 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 New in beta 14: Undo after closing tabs, auto-archive off by default, a welcome step for
 how Stedding behaves, the folder and pin verbs, ⌃M and ⌥⇧⌘P, the sidebar edge's bar, and
 the command bar's completion, Site Search, New Documents, Close Duplicate Tabs and Clear
-Site Cookies and Reload. Beta 14 is on Windows first; the Mac has them with its beta 14
-image.
+Site Cookies and Reload. On the Mac, beta 14 also brings beta 13's changes, which had no
+macOS image of their own: the sidebar can hide completely, new pins go to the bottom, the
+sidebar resizes from its edge, and the settings read in sections.
 
 **Sidebar and tabs**
 - Vertical tabs at Arc's proportions: an essentials row above every Space, the Space's
@@ -304,7 +304,7 @@ and what comes next:
 
 | | State |
 |---|---|
-| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 12's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
+| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 14's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
 | Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and the dangling-pointer detector (beta 14's series) and under AddressSanitizer (the series of 2026-09-30) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |

@@ -39,8 +39,7 @@ under the milestone it belongs to:
 | M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura; seven of them, and three parts of `S-125`, built in beta 14 | `S-88` to `S-96`, `S-98` to `S-101`, `S-118`, `S-125` |
 | 1.0 quality gate | Not reached | `S-61` (the rows `docs/PRODUCT.md` marks [1.0] that no milestone names: the Library, the mini player), `S-66`, `S-106`, `S-128`, `S-129` (spec rows short of a test or a look) |
 
-Outside the ladder: `S-47` (a capture probe), `S-58` (the Mac's disk) and `S-105` (the macOS
-image of betas 13 and 14, a release step).
+Outside the ladder: `S-47` (a capture probe) and `S-58` (the Mac's disk).
 
 ---
 
