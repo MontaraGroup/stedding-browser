@@ -35,7 +35,7 @@ Removable when: never; these are Stedding's own behaviours.
  .../browser/global_keyboard_shortcuts_mac.mm  |  11 +
  .../stedding_page/stedding_page.html.ts       |  22 +
  .../resources/stedding_welcome/app.css        |  58 +-
- .../browser/resources/stedding_welcome/app.ts | 178 +++++-
+ .../browser/resources/stedding_welcome/app.ts | 217 ++++++-
  chrome/browser/ui/BUILD.gn                    |   3 +
  chrome/browser/ui/accelerator_table.cc        |  16 +
  chrome/browser/ui/archive/BUILD.gn            |  39 ++
@@ -97,6 +97,7 @@ Removable when: never; these are Stedding's own behaviours.
  chrome/browser/ui/toasts/api/toast_id.h       |   8 +-
  chrome/browser/ui/toasts/toast_controller.cc  |   9 +
  chrome/browser/ui/toasts/toast_service.cc     |  35 ++
+ chrome/browser/ui/toasts/toast_view.cc        |  13 +-
  chrome/browser/ui/views/commandbar/BUILD.gn   |   7 +
  .../ui/views/commandbar/command_bar_view.cc   | 290 ++++++++-
  .../ui/views/commandbar/command_bar_view.h    |  49 +-
@@ -128,22 +129,22 @@ Removable when: never; these are Stedding's own behaviours.
  .../stedding_welcome_handler_unittest.cc      | 130 ++++
  .../stedding_welcome/stedding_welcome_ui.cc   |   5 +-
  chrome/test/stedding/BUILD.gn                 |  10 +
- .../test/stedding/address_band_browsertest.cc | 141 +++++
+ .../test/stedding/address_band_browsertest.cc | 169 +++++
  .../test/stedding/command_bar_browsertest.cc  | 129 ++++
  chrome/test/stedding/defaults_browsertest.cc  |  46 ++
- .../test/stedding/folder_tabs_browsertest.cc  | 152 ++++-
+ .../test/stedding/folder_tabs_browsertest.cc  | 157 ++++-
  .../test/stedding/media_keys_browsertest.cc   | 292 +++++++++
  chrome/test/stedding/restore_browsertest.cc   | 306 ++++++++-
  .../stedding/settings_spaces_browsertest.cc   |  52 ++
- .../stedding/sidebar_click_browsertest.cc     | 320 ++++++++++
- .../stedding/sidebar_forms_browsertest.cc     | 320 +++++++++-
+ .../stedding/sidebar_click_browsertest.cc     | 325 +++++++++-
+ .../stedding/sidebar_forms_browsertest.cc     | 341 ++++++++++-
  chrome/test/stedding/space_jar_browsertest.cc |  84 +++
  .../test/stedding/space_keys_browsertest.mm   |   4 +
- chrome/test/stedding/welcome_browsertest.cc   | 172 +++++-
+ chrome/test/stedding/welcome_browsertest.cc   | 191 +++++-
  components/tabs/impl/tab_strip_collection.cc  |  22 +
  .../tabs/public/tab_context_menu_command.h    |   4 +-
  components/tabs/public/tab_strip_collection.h |   7 +
- 113 files changed, 8457 insertions(+), 142 deletions(-)
+ 114 files changed, 8584 insertions(+), 145 deletions(-)
  create mode 100644 chrome/browser/ui/archive/closed_tabs_undo.cc
  create mode 100644 chrome/browser/ui/archive/closed_tabs_undo.h
  create mode 100644 chrome/browser/ui/archive/closed_tabs_undo_unittest.cc
@@ -403,7 +404,7 @@ index 16bb0df9d9844..5ee34e22a3fcf 100644
    color: var(--ink);
  }
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index af5a82dccdba0..80cfe9f4c4cb9 100644
+index af5a82dccdba0..38037196d9167 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
 @@ -2,7 +2,7 @@
@@ -638,7 +639,62 @@ index af5a82dccdba0..80cfe9f4c4cb9 100644
      case 'default': {
        heading('Make Stedding your default browser',
                'Links from other apps open here. ' +
-@@ -419,7 +562,7 @@ window.addEventListener('resize', () => {
+@@ -364,8 +507,46 @@ function updateMore(main: HTMLElement) {
+       'more', main.scrollTop + main.clientHeight < main.scrollHeight - 1);
+ }
+ 
++// welcome W12: render() rebuilds the whole flow, and it runs again whenever an
++// answer comes in late (the Arc check, the importer's list, the default
++// browser check, an import's progress). The control that had the focus is
++// found again by its place in the flow, its tag and its text, and keeps it;
++// otherwise each late answer dropped a keyboard user's focus onto the page.
++interface FocusPlace {
++  path: number[];
++  tag: string;
++  text: string;
++}
++
++function focusPlace(app: HTMLElement): FocusPlace|null {
++  const focused = document.activeElement;
++  if (!(focused instanceof HTMLElement) || !app.contains(focused)) {
++    return null;
++  }
++  const path: number[] = [];
++  for (let node = focused; node !== app; node = node.parentElement!) {
++    path.unshift(Array.from(node.parentElement!.children).indexOf(node));
++  }
++  return {path, tag: focused.tagName, text: focused.textContent ?? ''};
++}
++
++function refocus(app: HTMLElement, place: FocusPlace|null) {
++  if (!place) {
++    return;
++  }
++  let node: Element|undefined = app;
++  for (const index of place.path) {
++    node = node?.children[index];
++  }
++  if (node instanceof HTMLElement && node.tagName === place.tag &&
++      node.textContent === place.text) {
++    node.focus();
++  }
++}
++
+ function render() {
+   const app = document.getElementById('app')!;
++  const place = focusPlace(app);
+   app.replaceChildren();
+   const frame = el('div', 'frame');
+   const index = STEPS.indexOf(state.step);
+@@ -409,6 +590,7 @@ function render() {
+   app.append(frame);
+   main.addEventListener('scroll', () => updateMore(main));
+   updateMore(main);
++  refocus(app, place);
+ }
+ 
+ window.addEventListener('resize', () => {
+@@ -419,7 +601,7 @@ window.addEventListener('resize', () => {
  });
  
  // A capture opens the flow on a named step: chrome://stedding-welcome#import
@@ -647,7 +703,7 @@ index af5a82dccdba0..80cfe9f4c4cb9 100644
  {
    const wanted = location.hash.slice(1);
    if ((STEPS as string[]).includes(wanted)) {
-@@ -450,6 +593,11 @@ sendWithPromise('getSpaceColors').then((colors: unknown) => {
+@@ -450,6 +632,11 @@ sendWithPromise('getSpaceColors').then((colors: unknown) => {
    state.spaceColors = colors as SpaceColor[];
    render();
  });
@@ -5360,6 +5416,38 @@ index 6c7b4a48639d1..0b8bc4ac0db72 100644
    toast_registry_->RegisterToast(
        ToastId::kSkillSaved,
        ToastSpecification::Builder(
+diff --git a/chrome/browser/ui/toasts/toast_view.cc b/chrome/browser/ui/toasts/toast_view.cc
+index 00a2ed2b1c5ad..ca1c95c8996e7 100644
+--- a/chrome/browser/ui/toasts/toast_view.cc
++++ b/chrome/browser/ui/toasts/toast_view.cc
+@@ -28,6 +28,8 @@
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/animation/animation_builder.h"
+ #include "ui/views/border.h"
++#include "ui/views/bubble/bubble_border.h"
++#include "ui/views/bubble/bubble_frame_view.h"
+ #include "ui/views/controls/button/image_button.h"
+ #include "ui/views/controls/button/image_button_factory.h"
+ #include "ui/views/controls/button/md_text_button.h"
+@@ -472,8 +474,17 @@ gfx::Rect ToastView::GetBubbleBounds() {
+ 
+   // Take bubble out of its original bounds to cross "line of death", unless in
+   // fullscreen mode where the top container isn't rendered.
++  // Stedding (toolbar T35): over the page, the bubble's visible edge goes on
++  // the anchor's bottom, so the widget starts as far above it as its border's
++  // shadow reaches. That is about kShadowBlur where views draws the shadow; on
++  // the Mac the window server draws it outside the widget, the border has no
++  // inset, and the toast crossed the line under the address row by those
++  // 6 DIP (2026-10-12).
++  const views::BubbleFrameView* const frame = GetBubbleFrameView();
++  const int shadow_above = frame ? frame->bubble_border()->GetInsets().top()
++                                 : views::BubbleBorder::kShadowBlur;
+   const int y = anchor_bounds.bottom() - (render_toast_over_web_contents_
+-                                              ? views::BubbleBorder::kShadowBlur
++                                              ? shadow_above
+                                               : (preferred_size.height() / 2));
+   return gfx::Rect(x, y, width, preferred_size.height());
+ }
 diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
 index 44b1137063d0b..fa17387bbf145 100644
 --- a/chrome/browser/ui/views/commandbar/BUILD.gn
@@ -6009,7 +6097,7 @@ index 7e0a88f6e23b0..120842202c225 100644
    bool closing_ = false;
    // Set once the field has focus; focus changes before that are the bar's own.
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
-index bf229c6defaa6..0b965c7956c33 100644
+index 1c7293c79841e..889c6bdccc53c 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 @@ -12,6 +12,7 @@
@@ -6104,7 +6192,7 @@ index bf229c6defaa6..0b965c7956c33 100644
    std::ignore = work;
  }
  
-@@ -324,6 +366,45 @@ TEST_F(CommandBarViewTest, CommandRowsFollowTheWindowsCommands) {
+@@ -332,6 +374,45 @@ TEST_F(CommandBarViewTest, CommandRowsFollowTheWindowsCommands) {
    EXPECT_EQ(work->id(), model().active_id());
  }
  
@@ -6150,7 +6238,7 @@ index bf229c6defaa6..0b965c7956c33 100644
  // commandbar K15: a private window lists the window commands that belong
  // there and are enabled in it, and nothing Space-, pin- or folder-shaped.
  TEST_F(CommandBarViewTest, PrivateWindowListsItsCommands) {
-@@ -351,6 +432,57 @@ TEST_F(CommandBarViewTest, PrivateWindowListsItsCommands) {
+@@ -359,6 +440,57 @@ TEST_F(CommandBarViewTest, PrivateWindowListsItsCommands) {
    private_window->GetTabStripModel()->CloseAllTabs();
  }
  
@@ -6208,7 +6296,7 @@ index bf229c6defaa6..0b965c7956c33 100644
  // commandbar K10: Enter on a Space row moves the tab there.
  TEST_F(CommandBarViewTest, MoveToSpaceRowMovesTheTab) {
    AddTab(browser(), GURL("https://example.com/"));
-@@ -365,6 +497,31 @@ TEST_F(CommandBarViewTest, MoveToSpaceRowMovesTheTab) {
+@@ -373,6 +505,31 @@ TEST_F(CommandBarViewTest, MoveToSpaceRowMovesTheTab) {
    EXPECT_EQ(work->id(), model().active_id());
  }
  
@@ -6240,7 +6328,7 @@ index bf229c6defaa6..0b965c7956c33 100644
  // commandbar K10: the chord is drawn from the window's accelerator provider.
  TEST_F(CommandBarViewTest, ActionRowsCarryAccelerators) {
    AddTab(browser(), GURL("https://example.com/"));
-@@ -558,6 +715,55 @@ TEST_F(CommandBarViewTest, DropdownPrefRowCycles) {
+@@ -566,6 +723,55 @@ TEST_F(CommandBarViewTest, DropdownPrefRowCycles) {
    EXPECT_EQ(u"Short context menus: Off", bar->row_title_for_testing(0));
  }
  
@@ -6296,7 +6384,7 @@ index bf229c6defaa6..0b965c7956c33 100644
  // tabs R15: the bar matches the name the user gave a tab.
  TEST_F(CommandBarViewTest, MatchesCustomTitle) {
    AddTab(browser(), GURL("https://example.com/"));
-@@ -715,6 +921,379 @@ TEST_F(CommandBarViewTest, DensityActionsSetThePreset) {
+@@ -723,6 +929,379 @@ TEST_F(CommandBarViewTest, DensityActionsSetThePreset) {
    EXPECT_EQ(0, g_browser_process->local_state()->GetInteger(
                     stedding::prefs::kSidebarDensity));
  }
@@ -6677,7 +6765,7 @@ index bf229c6defaa6..0b965c7956c33 100644
  
  // With no omnibox classifier in the fixture, typed text falls back to a
 diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
-index a7f071b64e527..d3d5c749557ff 100644
+index 15f984e751498..0225937770fa4 100644
 --- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
 +++ b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
 @@ -55,8 +55,10 @@ bool SidebarHidden(const BrowserViewLayoutViews& views) {
@@ -6693,7 +6781,7 @@ index a7f071b64e527..d3d5c749557ff 100644
  int CardGutter(const BrowserViewLayoutViews& views) {
    return VerticalTabStripRegionView::SteddingCardGutter(
        views::AsViewClass<BrowserView>(views.browser_view.get()));
-@@ -175,7 +177,9 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+@@ -189,7 +191,9 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
    // side gutters (MultiContentsView's mat inset) and sits the same gutter
    // below the window's top edge, as the card does at the right and bottom.
    // None while the sidebar is hidden completely: the row runs edge to edge
@@ -6704,7 +6792,7 @@ index a7f071b64e527..d3d5c749557ff 100644
    const bool hidden = DrawsVerticalStrip(delegate()) && SidebarHidden(views());
    const int kCardSideInset = CardGutter(views());
    params.visual_client_area.Inset(
-@@ -242,7 +246,8 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+@@ -256,7 +260,8 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
        gfx::Rect bounds;
        if (show) {
          // Across the strip's column as the strip's own row puts it: past the
@@ -6714,7 +6802,7 @@ index a7f071b64e527..d3d5c749557ff 100644
          const gfx::Size size = toggle->GetPreferredSize();
          const int x =
              VerticalTabStripRegionView::IsRailWidth(strip_inset)
-@@ -327,7 +332,8 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
+@@ -341,7 +346,8 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
    // showed the row's colour through its rounded top corners until
    // 2026-09-05. With the row hidden (T8) the page is the whole card.
    // Square with no gutter -- the sidebar hidden completely (sidebar Y19), a
@@ -9287,10 +9375,10 @@ index 58b92f1f8807f..44100bb8ea32c 100644
      "//skia",
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
 new file mode 100644
-index 0000000000000..ef77640d58cfc
+index 0000000000000..ccc8c5937ead9
 --- /dev/null
 +++ b/chrome/test/stedding/address_band_browsertest.cc
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,169 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -9314,9 +9402,11 @@ index 0000000000000..ef77640d58cfc
 +#include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/browser/ui/toasts/toast_controller.h"
++#include "chrome/browser/ui/toasts/toast_view.h"
 +#include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 +#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
 +#include "content/public/test/browser_test.h"
@@ -9324,7 +9414,12 @@ index 0000000000000..ef77640d58cfc
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "ui/base/window_open_disposition.h"
 +#include "third_party/skia/include/core/SkColor.h"
++#include "ui/display/display.h"
++#include "ui/display/screen.h"
 +#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/views/bubble/bubble_border.h"
++#include "ui/views/bubble/bubble_frame_view.h"
 +#include "ui/views/focus/focus_manager.h"
 +#include "ui/views/test/views_test_utils.h"
 +#include "ui/views/view.h"
@@ -9339,7 +9434,12 @@ index 0000000000000..ef77640d58cfc
 +    InProcessBrowserTest::SetUpOnMainThread();
 +    host_resolver()->AddRule("*", "127.0.0.1");
 +    ASSERT_TRUE(embedded_test_server()->Start());
-+    view()->GetWidget()->SetBounds(gfx::Rect(0, 0, 1600, 900));
++    // In the screen's work area, not at (0, 0): on the Mac that is under the
++    // menu bar, where the toast's place and the row's read 33 DIP apart
++    // (2026-10-12).
++    view()->GetWidget()->SetBounds(gfx::Rect(
++        display::Screen::Get()->GetPrimaryDisplay().work_area().origin(),
++        gfx::Size(1600, 900)));
 +    ASSERT_TRUE(ui_test_utils::NavigateToURL(
 +        browser(), embedded_test_server()->GetURL("a.test", "/title1.html")));
 +    views::test::RunScheduledLayout(view());
@@ -9421,6 +9521,11 @@ index 0000000000000..ef77640d58cfc
 +           toasts->GetToastWidgetForTesting()->IsVisible();
 +  })) << "closing a tab shows the undo toast";
 +  views::test::RunScheduledLayout(view());
++  // The toast took its place as it showed. On the Mac the window was still
++  // reaching the place SetUpOnMainThread gave it, and a toast placed then sat
++  // that move off, up to 40 DIP high (2026-10-12); place it again on the
++  // settled window, as a bubble is when its window moves.
++  toasts->GetToastViewForTesting()->SizeToContents();
 +  const gfx::Rect toast =
 +      toasts->GetToastWidgetForTesting()->GetWindowBoundsInScreen();
 +  const gfx::Rect address = bar()->GetBoundsInScreen();
@@ -9429,6 +9534,17 @@ index 0000000000000..ef77640d58cfc
 +  EXPECT_GT(toast.CenterPoint().y(), address.bottom() + 8)
 +      << "the toast's middle is at " << toast.CenterPoint().y()
 +      << ", the address row ends at " << address.bottom();
++  // Its visible edge, the widget's top plus the shadow its border draws, is on
++  // or under the row's bottom. The Mac's border draws none, and a toast placed
++  // with Chromium's allowance for one crossed the line under the address row
++  // by 6 DIP: its top at 65 against the row's 71 (2026-10-12).
++  const int toast_top = toast.y() + toasts->GetToastViewForTesting()
++                                        ->GetBubbleFrameView()
++                                        ->bubble_border()
++                                        ->GetInsets()
++                                        .top();
++  EXPECT_GE(toast_top, view()->toolbar()->GetBoundsInScreen().bottom())
++      << "the toast's visible top is at " << toast_top;
 +}
 +
 +}  // namespace
@@ -9681,7 +9797,7 @@ index c1eb8041ce55c..d58d0cb61e101 100644
                         StayingAfterCloseAllKeepsEverythingWorking) {
    ASSERT_TRUE(ui_test_utils::NavigateToURL(
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index 81260179109c2..beb0e606b0b92 100644
+index 81260179109c2..891503dd9d3ce 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -12,7 +12,9 @@
@@ -9756,7 +9872,7 @@ index 81260179109c2..beb0e606b0b92 100644
    // A tab at the end on a page of the test server, loaded. It loads on
    // screen: a background tab's renderer runs at a low priority on the Mac.
    tabs::TabInterface* OpenLoaded(const std::string& host) {
-@@ -451,4 +473,132 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, RestoringAClosedFolderTabDoesNotCrash) {
+@@ -451,4 +473,137 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, RestoringAClosedFolderTabDoesNotCrash) {
    EXPECT_EQ(4, tab_strip_model()->count());
  }
  
@@ -9825,10 +9941,15 @@ index 81260179109c2..beb0e606b0b92 100644
 +  EXPECT_EQ(folder, ParentOf(1)) << "both stay in the folder";
 +  EXPECT_EQ(folder, ParentOf(2));
 +  // The rows' views follow the model's moves as they arrive, which can be
-+  // after the rows first look settled.
++  // after the rows first look settled. The check only finds the rows:
++  // DrawnRow waits in a run loop of its own, and on the Mac that wait,
++  // nested in RunUntil's, never returned (2026-10-12).
 +  EXPECT_TRUE(base::test::RunUntil([&]() {
-+    TabView* const apple_row = DrawnRow(apple);
-+    TabView* const zebra_row = DrawnRow(zebra);
++    views::test::RunScheduledLayout(widget());
++    TabView* const apple_row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), apple);
++    TabView* const zebra_row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), zebra);
 +    return apple_row && zebra_row &&
 +           apple_row->GetBoundsInScreen().y() <
 +               zebra_row->GetBoundsInScreen().y();
@@ -10625,7 +10746,7 @@ index 8ddebbe6ec633..b756874b480c7 100644
    BrowserWindowInterface* const first = browser();
    spaces::SpaceModel* const model = spaces::SpaceModel::From(first);
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index 190a5efb88117..e3f46df28b89c 100644
+index 190a5efb88117..d8efb61b35e33 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
 @@ -24,7 +24,9 @@
@@ -10788,7 +10909,19 @@ index 190a5efb88117..e3f46df28b89c 100644
    // The middle of the page on screen.
    gfx::Point PageCentre() {
      return browser_view()
-@@ -838,4 +946,216 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ASpaceRenameLeftOpenEndsOnAClick) {
+@@ -709,7 +817,10 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, AShiftClickRangeTakesOnlyShownRows) {
+ IN_PROC_BROWSER_TEST_F(SidebarClickTest, AClickOnThePageEndsARename) {
+   AppendTab();
+   AppendTab();
+-  views::test::RunScheduledLayout(browser_view()->GetWidget());
++  // The new rows grow in over 200 ms; a title's centre read before then lay
++  // under a row still 13 DIP tall, and the click went between the rows (the
++  // Mac, 2026-10-12).
++  WaitForRowsToSettle();
+   TabView* const row = RowFor(1);
+   ASSERT_TRUE(row);
+   row->BeginRename();
+@@ -838,4 +949,216 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ASpaceRenameLeftOpenEndsOnAClick) {
    EXPECT_EQ(name, model->DisplayName(model->active_id()));
  }
  
@@ -11006,10 +11139,10 @@ index 190a5efb88117..e3f46df28b89c 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
-index 2527263f32290..0ca893194690e 100644
+index 2527263f32290..873a30c73b751 100644
 --- a/chrome/test/stedding/sidebar_forms_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
-@@ -8,14 +8,21 @@
+@@ -8,14 +8,25 @@
  // address row run edge to edge, and the pointer at the window's leading edge
  // slides the sidebar in over the page, which does not move. Open or as the
  // rail, the handle that resizes the sidebar reaches over the card's gutter
@@ -11020,19 +11153,23 @@ index 2527263f32290..0ca893194690e 100644
 +// With the page flush against the window (sidebar Y23) the card keeps no
 +// gutter or rounded corner beside the open sidebar or the rail either, and
 +// the rail centres its rows on itself.
++
++#include <algorithm>
  
  #include "base/command_line.h"
 +#include "base/feature_list.h"
  #include "base/i18n/base_i18n_switches.h"
  #include "base/i18n/rtl.h"
++#include "base/numerics/safe_conversions.h"
  #include "base/run_loop.h"
  #include "base/strings/utf_string_conversions.h"
  #include "base/test/run_until.h"
 +#include "base/time/time.h"
++#include "build/build_config.h"
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/animation/browser_animation_controller.h"
-@@ -23,17 +30,22 @@
+@@ -23,17 +34,23 @@
  #include "chrome/browser/ui/stedding/stedding_prefs.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -11042,6 +11179,7 @@ index 2527263f32290..0ca893194690e 100644
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/frame/contents_web_view.h"
  #include "chrome/browser/ui/views/frame/multi_contents_view.h"
++#include "chrome/browser/ui/views/frame/stedding_window_background.h"
  #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 +#include "chrome/browser/ui/views/stedding/sidebar_resize_handle.h"
 +#include "chrome/browser/ui/views/tabs/common/tab_view.h"
@@ -11055,7 +11193,7 @@ index 2527263f32290..0ca893194690e 100644
  #include "components/prefs/pref_service.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/browser/web_contents_delegate.h"
-@@ -41,6 +53,10 @@
+@@ -41,6 +58,10 @@
  #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
  #include "ui/base/accelerators/accelerator.h"
  #include "ui/compositor/layer.h"
@@ -11066,7 +11204,7 @@ index 2527263f32290..0ca893194690e 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/rounded_corners_f.h"
  #include "ui/views/controls/button/button.h"
-@@ -103,6 +119,84 @@ class SidebarFormsTest
+@@ -103,6 +124,84 @@ class SidebarFormsTest
      Settle();
      ASSERT_TRUE(controller()->IsCollapsed());
    }
@@ -11151,7 +11289,38 @@ index 2527263f32290..0ca893194690e 100644
  };
  
  // sidebar Y19: closed to nothing, the strip takes no width and the page card
-@@ -237,6 +331,95 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheHandleReachesTheCardsEdge) {
+@@ -124,7 +223,19 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, HiddenTheWindowIsThePage) {
+   EXPECT_EQ(Window().x(), Page().x()) << "the page starts at the window's edge";
+   EXPECT_EQ(Window().right(), Page().right());
+   EXPECT_EQ(Window().bottom(), Page().bottom());
++  // So does the address row's bar. On the Mac the row's contents clear the
++  // traffic lights, as in a window without a sidebar, and the bar runs on
++  // under them: the lights sat on a patch of the window's ground beside the
++  // row (2026-10-12; WindowButtonsTest.HiddenTheLightsSitOnTheRowsBar).
++  EXPECT_EQ(Window().x(),
++            base::ClampFloor(stedding::PageBarSurface(browser_view()).x()))
++      << "so does the address row's bar";
++#if BUILDFLAG(IS_MAC)
++  EXPECT_GT(Row().x(), Window().x())
++      << "the row's contents clear the traffic lights";
++#else
+   EXPECT_EQ(Window().x(), Row().x()) << "so does the address row";
++#endif
+   EXPECT_EQ(gfx::RoundedCornersF(),
+             browser_view()->multi_contents_view()->GetBackgroundRadii())
+       << "no rounded corner on the card";
+@@ -189,7 +300,9 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheLeadingEdgeSlidesItInOverThePage) {
+   EXPECT_FALSE(region()->layer()->GetMasksToBounds())
+       << "resting open over the page, its edge's shadow shows";
+   // Drawn open, its top row is the open sidebar's, not the rail's stack:
+-  // stacked, the buttons left an empty band some 70 DIP tall.
++  // stacked, the buttons left an empty band some 70 DIP tall. Nor the
++  // stack's 40 DIP: given no toolbar height, the row grew by the toolbar
++  // button's inset and every row sat 2 DIP lower (the Mac, 2026-10-12).
+   views::View* const top = region()->top_button_container_for_testing();
+   EXPECT_LE(top->height(), open_top_height_)
+       << "the top row as tall as the open sidebar's";
+@@ -237,6 +350,95 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheHandleReachesTheCardsEdge) {
    EXPECT_NE(handle, root()->GetEventHandlerForPoint(gfx::Point(1, y)));
  }
  
@@ -11247,7 +11416,7 @@ index 2527263f32290..0ca893194690e 100644
  // BACKLOG S-69: a page in a full screen of its own -- a video's button, the
  // Fullscreen API -- takes the screen edge to edge: no card gutter around it,
  // no rounded corner. The gutter left a band of the window's ground on three
-@@ -357,6 +540,124 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheEdgeDoesNothingInFullScreen) {
+@@ -357,6 +559,124 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheEdgeDoesNothingInFullScreen) {
        .Wait();
  }
  
@@ -11372,7 +11541,7 @@ index 2527263f32290..0ca893194690e 100644
  // Right to left the sidebar is on the right: the handle reaches over the
  // gutter on its left to the card's edge, and the window's right edge slides
  // a hidden sidebar in. Both were the left-to-right sides until a review
-@@ -395,4 +696,21 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsRtlTest, TheHandleAndTheEdgeAreMirrored) {
+@@ -395,4 +715,21 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsRtlTest, TheHandleAndTheEdgeAreMirrored) {
        [&]() { return region()->is_expanded_on_hover() && !Animating(); }));
  }
  
@@ -11522,7 +11691,7 @@ index 9817d98b776b8..ec25d90cdebca 100644
    for (const Chord& chord : chords) {
      SCOPED_TRACE(testing::Message() << "command " << chord.command);
 diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
-index ddd654d67f774..326d77fc65730 100644
+index ddd654d67f774..de2df17ebe270 100644
 --- a/chrome/test/stedding/welcome_browsertest.cc
 +++ b/chrome/test/stedding/welcome_browsertest.cc
 @@ -5,12 +5,21 @@
@@ -11626,7 +11795,7 @@ index ddd654d67f774..326d77fc65730 100644
    ASSERT_NE(std::string::npos, step.find("Every shortcut")) << step;
  #if BUILDFLAG(IS_MAC)
    EXPECT_NE(std::string::npos, step.find("swipe")) << step;
-@@ -107,4 +143,112 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, AStepThatRunsOnFadesOutUntilItsEnd) {
+@@ -107,4 +143,131 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, AStepThatRunsOnFadesOutUntilItsEnd) {
        })())"));
  }
  
@@ -11692,6 +11861,25 @@ index ddd654d67f774..326d77fc65730 100644
 +            content::EvalJs(
 +                page, "document.querySelector('footer .status').textContent"));
 +  EXPECT_FALSE(pref_service->GetBoolean(stedding::prefs::kWelcomeShown));
++}
++
++// welcome W12: an answer that comes late (the Arc check, the importer's list,
++// the default-browser check, an import's progress) redraws the whole flow,
++// and the control that had the focus keeps it. On the Mac,
++// EachBehaviourChoiceIsWrittenAtOnce found the focus on the page in four
++// runs of five (2026-10-12).
++IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, ALateAnswerKeepsTheFocus) {
++  content::WebContents* const page = OpenWelcome(*browser());
++  ASSERT_TRUE(page);
++  ASSERT_EQ("", GoTo(page, ".choices"));
++  EXPECT_EQ("closedForm=1", content::EvalJs(page, R"(
++      (() => {
++        document.querySelector(
++            '.pill[data-name="closedForm"][data-value="1"]').focus();
++        cr.webUIListenerCallback('default-browser-changed', 'not-default');
++        const focused = document.activeElement;
++        return focused.dataset.name + '=' + focused.dataset.value;
++      })())"));
 +}
 +
 +// welcome W2 (S-77) in two regions: France's list of eight engines and the

@@ -72,14 +72,15 @@ Removable when: never; this is Stedding's sidebar.
  chrome/browser/ui/tabs/tab_favicon_theming.cc |  33 +-
  .../ui/tabs/tab_favicon_theming_unittest.cc   |  71 ++++
  .../ui/views/commandbar/command_bar_view.cc   |  51 ++-
- .../commandbar/command_bar_view_unittest.cc   |  16 +-
+ .../commandbar/command_bar_view_unittest.cc   |  24 +-
  .../ui/views/frame/browser_frame_view_win.cc  |   5 +-
  .../views/frame/browser_native_widget_mac.mm  |   6 +-
  chrome/browser/ui/views/frame/browser_view.cc |   2 +-
  .../layout/browser_view_tabbed_layout_impl.cc |  12 +-
- .../layout/stedding_browser_view_layout.cc    |  56 ++-
+ .../layout/stedding_browser_view_layout.cc    |  70 ++-
  .../ui/views/frame/multi_contents_view.cc     |   6 +-
- .../views/frame/stedding_window_background.cc |  19 +-
+ .../views/frame/stedding_window_background.cc |  62 ++-
+ .../views/frame/stedding_window_background.h  |   9 +
  .../frame/vertical_tab_strip_region_view.cc   | 297 ++++++++++++-
  .../frame/vertical_tab_strip_region_view.h    |  48 +++
  .../vertical_tab_strip_top_container.cc       |  15 +-
@@ -89,7 +90,8 @@ Removable when: never; this is Stedding's sidebar.
  chrome/test/stedding/BUILD.gn                 |   1 +
  .../test/stedding/command_bar_browsertest.cc  |  38 ++
  .../stedding/sidebar_forms_browsertest.cc     | 398 ++++++++++++++++++
- 38 files changed, 1421 insertions(+), 212 deletions(-)
+ .../stedding/window_buttons_browsertest.mm    |  44 ++
+ 40 files changed, 1526 insertions(+), 225 deletions(-)
  create mode 100644 chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
  create mode 100644 chrome/test/stedding/sidebar_forms_browsertest.cc
 
@@ -1177,7 +1179,7 @@ index 6dac0dc159ab8..68624fe1109ae 100644
      actions_.push_back({u"Turn Bookmarks into Pinned Tabs", std::u16string(),
                          base::BindRepeating(
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
-index 29ba163424dc5..bf229c6defaa6 100644
+index 29ba163424dc5..1c7293c79841e 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 @@ -26,6 +26,7 @@
@@ -1196,7 +1198,7 @@ index 29ba163424dc5..bf229c6defaa6 100644
  #include "ui/events/event.h"
  #include "ui/events/keycodes/keyboard_codes.h"
  #include "ui/gfx/geometry/rect.h"
-@@ -294,6 +296,14 @@ TEST_F(CommandBarViewTest, ActionTitlesHaveNoMacGlyphsOffTheMac) {
+@@ -294,6 +296,22 @@ TEST_F(CommandBarViewTest, ActionTitlesHaveNoMacGlyphsOffTheMac) {
    EXPECT_TRUE(sleeps);
    EXPECT_TRUE(cycles);
  }
@@ -1208,10 +1210,18 @@ index 29ba163424dc5..bf229c6defaa6 100644
 +  EXPECT_EQ(u"Show in folder",
 +            l10n_util::GetStringUTF16(IDS_STEDDING_CAPTURE_TOAST_BUTTON));
 +}
++#else
++// screenshot C5: on the Mac the button keeps the Finder's name, as Chromium's
++// downloads do there. With the case above, tooling/dev's SteddingStringsTest
++// filter matches a test on both platforms.
++TEST(SteddingStringsTest, TheCaptureToastSaysShowInFinderOnTheMac) {
++  EXPECT_EQ(u"Show in Finder",
++            l10n_util::GetStringUTF16(IDS_STEDDING_CAPTURE_TOAST_BUTTON));
++}
  #endif
  
  // commandbar K9, K10: a command row is listed only while its command is
-@@ -691,16 +701,16 @@ TEST_F(CommandBarViewTest, ShareCoatFiltersToTheActiveSpace) {
+@@ -691,16 +709,16 @@ TEST_F(CommandBarViewTest, ShareCoatFiltersToTheActiveSpace) {
  TEST_F(CommandBarViewTest, DensityActionsSetThePreset) {
    auto bar = std::make_unique<CommandBarView>(browser());
    bar->SetModeForTesting(CommandBarView::Mode::kActions);
@@ -1317,7 +1327,7 @@ index f662e5bb6dce6..46eeba02b0d38 100644
          unclipped_contents_region.Inset(gfx::Insets::TLBR(
              0, horizontal_layout.vertical_tab_strip_width, 0, 0));
 diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
-index 818a3d9ef0898..a7f071b64e527 100644
+index 818a3d9ef0898..15f984e751498 100644
 --- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
 +++ b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
 @@ -11,6 +11,7 @@
@@ -1359,7 +1369,28 @@ index 818a3d9ef0898..a7f071b64e527 100644
  }
  
  }  // namespace
-@@ -144,8 +160,12 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+@@ -79,6 +95,20 @@ SteddingBrowserViewLayout::CalculateProposedLayout(
+             : views().top_container->GetPreferredSize().height();
+     strip->SetToolbarHeightForLayout(toolbar_height);
+   }
++  // sidebar Y20: a hidden sidebar slid in over the page has the open
++  // sidebar's top row, lined up with the address row beside it. Upstream
++  // gives a strip with no column a toolbar 0 DIP tall, and the row grew by
++  // the toolbar-button inset: 40 DIP against the open sidebar's 38, every
++  // row 2 DIP lower (the Mac, 2026-10-12). It takes the row's own height.
++  if (strip && DrawsVerticalStrip(delegate()) && strip->IsHiddenCompletely() &&
++      views().top_container &&
++      views().top_container->parent() == views().browser_view) {
++    if (const auto row =
++            layout.GetBoundsFor(views().top_container, views().browser_view);
++        row && row->bottom() > 0) {
++      strip->SetToolbarHeightForLayout(row->bottom());
++    }
++  }
+   // sidebar Y7: with the address row hidden, upstream drops the collapsed
+   // rail a caption's height down the window so nothing sits under the
+   // traffic lights (GetCollapsedVerticalTabStripRelativeTop), and its toggle
+@@ -144,8 +174,12 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
          delegate().GetImmersiveModeController();
      if (immersive && immersive->IsEnabled() &&
          views().vertical_tab_strip_region_view) {
@@ -1373,7 +1404,7 @@ index 818a3d9ef0898..a7f071b64e527 100644
                ? views().vertical_tab_strip_region_view->width()
                : views().vertical_tab_strip_region_view->uncollapsed_width();
        params.visual_client_area.Inset(gfx::Insets::TLBR(0, strip_inset, 0, 0));
-@@ -154,7 +174,10 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+@@ -154,7 +188,10 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
    // The toolbar row is the top of the content card, so it keeps the card's
    // side gutters (MultiContentsView's mat inset) and sits the same gutter
    // below the window's top edge, as the card does at the right and bottom.
@@ -1385,7 +1416,7 @@ index 818a3d9ef0898..a7f071b64e527 100644
    params.visual_client_area.Inset(
        gfx::Insets::TLBR(kCardSideInset, kCardSideInset, 0, kCardSideInset));
    // The exclusion above is skipped with a vertical strip because macOS's
-@@ -165,13 +188,15 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+@@ -165,13 +202,15 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
    // contents give up that much (the bar itself runs on under the buttons:
    // SteddingWindowBackground::PaintPageBar).
    if (const int trailing = TrailingReserve(
@@ -1403,7 +1434,7 @@ index 818a3d9ef0898..a7f071b64e527 100644
    result.set_x(result.x() - kCardSideInset);
    result.set_width(result.width() + 2 * kCardSideInset);
    // The same for the top: the toolbar was placed kCardSideInset down inside
-@@ -280,7 +305,8 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
+@@ -280,7 +319,8 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
                            : nullptr) {
      toolbar->SetSteddingTrailingReserve(
          delegate().IsToolbarVisible()
@@ -1413,7 +1444,7 @@ index 818a3d9ef0898..a7f071b64e527 100644
              : 0);
    }
  
-@@ -300,15 +326,23 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
+@@ -300,15 +340,23 @@ void SteddingBrowserViewLayout::DoPostLayoutVisualAdjustments(
    // under it (toolbar T16): a page whose header is not its theme colour
    // showed the row's colour through its rounded top corners until
    // 2026-09-05. With the row hidden (T8) the page is the whole card.
@@ -1466,7 +1497,7 @@ index b75665cbc93f4..54132fe154c95 100644
    } else if (IsInSplitView()) {
      available_space.Inset(split_view_insets_);
 diff --git a/chrome/browser/ui/views/frame/stedding_window_background.cc b/chrome/browser/ui/views/frame/stedding_window_background.cc
-index 4c4819d635d52..0297de98a3df0 100644
+index 4c4819d635d52..143d919328a85 100644
 --- a/chrome/browser/ui/views/frame/stedding_window_background.cc
 +++ b/chrome/browser/ui/views/frame/stedding_window_background.cc
 @@ -19,6 +19,7 @@
@@ -1492,24 +1523,79 @@ index 4c4819d635d52..0297de98a3df0 100644
    cc::PaintFlags flags;
    flags.setAntiAlias(true);
    flags.setColor(bar);
-@@ -233,13 +237,13 @@ void SteddingWindowBackground::PaintPageBar(gfx::Canvas* canvas,
-   // colour (PageBarColorSupplier). Stopping with the contents left the
-   // row's end as a cut corner beside the buttons (operator, 2026-09-08).
-   // On macOS the two edges coincide.
+@@ -201,6 +205,21 @@ void SteddingWindowBackground::PaintPageBar(gfx::Canvas* canvas,
+   // until 2026-09-05, which made a white page's row grey.
+   const SkColor bar = *controller->color();
+ 
++  const gfx::RectF surface = PageBarSurface(browser_view);
++  if (surface.IsEmpty()) {
++    return;
++  }
++  PaintBarSurface(
++      canvas, surface, bar,
++      /*square=*/VerticalTabStripRegionView::SteddingCardGutter(browser_view) ==
++          0);
++}
++
++gfx::RectF PageBarSurface(BrowserView* browser_view) {
++  if (!browser_view || !browser_view->toolbar() ||
++      !browser_view->multi_contents_view()) {
++    return gfx::RectF();
++  }
+   // In full screen on macOS the top container, toolbar included, moves into
+   // an overlay widget of its own (immersive mode). A view in another widget
+   // has no rectangle on this canvas, and converting one is a CHECK: entering
+@@ -209,7 +228,7 @@ void SteddingWindowBackground::PaintPageBar(gfx::Canvas* canvas,
+   // The overlay's row keeps its own colour there.
+   if (!PageBarViewsShareWidget(browser_view, browser_view->toolbar(),
+                                browser_view->multi_contents_view())) {
+-    return;
++    return gfx::RectF();
+   }
+ 
+   // Both views sit inside containers of their own; the canvas is the browser
+@@ -223,23 +242,25 @@ void SteddingWindowBackground::PaintPageBar(gfx::Canvas* canvas,
+   views::View::ConvertRectToTarget(browser_view->multi_contents_view(),
+                                    browser_view, &card);
+   if (toolbar.IsEmpty() || card.IsEmpty()) {
+-    return;
++    return gfx::RectF();
+   }
+   // From the toolbar's top to the card's top edge: the page starts square
+-  // under the row (toolbar T16), so nothing runs under it. And to the
+-  // card's right edge, not the toolbar's: on Windows the toolbar's contents
+-  // stop short of the frame's caption buttons (toolbar T19), but the bar
+-  // runs on under them, the buttons painting their glyphs in its contrast
+-  // colour (PageBarColorSupplier). Stopping with the contents left the
+-  // row's end as a cut corner beside the buttons (operator, 2026-09-08).
+-  // On macOS the two edges coincide.
 -  const float bar_right =
 -      card.right() - static_cast<float>(stedding::kCardGutter.Get());
-+  const int gutter = VerticalTabStripRegionView::SteddingCardGutter(browser_view);
-+  const float bar_right = card.right() - static_cast<float>(gutter);
-   PaintBarSurface(canvas,
-                   gfx::RectF(toolbar.x(), toolbar.y(),
-                              std::max(toolbar.width(), bar_right - toolbar.x()),
-                              card.y() - toolbar.y()),
+-  PaintBarSurface(canvas,
+-                  gfx::RectF(toolbar.x(), toolbar.y(),
+-                             std::max(toolbar.width(), bar_right - toolbar.x()),
+-                             card.y() - toolbar.y()),
 -                  bar);
-+                  bar, /*square=*/gutter == 0);
++  // under the row (toolbar T16), so nothing runs under it. And across the
++  // card's visible width, not the toolbar's: on Windows the toolbar's
++  // contents stop short of the frame's caption buttons (toolbar T19), but the
++  // bar runs on under them, the buttons painting their glyphs in its contrast
++  // colour (PageBarColorSupplier). Stopping with the contents left the row's
++  // end as a cut corner beside the buttons (operator, 2026-09-08). The same
++  // at the leading end on macOS while the sidebar is hidden: the contents
++  // clear the traffic lights, the bar runs under them, and the lights sat on
++  // a patch of the window's ground beside the row (sidebar Y19, 2026-10-12).
++  // Otherwise on macOS the card's edges and the toolbar's coincide.
++  const float gutter = static_cast<float>(
++      VerticalTabStripRegionView::SteddingCardGutter(browser_view));
++  const float bar_left = std::min(toolbar.x(), card.x() + gutter);
++  const float bar_right = std::max(toolbar.right(), card.right() - gutter);
++  return gfx::RectF(bar_left, toolbar.y(), bar_right - bar_left,
++                    card.y() - toolbar.y());
  }
  
  void PaintOverlayPageBar(const ui::PaintContext& context,
-@@ -262,7 +266,10 @@ void PaintOverlayPageBar(const ui::PaintContext& context,
+@@ -262,7 +283,10 @@ void PaintOverlayPageBar(const ui::PaintContext& context,
      return;
    }
    ui::PaintRecorder recorder(context, top_container->size());
@@ -1521,6 +1607,33 @@ index 4c4819d635d52..0297de98a3df0 100644
  }
  
  }  // namespace stedding
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.h b/chrome/browser/ui/views/frame/stedding_window_background.h
+index b805a5b6ae563..1da57954e59fd 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.h
++++ b/chrome/browser/ui/views/frame/stedding_window_background.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_VIEWS_FRAME_STEDDING_WINDOW_BACKGROUND_H_
+ 
+ #include "base/callback_list.h"
++#include "ui/gfx/geometry/rect_f.h"
+ #include "ui/views/background.h"
+ 
+ class BrowserView;
+@@ -44,6 +45,14 @@ void PaintOverlayPageBar(const ui::PaintContext& context,
+                          views::View* top_container,
+                          BrowserView* browser_view);
+ 
++// The address row's page-coloured surface in `browser_view`'s coordinates,
++// as PaintPageBar paints it: from the toolbar's top to the card's, across the
++// card's visible width, which can be wider than the toolbar's contents --
++// Windows' caption buttons at the trailing end (toolbar T19), macOS's traffic
++// lights at the leading one while the sidebar is hidden (sidebar Y19). Empty
++// when either view is missing or in another widget (full screen, T24).
++gfx::RectF PageBarSurface(BrowserView* browser_view);
++
+ class SteddingWindowBackground : public views::Background {
+  public:
+   // `browser_view` is the view this background paints; the background
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 index b703183d30017..f71cb05a50415 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
@@ -2703,3 +2816,83 @@ index 0000000000000..2527263f32290
 +}
 +
 +}  // namespace
+diff --git a/chrome/test/stedding/window_buttons_browsertest.mm b/chrome/test/stedding/window_buttons_browsertest.mm
+index 6e5a51dc678cf..970970601a77f 100644
+--- a/chrome/test/stedding/window_buttons_browsertest.mm
++++ b/chrome/test/stedding/window_buttons_browsertest.mm
+@@ -14,26 +14,31 @@
+ #include <algorithm>
+ 
+ #include "base/test/run_until.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/stedding_fullscreen_sidebar_toggle.h"
++#include "chrome/browser/ui/views/frame/stedding_window_background.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
++#include "components/prefs/pref_service.h"
+ #include "content/public/test/browser_test.h"
+ #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
+ #include "ui/events/event.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/mac/coordinate_conversion.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/test/button_test_api.h"
+@@ -180,4 +185,43 @@ IN_PROC_BROWSER_TEST_F(WindowButtonsTest, FullScreenDrawsOneLineUnderTheRow) {
+   }));
+ }
+ 
++// sidebar Y19: hidden, the window has no sidebar column, and the traffic
++// lights sit on the address row: the row's contents start past them, as in
++// a window without a sidebar, and its page-coloured bar runs on under them.
++// They sat on a patch of the window's ground beside the row (2026-10-12).
++IN_PROC_BROWSER_TEST_F(WindowButtonsTest, HiddenTheLightsSitOnTheRowsBar) {
++  BrowserView* const browser_view =
++      BrowserView::GetBrowserViewForBrowser(browser());
++  VerticalTabStripRegionView* const strip =
++      browser_view->vertical_tab_strip_region_view_for_testing();
++  browser()->GetProfile()->GetPrefs()->SetInteger(
++      stedding::prefs::kSidebarClosedForm,
++      stedding::prefs::kSidebarClosedHidden);
++  tabs::VerticalTabStripStateController::From(browser())->RequestCollapse(true);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    views::test::RunScheduledLayout(browser_view->GetWidget());
++    return !BrowserAnimationController::From(browser())->IsAnimating(
++               TabStripAnimations::kVerticalTabStrip) &&
++           strip->IsHiddenCompletely() && strip->width() == 0;
++  }));
++
++  gfx::Rect bar = gfx::ToEnclosingRect(stedding::PageBarSurface(browser_view));
++  ASSERT_FALSE(bar.IsEmpty());
++  views::View::ConvertRectToScreen(browser_view, &bar);
++  const int contents_left = browser_view->toolbar()->GetBoundsInScreen().x();
++  NSWindow* const window =
++      browser_view->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++  for (NSWindowButton kind :
++       {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton}) {
++    NSButton* const button = [window standardWindowButton:kind];
++    ASSERT_TRUE(button);
++    const gfx::Rect frame = ScreenFrame(window, button);
++    EXPECT_TRUE(bar.Contains(frame))
++        << "window button " << kind << " at " << frame.ToString()
++        << " is off the row's bar " << bar.ToString();
++    EXPECT_LT(frame.right(), contents_left)
++        << "the row's contents run under window button " << kind;
++  }
++}
++
+ }  // namespace

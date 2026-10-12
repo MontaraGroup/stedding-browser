@@ -36,14 +36,14 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Seventy-odd traps follow. Read the one for the topic in front of you, not the list.
+Eighty-odd traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
@@ -1041,6 +1041,35 @@ private window has.
     failed when the cursor rested near the screen's top left, where test windows open, and
     passed with it parked in the bottom-right corner (2026-10-12). Park the cursor before a
     browser-suite run (the PC's suite scripts now do), and only while the operator is idle.
+
+79. **A `base::test::RunUntil` check must only look, never wait.**
+    `FolderTabsTest.AlphabetizeFromTheHeaderSortsTheRows` called a helper that runs a loop of
+    its own (`WaitForRowsToSettle`, inside `DrawnRow`) from `RunUntil`'s condition. Windows
+    got away with it; on the Mac the nested loop, entered from the message pump's pre-wait
+    observer, never returned, and the test timed out every run (2026-10-12). Settle before
+    the check; inside it, only lay out and find (`RunScheduledLayout`, `FindDrawnRow`).
+
+80. **A filter part that names a test of one platform stops `tooling/dev test` on the
+    other.** The screenshot filter named `SteddingStringsTest.*`, whose one case was built
+    off the Mac only; the Mac's `unit_tests` had no such test, and the guard that refuses a
+    filter part matching nothing stopped the whole sweep before it ran (2026-10-12). Give
+    such a class a case on every platform (here the Mac's "Show in Finder"), and build a new
+    filter on both machines before the release that needs it.
+
+81. **A bubble placed while a Mac test window is still moving keeps the old place.**
+    `AddressBandTest` moves its window in `SetUpOnMainThread`; the undo toast that showed
+    moments later was placed against the window's old origin, its top above the window's own
+    (y 25 against 33), and the test read it 12 to 40 DIP high, a different number each run
+    (2026-10-12). A bubble follows its window only when the window moves after it shows. Put
+    test windows in the screen's work area, not at (0, 0) under the menu bar, and call the
+    bubble's `SizeToContents()` before measuring where it sits.
+
+82. **`tooling/drive`'s `hover` jumps the pointer; leaving a view needs a path.** A hidden
+    sidebar slid in at the window's edge did not slide away when the next `hover` put the
+    pointer in the middle of the page, and did when the pointer went there in eight steps:
+    `hover` posts one move, and a hand never jumps (2026-10-12). Move along a path to check
+    anything that reacts to the pointer leaving; and in the command bar, select its text
+    (`key a+cmd`) before typing, or the last text stays in front of the new.
 
 ## The Windows build
 
