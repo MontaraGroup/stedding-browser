@@ -171,8 +171,8 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
 - **Site Search** **[1.0]** — a search engine's keyword, then the query, searches that site
   directly, from Chromium's own keywords and their `%s` templates (K18). `@Space` narrows
   the list to a Space (K19). Tab after a site's name turns it into a search chip, the
-  list being Chromium's own search engine settings (`features/commandbar.md` K27). Typing completes to a site from history, the rest
-  selected (`features/commandbar.md` K23).
+  list being Chromium's own search engine settings (K27). Typing completes to a site from
+  history, the rest selected (K23).
 - **Full URL in Toolbar** **[1.0]** — the address row above, on by default; `⇧⌘D` shows or
   hides it on its own, and a setting hides it with the sidebar (`features/toolbar.md`
   T8–T12).
@@ -300,8 +300,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 
 - **Auto Archive** **[1.0]** — idle unpinned tabs archive after a set time, reset by viewing
   the tab; nothing pinned, in a folder or in use is archived. Arc archives after 12 hours by
-  default and does not let you turn it off. Stedding's is off (Never) by default since patch
-  0060, and offers 6 hours, 12 hours, 1 day, 3 days and 7 days; the welcome flow asks
+  default and does not let you turn it off. Stedding's is off (Never) by default since beta 14,
+  and offers 6 hours, 12 hours, 1 day, 3 days and 7 days; the welcome flow asks
   (`features/archive.md` A6, `features/welcome.md` W12).
 - **View and restore the archive** **[1.0]** — the Archived view, by day and Space and
   searchable, and archived tabs in the command bar (archive A7–A11).
@@ -344,7 +344,7 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
   Stedding (`S-90`).
 - **Dark mode for web pages**, on Chromium's own (`S-100`).
 - **Smaller things seen in Nook**: the site's controls in one panel (`S-118`) and the rest
-  of the small conveniences (`S-125`). Built since patch 0060: clear a site's cookies and
+  of the small conveniences (`S-125`). Built in beta 14: clear a site's cookies and
   reload (`features/commandbar.md` K24, `features/sessions.md` S27), folder verbs
   (`features/folders.md` F30–F33), a pin's home address edited by hand and a middle click
   that sends a pin home (`features/pins.md` H15, H16), mute and picture in picture by key
@@ -371,7 +371,7 @@ honest target until that is revisited is **parity minus Boosts and Easels**.
 ## Where we deliberately differ
 
 - **No account, ever.** Arc requires one.
-- **Auto Archive is off until you pick a time** (since patch 0060), and little windows are
+- **Auto Archive is off until you pick a time** (since beta 14), and little windows are
   never closed for idling.
 - **An address row with the whole address**, where Arc has none.
 - **Bookmarks stay**, beside pinned tabs.

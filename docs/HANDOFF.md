@@ -41,9 +41,9 @@ Seventy-odd traps follow. Read the one for the topic in front of you, not the li
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74 |
-| The working loop and the series | 5, 9, 13, 14, 17, 22, 28, 50, 51 |
+| The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
@@ -342,10 +342,9 @@ private window has.
     functions. In the live checks, chrome://settings' search box finds a row
     but does not scroll to it: click the page body and press space instead;
     `tooling/drive-window.py` writes its `shot` files into the current
-    directory, so `cd` to the scratch directory first. (This trap once said the
-    feature params `folder_tabs` and `pin_tabs` do not exist; they do, and are
-    the way to seed a folder or an essential for a capture. A Space pin comes
-    from `space_pin_tabs/N`, or the ⌘T action "Pin to This Space".)
+    directory, so `cd` to the scratch directory first. The feature params
+    `folder_tabs/N` and `pin_tabs/N` seed a folder or an essential for a capture;
+    a Space pin comes from `space_pin_tabs/N`, or the ⌘T action "Pin to This Space".
 
 26. **Wave 4's lessons.** `content::WebContents::Create` makes a plain
     WebContents; `WebContentsTester::For` on it is a wrong cast that only
@@ -368,7 +367,7 @@ private window has.
     went to the frontmost app, which was the operator's chat (2026-09-05). The
     input-free path covers almost everything: `tooling/capture-state` (a window
     capture by id, no focus change; `tooling/capture-ui` forwards to it) with feature params for the state
-    (`folder_tabs/N` does exist, whatever trap 25 says; `pin_tabs/N`,
+    (`folder_tabs/N`, `pin_tabs/N`,
     `extra_spaces/N`, `space_pin_tabs/N`, `drift_tabs/N`; the collapsed rail is
     a profile preference, `vertical_tabs.collapsed_state`, seeded into a fresh
     profile's `Default/Preferences`), and `tooling/window_by_pid.py --quit <pid>`
@@ -388,11 +387,8 @@ private window has.
     events are told apart by their time), and a screenshot is of the window's rectangle,
     only while it is in front. Without the yes, the input-free tools.
 
-28. **An apply script's anchors die at the first clang-format.** The pipeline
-    formats after applying, so a re-run fails on any anchor or guard that
-    clang-format rewrapped, and stops before the build. Re-run the pipeline
-    with a no-op apply once the edits are in, and write guards on lines
-    clang-format will not touch.
+28. **Retired:** it was about an early apply-script pipeline that clang-format broke; the
+    series is git commits exported by `tooling/update-patches`, and no such script runs.
 
 29. **`tooling/capture-state` is the harness that needs no hands.** It launches
     the app on a fresh profile, captures every window the process owns by id and
@@ -1038,6 +1034,14 @@ private window has.
     round. Do that check first: it costs one incremental build. The remote-desktop display
     had reconnected many times that day (its display was the seventeenth of the session).
 
+78. **The real cursor over a test window's sidebar fails the hover and edge tests.** The
+    sidebar expands on hover and the hidden form's edge re-checks the real pointer, so four
+    tests (`SidebarFormsTest.TheLeadingEdgeSlidesItInOverThePage`, `.TheEdgeDoesNothingInFullScreen`,
+    `SidebarRailTest.HoveringTheRailLeavesOneClickHandler`, `.ADriftedPinShowsTheDotOrTheSlash`)
+    failed when the cursor rested near the screen's top left, where test windows open, and
+    passed with it parked in the bottom-right corner (2026-10-12). Park the cursor before a
+    browser-suite run (the PC's suite scripts now do), and only while the operator is idle.
+
 ## The Windows build
 
 Git for Windows for the bash tooling, PowerShell for the rest, Visual Studio's own
@@ -1100,11 +1104,11 @@ decisions of 2026-09-26 head it, and "Where Phase 0 stands" lists what each open
 item waits on. Everything else open is `BACKLOG.md`, in priority order. This file keeps no
 list of its own.
 
-Beta 13 (2026-10-11) is the current Windows installer: patch 0059, built, used and released
-from the PC. Its macOS image is the Mac's to add after the Mac's own pass on 0059, which it
-has not built (`S-105`); until then beta 12's DMG (2026-10-02, signed and notarized) is the
-current macOS image. Patch 0060, the operator's round after beta 13, is not released; the
-next release carries it (`docs/PROJECT-LOG.md`).
+Beta 14 carries patches 0060 and 0061, with the Windows installer first, as beta 13 did
+for 0059. The macOS image of either is the Mac's to add after its own pass on 0059 to 0061,
+which it has not built (`S-105`); until then beta 12's DMG (2026-10-02, signed and
+notarized) is the newest macOS image. `docs/PROJECT-LOG.md` has what each patch was seen to
+do.
 
 ## Release channel
 

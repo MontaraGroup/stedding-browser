@@ -23,7 +23,8 @@ it, in the page's own colour: the colour the page draws along its top edge, else
 (`features/toolbar.md` T3, T7, T15, T31). That one change accounts for most of "looks like
 Arc". With the sidebar hidden completely, or in a full screen with no address row, the
 page is edge to edge with no gutter and no rounded corner (`features/sidebar.md` Y19,
-`features/toolbar.md` T33).
+`features/toolbar.md` T33); the setting "Page flush against the window", off by default,
+does the same beside an open sidebar (`features/sidebar.md` Y23).
 
 ## Targets and shipped values
 

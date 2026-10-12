@@ -22,8 +22,7 @@ The product name itself is not an asset: `tooling/brand/product_name.py`, run by
 (`chrome/app/chromium_strings.grd` and its siblings) and in every locale's
 translations of them, leaving ChromiumOS and ChromiumUpdater alone, and the
 linked project name in the About page's license line: "Stedding is made
-possible by the Chromium open source project" is true as written (the
-earlier one-liner renamed both, and beta 4's About page says so).
+possible by the Chromium open source project" is true as written.
 
 Upstream's branding switch is boolean — `chromium/` or `google_chrome/` — and grit
 includes hardcode `chromium/`, so there is no third directory to add. Our files

@@ -2,16 +2,11 @@
 
 Every shortcut Stedding adds or changes, on both platforms. The same list is inside
 the browser at **Settings → Stedding → Shortcuts**, generated from the keyboard tables
-the browser itself uses, so its keys are those of the version you run. In beta 12, the
-current macOS image, two of its descriptions are behind this page: it still lists Peek's
-two keys, though Peek is off, and it calls ⌘1–⌘9 the first nine rows, though ⌘9 is the
-last one. Beta 13 corrects both (`BACKLOG.md` S-82).
+the browser itself uses, so its keys are those of the version you run.
 
-Four keys on this page come with the next release and are not in beta 13: muting a tab
-(⌃M / Ctrl+M), all folders at once (⇧⌘E / Ctrl+Shift+E), clearing a site's cookies
-(⌥⇧⌘R / Ctrl+Alt+Shift+R) and picture in picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). From the next
-release the list in the browser also names Reopen Closed Tab (⇧⌘T / Ctrl+Shift+T),
-Chromium's own key, which works in every version.
+Four keys are new since beta 14: muting a tab (⌃M / Ctrl+M), all folders at once
+(⇧⌘E / Ctrl+Shift+E), clearing a site's cookies (⌥⇧⌘R / Ctrl+Alt+Shift+R) and picture in
+picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). An earlier build does nothing with them.
 
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
@@ -29,14 +24,14 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
 | In a little window (macOS): move the page into your window as a tab | ⌘O | — |
 | In a little window (macOS): send the page into a split of your window | ⇧⌘O | — |
-| In a little window (macOS): close it. By a reading of the code the bare key does not reach the window yet (`PLAN.md` CMD-15) | Esc | — |
+| In a little window (macOS): close it (the bare key may not reach the window yet, `PLAN.md` CMD-15) | Esc | — |
 
 ## Tabs and the bar
 
 | Action | macOS | Windows |
 |---|---|---|
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
-| Open the bar in actions mode (⇥ in an empty bar does the same; ⇥ after a site's name, from the next release, makes a search chip for that site instead) | ⇧⌘P | Ctrl+Shift+P |
+| Open the bar in actions mode (⇥ in an empty bar does the same; ⇥ after the start of a search engine's name makes a search chip for that site instead) | ⇧⌘P | Ctrl+Shift+P |
 | Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
 | Jump to one of the first eight rows you can see, or to the last one with 9 (hold ⌘ / Ctrl a moment to see the numbers) | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
 | Next tab / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+PgDn / Ctrl+PgUp |
@@ -85,7 +80,7 @@ its menu item; only the key moves.
 | ⌥⌘↓ / ⌥⌘↑ | Next / previous tab in the sidebar | Focus the next / previous pane (now F6 / ⇧F6) |
 | ⇧⌘K / Ctrl+Shift+K | Clear the Space | unbound |
 
-The four keys of the next release (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
+The four keys added in beta 14 (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
 Ctrl+Alt+Shift+P and Ctrl+Alt+Shift+R) were free in Chromium on both platforms, so they move
 none of its keys.
 

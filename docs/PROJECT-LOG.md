@@ -6,7 +6,19 @@ This file was the "State of the project" section of `AGENTS.md` until 2026-09-30
 unchanged, and is where the dated record goes from now on: an agent opening the repo cold
 should not have to read four hundred lines of rounds to learn the rules.
 
-## 2026-10-11 -- three more items (patch 0061, not released)
+
+## 2026-10-12 -- beta 14 released (patches 0060 and 0061)
+
+`v0.2.0-beta.14`, the Windows installer first (unsigned; the Mac adds its image after its own
+pass, `S-105`). Before the cut: a docs pass over every Markdown file, cutting history and stale
+notes; the row-numbers setting's sub-label corrected to "the first eight rows you can see, and
+9 to the last one" (folded into 0061). The release build with the version set: 904 of 904 unit
+tests, 212 of 213 browser tests, the other the known `SleepInUseTest` race, three of three
+alone. Four sidebar hover tests failed once with the real cursor resting over where test windows
+open, and passed with it parked in the screen's corner (trap 78). The installer ran over beta 13
+as a repair with Stedding closed, the installed `chrome.dll` matching the build
+(`docs/release-notes/v0.2.0-beta.14.md`).
+## 2026-10-11 -- three more items (patch 0061, beta 14)
 
 The operator asked for the next three, fast. Three small items in different parts of the code
 were built together without building in between, then built and tested once.
@@ -27,12 +39,12 @@ were built together without building in between, then built and tested once.
   rebuilt for the check, which had passed them at noon, so the cause is this PC's state (trap
   77), not the round. The DCHECK build passed them in the same round.
 
-## 2026-10-11 -- the operator's round after beta 13 (patch 0060, not released)
+## 2026-10-11 -- the operator's round after beta 13 (patch 0060, beta 14)
 
 After beta 13 the operator asked that auto-archive not run by default, a welcome step to ask
 about it and the like, ten backlog items that are not hard, built and tested together, and a
 fix for the address row's hover. All of it is one new patch, 0060 (the operator-round
-exception in `patches/README.md`). Nothing of it is released; the next release carries it.
+exception in `patches/README.md`). It went out in beta 14 with patch 0061.
 
 - **Auto-archive off by default** (S-130; archive A6, settings T2 and T8, commandbar K17):
   `stedding.archive.idle_hours` defaults to 0, Never, where it was 12, and a 7-day choice joins
@@ -214,12 +226,37 @@ hour), and the suites passed on it before anything changed. Then:
 
 The Windows build machine picked the work up from the Mac on 2026-09-29 (Ryzen 9 5900XT, 32 GB) with the pin at 155.0.8059.12 and 57 patches, and in two days did what the Mac's 2026-09-28 pass could not: built the series on Windows, ran it under sanitizers, and used the product with the real pointer and keyboard.
 
-- **2026-09-29.** `tooling/sync-chromium` got a Windows mode (18 minutes). The first full build died of memory at 32 jobs and finished at 20 to 26 (trap 54); the suites then passed after the tests that assumed the Mac were corrected (unit 798 of 798, browser 150 of 150; trap 55). `PLAN.md`, *Windows run*, has the detail.
+- **2026-09-29.** `tooling/sync-chromium` got a Windows mode (18 minutes). The first full build died of memory at 32 jobs and finished at 20 to 26 (trap 54). Everything compiled but three test files (a narrow literal passed to `FilePath::Append`, a local named `far`, a Mac-only path key), and the suites passed once the tests that assumed the Mac were corrected (unit 798 of 798, browser 150 of 150 with five Windows-only tests added; trap 55). No product bug turned up on Windows.
 - **2026-09-30, sanitizers.** A DCHECK build with the dangling-pointer detector (3 h 20 min) and an ASan build (trap 57: its assembler never finished until `malloc_context_size=0`) found twelve defects in a tree whose suites were green (trap 60): a light-mode contrast bug, the quiet/adaptive permission defaults, a dangling Clear line and New Tab row after the switch to horizontal tabs, views without an accessible name, and the tests' own lifetimes. All are folded into patches 0030, 0042, 0043, 0047 and 0057. Final tree: release 800 of 800 unit, 151 of 151 browser; DCHECKs and the dangling-pointer detector the same; ASan: unit 800 of 800, browser 151 of 151.
 - **2026-09-30, real use.** With the owner's leave, `tooling\win\drive.ps1` drove a fresh profile with the real pointer and keyboard (trap 58): the Mac's words on Windows in the welcome flow, a tooltip and three command-bar rows (fixed); light-mode row text (fixed); three more faults logged as S-68 to S-70. Every click on every kind of row selected its tab (8 of 8 open, 7 of 7 in the rail).
 - **2026-09-30, beta 9.** `v0.2.0-beta.9` (https://github.com/ysalitrynskyi/stedding-browser/releases/tag/v0.2.0-beta.9), the Windows installer alone on Chromium 155.0.8059.12, published from this PC; macOS stays on beta 8 until the Mac has built the series and proved the keychain copy and the profile migration. The installer was run as the user over beta 6, on a copy of its profile, uninstalled and installed again (`tooling/win/test-installer.ps1`); the unit sweep and the browser suite passed on the exact image (800 of 800, 151 of 151). Open after it: S-68 to S-71, Win+V's own list, the Mac-only Phase 0 items, signing and updates (S-56).
 - **2026-09-30, beta 10.** `v0.2.0-beta.10` (https://github.com/ysalitrynskyi/stedding-browser/releases/tag/v0.2.0-beta.10), the Windows installer on the same Chromium 155.0.8059.12 as beta 9, after the operator's screenshot of the address bar: the field was a pill of about 220 px in a window of 1688 and a click left only the bare host selected. Now the whole address shows always (Chromium's "Always show full URLs" registered on), the host in the text colour and the rest a step dimmer, and the field takes the row with the address gathered on the page's centre (toolbar T28 to T30, PLAN.md WIN-29); the command bar stays inside a narrow window (S-68, K20). Because the file version is the pin's, it installs as a repair and needs Stedding closed (S-72, trap 62). Built on the operator's word although PLAN.md would have queued it. The gates: 802 unit and 153 browser tests on the exact build and again on a build with DCHECKs and the dangling-pointer detector on (3 h 49 min from nothing, still the long pole); the installer run over the installed beta 9 as a repair, with the operator's Stedding closed (the file version is the pin's, so it replaced `chrome.dll` in place); the installed build opened on a fresh profile and on a copy of the real one. AddressSanitizer was not re-run: the change adds an integer to a view.
 - **2026-09-30, the method.** The owner asked what the work did inefficiently. `AGENTS.md` and `docs/AGENT-LOOP.md` were rewritten around the answer (ask once, order of evidence, supervise long jobs, one pass that finds every failure), `docs/HANDOFF.md` gained the fast path and a trap index, and the machine-wide agent notes got a *Long jobs* section.
+
+## 2026-09-26 to 2026-09-29 -- the audit, the owner's decisions and patch 0057
+
+- **The audit (2026-09-26).** Sixteen review units read every file the series of 52 patches
+  changed, each twice; 353 root-cause clusters stood after verification, every one a reading
+  of the code, nothing built or run. It became `PLAN.md`, whose section 1 keeps the verdict
+  as written. The owner answered its questions the same day (the decisions at the top of
+  `PLAN.md`): horizontal tabs stay, Peek off until rebuilt, sleep at Never, every cut approved.
+- **Patch 0057 (2026-09-28 and 29).** Patches 0053 to 0056 had claimed the plan done without
+  being built. 0057 finished Phase 0's code and proved it on a real build of the pin: on the
+  series pushed on 2026-09-29, `stedding_browser_tests` 146 of 146 and the unit sweep 809 of
+  809, with real windows throughout (clicks on every kind of row and the rail, drags onto
+  folder headers and Space chips, Space switches by every path, three restarts, the cookie jar
+  of every way a tab opens, the archive, little windows, the sleep gate, search defaults,
+  HTTPS-First, the private coat, the horizontal strip) and each change seen to fail with its
+  fix taken out. The items it closed are ticked in `PLAN.md` section 4.
+- **Found and fixed on the way:** a folder row reading a freed folder as a window closed (a
+  crash, TAB-8); closing a Space's last tab briefly activating another Space's tab (spaces
+  B4); Settings' sidebar-hover switch bound to a preference M155 renamed; a Space chip taking a
+  tab group's header; a restored Blank Window following the Spaces; `tooling/capture-state`
+  never capturing, because Chromium made the app frontmost (trap 29); a command bar row that
+  turned Peek on; new tabs made during a Space switch filed in the Space being left.
+- **Left for others:** the owner's own steps, a Windows build, the sanitizer builds,
+  VoiceOver, the Keychain prompts and the owner's decisions; `PLAN.md`, "Where Phase 0
+  stands", tracks each.
 
 ## State of the project, up to 2026-09-28
 
@@ -393,11 +430,6 @@ Built, by the old measure (each has open findings in `PLAN.md`):
   audit of those two patches (HANDOFF trap 46) found seven helpers with tests and
   no surface; patch 0055 cut them.
 
-Read `docs/HANDOFF.md` before touching anything — it carries the working loop,
-every dev parameter, and the traps already paid for, numbered contiguously and cited
-by number across the docs (`tooling/check-repo traps` keeps both true). `docs/ARC-ROUND2.md` is
-the operator-feedback ledger; `docs/UI-SPEC.md` the measured Arc match.
-
 Released: `v0.2.0-beta.4` (2026-09-05, published from this repo with
 `tooling/publish-release`), unsigned (M7 waits on Apple). It carries rounds 5,
 6 and 7, the round-7 second pass included. Published from Windows: `v0.2.0-beta.5`
@@ -419,57 +451,13 @@ previous pin, 153.0.8010.53, and `v0.2.0-beta.7` (153.0.8010.48) the one before.
 met (cold +2.3%, warm −2.0%, memory +0.0% over vanilla).
 
 
-## The hand-over note of 2026-09-28 (as it stood)
+## The hand-over note of 2026-09-28 (summary)
 
-*Since: the sanitizer runs were done on the PC on 2026-09-30 and the Mac-only migration and
-keychain checks on 2026-10-01 (above); releases resumed with beta 9; and real input is used
-with the operator's yes through a guarded driver (`docs/HANDOFF.md`, trap 27), where this
-note says never to inject input while someone is at the machine.*
-
-Until Phase 1 of `PLAN.md` is done, `PLAN.md` sets the order of work; after it,
-`BACKLOG.md` does. `v0.2.0-beta.4` is out (unsigned, 2026-09-05): rounds
-5, 6 and 7 — the Arc parity work, the Zen-mods plan in full
-(`docs/ROUND6-PLAN.md`, patches 0016–0036), the operator's six from beta 3, the
-Arc one-click import, and the second pass on the operator's replies the same
-evening (patches 0037–0038 and fixups into 0001, 0002). `v0.2.0-beta.5` is
-out with round 8 and M8's first slice as the Windows preview alone, and
-`v0.2.0-beta.6` is out on both platforms: from Windows with round 9 on
-2026-09-10, the macOS image added from the Mac the same day.
-`v0.2.0-beta.7` (2026-09-16) is the Mac image of pin 153.0.8010.48 with
-independent sessions, and `v0.2.0-beta.8` (2026-09-18) the Mac image of
-153.0.8010.53 with the audit's fixes; the Windows installer for a current tag is
-still to join it (`S-56`).
-
-**Whoever picks this up next** (state as of 2026-09-28): read `docs/HANDOFF.md`
-first, then `PLAN.md`, which sets the order of work until its Phase 1 is done. The
-owner's decisions on it are at the top of `PLAN.md` and override its earlier
-recommendations (horizontal tab mode stays, and must work). The loop, the dev
-parameters and the traps are in HANDOFF, including `tooling/capture-state` (a
-capture that needs neither the keyboard nor the pointer, trap 29), the rule that a
-release sweep runs Chromium's own suites around what the series touches (trap 31),
-and what a vanished checkout costs (trap 44). `tooling/dev status` says whether the
-checkout and the test binaries exist; `tooling/check-pin` says how far behind
-stable the pin is. Stedding's own browser tests, which click real rows in a real
-window, are `stedding_browser_tests` (`chrome/test/stedding/` in the checkout).
-Patch 0057 finished Phase 0's code and proved each item it could on a real build
-(the status block at the top of `PLAN.md` lists what each item still waits on).
-From 2026-09-29 the work continues on the Windows build machine. The series is on
-the pin there, built, and its unit sweep and browser tests pass on Windows (PLAN.md,
-*Windows run*; `docs/HANDOFF.md`, "The Windows build" and traps 53-55). What is
-left there is the ASan and dangling-pointer runs, which need a second output
-directory the owner has to give, and a look at Win+V's own list. The Mac-only
-items (the keychain and the profile migration on a beta 8 profile, VoiceOver, the
-managed-policy Mac) wait for the Mac.
-Nothing is released until `PLAN.md`'s Phase 0 is done: the profile migration and
-the keychain copy must be proven on a real beta-8 profile first.
-
-The website is finished and live (see *Site* above); what remains there is one
-dashboard step for the owner, the www redirect (`S-59`). Keep README, `docs/INSTALL.md`,
-`docs/SHORTCUTS.md` and `docs/FAQ.md` true after every release: they are the
-product's front door, written for people, and the site takes its facts from them.
-
-How to work here is `docs/HANDOFF.md`: the loop, the dev parameters that recreate
-any state for a capture, and the traps. Two rules that cost the most when broken:
-never edit the checkout while a build runs, and never inject input while someone
-is at the machine (`tooling/capture-state` needs neither the keyboard nor the
-pointer).
+The note left on the Mac before the PC took over said: read `docs/HANDOFF.md`, then
+`PLAN.md`; nothing is released until Phase 0 is done, and the profile migration and the
+keychain copy are proven on a real beta 8 profile first; the sanitizer runs wait for a
+second output directory; never edit the checkout while a build runs, and never inject input
+while someone is at the machine. All of it was done or replaced in the days after: the
+sanitizer runs on the PC on 2026-09-30, the migration and keychain on the Mac on 2026-10-01,
+releases from beta 9, and real input with the operator's yes through a guarded driver
+(`docs/HANDOFF.md`, trap 27).

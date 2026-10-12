@@ -1,6 +1,6 @@
 # 0018 — Windows: Chromium's own installer, per user, under Stedding's name
 
-Status: accepted
+Status: Accepted
 Date: 2026-09-09
 
 ## Context

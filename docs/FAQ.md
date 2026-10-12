@@ -52,12 +52,10 @@ signed (`S-74`).
 The rest of the Windows port (little windows, signing, updates), then Linux. Alongside
 them, things Arc never had: ad and tracker blocking built in, tracking parameters
 stripped from every link you open, web apps keeping their own shortcuts, shortcuts you
-can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player,
-Peek rebuilt, and import from Dia. Arc's own features still to come include folders
-inside the pinned list and Collapse Pinned Tabs. Undo after closing tabs and several
-smaller items are built for the next release. The order is [BACKLOG.md](../BACKLOG.md)
-(`S-88` to `S-101` and `S-107` to `S-126`); the milestone for what is past Arc is M10 in
-[ROADMAP.md](ROADMAP.md).
+can change, child tabs, the sidebar on the right, a mini player, Peek rebuilt, and import
+from Dia. Arc's own features still to come include folders inside the pinned list. The
+order is the Features section of [BACKLOG.md](../BACKLOG.md); the milestone for what is
+past Arc is M10 in [ROADMAP.md](ROADMAP.md).
 
 **Does it run on Intel Macs? On Linux?**
 Not yet. Today: macOS on Apple silicon and Windows x64 (a preview). Linux is the next
@@ -81,7 +79,9 @@ Then ⌘S (Ctrl+S on Windows) hides it and the page fills the window, with no bo
 Move the pointer to the window's left edge and the sidebar slides back over the
 page; ⌘S brings it back for good. The command bar's actions (⇧⌘P) have "Hide
 Sidebar", "Collapse Sidebar to Icons" and "Show Sidebar". The same Sidebar section
-sets the tab rows' height, the text size and the sidebar's width.
+sets the tab rows' height, the text size and the sidebar's width (a double click on the
+sidebar's edge returns it to the default), and **Page flush against the window** takes
+away the margin and rounded corners around the page while the sidebar shows.
 
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Bookmarks you import stay bookmarks, in the bookmark
@@ -94,14 +94,20 @@ Switched off. It opened a link from a pinned tab over the window, but its page c
 blank, so it is off until it is rebuilt together with little windows (`S-93`).
 
 **What happens to tabs I do not close?**
-From the next release, nothing, until you choose a time: Settings → Stedding → Tabs →
-**Archive tabs nobody has looked at for** (6 hours to 7 days), the welcome flow's
-**Choose how Stedding behaves** step, or the command bar's "Archive idle tabs after".
-Then unpinned tabs nobody has looked at for that long move to the Archived view at the
-bottom of the sidebar, grouped by day and Space; restore any of them with a click. Beta
-13 archives after 12 hours unless you changed it; on update, a profile that never changed
-it stops archiving and one that chose a time keeps it. Pinned tabs never archive; ⌘W puts
-a pinned tab to sleep instead of closing it.
+Nothing, until you choose a time: Settings → Stedding → Tabs → **Archive tabs nobody has
+looked at for** (6 hours to 7 days), the welcome flow's **Choose how Stedding behaves**
+step, or the command bar's "Archive idle tabs after". Then unpinned tabs outside folders
+that nobody has looked at for that long move to the Archived view at the bottom of the
+sidebar, grouped by day and Space; restore any of them with a click. This is so since
+beta 14; earlier betas archived after 12 hours, and on update a profile that never changed
+the setting stops archiving while one that chose a time keeps it. Pinned tabs never
+archive; ⌘W puts a pinned tab to sleep instead of closing it.
+
+**I closed a tab by mistake. How do I get it back?**
+The toast that appears after a close has **Undo**: it puts the tabs back in their Space
+and folder. ⇧⌘T (Ctrl+Shift+T) reopens closed tabs one at a time, also after the toast
+has gone. Settings → Stedding → Tabs → **Offer Undo after closing tabs** turns the toast
+off. Since beta 14.
 
 **Is there sync?**
 No service, by design: there is no account anywhere in the product. Instead a Space
@@ -169,5 +175,5 @@ fork experience are welcome too. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 Use GitHub's private vulnerability reporting on the repository's Security tab
 ([SECURITY.md](../SECURITY.md)). Please do not open a public issue for it.
 
-**I am an AI agent or a new contributor. Where do I start?**
+**I am a new contributor. Where do I start?**
 [AGENTS.md](../AGENTS.md), then [HANDOFF.md](HANDOFF.md).

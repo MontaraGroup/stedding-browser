@@ -206,8 +206,8 @@ public 1.0 release, the codec licence terms are recorded per
 13. Used for real on the platform being released, from the installer a user gets: a fresh
     profile, the first launch and its welcome flow, light and dark, a click on every kind of
     row, the gestures the specs name, with the real pointer and keyboard
-    (`docs/AGENT-LOOP.md`, "Real use"). Every suite passed the build that first had this
-    done to it and five faults were on screen (`docs/HANDOFF.md`, trap 58).
+    (`docs/AGENT-LOOP.md`, "Real use, safely"). Every suite passed the build that first had
+    this done to it and five faults were on screen (`docs/HANDOFF.md`, trap 58).
 14. Both suites clean with DCHECKs and the dangling-pointer detector on
     (`STEDDING_TEST_OUT=win-checks tooling/dev test all --no-build` on Windows), and the
     lifetime suites clean under ASan. A build that stops at its first window on a DCHECK has

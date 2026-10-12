@@ -1,6 +1,6 @@
 # 0019 — Independent Space sessions are StoragePartitions, not Chrome profiles
 
-Status: accepted
+Status: Accepted
 Date: 2026-09-16
 
 ## Context

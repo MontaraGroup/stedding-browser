@@ -13,16 +13,16 @@ below always means: a fresh macOS user account can install the artifact and run 
 without developer tools, without terminal commands, and without reading build docs
 (Windows/Linux equivalents apply from M8/M9 on).
 
-**Where this stands (2026-10-11):** the current release is `v0.2.0-beta.13` on Chromium
+**Where this stands (2026-10-12):** the current release is `v0.2.0-beta.14` on Chromium
 155.0.8059.12, a Windows x64 preview (unsigned) out first, its macOS image to follow from
 the Mac; until it does, beta 12's macOS image (Apple silicon, signed and notarized, as every
-macOS image is from beta 10 on) is the current one. The ladder was climbed out of order,
+macOS image is from beta 10 on) is the newest one. The ladder was climbed out of order,
 chasing feedback from real use (`docs/ARC-ROUND2.md`), and each feature's own spec under
 `docs/features/` is the record of what passes. `PLAN.md` is the finish-or-cut pass over the
 features of M2 to M6 that the 2026-09-26 audit asked for; its items keep their own ids there
-and are not repeated here. Patch 0060, built and in test but in no release yet, closes twelve
-`BACKLOG.md` ids and three parts of `S-125` (BACKLOG's Done table). In short, with every open
-`BACKLOG.md` id under the milestone it belongs to:
+and are not repeated here. Beta 14's patches 0060 and 0061 closed sixteen `BACKLOG.md` ids
+and three parts of `S-125` (BACKLOG's Done table). In short, with every open `BACKLOG.md` id
+under the milestone it belongs to:
 
 | Milestone | State | Open in `BACKLOG.md` |
 |---|---|---|
@@ -36,11 +36,11 @@ and are not repeated here. Patch 0060, built and in test but in no release yet, 
 | M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first | `S-74`, `S-49`, `S-59` |
 | M8 Windows | A preview with every feature, Arc's keys for Windows and a per-user installer; little windows, signing, updates and CI open | `S-56`, `S-55`, `S-71`, `S-72`, `S-81` |
 | M9 Linux | Not started; there is no Intel Mac build either | -- |
-| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura; seven of them, and three parts of `S-125`, built since patch 0060 (unreleased) | `S-88` to `S-96`, `S-98` to `S-101`, `S-118`, `S-125` |
+| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura; seven of them, and three parts of `S-125`, built in beta 14 | `S-88` to `S-96`, `S-98` to `S-101`, `S-118`, `S-125` |
 | 1.0 quality gate | Not reached | `S-61` (the rows `docs/PRODUCT.md` marks [1.0] that no milestone names: the Library, the mini player), `S-66`, `S-106`, `S-128`, `S-129` (spec rows short of a test or a look) |
 
-Outside the ladder: `S-47` (a capture probe), `S-58` (the Mac's disk) and `S-105` (beta 13's
-macOS image, a release step).
+Outside the ladder: `S-47` (a capture probe), `S-58` (the Mac's disk) and `S-105` (the macOS
+image of betas 13 and 14, a release step).
 
 ---
 
@@ -315,22 +315,18 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-11):** the preview ships with beta 13 on 155.0.8059.12. Both
+**Where this stands (2026-10-12):** the preview ships with beta 14 on 155.0.8059.12. Both
 suites passed with DCHECKs and the dangling-pointer detector on and under AddressSanitizer
-on 2026-09-30, and with DCHECKs and the detector again on the series through patch 0059 on
-2026-10-11, after one fix; ASan has not run on 0058 and 0059 yet (`S-106`). A second release on one Chromium number installs as a repair that needs
-Stedding closed (`S-72`). The history: the series builds and runs on Windows (round 8,
-patch 0039): the Stedding window with its sidebar, Spaces, folders, the command bar,
-archive and routing, the address row under the window's own caption buttons and
-measured to the Mac's geometry. Since 2026-09-09: branding -- the name, the icon,
-`%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM classes and sandbox
-prefix (N3–N4) -- and the installer's tooling, Chromium's `mini_installer` from the
-`win-release` configuration (ADR 0018), built, installed and uninstalled on the build
-machine and published with beta 5 as a preview (N6). Since 2026-09-10: Arc's keyboard
-for Windows (N7, patch 0043) with round 9's look at the preview, published as beta
-6. Not done: little windows and links from other applications, signing and
-SmartScreen, updates, CI, Windows performance budgets, and importing from Arc for
-Windows (`BACKLOG.md` S-81). `BACKLOG.md` S-56.
+on 2026-09-30, and with DCHECKs and the detector again on the series through patch 0061 on
+2026-10-11, after one fix; ASan has not run on 0058 to 0061 yet (`S-106`). A second release
+on one Chromium number installs as a repair that needs Stedding closed (`S-72`). Built so
+far: the series and the Stedding window on Windows (round 8, patch 0039); branding -- the
+name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM classes and
+sandbox prefix (N3–N4) -- and Chromium's `mini_installer` from the `win-release`
+configuration (ADR 0018), a preview since beta 5 (N6); Arc's keyboard for Windows (N7,
+patch 0043). Not done: little windows and links from other applications, signing and
+SmartScreen, updates, CI, Windows performance budgets, and importing from Arc for Windows
+(`BACKLOG.md` S-81). `BACKLOG.md` S-56.
 
 Scope:
 
@@ -386,7 +382,7 @@ Scope, by area (`BACKLOG.md` ids):
   second (`S-90`); shortcuts the user can change, with a conflict check (`S-91`, the 1.0 item
   `docs/PRODUCT.md` §12 names).
 - **Tabs:** child tabs under their opener, Back returning to it (`S-92`); Undo after closing
-  tabs (`S-97`, built since patch 0060, unreleased); a page open in another window offers
+  tabs (`S-97`, built in beta 14); a page open in another window offers
   "Show here / Go to window" (`S-94`).
 - **Sidebar:** on the right, as a setting (`S-96`); History and Downloads as panels in its
   column (`S-98`); the mini player for a video you leave (`S-95`); Space colours and icons
@@ -401,12 +397,12 @@ Scope, by area (`BACKLOG.md` ids):
   picture by key (`S-122`); a resize bar on the sidebar's edge and a double click to reset
   it (`S-123`); the page flush against the window with the sidebar open (`S-124`); a handful
   of small conveniences (`S-125`). `S-119` to `S-124` and three of `S-125`'s conveniences
-  are built since patch 0060 (unreleased).
+  are built in beta 14.
 
 The same read found Arc behaviour that `docs/PRODUCT.md` puts at 1.0 with no item until
 then; those sit under their own milestones above, not here: folders in the pinned run
-(`S-107`), inline completion (built since patch 0060) and Site Search in the command bar
-(`S-108`, `S-109`), loading only the selected tab at launch (`S-110`), tabs sleeping on a
+(`S-107`), inline completion and Site Search in the command bar (`S-108`, `S-109`, both
+built in beta 14), loading only the selected tab at launch (`S-110`), tabs sleeping on a
 timer (`S-111`), the tab
 selected after a close (`S-112`), a split made by dragging a row onto the page (`S-113`), and
 routing rules edited in Settings (`S-126`). What was read and left out, and why, is in ADR

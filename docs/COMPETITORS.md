@@ -125,10 +125,10 @@ rebindable shortcuts; a video you leave playing moving into the sidebar; Peek an
 windows as one page that becomes a tab without reloading; "this page is open in another
 window: show here / go to window"; the sidebar on the right; closed tabs reopened from a
 stack kept across launches; History and Downloads in the sidebar; import from Dia and
-Safari's export file. A second read of its code the same day added smaller things: inline
-completion and Tab-to-search chips in its command bar, folders inside the pinned list, a
-launch that loads only the last tab, tabs that sleep on a timer, one panel of site
-controls, and folder and pin verbs. It also carries AI
+Safari's export file. A second read of its code the same day added smaller things:
+folders inside the pinned list, a launch that loads only the last tab, tabs that sleep on
+a timer and one panel of site controls; its inline completion, Tab-to-search chips and
+folder and pin verbs have Stedding counterparts since beta 14. It also carries AI
 features (a sidebar chat, a tab organizer, an agent-control server) that ADR 0020 keeps out
 of Stedding. The ideas Stedding takes are rebuilt from these descriptions, never from its
 files (ADR 0021; `docs/ROADMAP.md` M10).
@@ -215,7 +215,8 @@ Honesty section. As of 2026-10-05:
   treadmill that has broken larger teams. Until we demonstrate months of on-time
   stable rebases, trusting us with your daily browsing is a leap.
 - **No sync.** Google Sync is unavailable to Chromium forks (see PRIVACY.md), and
-  our own sync does not exist yet. Multi-device users lose real functionality.
+  Stedding runs no sync service: a Space moves between machines as a file.
+  Multi-device users lose real functionality.
 - **Small team, bus factor.** Brave has a company behind it; Zen has a large
   community. We have neither yet. The BSD license is the mitigation — anyone can
   pick up the work — but a license is not a maintainer.

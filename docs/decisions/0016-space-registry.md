@@ -1,6 +1,6 @@
 # 0016 — One sidebar for every window: the SpaceRegistry
 
-Status: accepted
+Status: Accepted
 Date: 2026-09-05
 
 ## Context

@@ -4,8 +4,9 @@
 > 2026-10-02): what each round found, what was fixed and how it was checked. Rounds 8 to 11
 > follow in the order they were written, not by number. It is kept because feature specs,
 > patches and release notes cite its rounds and rows. It is not a list of open work: what
-> stayed open went to `PLAN.md` and `BACKLOG.md`. The operator's pass on beta 12 (2026-10-10
-> and 11) has no round here; it is in `PLAN.md`'s status blocks and `docs/PROJECT-LOG.md`.
+> stayed open went to `PLAN.md` and `BACKLOG.md`. The operator's passes after round 11 (on
+> beta 12, patch 0059, and after beta 13, patches 0060 and 0061) have no round here; they are
+> in `docs/PROJECT-LOG.md`.
 
 Nine defects from real use, windowed and fullscreen, compared against Arc
 fullscreen. Each gets fixed and verified by capture; this file tracks status.
@@ -22,8 +23,7 @@ fullscreen. Each gets fixed and verified by capture; this file tracks status.
 | 8 | Clear line position | **Fixed** — Clear lives on TabStripView's pinned/unpinned separator, which now shows whenever both exist (patch 0004) | done |
 | 9 | Pin tiers | **Fixed** — Chromium pin = essentials (grid, global); new per-Space pin in SpaceModel, persisted and restored, Clear skips it, tab context menu carries Pin/Unpin to This Space (patch 0004) | done |
 
-Method: grok researches seams read-only; implementation and every visual check
-here. No fix is done until a capture shows it.
+Method: no fix is done until a capture shows it.
 
 
 ## Round 3 — folders and colours (operator request, 2026-09-01)

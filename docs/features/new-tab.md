@@ -1,8 +1,8 @@
 # Feature: New tab page
 
-Status: **N1–N5 built**; **N6–N8 planned**.
-Owner docs: `docs/PRIVACY.md` (no request on a new tab), `docs/UI-SPEC.md`. Patch: `0003`
-(the de-Google patch: default search, choice screen, local new tab page).
+Status: **N1–N5 built**; **N6–N8 planned** (BACKLOG S-61).
+Owner docs: `docs/PRIVACY.md` (no request on a new tab), `docs/UI-SPEC.md`. Patches: `0003`
+(the de-Google patch: default search, choice screen, local new tab page), `0044` (N1 with Google).
 
 The new tab page is Chromium's local "third-party" page, always, whatever the default
 search engine offers: nothing on it leaves the machine. It is a calm place to press the
@@ -12,11 +12,11 @@ command-bar shortcut, not a feed.
 
 | Id | Behaviour | Test | State |
 |---|---|---|---|
-| N1 | A new tab opens the local page, never a search engine's remote new tab page, whichever engine is the default -- Google included: Chromium's first-party page for Google (its logo, the OneGoogleBar, the theme and Web Store promos) was what a Google choice on the welcome flow opened until 2026-09-10 (`S-45`, patch 0044). | `search.cc` hunk (`kUseProviderNewTabPage`, the third-party page for every provider); live: `tooling/drive` on a fresh profile with DuckDuckGo shows the local page; `w10_ntp_google` (Google chosen, Windows, 2026-09-10) | built |
+| N1 | A new tab opens the local page, never a search engine's remote new tab page, whichever engine is the default, Google included (`S-45`). | `search.cc` hunk (`kUseProviderNewTabPage`, the third-party page for every provider); live: `tooling/drive` on a fresh profile with DuckDuckGo shows the local page; `w10_ntp_google` (Google chosen, Windows, 2026-09-10) | built |
 | N2 | A fresh profile has no Chrome Web Store shortcut; the shortcut row shows only sites the user visited. | live: capture of a fresh profile shows no tile | built |
 | N3 | The page says how to open the command bar, using the platform's own shortcut glyphs (⌘T on macOS, Ctrl+T elsewhere); the "Stedding" settings section can turn the line off. | live: capture; `tooling/probes/ntp.json`; settings T4 | built |
 | N4 | The page's background follows the theme (sand in light, the gradient's ground in dark), with no hard-coded Google colours. | `tooling/probes/ntp.json` | built |
 | N5 | A setting hides the shortcut row entirely, for users who want Arc's empty page. | settings T5 (live) | built |
-| N6 | Space home: a new tab in Space S lists that Space's pins, recents and yesterday's archive. No feed, no network (N1). | `MorningDigestTest.CardIsForTheTabsSpace` (not written yet) | planned |
-| N7 | Morning card: after local midnight, one card of local facts (archived, slept with a recorded reason, downloads started in S). Counts and titles, never a generated paragraph. Off-able. | `MorningDigestTest.EmptySpaceHasNoCard` (not written yet) | planned |
-| N8 | Isolated visits do not rank in ⌘T of another Space unless a modifier is held (command bar K19). | its own test is not written yet; `SpaceQueryTest.AtSpacePrefixFiltersOpenAndArchived` proves only commandbar K19's `@Space` prefix | planned |
+| N6 | Space home: a new tab in Space S lists that Space's pins, recents and yesterday's archive. No feed, no network (N1). | `MorningDigestTest.CardIsForTheTabsSpace` (not written yet) | planned · BACKLOG S-61 |
+| N7 | Morning card: after local midnight, one card of local facts (archived, slept with a recorded reason, downloads started in S). Counts and titles, never a generated paragraph. Off-able. | `MorningDigestTest.EmptySpaceHasNoCard` (not written yet) | planned · BACKLOG S-61 |
+| N8 | Isolated visits do not rank in ⌘T of another Space unless a modifier is held (command bar K19). | its own test is not written yet; `SpaceQueryTest.AtSpacePrefixFiltersOpenAndArchived` proves only commandbar K19's `@Space` prefix | planned · BACKLOG S-61 |

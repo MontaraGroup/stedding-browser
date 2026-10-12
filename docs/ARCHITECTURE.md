@@ -31,7 +31,8 @@ time. The pin is updated deliberately, never implicitly — see
 ### Patch discipline
 
 - **One logical change per patch.** A patch does one thing: adds one flag, reroutes one
-  service, brands one surface. Never a grab-bag.
+  service, brands one surface. Never a grab-bag; the one exception, a round of operator
+  feedback that touches many features at once, is described in `patches/README.md`.
 - **Every patch carries a header**: what it does, why it exists, and what would let
   us delete it (e.g. an upstream flag landing) — as `Why:` and `Removable when:` in
   the commit message, which `tooling/update-patches` refuses to export without. Which

@@ -89,8 +89,10 @@ preselects nothing, and no engine has paid for placement — no search deal exis
 if that ever changes it will be disclosed in this document and in release notes
 before shipping. Until the user chooses, the default is DuckDuckGo, in every region:
 a query typed before a choice -- the welcome's search step skipped, say -- goes to
-DuckDuckGo and nowhere else. Search suggestions (sending keystrokes to the chosen
-engine) are off by default and can be turned on in Settings → Stedding → Privacy.
+DuckDuckGo and nowhere else. A skipped step also brings Chromium's own "Choose your
+search engine" dialog over the first page (`BACKLOG.md` S-134). Search suggestions
+(sending keystrokes to the chosen engine) are off by default and can be turned on in
+Settings → Stedding → Privacy.
 
 ### Safe Browsing — does not work in these builds
 
@@ -132,19 +134,16 @@ folder by hand if you do not want to keep it, or import one of its files with
 ### A Space's own cookies and Delete browsing data
 
 A Space with an independent session keeps its cookies, cache and site data in a
-jar of its own on this disk (`features/sessions.md`). In every beta up to 8,
-**Delete browsing data** did not reach those jars: the dialog reported the data
-gone while each such Space stayed signed in, and so did the jar a Space keeps
-while its independent session is switched off. The same was true of
-`chrome.browsingData` and of deleting one site's data. The fix makes every removal
-that names no jar run again for each Space's jar, with the same time range and the
-same sites (sessions S24, PLAN.md SPC-11). Beta 9 and later carry the fix (on the Mac,
-beta 10 and later). On beta 8 or earlier, use **Clear Independent Session** on the
-Space, or delete the Space.
+jar of its own on this disk (`features/sessions.md`). **Delete browsing data**,
+`chrome.browsingData` and deleting one site's data reach every Space's jar, with the
+same time range and the same sites (sessions S24), from beta 9 on (on the Mac, beta 10).
+On beta 8 or earlier they did not: use **Clear Independent Session** on the Space, or
+delete the Space.
 
-Chromium also clears out unused storage after an extension or app is removed, and
-that clean-up could delete the jar of a Space with no tab open, cookies and all
-(sessions S25, PLAN.md SPC-10). The same builds keep the jars.
+**Clear Site Cookies and Reload** (⌥⇧⌘R, Ctrl+Alt+Shift+R, or the command bar; since beta
+14) deletes the cookies of the page's site from the jar that tab uses and no other, then
+reloads it; site storage, cache, history and passwords stay (`features/commandbar.md`
+K24).
 
 ### Google account sync — not available
 

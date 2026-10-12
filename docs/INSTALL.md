@@ -4,8 +4,6 @@ Stedding ships as beta pre-releases on the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). Each
 release carries a file for each platform it was built for, and a SHA-256 checksum for
 each. Not every release has both: take the newest one with a file for your platform.
-Beta 13 is the Windows installer until its macOS image is added; until then the current
-macOS image is beta 12's.
 
 The macOS image is signed with the project's Developer ID and notarized by Apple from
 beta 10 on, so it opens like any other app. The Windows installer is **not code-signed
@@ -22,10 +20,6 @@ Macs are not supported yet.
 2. Open the DMG and drag **Stedding** into **Applications**.
 3. Open Stedding. macOS checks Apple's notarization once and opens it.
 
-Betas up to beta 8 were not signed and needed a Terminal command
-(`xattr -dr com.apple.quarantine /Applications/Stedding.app`) before the first launch;
-from beta 10 on that step is gone.
-
 ### Verifying the download
 
 The release notes list a SHA-256 for each file. In Terminal:
@@ -39,21 +33,19 @@ The number must match the one in the notes exactly.
 ### Where your data is
 
 Your profile — tabs, Spaces, history, passwords, extensions — lives in
-`~/Library/Application Support/Stedding`. Mac builds up to beta 8 kept it in
-`~/Library/Application Support/Chromium` by mistake, a folder any Chromium on the
-same Mac also uses. The first launch of a later build copies that profile into
-Stedding's own folder, if that folder holds no profile yet, and leaves the old one as
-it was. If another browser is using the old folder at that moment, Stedding asks
-first: **Quit**, close the other browser and open Stedding again to bring the profile
-across, or **Start a New Profile** and leave the old one where it is. Keep the old
-folder until you have checked that your tabs and Spaces came across. **Export Space…**
-in Settings → Stedding → Spaces writes a Space to a file you can keep or move to another
-machine.
+`~/Library/Application Support/Stedding`. **Export Space…** in Settings → Stedding →
+Spaces writes a Space to a file you can keep or move to another machine. Saved passwords
+are encrypted with a key kept in the macOS keychain under the name "Stedding Safe
+Storage".
 
-Saved passwords are encrypted with a key kept in the macOS keychain under the name
-"Stedding Safe Storage". Builds up to beta 8 used the item "Chromium Safe Storage"; a
-later build copies that key under Stedding's name once, so macOS may ask one time for
-access to the Chromium item.
+Coming from beta 8 or earlier: those builds kept the profile in
+`~/Library/Application Support/Chromium` and the key in "Chromium Safe Storage". The
+first launch of a later build copies the profile into Stedding's own folder, if that
+folder holds no profile yet, and leaves the old one as it was; if another browser is using
+the old folder then, Stedding asks you to **Quit** and close it, or to **Start a New
+Profile**. It copies the key once too, so macOS may ask one time for access to the
+Chromium item. Keep the old folder until you have checked that your tabs and Spaces came
+across.
 
 ### Updating
 
@@ -92,28 +84,36 @@ The profile is under `%LOCALAPPDATA%\Stedding\User Data`. Export works as on mac
 ### Updating and uninstalling
 
 Close Stedding, then run the new installer over the old version; the profile is kept. When
-the new release is on the same Chromium number as the one installed (betas 9, 10, 12 and
-13 are all 155.0.8059.12) the installer repairs in place and cannot replace the files of
-a running Stedding, so it has to be closed (a release on a different Chromium number is added
-beside the old version, which is how beta 6 became beta 9). Uninstall from **Settings → Apps**,
-as with any app.
+the new release is on the same Chromium number as the one installed (the release notes
+name it) the installer repairs in place and cannot replace the files of a running
+Stedding, so it has to be closed. Uninstall from **Settings → Apps**, as with any app.
 
 ### What the Windows preview does not have yet
 
 The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctrl and
 Alt, the name and icon, and a per-user installer. Still open: little windows for links
-from other apps, signing, and automatic updates (`S-56`); the two-finger Space swipe
-(`PLAN.md` TAB-31); and importing from Arc, whose Windows files Stedding does not read
-yet (`S-81`).
+from other apps (they open as tabs), signing, and automatic updates (`S-56`); the
+two-finger Space swipe (`PLAN.md` TAB-31); and importing from Arc, whose Windows files
+Stedding does not read yet (`S-81`).
 
 ## First start
 
-The first window opens the welcome flow: choose a search engine; import from Arc (on a
-Mac), or through Chromium's importer from Safari (bookmarks) or Firefox (bookmarks and history)
-on macOS, and from Firefox, Internet Explorer or the old Edge on Windows; pick a Space
-colour; set Stedding as the default browser if you want; and see the keyboard
-shortcuts. Chrome, Brave and the new Edge cannot be imported yet. Each choice can be
-changed later in Settings.
+The first window opens the welcome flow, six steps, each one skippable (five before beta
+14, which added step 4):
+
+1. Choose a search engine.
+2. Import from Arc (on a Mac), or through Chromium's importer from Safari (bookmarks) or
+   Firefox (bookmarks and history) on macOS, and from Firefox, Internet Explorer or the old
+   Edge on Windows. Chrome, Brave and the new Edge cannot be imported yet.
+3. Pick the colour scheme (system, light or dark) and a Space colour.
+4. Choose how Stedding behaves: whether idle tabs are archived (Never until you choose),
+   whether the closed sidebar shrinks to icons or hides, and whether a Space sleeps after
+   you leave it.
+5. Set Stedding as the default browser if you want.
+6. See the keys worth knowing.
+
+Each choice can be changed later in Settings. If you skip the search engine step,
+Chromium's own "Choose your search engine" dialog opens on the first page (`S-134`).
 
 ## Linux
 

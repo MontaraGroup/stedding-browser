@@ -1,6 +1,6 @@
 # 0017 — Privacy defaults are preference defaults, in one block
 
-Status: accepted
+Status: Accepted
 Date: 2026-09-05
 
 ## Context

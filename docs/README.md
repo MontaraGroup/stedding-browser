@@ -28,7 +28,7 @@ Everything under `docs/`, grouped by who it is for.
 | [ARC-ROUND2.md](ARC-ROUND2.md) | The ledger of what real use turned up on each build, round by round, and what changed |
 | [../BACKLOG.md](../BACKLOG.md) | The one list of open work |
 
-## For contributors and AI agents
+## For contributors
 
 | Document | Contents |
 |---|---|

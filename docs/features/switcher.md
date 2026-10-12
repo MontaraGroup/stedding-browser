@@ -1,6 +1,6 @@
 # Feature: Recent-tabs switcher
 
-Status: **X1–X5 built** (round 6, `docs/ROUND6-PLAN.md` R6-12, patch 0023).
+Status: **X1–X5 built**.
 Owner docs: `docs/PRODUCT.md` §1. Patch: 0023.
 
 ⌃⇥ walks the most recently used tabs of the active Space; a tap goes to the
@@ -20,7 +20,7 @@ On Windows every chord below is the Mac's with ⌘ read as Ctrl and ⌥⌘ as Ct
 | X4 | ⌥⌘↑ / ⌥⌘↓ select the previous / next visible row (SelectRelativeTab already skips hidden tabs); ⌥⇧⌘↑ / ⌥⇧⌘↓ move the active row within its container, folder-aware (MoveTabRelative). | TabStripModelTest.MoveTabRelativeStaysInsideItsFolder (a row inside a folder stays inside; a folder beside a row is one row to jump; Chromium's group rules apply where no folder is involved). | built |
 | X5 | Setting off returns ⌃⇥ to sidebar order (IDC_CYCLE_TO_NEXT_TAB as today). | SpaceWindowTest.CtrlTabSettingOffUsesStripOrder. | built |
 
-## Notes from the build (2026-09-05)
+## Notes
 
 - The history lives in `SpaceModel` beside `last_active_`: one vector of tab
   handles per Space, most recent first, capped at 40; the strip and ⌃⇥ read the
@@ -28,9 +28,8 @@ On Windows every chord below is the Mac's with ⌘ read as Ctrl and ⌥⌘ as Ct
   `CancelCycle`) freezes the list while ⌃ is down so each step goes one further
   back; the landing tab becomes the most recent when the run ends. Leaving the
   Space ends a run where it is.
-- A fresh window has no history: the live check's first ⌃⇥ found only the active
-  tab and went nowhere. `RecentTabs()` now follows the history with the Space's
-  never-activated tabs in sidebar order (`SpaceWindowTest.RecentTabsFallBackToSidebarOrder`),
+- `RecentTabs()` follows the history with the Space's never-activated tabs in
+  sidebar order (`SpaceWindowTest.RecentTabsFallBackToSidebarOrder`),
   so the strip always has somewhere to go, as Chrome's MRU does with creation times.
 - Chromium's `kCtrlTabMru` stays off; the command controller asks
   `spaces::CycleRecentTab()` first, which declines in popup and private windows

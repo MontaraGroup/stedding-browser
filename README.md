@@ -61,8 +61,8 @@ behind each behaviour, is in [docs/features/](docs/features/).
 
 ## Download
 
-The current release is **0.2.0 beta 13**, built on Chromium 155.0.8059.12 (stable): a Windows
-preview, with the macOS image of beta 13 to follow from the Mac; until then the current macOS
+The current release is **0.2.0 beta 14**, built on Chromium 155.0.8059.12 (stable): a Windows
+preview, with the macOS image of beta 14 to follow from the Mac; until then the current macOS
 image is beta 12's, signed and notarized. Get them from
 [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases):
@@ -93,14 +93,16 @@ Independent Session** on the chip menu signs that Space out of everything at onc
 ![Four Spaces in the switcher at the bottom of the sidebar, each with its own colour](docs/images/readme/spaces.png)
 
 **The command bar.** ⌘T opens one bar for everything: type a URL, a search, or the name
-of any open tab in any Space and jump to it. Type `>` (or ⇧⌘P) for every command with
-its shortcut.
+of any open tab in any Space and jump to it. It completes a site from your history as you
+type, and ⇥ after a site's name searches that site. Type `>` (or ⇧⌘P) for every command
+with its shortcut.
 
 ![The command bar over the page, listing open tabs across Spaces](docs/images/readme/command-bar.png)
 
 **Folders and pinned tabs.** Drag tabs into folders, nest folders, collapse them, rename
 anything in place. A pinned tab remembers its home page: wander away and a slash shows
-it; ⌥-click the favicon, or choose **Reset to Pinned Page**, and you are back.
+it; ⌥-click the favicon, middle-click the row, or choose **Reset to Pinned Page**, and
+you are back.
 
 ![Nested folders and pinned tabs in the sidebar](docs/images/readme/folders.png)
 
@@ -128,6 +130,12 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 
 ## Features
 
+New in beta 14: Undo after closing tabs, auto-archive off by default, a welcome step for
+how Stedding behaves, the folder and pin verbs, ⌃M and ⌥⇧⌘P, the sidebar edge's bar, and
+the command bar's completion, Site Search, New Documents, Close Duplicate Tabs and Clear
+Site Cookies and Reload. Beta 14 is on Windows first; the Mac has them with its beta 14
+image.
+
 **Sidebar and tabs**
 - Vertical tabs at Arc's proportions: an essentials row above every Space, the Space's
   pinned sites, a Clear line, then the tabs. Three tab row heights and a text size.
@@ -135,12 +143,24 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
   the rows and jump with ⌘1–⌘8 (⌘9 is the last row).
 - Sleeping tabs: ⌘W puts a pinned tab to sleep instead of losing it; ⌃⇥ walks the
   Space's most recent tabs.
-- Auto-archive: unpinned tabs nobody has looked at for a time you set move to an
-  **Archived** view, searchable by day and Space, restorable with a click. Beta 13
-  archives after 12 hours by default; from the next release nothing is archived until you
-  choose a time (6 hours to 7 days).
+- Undo after closing tabs: ⌘W, a row's close button, Clear and the other closes show a
+  toast whose **Undo** puts the tabs back in their Space and folder (a switch in
+  Settings → Stedding → Tabs turns it off).
+- Auto-archive, if you want it: choose a time (6 hours to 7 days) and unpinned tabs
+  nobody has looked at for that long move to an **Archived** view, searchable by day and
+  Space, restorable with a click. Since beta 14 it is off until you choose; earlier betas
+  archived after 12 hours.
+- Folders: ⇧⌘E collapses all of a Space's folders or expands them; a folder's menu has
+  **New Tab in Folder** and **Alphabetize**; a collapsed folder shows how many tabs it
+  holds.
+- Pinned tabs: **Edit Pinned Address…** changes a pin's home; **Collapse Pinned Tabs**
+  on the Space's menu hides a Space's pins until you expand them.
+- ⌃M mutes the tab or unmutes it.
 - Split view: ⌥⌘N splits the current tab with a new one; the panes move, pin and sleep
   together.
+- The sidebar's edge shows a bar where it can be dragged, and a double click there
+  returns the sidebar to its default width; a middle click on its empty space opens the
+  command bar.
 
 **Spaces**
 - Per-Space tabs, colour and icon; a chip switcher with drag to reorder; keys for
@@ -151,6 +171,18 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 - Routing: a site opens in the Space it belongs to, with a toast that undoes it.
 - One sidebar for every window; ⌥⇧⌘N opens a blank window with Spaces of its own.
 
+**The command bar**
+- Open tabs from every Space, archived tabs and the address bar's own suggestions in one
+  list; `@Work rust` looks only in the Spaces whose name starts with "Work".
+- Typing completes a site from your history; ⇥ after the start of a search engine's name
+  or keyword makes a chip, and the search goes to that site (the engines are those in
+  Chromium's search engine settings).
+- Actions mode (⇧⌘P) lists every command with its shortcut, among them Close Duplicate
+  Tabs, Clear Site Cookies and Reload (⌥⇧⌘R: only that site's cookies, in the Space's own
+  jar when it has one) and on/off rows for most of Stedding's switches.
+- New Documents: type "new" for a blank Google Doc, Sheet, Slides or Form, Notion page,
+  Figma file, GitHub repository or gist, or Word, Excel or PowerPoint document.
+
 **Little windows**
 - Links from other apps open in a small window of their own (macOS; on Windows they
   open as tabs for now, `S-56`).
@@ -160,9 +192,14 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 **The address row and the page**
 - The page floats on a card; the address row is the top edge of the card in the page's
   own colour, with the address centred and no chrome around it.
+- **Page flush against the window** (Settings → Stedding → Sidebar) drops the card's
+  margin and rounded corners while the sidebar shows.
 - ⇧⌘C copies the link without tracking parameters, ⌥⇧⌘C as Markdown.
 - Screenshots: ⇧⌘2 the visible page, ⌥⇧⌘2 a region, ⇧⌘1 the whole document; PNG to
   Downloads and the clipboard.
+- ⌥⇧⌘P plays the page's video in picture in picture, or brings it back.
+- A hovered link's address shows at the page's corner; a switch in Settings → Stedding →
+  Pages and menus turns it off.
 
 **Import and export**
 - Everything from Arc in one click (see [Moving from Arc](#moving-from-arc)).
@@ -174,6 +211,9 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 - Export a Space as a file, and import a sidebar file. There is no automatic backup.
 
 **Settings and shortcuts**
+- A six-step welcome flow at first start: the search engine, import, appearance, **Choose
+  how Stedding behaves** (auto-archive, the sidebar's closed form, Space sleep), the
+  default browser, and the keys worth knowing.
 - A **Stedding** section first in Settings, one switch per feature, the window's
   Spaces to rename or delete, and the full shortcut reference.
 - Chromium's Google and AI sections are gone; what remains is what the browser does.
@@ -201,6 +241,9 @@ The most used ones. The complete list, for both platforms, is in
 | Jump to one of the first eight rows, or the last with 9 | ⌘1–⌘9 | Ctrl+1–9 |
 | Most recent tab of the Space | ⌃⇥ | Ctrl+Tab |
 | Clear the Space's unpinned tabs | ⇧⌘K | Ctrl+Shift+K |
+| Collapse the Space's folders, or expand them all | ⇧⌘E | Ctrl+Shift+E |
+| Mute the tab or unmute it | ⌃M | Ctrl+M |
+| Reopen closed tabs, one at a time | ⇧⌘T | Ctrl+Shift+T |
 | Split the tab with a new one | ⌥⌘N | Alt+Shift+N |
 | Copy the link (clean) / as Markdown | ⇧⌘C / ⌥⇧⌘C | Ctrl+Shift+C / Ctrl+Alt+Shift+C |
 | Screenshot: page / region / full page | ⇧⌘2 / ⌥⇧⌘2 / ⇧⌘1 | Ctrl+Shift+2 / Ctrl+Alt+Shift+2 / Ctrl+Shift+1 |
@@ -256,18 +299,18 @@ page.
 
 Stedding is an early **beta**. A review of the whole code in September 2026 found many
 defects, some of them in the basics (selecting a tab, the collapsed sidebar, restoring a
-session); betas 9 to 13 carry the fixes so far, and `PLAN.md` lists the rest. What is out
+session); the betas since then carry the fixes so far, and `PLAN.md` lists the rest. What is out
 and what comes next:
 
 | | State |
 |---|---|
-| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 12's, signed and notarized as every macOS image is from beta 10 on; beta 13's follows from the Mac |
-| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs (beta 13's series, 2026-10-11) and under AddressSanitizer (2026-09-30) |
+| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 12's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
+| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and the dangling-pointer detector (beta 14's series) and under AddressSanitizer (the series of 2026-09-30) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
-| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, Undo after closing tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (`S-88` to `S-101`, `S-118` to `S-125`). Undo after closing tabs and several of the smaller items are built for the next release |
+| Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (the Features section of [BACKLOG.md](BACKLOG.md)). Undo after closing tabs and several smaller items are in since beta 14 |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
 Known limits in the current builds: no automatic updates yet, and the Windows installer is
@@ -371,7 +414,7 @@ For the project:
 | [docs/decisions/](docs/decisions/) | Architecture decision records |
 | [BACKLOG.md](BACKLOG.md) | The one list of open work |
 
-For contributors and AI agents: start with [AGENTS.md](AGENTS.md), then
+For contributors: start with [AGENTS.md](AGENTS.md), then
 [docs/HANDOFF.md](docs/HANDOFF.md) (the working loop, the dev parameters, the traps
 already paid for) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The index of
 everything under `docs/` is [docs/README.md](docs/README.md).

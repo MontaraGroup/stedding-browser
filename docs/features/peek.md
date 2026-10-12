@@ -24,7 +24,7 @@ and hands it to the tab strip on promotion.
 
 | Id | Behaviour | Test | State |
 |---|---|---|---|
-| P1 | A link click from a pinned tab to a different site (eTLD+1) opens a peek instead of navigating the tab. | `ShouldPeekTest.LinkToAnotherSiteFromAPinnedTab`; live, before Peek was switched off: `tooling/drive` pins a page with a cross-site link, clicks it, the peek's card appears and the tab's URL is unchanged | partial · off until rebuilt (S-93); the peek shows no page (PLAN.md CMD-9) |
+| P1 | A link click from a pinned tab to a different site (eTLD+1) opens a peek instead of navigating the tab. | `ShouldPeekTest.LinkToAnotherSiteFromAPinnedTab` | partial · off until rebuilt (S-93); the peek shows no page (PLAN.md CMD-9) |
 | P2 | Links that stay on the pinned site (other paths, subdomains, http→https) navigate the tab as always. | `ShouldPeekTest.StayingOnTheSiteNavigatesTheTab`, `PeekThrottleTest.PinnedTabStaysOnItsSite` | partial · off until rebuilt (S-93); the peek shows no page (PLAN.md CMD-9) |
 | P3 | Unpinned tabs are never throttled; the throttle is not even registered for them. | `ShouldPeekTest.UnpinnedTabsFollowLinks`, `PeekThrottleTest.UnpinnedTabIsNotThrottled` | partial · off until rebuilt (S-93); the peek shows no page (PLAN.md CMD-9) |
 | P4 | Typed URLs, script redirects (sign-in bounces) and form posts navigate the pinned tab; only a user's link click peeks. | `ShouldPeekTest.TypedUrlsScriptRedirectsAndPostsNavigateTheTab`, `PeekThrottleTest.ScriptRedirectFromPinnedTabProceeds` | partial · off until rebuilt (S-93); the peek shows no page (PLAN.md CMD-9) |

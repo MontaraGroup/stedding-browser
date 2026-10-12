@@ -28,44 +28,18 @@ synthesis where they differ.
 Every number in this file comes from that material or from the repo; where the material
 is silent the cell says TBD.
 
-## How to continue
+## How it was worked
 
-For the next agent picking this up cold:
-
-1. **Read order.** `AGENTS.md` → `docs/HANDOFF.md` (the traps) → `docs/AGENT-LOOP.md`
-   (the loop) → this file's Decisions and the wave you are in → the item's feature spec
-   in `docs/features/` (a new spec is created from the rows here) → `BACKLOG.md`.
-2. **One item at a time, the loop as written.** research the seam → copy the item's rows
-   into `docs/features/<feature>.md` with State `planned` → write the failing test named
-   in the row → implement → `tooling/dev build` → `tooling/dev test <feature>` → capture
-   (`tooling/dev capture --assert tooling/probes/window.json`; interactive rows through
-   `tooling/drive <profile> <steps>`) → `tooling/dev patch` → commit this repo with the
-   regenerated patches, the spec state and the backlog row in one commit.
-3. **Patches.** The first round-6 patch is `0016`; each wave-1/2 item family gets one new
-   patch, numbered in landing order, and the number is written into the item's Patch line
-   and the spec header when it lands (do not pre-assign). Fixups go **only** into round-6
-   patches (D11); never into the patches that exist today (`tooling/dev status` lists
-   them). Wave-3/4 items follow the same rule.
-4. **The status column.** The wave tables below carry `planned`. Move an item to `built`
-   (with its patch number) when every row's test is green; a row shipped without a test
-   is a `gap` and gets an `S-` id in `BACKLOG.md`. Rows marked `draft` were written by the
-   orchestrator from the critic's text and need a side-by-side check against Arc before
-   their failing test.
-5. **Commands.** `tooling/dev build`, `tooling/dev test <feature>`, `tooling/dev test all`,
-   `tooling/dev capture`, `tooling/drive`, `tooling/dev patch`, `tooling/dev check`,
-   `tooling/dev status` (every count in a doc comes from it).
-6. **Budgets.** Nothing runs unattended past 15 minutes; `tooling/dev build` and `test`
-   print progress every minute and stop themselves; a longer job is asked for and passed
-   `--budget <minutes>`. Never edit the checkout while a build runs. After a failed fold,
-   `git stash list` (HANDOFF trap 13).
-7. **Every new surface** is captured in dark and light with a probe (QUALITY; critic #30)
-   and names a VoiceOver role and a keyboard-only path in its spec before it is `built`
-   (QUALITY accessibility gate; critic #31).
-8. **ADRs** are numbered in writing order (`docs/decisions/README.md`); the synthesis's
-   "0016"/"0017" are placeholders. Wave 4 starts with the registry ADR (R6-31 G0); the
-   privacy ADR is part of R6-26 (Q0).
-9. **Paths** below are relative to the Chromium checkout (`docs/HANDOFF.md` says where it
-   is) or to this repo; `file:line` numbers were read on the pinned tree on 2026-09-04.
+The round's rules, kept for the citations below. One item at a time through the loop
+(`docs/AGENT-LOOP.md`), each item's rows copied into its feature spec as `planned` before
+its failing test. Round 6's patches started at 0016, one per item family, numbered in
+landing order, with fixups only into round-6 patches (D11). A row shipped without a test
+was a `gap` with an `S-` id in `BACKLOG.md`; rows marked `draft` were written from the
+critic's text and checked against Arc before their failing test. Rule 7: every new surface
+was captured in dark and light with a probe (QUALITY; critic #30) and named a VoiceOver
+role and a keyboard-only path in its spec before it was `built` (QUALITY accessibility
+gate; critic #31). Paths below are relative to the Chromium checkout or to this repo, and
+`file:line` numbers were read on the pinned tree on 2026-09-04.
 
 ## Decisions
 
@@ -231,7 +205,7 @@ said otherwise. Each is also in the item's spec.
   (`MotionTest`) and the call sites are reviewed; a frame-level proof needs a faster
   capture path.
 
-#### Wave 2 — landing notes (2026-09-05, in progress)
+#### Wave 2 — landing notes (2026-09-05)
 
 - **Order of landing.** Parts A–E of the wave went into the checkout together on
   2026-09-05 after wave 1's commit: R6-13 R10 (⌘1–9 skip hidden rows), R6-14 M5–M6
@@ -1711,11 +1685,11 @@ numbered point (adopted as a decision, folded into an item, or declined with the
 >
 > 30. [cross-cutting] Light/dark and fullscreen captures are named for 7, 9, 14, 20, 21 but not for the new surfaces in 3 (strip), 4 (badges), 10 (textfield), 13 (archive WebUI), 15 (little-window bar), 18 (pill); QUALITY requires both plus a probe for each.
 >
-> → Disposition: adopted as a rule (How to continue, 7): every new surface captured dark and light with a probe.
+> → Disposition: adopted as a rule (How it was worked, rule 7): every new surface captured dark and light with a probe.
 >
 > 31. [cross-cutting] No item names a VoiceOver role or a keyboard-only path (QUALITY accessibility gate): the ⌃⇥ strip, ⌘-held badges, inline rename, the archive page, the little-window bar, the Space chips as dots.
 >
-> → Disposition: adopted as a rule (How to continue, 7): a VoiceOver role and keyboard path per new surface before "built".
+> → Disposition: adopted as a rule (How it was worked, rule 7): a VoiceOver role and keyboard path per new surface before "built".
 >
 > 32. [missing, cheap] "New Documents" (PRODUCT §7 [1.0]): one URL pref and a ⌘T action "New document" in item 1; "Collapse Pinned Tabs" (§1 [1.0]): a collapsible pinned run, one row in item 8 or 2.
 >

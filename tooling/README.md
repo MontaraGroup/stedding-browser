@@ -15,11 +15,12 @@ PowerShell.
 
 | File | What it does |
 |---|---|
-| `dev` | **Start here.** `build`, `test <feature>`, `capture`, `patch`, `check`, `status`, `features` — the loop in [docs/AGENT-LOOP.md](../docs/AGENT-LOOP.md) as one command. Owns the feature→gtest-filter tables (unit_tests, components_unittests; Stedding's browser tests run whole). `test` lists what every part of the filter matches before it runs anything and stops when a part matches nothing; `--list` does only that. No retries: a test that passes only on its second run fails. |
+| `dev` | **Start here.** `build`, `test <feature>`, `capture`, `patch`, `check`, `status`, `features` — the loop in [docs/AGENT-LOOP.md](../docs/AGENT-LOOP.md) as one command. Owns the feature→gtest-filter tables (unit_tests, components_unittests; Stedding's browser tests run whole). `test` lists what every part of the filter matches before it runs anything and stops when a part matches nothing; `--list` does only that. No retries: a test that passes only on its second run fails. `STEDDING_TEST_OUT=win-checks` or `win-asan` points `test` at that output directory and sets the run-time flags (the detector flag, ASan's option string with the quoted symbolizer path). |
 | `assert-capture` | Checks a capture against a probe spec (points in DIPs with expected colour or luminance), optionally against a golden PNG. `--record` fills a spec from a capture you have inspected. `tooling/dev capture --assert <spec>` runs the spec's own capture command and checks it. |
 | `probes/` | Probe specs. `window.json` is the reference window: sidebar edge, content corner radius, toolbar height, essentials grid, no Chromium buttons, switcher at the bottom. `ntp.json` is a fresh profile's new tab page: theme ground, the hint line, no shortcut tile (`docs/features/new-tab.md`). `settings.json` is Settings → Stedding; `geometry.json` is what `check-geometry` measures. Probes with `w`/`h` check a box, for text and icons. |
 | `drive` | **(macOS)** Drives the built browser with synthetic clicks, drags and keys from a steps file (`drive-window.py`), captures after steps, and quits the launched pid so session files flush. Checks every step before it launches anything, refuses to start while another app with the same bundle id runs, and starts the browser in the background; any exit, Ctrl-C or kill quits that pid, then kills it. Input goes only to that pid while it is frontmost, and a click only where its window is on top. The real OS pointer moves: never on a machine someone is using. |
 | `capture-state` | **(macOS)** Photographs a browser state without input: a fresh profile in the state the feature params and switches describe (`--features`, `--stedding-welcome=<step>`, `--seed collapsed`), every window of the launched pid by id, a quit of that pid, the abort check. Refuses to start while another app with the same bundle id runs, starts the browser in the background, and fails if it ever becomes the frontmost app. Safe while someone is at the machine; how round 7 was verified. |
+| `capture-ui` | **(macOS)** Runs `capture-state` with the same arguments, so older commands still work; with no `--out` the image is `ui-capture.png` in the repo root, with no `--url` the page is example.com. `tooling/dev capture` calls it. |
 | `capture-windows` | **(macOS)** Captures every on-screen window a pid owns, by window id, largest first — a dialog such as the welcome flow is the second file. Used by `capture-state`. `--largest PID OUT.png` captures the largest one only, on screen or not: `drive`'s `shot` step. |
 | `drive-window.py` | **(macOS)** The step runner behind `drive`. `--check <steps>` reads and checks a steps file and posts nothing. A button or modifier it pressed is always released, on an error or an interrupt too. |
 | `window_by_pid.py` | **(macOS)** The windows a launched pid (or its children) owns, and `--quit <pid>` for a clean quit of that one browser. Used by the capture and drive tools so they never touch another Stedding. |
@@ -45,7 +46,6 @@ PowerShell.
 | `check-repo` | Repository hygiene: shell portability, links, ADRs, patch series, the pin, traps, LF line endings, nothing tracked that is ignored, no machine paths; every test a spec row or BACKLOG cites exists and is in a `dev` filter. |
 | `check-shell` | shellcheck at the pinned version over every script here, plus `bash -n`. CI calls this exact script. |
 | `digest-sanitizer` | A test run's output as a few lines: the tests that crashed, each distinct DCHECK/FATAL once with the first frames that are this project's, each dangling raw_ptr as a pair (freed in / still held in), each AddressSanitizer report's head. `tooling/dev` calls it on any run with a finding; `STEDDING_TEST_LOG` keeps the raw output. Read findings through it, not raw (trap 60). |
-| `dev test` with `STEDDING_TEST_OUT` | `STEDDING_TEST_OUT=win-checks` or `win-asan` points `tooling/dev test` at that output directory and sets the run-time flags (the detector flag, ASan's option string with the quoted symbolizer path) |
 | `win/build.ps1` | One Windows build chunk: `gn gen` with the args file of `args/<config>.gn`, `autoninja`, a progress line a minute (steps, compilers, commit charge), a budget. `-Jobs` caps the steps; exit 0 built, 1 failed, 2 budget stop, 3 stuck |
 | `win/build-until-done.ps1` | The build to the end, detached: `build.ps1` chunk after chunk, status in `out\<config>\supervisor.log` ending in `SUPERVISOR_EXIT=<n>`, exit 4 on steps killed at three stops in a row. Wait for that line; do not poll a clock (traps 9, 54, 57) |
 | `win/drive.ps1` | The window used for real: pointer, keyboard, a window-only screenshot, rows and buttons by UI Automation, the visible page by DevTools, guarded (only into the window under test, only while the operator's hands are off). Ask the operator first (trap 27, trap 58) |
@@ -120,17 +120,6 @@ tooling/check-repo patches        # verify the result
 Every patch commit message must carry `Why:` and `Removable when:` fields.
 `update-patches` refuses to export a series without them, because a patch nobody can
 justify or delete is how a minimal patch set stops being minimal.
-
-### `capture-ui`
-
-**(macOS)** Execs `capture-state` with the same arguments, so older commands still run. It
-does not look up a window itself. With no `--out`, the image is `ui-capture.png`
-in the repo root; with no `--url`, the page is example.com.
-
-```
-tooling/capture-ui --out /tmp/now.png --size 1400x880
-```
-
 
 ## Paths
 

@@ -23,7 +23,6 @@ what kinds of contributions are useful right now.
 - **Design input.** The feature spec (`docs/PRODUCT.md`), the ideas past Arc parity
   (`docs/ROADMAP.md` M10) and the privacy defaults (`docs/PRIVACY.md`) are living
   documents until code freezes them into behavior.
-
 - **Build tooling.** `tooling/` runs on macOS arm64 and, through `tooling/win/`, on
   Windows x64. Fixes to the scripts, and reports of what breaks on a machine unlike
   the reference one, are useful now. Run `tooling/check-repo` and `tooling/check-shell`
