@@ -6,8 +6,6 @@ tool-agnostic; everything you need is in this repo, nothing depends on a particu
 assistant, session or machine. What was built and when is `docs/PROJECT-LOG.md`; the order
 of work is `PLAN.md`; the procedure is `docs/AGENT-LOOP.md`; the traps are `docs/HANDOFF.md`.
 
-Local machine context, when this checkout sits under `~/work`: read `~/work/AGENTS.md` first.
-
 ## What this project is
 
 **Stedding Browser** — a fully open-source, Chromium-based desktop browser with an
