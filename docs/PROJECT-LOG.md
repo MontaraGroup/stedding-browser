@@ -7,6 +7,20 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-13 -- the Mac's round checked on Windows (patches 0030, 0062)
+
+The Mac's round (the entry below) pulled onto the PC: the branch rebuilt from patch 0030 on out
+of the patch files with git plumbing alone, so only the files that differ were written, and its
+export matched the pulled series byte for byte. A read of the round for the PC found three
+faults, fixed in 0062 with tests that failed before: a split inside a folder was left behind
+by Restore Folder and ⇧⌘T, being its own split entry (folders F19); Recently Closed kept the
+old folder ids after a rebuild, so no folder showed ⇧⌘T's chord (TAB-13); a normal window's
+colour supplier was freed with its window, and its address could come back as a private
+window's, which would then take the normal window's cached provider (private V9). Left as
+`S-135`: the order of a folder restored from another window, and a chip lit for one frame for
+an essential. The quiet-start tests (`QuietStartTest.*`, the two Google calls) ran in the
+Windows browser suite. Tests: on both the release and the DCHECK build, 928 of 928 unit tests and 226 browser tests: everything passed but the two new folder tests, whose first versions were wrong (one built its split after the folder, which takes the split out of it; one asked a menu with no window for its chord), and which pass on both builds as corrected. Four sidebar hover tests and a Guest-window colour test failed once with the real cursor over where test windows open and passed with it parked (trap 78).
+
 ## 2026-10-12 and 13 -- two privacy leaks, Phase 0's last code items, and the operator's three (patches 0030, 0062)
 
 The operator asked for the two startup calls to Google (`S-54`, `S-67`) and the Phase 0

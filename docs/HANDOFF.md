@@ -19,8 +19,9 @@ of 2026-09-29 to 30.
    Windows; `tooling/drive` on the Mac). Half an hour, and it finds what the suites do not.
 4. **Run the suites on the shipping configuration:** `tooling/dev test all --no-build`.
 5. **Sanitizer runs, cheapest first:** a DCHECK + dangling-pointer build (`win-checks`, or
-   `mac-checks` on the Mac), then ASan (`win-asan`). The same command on each:
-   `STEDDING_TEST_OUT=win-checks tooling/dev test all --no-build`. Read findings with `tooling/digest-sanitizer <log>`, not raw.
+   `mac-checks` on the Mac), then ASan (`win-asan`). The same command on each, naming its
+   directory: `STEDDING_TEST_OUT=win-checks tooling/dev test all --no-build` (`mac-checks`
+   on the Mac). Read findings with `tooling/digest-sanitizer <log>`, not raw.
 6. **Fix loop:** edit the checkout (no build running), `tooling/fold-fix <commit> <files>`,
    `tooling/update-patches`, `tooling/check-repo`, commit this repo.
 7. **Report** what was and was not verified, result first.
