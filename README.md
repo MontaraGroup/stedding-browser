@@ -290,9 +290,9 @@ Privacy here is a set of defaults, not a mode. Out of the box:
   API key the builds do not carry, so they are refused (`S-75`).
 
 [docs/PRIVACY.md](docs/PRIVACY.md) lists the network connections the browser makes and
-records what a fresh profile actually contacted; two Google calls on that record are
-still being removed (`S-54`, `S-67`), and anything else not on the list is a bug we
-want to hear about. Updates are not automatic yet: new versions appear on the Releases
+records what a fresh profile actually contacted; two Google calls on the earlier
+record are gone from the series since 2026-10-12 and leave with the next release
+(`S-54`, `S-67`), and anything else not on the list is a bug we want to hear about. Updates are not automatic yet: new versions appear on the Releases
 page.
 
 ## Status and roadmap
@@ -340,7 +340,8 @@ the Chrome Web Store as usual.
 
 **Does it talk to Google?** For what Chromium itself does: component updates, Safe
 Browsing list requests (refused without a key, so Safe Browsing does not work) and
-network time, and two calls still being removed (`S-54`, `S-67`).
+network time; two calls at start, Google's push service and its account check, are
+gone from the series and leave with the next release (`S-54`, `S-67`).
 There is no telemetry, no sign-in and no experiment downloads; the Web Store is
 contacted only when you install or update an extension. The connections are listed in
 [docs/PRIVACY.md](docs/PRIVACY.md).

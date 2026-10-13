@@ -249,9 +249,10 @@ pin, upstream commits mixed in — is refused.
 | `win-release` | The Windows build and its installer | The Mac's `release` on the other platform: non-component, no symbols, no PGO (ADR 0018). |
 | `win-asan` | AddressSanitizer runs of the lifetime tests (PLAN.md TAB-7, TAB-8, TAB-9, SPC-1 to SPC-3, WIN-1, WEB-2) | `is_asan`, line-table symbols so a report names functions. Test targets only; the Mac has no counterpart. |
 | `win-checks` | The dangling-pointer detector with DCHECKs on (the same items, and WIN-2) | Release code with `dcheck_always_on` and BackupRefPtr; needs `--enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr` at run time. Test targets only. |
+| `mac-checks` | The same checks on the Mac, whose own code paths `win-checks` never compiles (since 2026-10-12) | `win-checks` for arm64 Mac, with no line tables (they would not fit beside `out/release` above the build's disk floor); the same run-time flag, which `STEDDING_TEST_OUT=mac-checks tooling/dev test` adds. Test targets only. |
 | `win-debug` | A debug build for the checks PLAN.md asks of one (WIN-2) and for debugging on Windows | `debug` for the other platform: a component build. Test target only; the largest output this project asks a disk for. |
 
-The full args, with the reasoning for each, are in `tooling/args/`. The three sanitizer
+The full args, with the reasoning for each, are in `tooling/args/`. The four sanitizer
 and check configurations are throwaway: build the test targets, run the tests, delete
 the output directory (trap 54 has the memory and disk costs of a build on this machine).
 
@@ -471,9 +472,10 @@ features that users expect from a real product just to make a purity claim.
   lists, Widevine for DRM playback). Today every component comes from Google, as in
   stock Chromium; which ones to mirror, proxy or remove is decided before 1.0.
 - **Default search, suggestions, spellcheck, translate, DNS/preconnect defaults:**
-  privacy-preserving defaults per `PRIVACY.md`. A fresh profile does not yet keep to
-  what the user asked for: it checks Google's account list and registers with Google's
-  push service unasked (`PRIVACY.md`, the recorded run; BACKLOG S-54, S-67).
+  privacy-preserving defaults per `PRIVACY.md`. Up to beta 14 a fresh profile also
+  checked Google's account list and registered with Google's push service unasked; the
+  series has stopped both since 2026-10-12, and the next release carries it (`PRIVACY.md`,
+  the recorded runs; privacy Q11, Q12).
 
 Ungoogled-Chromium is prior art we learn from, but our bar is different: it optimizes
 for maximal removal and accepts breakage; we optimize for a polished product with

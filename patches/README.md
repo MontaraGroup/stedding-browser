@@ -23,8 +23,10 @@ lines; the next rebase folds them where they belong (`PLAN.md` Phase 4, SER-4). 
 - 0059, the operator's pass on beta 12: the hidden sidebar, pins, the resize edge, the
   settings sections;
 - 0060, the operator's round after beta 13: Never as the archive default, the welcome
-  flow's behaviour step, ten backlog items, the address band and the toasts' place; and
-  0061, three more: Site Search chips, Collapse Pinned Tabs, New Documents.
+  flow's behaviour step, ten backlog items, the address band and the toasts' place;
+  0061, three more: Site Search chips, Collapse Pinned Tabs, New Documents; and 0062, the
+  Mac's round of 2026-10-12: a folder close as one Recently Closed entry, the lit chip, the
+  extension-reload test and the quiet-start tests (its privacy code went into 0030).
 
 Most branding is **not** here: it is asset replacement in [../branding/](../branding/),
 which costs no patches at all. A patch is the last resort, not the first.

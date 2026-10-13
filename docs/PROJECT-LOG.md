@@ -7,6 +7,55 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-12 -- two privacy leaks and Phase 0's last code items (patches 0030, 0062)
+
+The operator asked for the two startup calls to Google (`S-54`, `S-67`) and the Phase 0
+items with code left (TAB-13, SPC-4, WEB-5, CMD-1), pushed without a release and tested
+properly. Every fix has a test that failed with the fix taken out.
+
+- **Google's push service** (privacy Q11; patch 0030). The user policy invalidations
+  (`UserFmRegistrationTokenUploader`) asked the push service for a token for every
+  profile at every start, managed or not; they wait for a connected user policy now,
+  which a profile with no browser sign-in never has. `QuietStartTest.GooglesPushServiceStaysOff`.
+- **The Google account check** (privacy Q12; patch 0030). Three startup readers -- a
+  session-length metric, the account investigator, the trusted vault client -- made the
+  cookie manager ask `accounts.google.com/ListAccounts`; it no longer asks where browser
+  sign-in is not allowed, as in every Stedding build. Browser tests pretend an OAuth client
+  exists, so the test puts itself where the build is (`--allow-browser-signin=false`, trap
+  84), and a control test shows the stand-in server does see the check where sign-in is
+  allowed.
+- **The network record.** A fresh profile of the fixed release build, five minutes
+  headless and ten with a window, beside the same runs of the installed beta 10: the
+  account check is gone (beta 10 asked it in both runs); neither build reached the push
+  service in these runs, so that part rests on its browser test (`PRIVACY.md`).
+- **Safe Browsing in Settings** (privacy Q13, PLAN.md WEB-5; patch 0030): Settings →
+  Security says it does not work, above the modes.
+- **A folder close as one Recently Closed entry** (PLAN.md TAB-13, folders F19; patch 0062).
+  Not a new kind of entry in Chromium's restore code: Close Folder's Tabs marks each tab
+  with the close's batch and the folder's name, which the tab's record keeps; the app
+  menu's Recently Closed and the Mac's History menu show a batch as one item, and Restore
+  Folder and ⇧⌘T bring the folder back. A batch close records every tab at the same index,
+  so ⇧⌘T restores newest first, undoing the closes in turn (oldest first reversed the
+  folder). The list keeps an entry per tab, so Undo and the Archived view are unchanged.
+- **The lit chip** (PLAN.md SPC-4, spaces B12; patch 0062), seen live with the real
+  pointer: over the chip a disc of its Space's colour, back over the list dark, dropped
+  dark with the row in that Space.
+- **The extension-reload test** (PLAN.md CMD-1, F61; patch 0062).
+- **The series.** The privacy code folded into 0030 by plumbing (32 commits rewritten);
+  the rest conflicted with the archive and test layouts of 0058 to 0061, so it is one new
+  patch, 0062, under the operator-round exception. A Mac checked configuration,
+  `tooling/args/mac-checks.gn`, and a Mac-only unit filter table in `tooling/dev` (trap
+  80's case: `HistoryMenuBridgeTest` exists only on the Mac).
+- **Tests**: on the release build, 921 of 921 unit tests and 20 of 20 component tests (the account-check
+  test among them), and 215 of 221 browser tests: the six others (four `SidebarRailTest`, two
+  `SidebarFormsRtlTest`) crashed or timed out at "CompleteShutdown took more than 30 seconds"
+  with the Mac at a load of 100 to 400 (trap 66), before any check of their own, and wait for
+  a quiet rerun. Each new test also ran on its own, three to five times, green.
+- **Not done**: the suites on the Mac's checked build (about 55,000 steps of it built overnight, stopped
+  when the Mac went on battery with its lid closed); the quiet rerun of the six sidebar tests;
+  live looks at the Settings note and at Recently Closed with a folder, which waited on a
+  `ps` that hung on the loaded machine. Committed, not pushed, until those are done.
+
 ## 2026-10-12 -- the Mac's pass on betas 13 and 14 (beta 14's macOS image)
 
 Betas 13 and 14 went out from the PC with no macOS image (`S-105`). The Mac pulled, applied the

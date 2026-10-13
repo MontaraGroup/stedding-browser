@@ -148,8 +148,10 @@ Independent Session**; deleting the Space clears it too.
 **Does it send anything to Google, or to you?**
 No telemetry, no crash reports, no experiment downloads, no identifiers. Google's
 sign-in and services are removed from the interface. Google is still contacted for what
-Chromium itself does: component updates, Safe Browsing list requests and network time,
-and two calls being removed (`S-54`, `S-67`). The Safe Browsing requests carry no API
+Chromium itself does: component updates, Safe Browsing list requests and network time.
+Two more calls at start, Google's push service and its account check, are gone from the
+series since 2026-10-12 and leave with the next release (`S-54`, `S-67`); beta 14 and
+earlier still make them. The Safe Browsing requests carry no API
 key and are refused, so Safe Browsing does not protect you in these builds (`S-75`). The Chrome Web Store is contacted only when you
 install or update an extension. [PRIVACY.md](PRIVACY.md) lists the connections and
 records what a fresh profile actually contacted; anything else is a bug.

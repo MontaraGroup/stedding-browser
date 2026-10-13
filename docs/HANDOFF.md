@@ -18,9 +18,9 @@ of 2026-09-29 to 30.
    first launch, light and dark, the gestures the specs name (`tooling\win\drive.ps1` on
    Windows; `tooling/drive` on the Mac). Half an hour, and it finds what the suites do not.
 4. **Run the suites on the shipping configuration:** `tooling/dev test all --no-build`.
-5. **Sanitizer runs, cheapest first:** a DCHECK + dangling-pointer build (`win-checks`), then
-   ASan (`win-asan`). The same command on each: `STEDDING_TEST_OUT=win-checks tooling/dev test
-   all --no-build`. Read findings with `tooling/digest-sanitizer <log>`, not raw.
+5. **Sanitizer runs, cheapest first:** a DCHECK + dangling-pointer build (`win-checks`, or
+   `mac-checks` on the Mac), then ASan (`win-asan`). The same command on each:
+   `STEDDING_TEST_OUT=win-checks tooling/dev test all --no-build`. Read findings with `tooling/digest-sanitizer <log>`, not raw.
 6. **Fix loop:** edit the checkout (no build running), `tooling/fold-fix <commit> <files>`,
    `tooling/update-patches`, `tooling/check-repo`, commit this repo.
 7. **Report** what was and was not verified, result first.
@@ -40,12 +40,12 @@ Eighty-odd traps follow. Read the one for the topic in front of you, not the lis
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
-| Release and signing | 44, 47, 49, 62 |
+| Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
 
 ## Where things live
@@ -1070,6 +1070,26 @@ private window has.
     `hover` posts one move, and a hand never jumps (2026-10-12). Move along a path to check
     anything that reacts to the pointer leaving; and in the command bar, select its text
     (`key a+cmd`) before typing, or the last text stays in front of the new.
+
+83. **A file put back from an archive keeps its old time, and the build skips it.** To
+    prove a test red, the fixes were saved with `tar`, taken out, built, and extracted
+    again; `tar` restores each file's modification time, which was older than the objects
+    the red build had just made, so the green build compiled nothing and the old code ran
+    again (2026-10-12). `touch` every file put back, or copy it with a fresh time.
+
+84. **Browser tests pretend an OAuth client exists; a Stedding build has none.**
+    `ChromeTestSuite` calls `SetIgnoreMissingOAuthClientForTesting`, so in every browser
+    test browser sign-in is allowed (`signin.allowed` true), where in a build it is not.
+    A test of what the build does without sign-in passed for the wrong reason, or failed
+    against a fix that works (2026-10-12): append `--allow-browser-signin=false` in
+    `SetUpCommandLine` to put the test where the build is (`QuietStartTest`).
+
+85. **A firewall that asks per program holds a newly signed build's connections.** On the
+    Mac an outgoing firewall asks before a program it has not seen connects, and every
+    signed build is a new program to it: `verify-build`'s network check waited behind the
+    unanswered question and timed out, and the probe took 75 s instead of 7 (2026-10-12).
+    The question is the operator's to answer; run `verify-build --offline` and say so in
+    the notes, and count the questions left on screen for the operator.
 
 ## The Windows build
 

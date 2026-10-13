@@ -1,0 +1,1919 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Mon, 12 Oct 2026 21:38:02 -0400
+Subject: round: a folder close is one Recently Closed entry, the lit chip,
+ quiet starts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The Mac's round of 2026-10-12 on the operator's word, as one patch: its
+fixups would conflict with the archive and test layouts that patches 0058
+to 0061 changed.
+
+A folder close as one entry (PLAN.md TAB-13, folders F19): Close Folder's
+Tabs marks each tab with the close's batch and the folder's name. The app
+menu's Recently Closed and the Mac's History menu show a batch as one
+folder item; Restore Folder and ⇧⌘T bring the whole folder back. The list
+keeps an entry per tab, so Undo and the Archived view are unchanged.
+
+The lit chip (PLAN.md SPC-4, spaces B12): the chip under dragged rows that
+it would take is lit in its Space's colour.
+
+The extension-reload test (PLAN.md CMD-1, F61): an extension reloaded and
+disabled under the open command bar leaves it whole.
+
+Quiet starts (privacy Q11 to Q13): the browser tests of the code in patch
+0030, no push service and no Google account check at start, and the
+Security page's word on Safe Browsing.
+
+Why: the operator asked for the Phase 0 items with code left and the two
+privacy leaks at startup, tested properly; each has its behaviour id and
+tests that failed before the fix.
+Removable when: never; these are Stedding's own behaviours.
+---
+ chrome/browser/app_controller_mac.mm          |   8 +
+ chrome/browser/ui/BUILD.gn                    |   1 +
+ chrome/browser/ui/archive/BUILD.gn            |  16 ++
+ chrome/browser/ui/archive/archive_mark.cc     |  53 ++++++
+ chrome/browser/ui/archive/archive_mark.h      |  20 +++
+ chrome/browser/ui/archive/archived_tabs.cc    |   5 +
+ chrome/browser/ui/archive/closed_folder.cc    | 110 +++++++++++++
+ chrome/browser/ui/archive/closed_folder.h     |  73 +++++++++
+ .../ui/archive/closed_folder_unittest.cc      |  91 +++++++++++
+ chrome/browser/ui/browser_tab_restorer.cc     |  13 ++
+ chrome/browser/ui/cocoa/BUILD.gn              |   1 +
+ chrome/browser/ui/cocoa/history_menu_bridge.h |  15 ++
+ .../browser/ui/cocoa/history_menu_bridge.mm   |  75 ++++++++-
+ .../ui/cocoa/history_menu_bridge_unittest.mm  |  46 ++++++
+ .../ui/cocoa/history_menu_cocoa_controller.mm |  17 ++
+ chrome/browser/ui/tabs/BUILD.gn               |   2 +
+ .../ui/tabs/recent_tabs_sub_menu_model.cc     |  54 +++++-
+ .../ui/tabs/recent_tabs_sub_menu_model.h      |  11 ++
+ chrome/browser/ui/tabs/tab_strip_model.cc     |  10 ++
+ .../ui/views/spaces/space_drag_target.cc      |  15 +-
+ .../spaces/space_drag_target_unittest.cc      |  41 +++++
+ .../ui/views/spaces/space_switcher_view.cc    |  34 +++-
+ .../ui/views/spaces/space_switcher_view.h     |  11 ++
+ chrome/test/stedding/BUILD.gn                 |  10 ++
+ .../test/stedding/command_bar_browsertest.cc  |  79 +++++++++
+ .../test/stedding/folder_tabs_browsertest.cc  | 106 ++++++++++++
+ .../test/stedding/quiet_start_browsertest.cc  | 154 ++++++++++++++++++
+ .../stedding/settings_security_browsertest.cc |  73 +++++++++
+ chrome/test/stedding/tab_drop_browsertest.cc  |  65 ++++++++
+ 29 files changed, 1195 insertions(+), 14 deletions(-)
+ create mode 100644 chrome/browser/ui/archive/closed_folder.cc
+ create mode 100644 chrome/browser/ui/archive/closed_folder.h
+ create mode 100644 chrome/browser/ui/archive/closed_folder_unittest.cc
+ create mode 100644 chrome/test/stedding/quiet_start_browsertest.cc
+ create mode 100644 chrome/test/stedding/settings_security_browsertest.cc
+
+diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
+index 19f4291a5bfa1..2e7908a901554 100644
+--- a/chrome/browser/app_controller_mac.mm
++++ b/chrome/browser/app_controller_mac.mm
+@@ -71,6 +71,7 @@
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/shortcuts/chrome_webloc_file.h"
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+ #include "chrome/browser/task_manager/task_manager_metrics_recorder.h"
+@@ -2864,6 +2865,13 @@ void TabRestorer::DoRestoreTab(Profile* profile, SessionID session_id) {
+   if (session_id.is_valid()) {
+     service->RestoreEntryById(context, session_id,
+                               WindowOpenDisposition::UNKNOWN);
++  } else if (const std::optional<stedding::ClosedFolder> folder =
++                 stedding::ClosedFolderAt(service->entries(),
++                                          service->entries().begin())) {
++    // Stedding (PLAN.md TAB-13): ⇧⌘T with no window open brings a folder
++    // close back whole, as it does in a window.
++    stedding::RestoreClosedFolder(*service, context, folder->batch,
++                                  WindowOpenDisposition::UNKNOWN);
+   } else {
+     service->RestoreMostRecentEntry(context);
+   }
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index a19d8212a4686..319b1d9da7b1b 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1577,6 +1577,7 @@ static_library("ui") {
+       "//chrome/browser/ui/views/spaces",
+       "//chrome/browser/ui/stedding/theme",
+       "//chrome/browser/ui/archive",
++      "//chrome/browser/ui/archive:closed_folder",
+       "//chrome/browser/ui/webui/stedding_archive",
+       "//chrome/browser/ui/webui/stedding_welcome",
+       "//chrome/browser/ui/stedding/screenshot",
+diff --git a/chrome/browser/ui/archive/BUILD.gn b/chrome/browser/ui/archive/BUILD.gn
+index e5a630392e3db..63c4768f928dd 100644
+--- a/chrome/browser/ui/archive/BUILD.gn
++++ b/chrome/browser/ui/archive/BUILD.gn
+@@ -15,6 +15,20 @@ source_set("mark") {
+   ]
+ }
+ 
++# PLAN.md TAB-13: a folder's tabs closed together, shown and restored as one
++# entry of the recently-closed list. A leaf over the list, so the menus that
++# list it and ⇧⌘T can use it.
++source_set("closed_folder") {
++  public = [ "closed_folder.h" ]
++  sources = [ "closed_folder.cc" ]
++  public_deps = [
++    "//base",
++    "//components/sessions",
++    "//ui/base",
++  ]
++  deps = [ ":mark" ]
++}
++
+ source_set("archive") {
+   public = [
+     "archived_tabs.h",
+@@ -83,11 +97,13 @@ source_set("unit_tests") {
+   testonly = true
+   sources = [
+     "archived_tabs_unittest.cc",
++    "closed_folder_unittest.cc",
+     "closed_tabs_undo_unittest.cc",
+     "tab_archiver_unittest.cc",
+   ]
+   deps = [
+     ":archive",
++    ":closed_folder",
+     ":mark",
+     ":undo",
+     "//base",
+diff --git a/chrome/browser/ui/archive/archive_mark.cc b/chrome/browser/ui/archive/archive_mark.cc
+index 7151a6f1527c0..291f90e029c20 100644
+--- a/chrome/browser/ui/archive/archive_mark.cc
++++ b/chrome/browser/ui/archive/archive_mark.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/archive/archive_mark.h"
+ 
+ #include <string_view>
++#include <utility>
+ 
+ #include "base/no_destructor.h"
+ #include "content/public/browser/web_contents.h"
+@@ -47,6 +48,35 @@ class ArchiveMark : public content::WebContentsObserver,
+ 
+ WEB_CONTENTS_USER_DATA_KEY_IMPL(ArchiveMark);
+ 
++// PLAN.md TAB-13: the folder a tab was closed with, for one close.
++class FolderCloseMark : public content::WebContentsObserver,
++                        public content::WebContentsUserData<FolderCloseMark> {
++ public:
++  ~FolderCloseMark() override = default;
++
++  std::optional<ClosedFolderMark>& mark() { return mark_; }
++
++  // content::WebContentsObserver: a close told to stay did not happen.
++  void BeforeUnloadFired(bool proceed) override {
++    if (!proceed) {
++      mark_.reset();
++    }
++  }
++  void BeforeUnloadDialogCancelled() override { mark_.reset(); }
++
++ private:
++  friend class content::WebContentsUserData<FolderCloseMark>;
++  FolderCloseMark(content::WebContents* contents, ClosedFolderMark mark)
++      : content::WebContentsObserver(contents),
++        content::WebContentsUserData<FolderCloseMark>(*contents),
++        mark_(std::move(mark)) {}
++
++  std::optional<ClosedFolderMark> mark_;
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(FolderCloseMark);
++
+ ArchiveMarkObserver& ObserverForTesting() {
+   static base::NoDestructor<ArchiveMarkObserver> observer;
+   return *observer;
+@@ -116,6 +146,29 @@ void ClearArchiveMark(content::WebContents* contents) {
+   }
+ }
+ 
++void MarkClosedWithFolder(content::WebContents* contents,
++                          ClosedFolderMark mark) {
++  if (!contents) {
++    return;
++  }
++  if (FolderCloseMark* const existing =
++          FolderCloseMark::FromWebContents(contents)) {
++    existing->mark() = std::move(mark);
++  } else {
++    FolderCloseMark::CreateForWebContents(contents, std::move(mark));
++  }
++}
++
++std::optional<ClosedFolderMark> TakeClosedFolderMark(
++    content::WebContents* contents) {
++  FolderCloseMark* const holder =
++      contents ? FolderCloseMark::FromWebContents(contents) : nullptr;
++  if (!holder) {
++    return std::nullopt;
++  }
++  return std::exchange(holder->mark(), std::nullopt);
++}
++
+ void SetArchiveMarkObserverForTesting(ArchiveMarkObserver observer) {
+   ObserverForTesting() = std::move(observer);
+ }
+diff --git a/chrome/browser/ui/archive/archive_mark.h b/chrome/browser/ui/archive/archive_mark.h
+index 51f416d2c2c51..6655c0e6ff5ba 100644
+--- a/chrome/browser/ui/archive/archive_mark.h
++++ b/chrome/browser/ui/archive/archive_mark.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_ARCHIVE_ARCHIVE_MARK_H_
+ 
+ #include <optional>
++#include <string>
+ #include <string_view>
+ 
+ #include "base/functional/callback.h"
+@@ -40,6 +41,25 @@ std::optional<ArchiveReason> TakeArchiveMark(content::WebContents* contents);
+ // Removes the mark, for a close that did not happen.
+ void ClearArchiveMark(content::WebContents* contents);
+ 
++// PLAN.md TAB-13, folders F19: Close Folder's Tabs marks each tab it closes
++// with the close's batch and the folder's name, so the recently-closed list
++// can show the folder as one entry and bring it back whole. The record of
++// the close takes the mark into the tab's extra data under these keys; like
++// the archive's, the mark is for one close and goes when "Leave site?" is
++// answered Stay.
++inline constexpr char kClosedFolderKey[] = "stedding.closedfolder";
++inline constexpr char kClosedFolderNameKey[] = "stedding.closedfolder.name";
++
++struct ClosedFolderMark {
++  std::string batch;
++  std::string name;
++};
++void MarkClosedWithFolder(content::WebContents* contents,
++                          ClosedFolderMark mark);
++// Reads the mark and removes it.
++std::optional<ClosedFolderMark> TakeClosedFolderMark(
++    content::WebContents* contents);
++
+ // Tests watch the marks go on, since the tab is gone a moment later.
+ using ArchiveMarkObserver =
+     base::RepeatingCallback<void(content::WebContents*, ArchiveReason)>;
+diff --git a/chrome/browser/ui/archive/archived_tabs.cc b/chrome/browser/ui/archive/archived_tabs.cc
+index 79b6223bbaa40..18109e537e6d9 100644
+--- a/chrome/browser/ui/archive/archived_tabs.cc
++++ b/chrome/browser/ui/archive/archived_tabs.cc
+@@ -188,6 +188,11 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
+   if (const std::optional<ArchiveReason> reason = TakeArchiveMark(contents)) {
+     (*extra_data)[kArchiveReasonKey] = ArchiveReasonName(*reason);
+   }
++  // PLAN.md TAB-13: the folder close the tab went with, for this close only.
++  if (std::optional<ClosedFolderMark> folder = TakeClosedFolderMark(contents)) {
++    (*extra_data)[kClosedFolderKey] = std::move(folder->batch);
++    (*extra_data)[kClosedFolderNameKey] = std::move(folder->name);
++  }
+   // The user's name for the tab (tabs R14), which a restore reads back.
+   if (const std::u16string name = TabName(contents); !name.empty()) {
+     (*extra_data)[kSessionTabNameKey] = base::UTF16ToUTF8(name);
+diff --git a/chrome/browser/ui/archive/closed_folder.cc b/chrome/browser/ui/archive/closed_folder.cc
+new file mode 100644
+index 0000000000000..7189061888bbb
+--- /dev/null
++++ b/chrome/browser/ui/archive/closed_folder.cc
+@@ -0,0 +1,110 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/archive/closed_folder.h"
++
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/ui/archive/archive_mark.h"
++#include "components/sessions/core/live_tab_context.h"
++#include "components/sessions/core/session_id.h"
++
++namespace stedding {
++
++ClosedFolder::ClosedFolder() = default;
++ClosedFolder::ClosedFolder(const ClosedFolder&) = default;
++ClosedFolder& ClosedFolder::operator=(const ClosedFolder&) = default;
++ClosedFolder::~ClosedFolder() = default;
++
++std::string ClosedFolderBatchOf(const sessions::tab_restore::Entry& entry) {
++  if (entry.type != sessions::tab_restore::TAB) {
++    return std::string();
++  }
++  const auto& tab = static_cast<const sessions::tab_restore::Tab&>(entry);
++  const auto it = tab.extra_data.find(kClosedFolderKey);
++  return it == tab.extra_data.end() ? std::string() : it->second;
++}
++
++std::optional<ClosedFolder> ClosedFolderAt(
++    const sessions::TabRestoreService::Entries& entries,
++    sessions::TabRestoreService::Entries::const_iterator it) {
++  if (it == entries.end()) {
++    return std::nullopt;
++  }
++  std::string batch = ClosedFolderBatchOf(**it);
++  if (batch.empty()) {
++    return std::nullopt;
++  }
++  ClosedFolder folder;
++  // The list is newest first; a close records its tabs in the folder's
++  // order, so the folder reads the list backwards.
++  for (auto entry = entries.rbegin(); entry != entries.rend(); ++entry) {
++    if (ClosedFolderBatchOf(**entry) == batch) {
++      folder.tabs.push_back(
++          static_cast<const sessions::tab_restore::Tab*>(entry->get()));
++    }
++  }
++  if (!folder.tabs.empty()) {
++    const auto name = folder.tabs.front()->extra_data.find(kClosedFolderNameKey);
++    if (name != folder.tabs.front()->extra_data.end()) {
++      folder.name = base::UTF8ToUTF16(name->second);
++    }
++  }
++  folder.batch = std::move(batch);
++  return folder;
++}
++
++std::vector<sessions::LiveTab*> RestoreClosedFolder(
++    sessions::TabRestoreService& service,
++    sessions::LiveTabContext* context,
++    std::string_view batch,
++    WindowOpenDisposition disposition) {
++  // The close's entries, oldest first: the folder's order.
++  std::vector<SessionID> ids;
++  int first_index = -1;
++  const sessions::TabRestoreService::Entries& entries = service.entries();
++  for (auto entry = entries.rbegin(); entry != entries.rend(); ++entry) {
++    if (batch.empty() || ClosedFolderBatchOf(**entry) != batch) {
++      continue;
++    }
++    if (ids.empty()) {
++      first_index =
++          static_cast<const sessions::tab_restore::Tab&>(**entry).tabstrip_index;
++    }
++    ids.push_back((*entry)->id);
++  }
++  // With no window to restore into, each tab finds the window the first one
++  // opened through its own browser id, which only UNKNOWN reads.
++  if (!context) {
++    disposition = WindowOpenDisposition::UNKNOWN;
++  }
++  std::vector<sessions::LiveTab*> restored;
++  const auto restore = [&](SessionID id, WindowOpenDisposition how) {
++    for (sessions::LiveTab* const live :
++         service.RestoreEntryById(context, id, how)) {
++      if (live) {
++        restored.push_back(live);
++      }
++    }
++  };
++  // UNKNOWN puts each tab back at the index it was closed from, and a close
++  // records each index after the tabs before it went: newest first, the
++  // restores undo the closes in turn and every tab lands where it was, the
++  // first of the folder last, and shown. Where the window has fewer tabs than
++  // the folder's place now, each goes to its end, so oldest first.
++  if (disposition == WindowOpenDisposition::UNKNOWN && context &&
++      first_index >= 0 && first_index <= context->GetTabCount()) {
++    for (auto id = ids.rbegin(); id != ids.rend(); ++id) {
++      restore(*id, WindowOpenDisposition::UNKNOWN);
++    }
++    return restored;
++  }
++  for (size_t i = 0; i < ids.size(); ++i) {
++    restore(ids[i], i == 0 || disposition == WindowOpenDisposition::UNKNOWN
++                        ? disposition
++                        : WindowOpenDisposition::NEW_BACKGROUND_TAB);
++  }
++  return restored;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/archive/closed_folder.h b/chrome/browser/ui/archive/closed_folder.h
+new file mode 100644
+index 0000000000000..17f352517b2ec
+--- /dev/null
++++ b/chrome/browser/ui/archive/closed_folder.h
+@@ -0,0 +1,73 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_ARCHIVE_CLOSED_FOLDER_H_
++#define CHROME_BROWSER_UI_ARCHIVE_CLOSED_FOLDER_H_
++
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "components/sessions/core/tab_restore_service.h"
++#include "components/sessions/core/tab_restore_types.h"
++#include "ui/base/window_open_disposition.h"
++
++namespace sessions {
++class LiveTab;
++class LiveTabContext;
++}  // namespace sessions
++
++namespace stedding {
++
++// PLAN.md TAB-13, docs/features/folders.md F19: a folder's tabs closed
++// together come back together. Close Folder's Tabs marks each tab it closes
++// with the close's batch (archive_mark.h). The recently-closed list keeps an
++// entry per tab, as for any close, so Undo, the Archived view and the saved
++// list read them as before; the menus that list recently closed tabs and ⇧⌘T
++// show a batch as one folder and bring it back whole.
++
++// The batch of the Close Folder's Tabs that recorded `entry`, or "" for an
++// entry any other close made.
++std::string ClosedFolderBatchOf(const sessions::tab_restore::Entry& entry);
++
++// One folder close as the recently-closed list holds it.
++struct ClosedFolder {
++  ClosedFolder();
++  ClosedFolder(const ClosedFolder&);
++  ClosedFolder& operator=(const ClosedFolder&);
++  ~ClosedFolder();
++
++  std::string batch;
++  // The folder's name when it was closed.
++  std::u16string name;
++  // Its tabs' entries, in the folder's order: the oldest entry first.
++  std::vector<raw_ptr<const sessions::tab_restore::Tab, VectorExperimental>>
++      tabs;
++};
++
++// The folder close that recorded the entry at `it`: every tab entry of that
++// close, wherever it is in `entries`. nullopt for an entry no folder close
++// made.
++std::optional<ClosedFolder> ClosedFolderAt(
++    const sessions::TabRestoreService::Entries& entries,
++    sessions::TabRestoreService::Entries::const_iterator it);
++
++// Restores every tab of the folder close `batch` and returns them, the folder
++// together and in its order. For UNKNOWN, as ⇧⌘T restores, each tab goes back
++// to its place, the folder's first tab shown; otherwise the first comes back
++// with `disposition` and the rest after it, in the background. With no
++// `context` the tabs go back to their window, which the first restore opens.
++// The tabs' folder path puts them back in their folder
++// (FolderSessionService).
++std::vector<sessions::LiveTab*> RestoreClosedFolder(
++    sessions::TabRestoreService& service,
++    sessions::LiveTabContext* context,
++    std::string_view batch,
++    WindowOpenDisposition disposition);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_ARCHIVE_CLOSED_FOLDER_H_
+diff --git a/chrome/browser/ui/archive/closed_folder_unittest.cc b/chrome/browser/ui/archive/closed_folder_unittest.cc
+new file mode 100644
+index 0000000000000..edaee635480b4
+--- /dev/null
++++ b/chrome/browser/ui/archive/closed_folder_unittest.cc
+@@ -0,0 +1,91 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/archive/closed_folder.h"
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "chrome/browser/ui/archive/archive_mark.h"
++#include "components/sessions/core/serialized_navigation_entry.h"
++#include "components/sessions/core/tab_restore_service.h"
++#include "components/sessions/core/tab_restore_types.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace stedding {
++namespace {
++
++// A tab entry of the recently-closed list, on `url`, closed by the folder
++// close `batch` of the folder `name`, or by any other close for "".
++std::unique_ptr<sessions::tab_restore::Tab> Closed(const std::string& url,
++                                                   const std::string& batch,
++                                                   const std::string& name) {
++  auto tab = std::make_unique<sessions::tab_restore::Tab>();
++  sessions::SerializedNavigationEntry navigation;
++  navigation.set_virtual_url(GURL(url));
++  tab->navigations.push_back(navigation);
++  if (!batch.empty()) {
++    tab->extra_data[kClosedFolderKey] = batch;
++    tab->extra_data[kClosedFolderNameKey] = name;
++  }
++  return tab;
++}
++
++std::string Urls(const ClosedFolder& folder) {
++  std::string urls;
++  for (const auto& tab : folder.tabs) {
++    urls += std::string(tab->navigations.front().virtual_url().host()) + " ";
++  }
++  return urls;
++}
++
++// PLAN.md TAB-13: the list is newest first. A folder close of a, b, c (in
++// that order) sits under a later plain close; any of its entries finds the
++// whole close, in the folder's order, with the folder's name, and a plain
++// close is no folder's.
++TEST(ClosedFolderTest, AnyEntryOfAFolderCloseFindsItWhole) {
++  sessions::TabRestoreService::Entries entries;
++  entries.push_back(Closed("https://later.test/", "", ""));
++  entries.push_back(Closed("https://c.test/", "batch-1", "Reading"));
++  entries.push_back(Closed("https://b.test/", "batch-1", "Reading"));
++  entries.push_back(Closed("https://a.test/", "batch-1", "Reading"));
++  entries.push_back(Closed("https://earlier.test/", "", ""));
++
++  auto it = entries.begin();
++  EXPECT_EQ(std::nullopt, ClosedFolderAt(entries, it)) << "a plain close";
++  ++it;
++  const std::optional<ClosedFolder> folder = ClosedFolderAt(entries, it);
++  ASSERT_TRUE(folder);
++  EXPECT_EQ("batch-1", folder->batch);
++  EXPECT_EQ(u"Reading", folder->name);
++  EXPECT_EQ("a.test b.test c.test ", Urls(*folder));
++  ++it;
++  ++it;
++  const std::optional<ClosedFolder> from_last = ClosedFolderAt(entries, it);
++  ASSERT_TRUE(from_last);
++  EXPECT_EQ("a.test b.test c.test ", Urls(*from_last));
++  EXPECT_EQ(std::nullopt, ClosedFolderAt(entries, entries.end()));
++}
++
++// Two folder closes stay apart, even of folders with the same name.
++TEST(ClosedFolderTest, TwoClosesOfOneNameStayApart) {
++  sessions::TabRestoreService::Entries entries;
++  entries.push_back(Closed("https://d.test/", "batch-2", "Reading"));
++  entries.push_back(Closed("https://b.test/", "batch-1", "Reading"));
++  entries.push_back(Closed("https://a.test/", "batch-1", "Reading"));
++
++  const std::optional<ClosedFolder> newer =
++      ClosedFolderAt(entries, entries.begin());
++  ASSERT_TRUE(newer);
++  EXPECT_EQ("d.test ", Urls(*newer));
++  const std::optional<ClosedFolder> older =
++      ClosedFolderAt(entries, std::next(entries.begin()));
++  ASSERT_TRUE(older);
++  EXPECT_EQ("a.test b.test ", Urls(*older));
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/browser_tab_restorer.cc b/chrome/browser/ui/browser_tab_restorer.cc
+index 0c83ecf469891..4a4e42399d9f0 100644
+--- a/chrome/browser/ui/browser_tab_restorer.cc
++++ b/chrome/browser/ui/browser_tab_restorer.cc
+@@ -2,6 +2,8 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include <optional>
++
+ #include "base/memory/ptr_util.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/metrics/user_metrics.h"
+@@ -9,6 +11,7 @@
+ #include "base/supports_user_data.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_live_tab_context.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+@@ -112,6 +115,16 @@ void RestoreTab(BrowserWindowInterface* browser) {
+     sessions::LiveTabContext* const live_tab_context =
+         BrowserLiveTabContext::From(browser);
+     CHECK(live_tab_context);
++    // Stedding (PLAN.md TAB-13, folders F19): the most recent close, made by
++    // Close Folder's Tabs, comes back whole, as Recently Closed shows it.
++    if (const std::optional<stedding::ClosedFolder> folder =
++            stedding::ClosedFolderAt(service->entries(),
++                                     service->entries().begin())) {
++      stedding::RestoreClosedFolder(*service, live_tab_context,
++                                    folder->batch,
++                                    WindowOpenDisposition::UNKNOWN);
++      return;
++    }
+     service->RestoreMostRecentEntry(live_tab_context);
+     return;
+   }
+diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
+index fcf3a297e1cd3..20029bc47268c 100644
+--- a/chrome/browser/ui/cocoa/BUILD.gn
++++ b/chrome/browser/ui/cocoa/BUILD.gn
+@@ -123,6 +123,7 @@ source_set("cocoa") {
+   ]
+ 
+   deps = [
++    "//chrome/browser/ui/archive:closed_folder",
+     "//chrome/app:command_ids",
+     "//chrome/app/theme:chrome_unscaled_resources_grit",
+     "//chrome/browser:app_controller_mac",
+diff --git a/chrome/browser/ui/cocoa/history_menu_bridge.h b/chrome/browser/ui/cocoa/history_menu_bridge.h
+index 68e966a56abed..fd24cd45a9a65 100644
+--- a/chrome/browser/ui/cocoa/history_menu_bridge.h
++++ b/chrome/browser/ui/cocoa/history_menu_bridge.h
+@@ -9,6 +9,7 @@
+ 
+ #include <map>
+ #include <memory>
++#include <string>
+ #include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
+@@ -27,6 +28,10 @@
+ #include "components/sessions/core/tab_restore_service_observer.h"
+ 
+ class Profile;
++
++namespace stedding {
++struct ClosedFolder;
++}  // namespace stedding
+ class ScopedProfileKeepAlive;
+ @class HistoryMenuCocoaController;
+ 
+@@ -105,6 +110,10 @@ class HistoryMenuBridge : public sessions::TabRestoreServiceObserver,
+     // this ID will be SessionID::InvalidValue().
+     SessionID session_id;
+ 
++    // Stedding (PLAN.md TAB-13): the batch of the Close Folder's Tabs this
++    // item restores whole, or "" for any other item.
++    std::string closed_folder_batch;
++
+     // If the HistoryItem is a window, this will be the vector of tabs. Note
+     // that this is a list of weak references. The |menu_item_map_| is the owner
+     // of all items. If it is not a window, then the entry is a single page and
+@@ -199,6 +208,12 @@ class HistoryMenuBridge : public sessions::TabRestoreServiceObserver,
+ 
+   // Adds an item for the group entry with a submenu containing its tabs.
+   // Returns whether the item was successfully added.
++  // Stedding (PLAN.md TAB-13): the tabs one Close Folder's Tabs closed, as
++  // one item whose submenu restores the folder or one of its tabs.
++  bool AddFolderEntryToMenu(const stedding::ClosedFolder& folder,
++                            NSMenu* menu,
++                            NSInteger tag,
++                            NSInteger index);
+   bool AddGroupEntryToMenu(sessions::tab_restore::Group* group,
+                            NSMenu* menu,
+                            NSInteger tag,
+diff --git a/chrome/browser/ui/cocoa/history_menu_bridge.mm b/chrome/browser/ui/cocoa/history_menu_bridge.mm
+index 711936a21d32f..39c7b1a048c17 100644
+--- a/chrome/browser/ui/cocoa/history_menu_bridge.mm
++++ b/chrome/browser/ui/cocoa/history_menu_bridge.mm
+@@ -7,6 +7,8 @@
+ #include <stddef.h>
+ 
+ #include <memory>
++#include <optional>
++#include <set>
+ #include <string>
+ #include <vector>
+ 
+@@ -20,6 +22,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/app/chrome_command_ids.h"  // IDC_HISTORY_MENU
+ #include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/app_controller_mac.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+@@ -35,6 +38,7 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/grit/generated_resources.h"
++#include "components/vector_icons/vector_icons.h"
+ #include "components/history/core/browser/history_types.h"
+ #include "components/sessions/core/session_id.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+@@ -68,7 +72,10 @@ HistoryMenuBridge::HistoryItem::HistoryItem()
+     : session_id(SessionID::InvalidValue()) {}
+ 
+ HistoryMenuBridge::HistoryItem::HistoryItem(const HistoryItem& copy)
+-    : title(copy.title), url(copy.url), session_id(copy.session_id) {}
++    : title(copy.title),
++      url(copy.url),
++      session_id(copy.session_id),
++      closed_folder_batch(copy.closed_folder_batch) {}
+ 
+ HistoryMenuBridge::HistoryItem::~HistoryItem() = default;
+ 
+@@ -148,10 +155,22 @@ void HistoryMenuBridge::TabRestoreServiceChanged(
+   NSInteger index = [menu indexOfItemWithTag:kRecentlyClosedTitle] + 1;
+   NSUInteger added_count = 0;
+ 
+-  for (const auto& entry : entries) {
++  // Stedding (PLAN.md TAB-13): the folder closes already shown as one item.
++  std::set<std::string> shown_folders;
++  for (auto it = entries.begin(); it != entries.end(); ++it) {
++    const auto& entry = *it;
+     if (added_count >= kRecentlyClosedCount) {
+       break;
+     }
++    if (std::optional<stedding::ClosedFolder> folder =
++            stedding::ClosedFolderAt(entries, it)) {
++      if (shown_folders.insert(folder->batch).second &&
++          AddFolderEntryToMenu(*folder, menu, kRecentlyClosed, index)) {
++        ++index;
++        ++added_count;
++      }
++      continue;
++    }
+     switch (entry->type) {
+       case sessions::tab_restore::Type::WINDOW: {
+         bool added = AddWindowEntryToMenu(
+@@ -374,6 +393,58 @@ bool HistoryMenuBridge::AddWindowEntryToMenu(
+   return true;
+ }
+ 
++bool HistoryMenuBridge::AddFolderEntryToMenu(
++    const stedding::ClosedFolder& folder,
++    NSMenu* menu,
++    NSInteger tag,
++    NSInteger index) {
++  if (folder.tabs.empty()) {
++    return false;
++  }
++  auto item = std::make_unique<HistoryItem>();
++  item->closed_folder_batch = folder.batch;
++  item->title = l10n_util::GetPluralStringFUTF16(IDS_RECENTLY_CLOSED_GROUP,
++                                                 folder.tabs.size());
++  item->title =
++      base::ReplaceStringPlaceholders(item->title, folder.name, nullptr);
++
++  // The submenu: the folder whole, then each of its tabs, as for a group.
++  NSMenu* submenu = [[NSMenu alloc] init];
++  auto restore_item = std::make_unique<HistoryItem>(*item);
++  // English only, as the rest of Stedding's own text (docs/QUALITY.md).
++  restore_item->menu_item =
++      [[NSMenuItem alloc] initWithTitle:@"Restore Folder"
++                                 action:@selector(openHistoryMenuItem:)
++                          keyEquivalent:@""];
++  NSMenuItem* restore_menu_item = restore_item->menu_item;
++  [restore_menu_item setTag:kRecentlyClosed + 1];  // +1 for submenu item.
++  [restore_menu_item setTarget:controller_];
++  CHECK(menu_item_map_.emplace(restore_menu_item, std::move(restore_item))
++            .second);
++  [submenu addItem:restore_menu_item];
++  [submenu addItem:[NSMenuItem separatorItem]];
++  NSInteger subindex = [[submenu itemArray] count];
++  for (const auto& tab : folder.tabs) {
++    std::unique_ptr<HistoryItem> tab_item =
++        HistoryItemForTab(*tab, /*attach_group_icon=*/false);
++    if (tab_item) {
++      item->tabs.push_back(tab_item.get());
++      AddItemToMenu(std::move(tab_item), submenu, kRecentlyClosed + 1,
++                    subindex++);
++    }
++  }
++
++  const auto& color_provider =
++      [AppController.sharedController lastActiveColorProvider];
++  item->icon = NSImageFromImageSkia(gfx::CreateVectorIcon(
++      vector_icons::kFolderFlippableIcon, gfx::kFaviconSize,
++      color_provider.GetColor(ui::kColorMenuIcon)));
++  [item->menu_item setImage:item->icon];
++  NSMenuItem* parent_item = AddItemToMenu(std::move(item), menu, tag, index);
++  [parent_item setSubmenu:submenu];
++  return true;
++}
++
+ bool HistoryMenuBridge::AddGroupEntryToMenu(sessions::tab_restore::Group* group,
+                                             NSMenu* menu,
+                                             NSInteger tag,
+diff --git a/chrome/browser/ui/cocoa/history_menu_bridge_unittest.mm b/chrome/browser/ui/cocoa/history_menu_bridge_unittest.mm
+index b5d112322fd2d..f9369022a0c2d 100644
+--- a/chrome/browser/ui/cocoa/history_menu_bridge_unittest.mm
++++ b/chrome/browser/ui/cocoa/history_menu_bridge_unittest.mm
+@@ -21,6 +21,7 @@
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/sessions/chrome_tab_restore_service_client.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
++#include "chrome/browser/ui/archive/archive_mark.h"
+ #include "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/common/chrome_features.h"
+@@ -391,6 +392,51 @@ TEST_F(HistoryMenuBridgeTest, RecentlyClosedTabs) {
+   EXPECT_EQ(0u, [[menu itemArray] count]);
+ }
+ 
++// Stedding (PLAN.md TAB-13): the tabs one Close Folder's Tabs closed are one
++// item, the folder's, whose submenu restores the whole folder or one of its
++// tabs, in the folder's order; a plain close above it keeps its own item.
++TEST_F(HistoryMenuBridgeTest, AFolderCloseIsOneItem) {
++  std::unique_ptr<MockTRS> trs(new MockTRS(profile(), os_crypt_async_.get()));
++  sessions::tab_restore::Tab* const later =
++      CreateSessionTab(10, "http://later.test", "Later");
++  sessions::tab_restore::Tab* const b =
++      CreateSessionTab(12, "http://b.test", "B");
++  sessions::tab_restore::Tab* const a =
++      CreateSessionTab(11, "http://a.test", "A");
++  for (sessions::tab_restore::Tab* const tab : {a, b}) {
++    tab->extra_data[stedding::kClosedFolderKey] = "batch-1";
++    tab->extra_data[stedding::kClosedFolderNameKey] = "Reading";
++  }
++  // Newest first, as the list holds them: the folder closed a, then b.
++  auto entries{CreateSessionEntries({later, b, a})};
++
++  using ::testing::ReturnRef;
++  EXPECT_CALL(*trs.get(), entries()).WillOnce(ReturnRef(entries));
++  bridge_->TabRestoreServiceChanged(trs.get());
++
++  NSMenu* menu = bridge_->HistoryMenu();
++  ASSERT_EQ(2U, [[menu itemArray] count])
++      << "the folder's tabs are items of their own";
++  EXPECT_NSEQ(@"Later", [[menu itemAtIndex:0] title]);
++  NSMenuItem* folder = [menu itemAtIndex:1];
++  EXPECT_TRUE([[folder title] containsString:@"Reading"]);
++  MockBridge::HistoryItem* folder_item = bridge_->HistoryItemForMenuItem(folder);
++  ASSERT_TRUE(folder_item);
++  EXPECT_EQ("batch-1", folder_item->closed_folder_batch);
++
++  NSMenu* submenu = [folder submenu];
++  ASSERT_TRUE(submenu);
++  ASSERT_EQ(4U, [[submenu itemArray] count]);
++  EXPECT_NSEQ(@"Restore Folder", [[submenu itemAtIndex:0] title]);
++  EXPECT_EQ("batch-1",
++            bridge_->HistoryItemForMenuItem([submenu itemAtIndex:0])
++                ->closed_folder_batch);
++  EXPECT_NSEQ(@"A", [[submenu itemAtIndex:2] title]);
++  EXPECT_NSEQ(@"B", [[submenu itemAtIndex:3] title]);
++  EXPECT_EQ(11, bridge_->HistoryItemForMenuItem([submenu itemAtIndex:2])
++                    ->session_id.id());
++}
++
+ // Test that the menu is created for a mix of windows and tabs.
+ TEST_F(HistoryMenuBridgeTest, RecentlyClosedTabsAndWindows) {
+   std::unique_ptr<MockTRS> trs(new MockTRS(profile(), os_crypt_async_.get()));
+diff --git a/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm b/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
+index 67819c2389ccf..d4e994ad1cc7c 100644
+--- a/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
++++ b/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
+@@ -11,9 +11,11 @@
+ #import "chrome/browser/app_controller_mac.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/ui/browser_live_tab_context.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "components/history/core/browser/history_service.h"
+@@ -40,6 +42,21 @@ void OpenURLForItem(HistoryMenuBridge::HistoryItem node,
+   if (!profile) {
+     return;  // Failed to load profile, ignore.
+   }
++  // Stedding (PLAN.md TAB-13): a folder close's own item brings every tab of
++  // the folder back, into the profile's window, or a new one.
++  if (!node.closed_folder_batch.empty()) {
++    sessions::TabRestoreService* const service =
++        TabRestoreServiceFactory::GetForProfile(profile);
++    if (!service || !service->IsLoaded()) {
++      return;
++    }
++    BrowserWindowInterface* const browser =
++        ProfileBrowserCollection::GetForProfile(profile)->FindTabbedBrowser();
++    stedding::RestoreClosedFolder(
++        *service, browser ? BrowserLiveTabContext::From(browser) : nullptr,
++        node.closed_folder_batch, WindowOpenDisposition::UNKNOWN);
++    return;
++  }
+   // If this item can be restored using TabRestoreService, do so. Otherwise,
+   // just load the URL.
+   if (node.session_id.is_valid()) {
+diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
+index 4155a21ba5c37..33bcbb5222829 100644
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -374,6 +374,7 @@ if (!is_android) {
+       ":tab_strip_model_observer",
+       ":tabs",
+       "//chrome/app:command_ids",
++      "//chrome/browser/ui/archive:mark",
+       "//chrome/browser/commerce",
+       "//chrome/browser/content_settings:content_settings_factory",
+       "//chrome/browser/extensions",
+@@ -516,6 +517,7 @@ if (!is_android) {
+     }
+ 
+     deps = [
++      "//chrome/browser/ui/archive:closed_folder",
+       ":tab_group",
+       ":tab_model",
+       ":tab_strip",
+diff --git a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc
+index 96269a9aea8c8..2c43e47c722c2 100644
+--- a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc
++++ b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc
+@@ -21,6 +21,7 @@
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+ #include "chrome/browser/favicon/favicon_utils.h"
+ #include "chrome/browser/favicon/history_ui_favicon_request_handler_factory.h"
+@@ -277,10 +278,13 @@ bool RecentTabsSubMenuModel::GetAcceleratorForCommandId(
+     const std::optional<size_t> parent_index =
+         parent_id == -1 ? std::nullopt : GetIndexOfCommandId(parent_id);
+ 
+-    // The first item is "Restore (Group / Window)".
++    // The first item is "Restore (Group / Window)", or Stedding's "Restore
++    // Folder", which ⇧⌘T restores whole (PLAN.md TAB-13).
+     const bool group_or_window_is_first_item =
+         (command_id == local_group_items_.begin()->first ||
+-         command_id == local_window_items_.begin()->first) &&
++         command_id == local_window_items_.begin()->first ||
++         (!local_folder_items_.empty() &&
++          command_id == local_folder_items_.begin()->first)) &&
+         parent_index == recent_tabs_title_index_.value() + 1;
+     if (group_or_window_is_first_item) {
+       *accelerator = reopen_closed_tab_accelerator_;
+@@ -396,6 +400,11 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
+     base::RecordAction(base::UserMetricsAction("WrenchMenu_OpenRecentSplit"));
+     service->RestoreEntryById(context, local_split_items_.at(command_id),
+                               disposition);
++  } else if (const auto folder = local_folder_items_.find(command_id);
++             folder != local_folder_items_.end()) {
++    // Stedding (PLAN.md TAB-13): the folder close, back together.
++    stedding::RestoreClosedFolder(*service, context, folder->second,
++                                  disposition);
+   } else {
+     CHECK(IsCommandType(CommandType::Submenu, command_id) ||
+           IsCommandType(CommandType::OtherDevice, command_id));
+@@ -500,12 +509,24 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
+                               IDS_RECENT_TABS);
+ 
+     int added_count = 0;
+-    for (const auto& entry : service->entries()) {
++    // Stedding (PLAN.md TAB-13): the folder closes already shown as one item.
++    std::set<std::string> shown_folders;
++    const sessions::TabRestoreService::Entries& entries = service->entries();
++    for (auto it = entries.begin(); it != entries.end(); ++it) {
++      const auto& entry = *it;
+       if (added_count == kMaxLocalEntries) {
+         break;
+       }
+       switch (entry->type) {
+         case sessions::tab_restore::Type::TAB: {
++          if (std::optional<stedding::ClosedFolder> folder =
++                  stedding::ClosedFolderAt(entries, it)) {
++            if (!shown_folders.insert(folder->batch).second) {
++              continue;  // Its folder's item is above.
++            }
++            BuildLocalFolderItem(*folder, ++last_local_model_index_);
++            break;
++          }
+           auto& tab = static_cast<const sessions::tab_restore::Tab&>(*entry);
+           BuildLocalTabItem(tab, ++last_local_model_index_);
+           break;
+@@ -690,6 +711,33 @@ void RecentTabsSubMenuModel::BuildLocalWindowItem(
+                                                           : kTabOldIcon));
+ }
+ 
++void RecentTabsSubMenuModel::BuildLocalFolderItem(
++    const stedding::ClosedFolder& folder,
++    size_t curr_model_index) {
++  const std::u16string item_label =
++      GetGroupItemLabel(folder.name, folder.tabs.size());
++  const int command_id = GetAndIncrementNextMenuID();
++  auto folder_model = std::make_unique<ui::SimpleMenuModel>(this);
++  const int restore_id = GetAndIncrementNextMenuID();
++  // English only, as the rest of Stedding's own text (docs/QUALITY.md).
++  folder_model->AddItemWithIcon(
++      restore_id, u"Restore Folder",
++      ui::ImageModel::FromVectorIcon(features::IsRoundedIconsEnabled()
++                                         ? vector_icons::kOpenInNewFlippableIcon
++                                         : vector_icons::kLaunchOldIcon));
++  local_folder_items_.emplace(restore_id, folder.batch);
++  folder_model->AddSeparator(ui::NORMAL_SEPARATOR);
++  for (const auto& tab : folder.tabs) {
++    AddTabItemToModel(tab.get(), folder_model.get(),
++                      GetAndIncrementNextMenuID());
++  }
++  InsertSubMenuAt(curr_model_index, command_id, item_label,
++                  folder_model.get());
++  local_sub_menu_items_.emplace(
++      command_id, SubMenuItem(command_id, std::move(folder_model)));
++  SetIcon(curr_model_index, CreateFavicon(vector_icons::kFolderFlippableIcon));
++}
++
+ void RecentTabsSubMenuModel::BuildLocalGroupItem(
+     const sessions::tab_restore::Group& group,
+     size_t curr_model_index) {
+diff --git a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h
+index 52600474533fb..09ef701353ab4 100644
+--- a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h
++++ b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h
+@@ -36,6 +36,10 @@ namespace sessions {
+ struct SessionTab;
+ }
+ 
++namespace stedding {
++struct ClosedFolder;
++}  // namespace stedding
++
+ namespace sync_sessions {
+ class OpenTabsUIDelegate;
+ class SessionSyncService;
+@@ -124,6 +128,10 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
+ 
+   // Build the recently closed group item with parameters needed to restore it,
+   // and add it to the menumodel at `curr_model_index`.
++  // Stedding (PLAN.md TAB-13): the tabs one Close Folder's Tabs closed, as
++  // one item: the folder's name and its count, Restore Folder, its tabs.
++  void BuildLocalFolderItem(const stedding::ClosedFolder& folder,
++                            size_t curr_model_index);
+   void BuildLocalGroupItem(const sessions::tab_restore::Group& group,
+                            size_t curr_model_index);
+ 
+@@ -284,6 +292,9 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
+ 
+   // Group items for local recently closed groups.
+   GroupItems local_group_items_;
++  // Stedding (PLAN.md TAB-13): Restore Folder rows, each the batch of the
++  // folder close it restores.
++  std::map<int, std::string> local_folder_items_;
+ 
+   // Split items for local recently closed splits.
+   SplitItems local_split_items_;
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index 083f8b5ebf331..f0169b15028c9 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -39,6 +39,7 @@
+ #include "base/trace_event/common/trace_event_common.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/types/pass_key.h"
++#include "base/uuid.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+@@ -49,6 +50,7 @@
+ #include "chrome/browser/reading_list/reading_list_model_factory.h"
+ #include "chrome/browser/resource_coordinator/tab_helper.h"
+ #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
++#include "chrome/browser/ui/archive/archive_mark.h"
+ #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
+ #include "chrome/browser/ui/browser_command_controller.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -5101,6 +5103,14 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
+       delegate_->AddTabAt(GURL(), -1, /*foreground=*/true);
+     }
+   }
++  // PLAN.md TAB-13, folders F19: the close's tabs carry its batch and the
++  // folder's name into the recently-closed list, which shows them as one
++  // folder and brings them back together (archive/closed_folder.h).
++  const std::string batch = base::Uuid::GenerateRandomV4().AsLowercaseString();
++  for (tabs::TabInterface* const tab : doomed) {
++    stedding::MarkClosedWithFolder(tab->GetContents(),
++                                   {.batch = batch, .name = folder->title()});
++  }
+   ExecuteCloseTabs(
+       base::BindRepeating(
+           [](const std::vector<tabs::TabInterface*>& list) { return list; },
+diff --git a/chrome/browser/ui/views/spaces/space_drag_target.cc b/chrome/browser/ui/views/spaces/space_drag_target.cc
+index 5556aa3dc8b50..af42c1cbe261d 100644
+--- a/chrome/browser/ui/views/spaces/space_drag_target.cc
++++ b/chrome/browser/ui/views/spaces/space_drag_target.cc
+@@ -29,6 +29,11 @@ SpaceDragTarget::~SpaceDragTarget() {
+ 
+ void SpaceDragTarget::SetHoveredSpace(std::optional<SpaceId> id) {
+   hovered_ = id;
++  // PLAN.md SPC-4: the chip that would take the drop is lit, and only one
++  // that would: not for an essential or a group's header.
++  if (switcher_) {
++    switcher_->SetDropTarget(CanDropTab() ? hovered_ : std::nullopt);
++  }
+ }
+ 
+ void SpaceDragTarget::OnTabDragEntered() {}
+@@ -36,13 +41,15 @@ void SpaceDragTarget::OnTabDragEntered() {}
+ TabDragContext* SpaceDragTarget::OnTabDragUpdated(
+     TabDragTarget::DragController& controller,
+     const gfx::Point& point_in_screen) {
+-  SetHoveredSpace(switcher_ ? switcher_->SpaceAtScreenPoint(point_in_screen)
+-                            : std::nullopt);
+   const DragSessionData& session = controller.GetSessionData();
+   dragged_pinned_ = std::ranges::any_of(
+       session.tab_drag_data_,
+       [](const TabDragData& data) { return data.contents && data.pinned; });
+   dragged_group_header_ = session.group_header_id().has_value();
++  // After what is dragged is known, so the chip is lit only for a drop it
++  // would take.
++  SetHoveredSpace(switcher_ ? switcher_->SpaceAtScreenPoint(point_in_screen)
++                            : std::nullopt);
+   // Keep the tabs where they are. Returning no context here popped them out
+   // into a window of their own as soon as the pointer reached the chips.
+   return const_cast<TabDragContext*>(controller.GetAttachedContext());
+@@ -53,9 +60,9 @@ void SpaceDragTarget::OnTabDragExited(const gfx::Point& point_in_screen) {
+ }
+ 
+ void SpaceDragTarget::OnTabDragEnded() {
+-  SetHoveredSpace(std::nullopt);
+   dragged_pinned_ = false;
+   dragged_group_header_ = false;
++  SetHoveredSpace(std::nullopt);
+ }
+ 
+ bool SpaceDragTarget::CanDropTab() {
+@@ -79,7 +86,7 @@ void SpaceDragTarget::HandleTabDrop(DragController& controller) {
+ void SpaceDragTarget::DropContents(
+     const std::vector<content::WebContents*>& dragged) {
+   const std::optional<SpaceId> target = hovered_;
+-  hovered_.reset();
++  SetHoveredSpace(std::nullopt);
+   if (!target || !model_->GetSpace(*target) || dragged_pinned_ ||
+       dragged_group_header_) {
+     return;
+diff --git a/chrome/browser/ui/views/spaces/space_drag_target_unittest.cc b/chrome/browser/ui/views/spaces/space_drag_target_unittest.cc
+index 193e221ddbf01..3fc7515742d1c 100644
+--- a/chrome/browser/ui/views/spaces/space_drag_target_unittest.cc
++++ b/chrome/browser/ui/views/spaces/space_drag_target_unittest.cc
+@@ -11,9 +11,13 @@
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/tabs/tab_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/spaces/space_switcher_view.h"
+ #include "chrome/browser/ui/views/tabs/dragging/drag_session_data.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/views/background.h"
++#include "ui/views/view.h"
+ #include "url/gurl.h"
+ 
+ namespace spaces {
+@@ -98,5 +102,42 @@ TEST_F(SpaceDragTargetTest, AGroupHeaderIsRefused) {
+   EXPECT_NE(other->id(), model.active_id()) << "nothing moved, nothing shown";
+ }
+ 
++// PLAN.md SPC-4, spaces B12: the chip that would take the drop is lit while
++// it would, and only then: not for an essential, not once the pointer is off
++// the chips, not after the drop.
++TEST_F(SpaceDragTargetTest, TheChipThatWouldTakeTheDropIsLit) {
++  AddTab(browser(), GURL("https://example.com/"));
++  TabStripModel* const tabs = browser()->tab_strip_model();
++
++  SpaceModel model;
++  Space* const other = model.AddSpace("Other", SK_ColorRED);
++  SpaceSwitcherView switcher(model, *browser());
++  // Wide enough that no chip is a dot.
++  switcher.SetBoundsRect(gfx::Rect(0, 0, 400, 40));
++  SpaceDragTarget target(model, *browser(), &switcher);
++  views::View* const chip = switcher.ChipForTesting(other->id());
++  ASSERT_TRUE(chip);
++  EXPECT_FALSE(chip->GetBackground());
++
++  target.SetHoveredSpace(other->id());
++  EXPECT_EQ(other->id(), switcher.drop_target_for_testing());
++  EXPECT_TRUE(chip->GetBackground()) << "the chip that would take it is dark";
++
++  target.SetHoveredSpace(std::nullopt);
++  EXPECT_EQ(std::nullopt, switcher.drop_target_for_testing());
++  EXPECT_FALSE(chip->GetBackground()) << "lit with the pointer off it";
++
++  target.SetDraggedTabPinnedForTesting(true);
++  target.SetHoveredSpace(other->id());
++  EXPECT_EQ(std::nullopt, switcher.drop_target_for_testing())
++      << "lit for an essential it will not take";
++  target.SetDraggedTabPinnedForTesting(false);
++
++  target.SetHoveredSpace(other->id());
++  target.DropContents({tabs->GetWebContentsAt(0)});
++  EXPECT_EQ(std::nullopt, switcher.drop_target_for_testing())
++      << "still lit after the drop";
++}
++
+ }  // namespace
+ }  // namespace spaces
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index 5842864681c0f..6bd36f0c479eb 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -57,6 +57,10 @@ namespace {
+ // From docs/UI-SPEC.md, measured against the reference: a row of small icons at
+ // the bottom of the sidebar, not named pills at the top.
+ constexpr int kIconSize = 24;
++// PLAN.md SPC-4: the drop target's disc, the Space's colour at about 55%
++// behind the glyph, its corners a quarter of the chip.
++constexpr SkAlpha kDropTargetAlpha = 0x8C;
++constexpr int kDropTargetRadius = kIconSize / 4;
+ // The emoji itself, in pixels; the chip is the hit target around it.
+ constexpr int kGlyphSize = 16;
+ constexpr int kRowInset = 12;
+@@ -423,19 +427,30 @@ void SpaceSwitcherView::ApplyOverflow() {
+     const Space& space = **it;
+     const size_t model_index = static_cast<size_t>(it - spaces.begin());
+     const bool active = chips_[i].second == model_->active_id();
++    // PLAN.md SPC-4: the chip a dragged tab would land on is never a dot.
++    const bool drop = drop_target_ == chips_[i].second;
+     // Stacked, the pointer does not grow the dots: the stack would change
+     // height under it and the chip it rests on would move away. The chips'
+     // tooltips name the Spaces there (sidebar Y13, Y14).
+-    const int chip_width =
+-        SwitcherChipWidth(overflow, active, row_hovered_ && !collapsed_);
++    const int chip_width = SwitcherChipWidth(
++        overflow, active || drop,
++        (row_hovered_ || drop_target_.has_value()) && !collapsed_);
+     widths.push_back(chip_width);
+     const bool dot = chip_width == kSwitcherDot;
+     chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
+                                : gfx::Size(kIconSize, kIconSize));
+     chip->SetText(dot ? std::u16string() : GlyphFor(space, model_index));
+-    chip->SetBackground(dot ? views::CreateRoundedRectBackground(
+-                                  space.color(), kSwitcherDot / 2)
+-                            : nullptr);
++    if (dot) {
++      chip->SetBackground(
++          views::CreateRoundedRectBackground(space.color(), kSwitcherDot / 2));
++    } else if (drop) {
++      chip->SetBackground(views::CreateRoundedRectBackground(
++          SkColorSetA(space.color(), kDropTargetAlpha), kDropTargetRadius));
++    } else {
++      chip->SetBackground(nullptr);
++    }
++    chip->SetEnabledTextColors(
++        SkColorSetA(SK_ColorWHITE, active || drop ? 0xFF : kInactiveAlpha));
+     if (!collapsed_) {
+       chip->SetProperty(views::kMarginsKey,
+                         gfx::Insets::TLBR(0, gap / 2, 0, gap - gap / 2));
+@@ -452,6 +467,15 @@ void SpaceSwitcherView::ApplyOverflow() {
+   icon_row_->InvalidateLayout();
+ }
+ 
++void SpaceSwitcherView::SetDropTarget(std::optional<SpaceId> id) {
++  if (drop_target_ == id) {
++    return;
++  }
++  drop_target_ = id;
++  ApplyOverflow();
++  SchedulePaint();
++}
++
+ void SpaceSwitcherView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+   if (previous_bounds.width() != width()) {
+     ApplyOverflow();
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.h b/chrome/browser/ui/views/spaces/space_switcher_view.h
+index 244eacae5d791..8c1153eae6d8a 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.h
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.h
+@@ -103,6 +103,15 @@ class SpaceSwitcherView : public views::View,
+ 
+   void SetNumberBadges(bool showing);
+ 
++  // PLAN.md SPC-4, spaces B12: the chip a dragged tab would be dropped on is
++  // lit in its Space's colour, full size and at full strength, until the
++  // drag moves off it, drops or ends. `id` is the Space that would take the
++  // drop, or none.
++  void SetDropTarget(std::optional<SpaceId> id);
++  std::optional<SpaceId> drop_target_for_testing() const {
++    return drop_target_;
++  }
++
+   // Tests: the rename the Space menu's Rename row starts, and its state.
+   void BeginRenameForTesting(const SpaceId& id) { BeginRename(id); }
+   bool IsRenamingForTesting() const { return renaming_.has_value(); }
+@@ -203,6 +212,8 @@ class SpaceSwitcherView : public views::View,
+   // wrong, so hit tests and the context menu go through this instead.
+   std::vector<std::pair<views::View*, SpaceId>> chips_;
+   HoverCallback hover_callback_;
++  // The Space a dragged tab would be dropped on (SetDropTarget).
++  std::optional<SpaceId> drop_target_;
+   bool row_hovered_ = false;
+   base::ScopedObservation<SpaceModel, SpaceModel::Observer> observation_{this};
+   std::optional<size_t> drag_chip_;
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index f15786564183c..db9c5427cd1c9 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -31,10 +31,12 @@ test("stedding_browser_tests") {
+     "media_keys_browsertest.cc",
+     "pinned_run_browsertest.cc",
+     "private_coat_browsertest.cc",
++    "quiet_start_browsertest.cc",
+     "restore_browsertest.cc",
+     "restored_page_state_browsertest.cc",
+     "screenshot_browsertest.cc",
+     "search_default_browsertest.cc",
++    "settings_security_browsertest.cc",
+     "settings_spaces_browsertest.cc",
+     "sidebar_click_browsertest.cc",
+     "sidebar_forms_browsertest.cc",
+@@ -56,14 +58,17 @@ test("stedding_browser_tests") {
+     "//chrome/browser",
+     "//chrome/browser/extensions",
+     "//chrome/browser/extensions:test_support",
++    "//chrome/browser/gcm",
+     "//chrome/browser/history",
+     "//chrome/browser/interstitials:test_support",
+     "//chrome/browser/media/webrtc",
++    "//chrome/browser/policy:policy_util",
+     "//chrome/browser/prefs:util",
+     "//chrome/browser/resource_coordinator",
+     "//chrome/browser/resource_coordinator:mojo_bindings",
+     "//chrome/browser/sessions",
+     "//chrome/browser/sessions:test_support",
++    "//chrome/browser/signin",
+     "//chrome/browser/ssl",
+     "//chrome/browser/ui",
+     "//chrome/browser/ui/animation",
+@@ -101,13 +106,17 @@ test("stedding_browser_tests") {
+     "//chrome/test/base:browser_tests_runner",
+     "//chrome/test/base:ui_test_utils",
+     "//components/history/core/browser",
++    "//components/gcm_driver",
++    "//components/gcm_driver/instance_id",
+     "//components/history/core/test",
++    "//components/invalidation",
+     "//components/javascript_dialogs",
+     "//components/keyed_service/core",
+     "//components/policy/core/common:common_constants",
+     "//components/prefs",
+     "//components/regional_capabilities",
+     "//components/search_engines",
++    "//components/signin/public/identity_manager",
+     "//components/sessions",
+     "//components/split_tabs",
+     "//components/tabs:public",
+@@ -116,6 +125,7 @@ test("stedding_browser_tests") {
+     "//extensions:test_support",
+     "//extensions/browser:test_support",
+     "//extensions/common",
++    "//google_apis",
+     "//media",
+     "//net:test_support",
+     "//services/network/public/cpp",
+diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
+index ed39a94983c24..23798c7f6586e 100644
+--- a/chrome/test/stedding/command_bar_browsertest.cc
++++ b/chrome/test/stedding/command_bar_browsertest.cc
+@@ -22,6 +22,7 @@
+ #include "base/threading/thread_restrictions.h"
+ #include "base/time/time.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/extensions/chrome_test_extension_loader.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -55,6 +56,12 @@
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/test_navigation_observer.h"
++#include "extensions/browser/disable_reason.h"
++#include "extensions/browser/extension_registrar.h"
++#include "extensions/browser/extension_registry.h"
++#include "extensions/browser/test_extension_registry_observer.h"
++#include "extensions/common/extension.h"
++#include "extensions/test/test_extension_dir.h"
+ #include "net/dns/mock_host_resolver.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -318,6 +325,78 @@ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, EveryRowRunsInAPrivateWindow) {
+   RunEveryRow(CreateIncognitoBrowser());
+ }
+ 
++// PLAN.md CMD-1 (F61): an extension with an action and a side panel,
++// reloaded and then disabled while the bar is open, leaves the bar whole.
++// Chromium's action-registry rows bound an extension's item by pointer, and a
++// reload freed the item under an open bar; the bar lists Stedding's own rows,
++// so it never lists the extension, holds nothing of it, and lists and runs
++// rows after either change.
++IN_PROC_BROWSER_TEST_F(CommandBarActionsTest,
++                       AnExtensionReloadedUnderTheOpenBarLeavesItWhole) {
++  extensions::TestExtensionDir dir;
++  dir.WriteManifest(R"({
++    "manifest_version": 3,
++    "name": "Steady Panel",
++    "version": "1",
++    "action": {"default_title": "Steady Panel"},
++    "side_panel": {"default_path": "panel.html"},
++    "permissions": ["sidePanel"]
++  })");
++  dir.WriteFile(FILE_PATH_LITERAL("panel.html"), "<!doctype html><p>Panel");
++  Profile* const profile = browser()->GetProfile();
++  const scoped_refptr<const extensions::Extension> extension =
++      extensions::ChromeTestExtensionLoader(profile).LoadExtension(
++          dir.UnpackedPath());
++  ASSERT_TRUE(extension);
++  const extensions::ExtensionId id = extension->id();
++  extensions::ExtensionRegistry* const registry =
++      extensions::ExtensionRegistry::Get(profile);
++
++  stedding::CommandBarView* const bar = Palette(browser());
++  ASSERT_TRUE(bar);
++  const auto lists_no_extension = [&]() {
++    for (const char16_t* query : {u"Steady", u"Panel", u"Side", u""}) {
++      Type(bar, query);
++      for (const std::u16string& title : Titles(bar)) {
++        EXPECT_EQ(std::u16string::npos, title.find(u"Steady")) << title;
++      }
++    }
++  };
++  lists_no_extension();
++
++  {
++    extensions::TestExtensionRegistryObserver reloaded(registry, id);
++    extensions::ExtensionRegistrar::Get(profile)->ReloadExtension(id);
++    ASSERT_TRUE(reloaded.WaitForExtensionLoaded());
++  }
++  ASSERT_EQ(bar, stedding::CommandBarView::GetOpenBar(
++                     BrowserView::GetBrowserViewForBrowser(browser())))
++      << "the reload closed the bar";
++  lists_no_extension();
++
++  {
++    extensions::TestExtensionRegistryObserver unloaded(registry, id);
++    extensions::ExtensionRegistrar::Get(profile)->DisableExtension(
++        id, {extensions::disable_reason::DISABLE_USER_ACTION});
++    ASSERT_TRUE(unloaded.WaitForExtensionUnloaded());
++  }
++  lists_no_extension();
++
++  // A row run from the same bar: Duplicate Tab adds a tab.
++  const int tabs_before = browser()->GetTabStripModel()->count();
++  Type(bar, u"Duplicate Tab");
++  const std::vector<std::u16string> titles = Titles(bar);
++  const auto row = std::ranges::find(titles, u"Duplicate Tab");
++  ASSERT_NE(titles.end(), row) << "the bar lists no Duplicate Tab";
++  for (size_t i = 0; i < static_cast<size_t>(row - titles.begin()); ++i) {
++    Press(bar, ui::VKEY_DOWN);
++  }
++  Press(bar, ui::VKEY_RETURN);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return browser()->GetTabStripModel()->count() == tabs_before + 1;
++  })) << "the row did not run";
++}
++
+ // The bar's keys in a real window (PLAN.md CMD-5; commandbar K2-K8, K14).
+ // The tabs are data: pages, which history does not keep, so the rows for a
+ // query are the typed text, the tabs and the archived tabs, and nothing else;
+diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
+index 891503dd9d3ce..23129a1af3d94 100644
+--- a/chrome/test/stedding/folder_tabs_browsertest.cc
++++ b/chrome/test/stedding/folder_tabs_browsertest.cc
+@@ -28,6 +28,7 @@
+ #include "base/test/run_until.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/sessions/tab_restore_service_factory.h"
+ #include "chrome/browser/extensions/api/tabs/tabs_api.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -40,6 +41,7 @@
+ #include "chrome/browser/ui/stedding/tab_names.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
++#include "chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -49,6 +51,7 @@
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/sessions/core/tab_restore_service.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+@@ -67,6 +70,7 @@
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/accelerators/accelerator.h"
++#include "ui/base/models/menu_model.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
+ #include "ui/events/event.h"
+@@ -374,6 +378,108 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, AMiddleTabReopenedComesBackInPlace) {
+   EXPECT_EQ(folder, ParentOf(back)) << "in its folder";
+ }
+ 
++// PLAN.md TAB-13, folders F19: Close Folder's Tabs is one entry of Recently
++// Closed. The menu shows the folder by its name and its count where its tabs
++// were an entry each; its Restore Folder, and ⇧⌘T, bring the tabs back
++// together, in their order, in a folder of that name.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest,
++                       RecentlyClosedBringsAFolderBackAsOneEntry) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  sessions::TabRestoreService* const service =
++      TabRestoreServiceFactory::GetForProfile(browser()->GetProfile());
++  ASSERT_TRUE(service);
++  for (const char* const host : {"a.test", "b.test", "c.test"}) {
++    OpenLoaded(host);
++  }
++  ASSERT_EQ(4, tab_strip_model()->count());
++  tabs::FolderTabCollection* folder =
++      tab_strip_model()->AddToNewFolder({1, 2, 3});
++  ASSERT_TRUE(folder);
++  folder->SetTitle("Reading");
++
++  // The three tabs, as their folder holds them, by host.
++  const auto in_reading = [&]() -> std::string {
++    std::string hosts;
++    for (int i = 0; i < tab_strip_model()->count(); ++i) {
++      const auto* const parent =
++          tab_strip_model()->GetTabAtIndex(i)->GetParentCollection();
++      const auto* const holder =
++          parent && parent->type() == tabs::TabCollection::Type::FOLDER
++              ? static_cast<const tabs::FolderTabCollection*>(parent)
++              : nullptr;
++      if (holder && holder->title() == "Reading") {
++        hosts += std::string(tab_strip_model()
++                                 ->GetWebContentsAt(i)
++                                 ->GetLastCommittedURL()
++                                 .host()) +
++                 " ";
++      }
++    }
++    return hosts;
++  };
++  ASSERT_EQ("a.test b.test c.test ", in_reading());
++
++  const size_t entries_before = service->entries().size();
++  tab_strip_model()->ActivateTabAt(0);
++  tab_strip_model()->CloseFolderTabs(folder);
++  folder = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return tab_strip_model()->count() == 1 &&
++           service->entries().size() == entries_before + 3;
++  }));
++
++  // One item for the folder, none for its tabs on their own.
++  {
++    RecentTabsSubMenuModel menu(nullptr, browser());
++    int folder_items = 0;
++    int restore_folder = -1;
++    for (size_t i = 0; i < menu.GetItemCount(); ++i) {
++      const std::u16string label = menu.GetLabelAt(i);
++      EXPECT_EQ(std::u16string::npos, label.find(u".test"))
++          << "a tab of the folder is an item of its own: " << label;
++      if (menu.GetTypeAt(i) != ui::MenuModel::TYPE_SUBMENU ||
++          label.find(u"Reading") == std::u16string::npos) {
++        continue;
++      }
++      ++folder_items;
++      ui::MenuModel* const sub = menu.GetSubmenuModelAt(i);
++      ASSERT_TRUE(sub);
++      ASSERT_EQ(u"Restore Folder", sub->GetLabelAt(0));
++      restore_folder = sub->GetCommandIdAt(0);
++      std::u16string tabs_listed;
++      for (size_t j = 2; j < sub->GetItemCount(); ++j) {
++        tabs_listed += sub->GetLabelAt(j) + u" ";
++      }
++      EXPECT_NE(std::u16string::npos, tabs_listed.find(u"a.test")) << tabs_listed;
++      EXPECT_LT(tabs_listed.find(u"a.test"), tabs_listed.find(u"b.test"))
++          << "the folder's tabs are listed in its order: " << tabs_listed;
++      EXPECT_LT(tabs_listed.find(u"b.test"), tabs_listed.find(u"c.test"))
++          << tabs_listed;
++    }
++    ASSERT_EQ(1, folder_items) << "Recently Closed has no item for the folder";
++    menu.ExecuteCommand(restore_folder, 0);
++  }
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return in_reading() == "a.test b.test c.test ";
++  })) << "Restore Folder brought back \"" << in_reading() << "\"";
++  EXPECT_EQ(entries_before, service->entries().size())
++      << "the folder's entries stayed in the list";
++
++  // Closed again, and ⇧⌘T brings the whole folder back.
++  const tabs::TabCollection* const again =
++      tab_strip_model()->GetTabAtIndex(1)->GetParentCollection();
++  ASSERT_TRUE(again && again->type() == tabs::TabCollection::Type::FOLDER);
++  tab_strip_model()->ActivateTabAt(0);
++  tab_strip_model()->CloseFolderTabs(const_cast<tabs::FolderTabCollection*>(
++      static_cast<const tabs::FolderTabCollection*>(again)));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return tab_strip_model()->count() == 1; }));
++  chrome::RestoreTab(browser());
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return in_reading() == "a.test b.test c.test ";
++  })) << "⇧⌘T brought back \"" << in_reading() << "\"";
++}
++
+ // TAB-6: Move Tab to New Folder on a split inside F[X, split, Y] nests the
+ // split, whole and in place.
+ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitInsideAFolderNestsInPlace) {
+diff --git a/chrome/test/stedding/quiet_start_browsertest.cc b/chrome/test/stedding/quiet_start_browsertest.cc
+new file mode 100644
+index 0000000000000..2328499579f92
+--- /dev/null
++++ b/chrome/test/stedding/quiet_start_browsertest.cc
+@@ -0,0 +1,154 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// A fresh profile at rest calls on no Google service it has no use for
++// (docs/PRIVACY.md, principle 2; docs/features/privacy.md Q11, Q12). The
++// recorded run of 2026-09-28 caught two: Google's push service, checked in
++// with and registered to within a minute of the first start, and the Google
++// account check, which sent the profile's Google cookies to
++// accounts.google.com (BACKLOG S-54, S-67).
++
++#include <atomic>
++#include <cstdint>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/run_loop.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/test/run_until.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
++#include "chrome/browser/gcm/gcm_profile_service_factory.h"
++#include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
++#include "chrome/browser/policy/policy_util.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/signin/identity_manager_factory.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "components/gcm_driver/gcm_driver.h"
++#include "components/gcm_driver/gcm_profile_service.h"
++#include "components/gcm_driver/instance_id/instance_id_driver.h"
++#include "components/gcm_driver/instance_id/instance_id_profile_service.h"
++#include "components/invalidation/invalidation_listener.h"
++#include "components/policy/core/common/remote_commands/remote_commands_constants.h"
++#include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
++#include "components/signin/public/identity_manager/identity_manager.h"
++#include "content/public/test/browser_test.h"
++#include "google_apis/gaia/gaia_switches.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace {
++
++// Long enough for what the two checks did before they were fixed: the
++// account check reached the server within a second of the call, and the
++// push service's registration was asked for while the profile started.
++constexpr base::TimeDelta kSettle = base::Seconds(3);
++
++void Settle() {
++  base::RunLoop wait;
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE, wait.QuitClosure(), kSettle);
++  wait.Run();
++}
++
++class QuietStartTest : public InProcessBrowserTest {
++ protected:
++  QuietStartTest() : gaia_(net::EmbeddedTestServer::TYPE_HTTPS) {
++    // The monitor runs on the server's own thread.
++    gaia_.RegisterRequestMonitor(base::BindRepeating(
++        [](std::atomic<int>* list_accounts,
++           const net::test_server::HttpRequest& request) {
++          if (request.relative_url.starts_with("/ListAccounts")) {
++            list_accounts->fetch_add(1);
++          }
++        },
++        &list_accounts_));
++  }
++
++  // Google's accounts host is this server, from before the browser starts,
++  // so a request made while the profile starts is seen too. Browser sign-in
++  // is not allowed, as in a Stedding build: the build carries no OAuth client,
++  // and the test suite pretends one exists (ChromeTestSuite), which the
++  // switch takes back.
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    ASSERT_TRUE(gaia_.InitializeAndListen());
++    command_line->AppendSwitchASCII(switches::kGaiaUrl,
++                                    gaia_.base_url().spec());
++    if (!signin_allowed_) {
++      command_line->AppendSwitchASCII("allow-browser-signin", "false");
++    }
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    gaia_.StartAcceptingConnections();
++  }
++
++  bool signin_allowed_ = false;
++  std::atomic<int> list_accounts_{0};
++  net::EmbeddedTestServer gaia_;
++};
++
++// The control: where browser sign-in is allowed, the same server does see the
++// account check, so a count of none above is a check that did not happen, not
++// one this server could not see.
++class QuietStartSigninAllowedTest : public QuietStartTest {
++ protected:
++  QuietStartSigninAllowedTest() { signin_allowed_ = true; }
++};
++
++// privacy Q11 (S-54): the policy invalidations asked Google's push service
++// for a token as the profile started, whether or not any policy could ever
++// arrive; the push service is started on demand now, for a site's push
++// subscription or an extension that uses it, and a fresh profile starts it
++// for neither.
++IN_PROC_BROWSER_TEST_F(QuietStartTest, GooglesPushServiceStaysOff) {
++  Settle();
++  Profile* const profile = browser()->GetProfile();
++  instance_id::InstanceIDDriver* const instance_ids =
++      instance_id::InstanceIDProfileServiceFactory::GetForProfile(profile)
++          ->driver();
++  for (const int64_t project : {policy::kPolicyInvalidationProjectNumber,
++                                policy::kRemoteCommandsInvalidationsProjectNumber}) {
++    const std::string app =
++        base::StrCat({invalidation::InvalidationListener::kFmAppId, "-",
++                      base::NumberToString(project)});
++    EXPECT_FALSE(instance_ids->ExistsInstanceID(app))
++        << app << " asked the push service for a token";
++  }
++  EXPECT_FALSE(
++      gcm::GCMProfileServiceFactory::GetForProfile(profile)->driver()->IsStarted())
++      << "the push service started with nothing to deliver";
++}
++
++// privacy Q12 (S-67): with browser sign-in not allowed, as in every Stedding
++// build, nothing asks Google which accounts the profile's cookies hold: not
++// the startup's own readers, and not a read of the cookie jar after it.
++IN_PROC_BROWSER_TEST_F(QuietStartTest, NoGoogleAccountCheckWithoutSignIn) {
++  signin::IdentityManager* const identity_manager =
++      IdentityManagerFactory::GetForProfile(browser()->GetProfile());
++  // What the session-length metric, the account investigator and the trusted
++  // vault client each call at startup.
++  EXPECT_FALSE(identity_manager->GetAccountsInCookieJar().AreAccountsFresh());
++  Settle();
++  EXPECT_EQ(0, list_accounts_.load())
++      << "the profile asked accounts.google.com which accounts its cookies "
++         "hold";
++}
++
++IN_PROC_BROWSER_TEST_F(QuietStartSigninAllowedTest,
++                       TheServerSeesTheAccountCheckWhereSignInIsAllowed) {
++  signin::IdentityManager* const identity_manager =
++      IdentityManagerFactory::GetForProfile(browser()->GetProfile());
++  identity_manager->GetAccountsInCookieJar();
++  EXPECT_TRUE(base::test::RunUntil([&]() { return list_accounts_.load() > 0; }))
++      << "the server saw no account check even with sign-in allowed";
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/settings_security_browsertest.cc b/chrome/test/stedding/settings_security_browsertest.cc
+new file mode 100644
+index 0000000000000..462e616442b20
+--- /dev/null
++++ b/chrome/test/stedding/settings_security_browsertest.cc
+@@ -0,0 +1,73 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Settings -> Privacy and security -> Security says that Safe Browsing does
++// not work in Stedding builds, above the modes it offers (docs/features/
++// privacy.md Q13, PLAN.md WEB-5). Its list update is refused without a Google
++// API key, which these builds do not carry, so no page is checked whichever
++// mode is chosen (docs/PRIVACY.md).
++
++#include <string>
++
++#include "base/test/run_until.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace {
++
++using SettingsSecurityTest = InProcessBrowserTest;
++
++// The text of the element with id $1, as the page draws it, through every
++// shadow root, with its white space folded; "" until it is drawn.
++constexpr char kDrawnText[] = R"(
++  (() => {
++    const find = root => {
++      const hit = root.getElementById ? root.getElementById($1) : null;
++      if (hit) {
++        return hit;
++      }
++      for (const element of root.querySelectorAll('*')) {
++        if (element.shadowRoot) {
++          const found = find(element.shadowRoot);
++          if (found) {
++            return found;
++          }
++        }
++      }
++      return null;
++    };
++    const element = find(document);
++    return element && element.offsetParent !== null
++        ? element.textContent.replace(/\s+/g, ' ').trim()
++        : '';
++  })()
++)";
++
++// privacy Q13: the note is on the page a user opens to choose a mode, shown,
++// and says that the lists need a key the build does not have.
++IN_PROC_BROWSER_TEST_F(SettingsSecurityTest, ThePageSaysSafeBrowsingDoesNotWork) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("chrome://settings/security")));
++  content::WebContents* const page =
++      browser()->tab_strip_model()->GetActiveWebContents();
++  std::string note;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    note = content::EvalJs(page, content::JsReplace(
++                                     kDrawnText,
++                                     "steddingSafeBrowsingUnavailable"))
++               .ExtractString();
++    return !note.empty();
++  })) << "chrome://settings/security shows no word about Safe Browsing";
++  EXPECT_EQ(0u, note.find("Safe Browsing does not work in Stedding yet."))
++      << note;
++  EXPECT_NE(std::string::npos, note.find("Stedding builds do not carry"))
++      << note;
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
+index 1052a048cb2b3..f98c27763edca 100644
+--- a/chrome/test/stedding/tab_drop_browsertest.cc
++++ b/chrome/test/stedding/tab_drop_browsertest.cc
+@@ -386,4 +386,69 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, TabsDroppedOnAChipMoveToThatSpace) {
+   }
+ }
+ 
++// PLAN.md SPC-4, spaces B12: while a dragged row is over a chip that would
++// take it, that chip is lit; it goes dark when the pointer leaves it and once
++// the row is dropped, and an essential, which no chip takes, lights none.
++IN_PROC_BROWSER_TEST_F(TabDropTest, TheChipUnderADraggedRowIsLit) {
++  spaces::SpaceModel* const m = model();
++  ASSERT_TRUE(m);
++  const spaces::SpaceId work = m->AddSpace("Work", SK_ColorBLUE)->id();
++  tabs::TabInterface* const essential = Open("essential.test");
++  tab_strip_model()->SetTabPinned(Index(essential), true);
++  tabs::TabInterface* const plain = Open("plain.test");
++  Open("stay.test");
++  ASSERT_TRUE(ChipCentre(work));
++  spaces::SpaceSwitcherView* const switcher = FindDrawnSwitcher(root());
++  ASSERT_TRUE(switcher);
++
++  // Pressed on the row, moved over the chip in steps, not released.
++  const gfx::Point row = RowCentre(plain);
++  const gfx::Point chip = *ChipCentre(work);
++  const auto move = [&](const gfx::Point& from, const gfx::Point& to) {
++    for (int step = 1; step <= 12; ++step) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * step / 12,
++                     from.y() + (to.y() - from.y()) * step / 12));
++    }
++    base::RunLoop().RunUntilIdle();
++  };
++  stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed, row);
++  move(row, chip);
++  EXPECT_EQ(work, switcher->drop_target_for_testing())
++      << "the chip under the dragged row is not lit";
++  views::View* const lit = switcher->ChipForTesting(work);
++  ASSERT_TRUE(lit);
++  EXPECT_TRUE(lit->GetBackground()) << "the lit chip draws nothing behind it";
++
++  // Away from the chips, back over the list: dark again.
++  move(chip, row);
++  EXPECT_EQ(std::nullopt, switcher->drop_target_for_testing())
++      << "the chip stayed lit with the pointer off it";
++
++  // Back over the chip and dropped: the row moves, and the chip goes dark.
++  move(row, chip);
++  stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, chip);
++  base::RunLoop().RunUntilIdle();
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return m->SpaceForTab(plain) == work;
++  })) << "the row did not move to Work";
++  EXPECT_EQ(std::nullopt, switcher->drop_target_for_testing())
++      << "the chip stayed lit after the drop";
++
++  // An essential belongs to every Space: no chip lights for it.
++  ASSERT_TRUE(m->SetActiveSpace(m->spaces().front()->id()));
++  tab_strip_model()->ActivateTabAt(Index(essential));
++  const gfx::Point pinned = RowCentre(essential);
++  const gfx::Point chip_again = *ChipCentre(work);
++  stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed, pinned);
++  move(pinned, chip_again);
++  EXPECT_EQ(std::nullopt, switcher->drop_target_for_testing())
++      << "a chip lit for an essential it will not take";
++  stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased,
++                                chip_again);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_TRUE(essential->IsPinned());
++}
++
+ }  // namespace

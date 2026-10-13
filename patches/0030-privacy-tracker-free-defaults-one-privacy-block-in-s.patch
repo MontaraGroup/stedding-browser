@@ -21,8 +21,11 @@ Removable when: Chromium ships these defaults, or a build flag sets them.
  .../metrics/chrome_feature_list_creator.cc    |  5 ++
  .../net/profile_network_context_service.cc    |  4 +-
  .../quiet_notification_permission_ui_state.cc | 15 +++-
+ .../user_fm_registration_token_uploader.cc    | 33 +++++++-
+ .../user_fm_registration_token_uploader.h     | 20 ++++-
  chrome/browser/prefs/browser_prefs.cc         |  2 +
  chrome/browser/profiles/profile.cc            | 28 ++++---
+ .../privacy_page/security/security_page.html  |  5 ++
  .../stedding_page/stedding_page.html.ts       | 70 ++++++++++++++++
  chrome/browser/ui/browser_ui_prefs.cc         |  7 +-
  chrome/browser/ui/stedding/BUILD.gn           | 19 +++++
@@ -31,9 +34,12 @@ Removable when: Chromium ships these defaults, or a build flag sets them.
  .../ui/stedding/privacy_defaults_unittest.cc  | 83 +++++++++++++++++++
  chrome/browser/ui/stedding/stedding_prefs.cc  |  4 +
  chrome/browser/ui/stedding/stedding_prefs.h   |  7 ++
+ .../settings_localized_strings_provider.cc    | 12 +++
  .../browser/ui/webui/settings/settings_ui.cc  | 47 +++++++++++
  .../core/browser/cookie_settings.cc           |  5 +-
- 17 files changed, 366 insertions(+), 21 deletions(-)
+ .../gaia_cookie_manager_service.cc            | 13 +++
+ .../gaia_cookie_manager_service_unittest.cc   | 19 +++++
+ 23 files changed, 466 insertions(+), 23 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/privacy_defaults.cc
  create mode 100644 chrome/browser/ui/stedding/privacy_defaults.h
  create mode 100644 chrome/browser/ui/stedding/privacy_defaults_unittest.cc
@@ -142,6 +148,111 @@ index 105ec6f8aff76..c2fcbbfad8d37 100644
    registry->RegisterBooleanPref(
        prefs::kDidMigrateAdaptiveNotifiationQuietingToCPSS,
        /*default_value=*/false);
+diff --git a/chrome/browser/policy/cloud/user_fm_registration_token_uploader.cc b/chrome/browser/policy/cloud/user_fm_registration_token_uploader.cc
+index d2386d277ef45..c8c986865f8f2 100644
+--- a/chrome/browser/policy/cloud/user_fm_registration_token_uploader.cc
++++ b/chrome/browser/policy/cloud/user_fm_registration_token_uploader.cc
+@@ -63,18 +63,49 @@ UserFmRegistrationTokenUploader::~UserFmRegistrationTokenUploader() = default;
+ 
+ void UserFmRegistrationTokenUploader::Shutdown() {
+   profile_observation_.Reset();
++  core_observation_.Reset();
+   uploaders_.clear();
++  profile_ = nullptr;
+ }
+ 
+ void UserFmRegistrationTokenUploader::OnProfileInitializationComplete(
+     Profile* profile) {
+   CHECK(profile_observation_.IsObservingSource(profile));
+   profile_observation_.Reset();
++  profile_ = profile;
++
++  // Stedding (privacy Q11): the uploaders exist to deliver user policy
++  // changes, which only a connected policy core has; each starts by asking
++  // Google's push service for a token. They started for every profile, and
++  // a fresh one with no account checked in with android.clients.google.com
++  // and registered with it within a minute of its first launch, and again on
++  // every launch after (BACKLOG S-54). Start them once the core connects.
++  if (policy_manager_->core()->IsConnected()) {
++    StartUploaders();
++  } else {
++    core_observation_.Observe(policy_manager_->core());
++  }
++}
++
++void UserFmRegistrationTokenUploader::OnCoreConnected(CloudPolicyCore* core) {
++  core_observation_.Reset();
++  StartUploaders();
++}
+ 
++void UserFmRegistrationTokenUploader::OnCoreDestruction(
++    CloudPolicyCore* core) {
++  core_observation_.Reset();
++}
++
++void UserFmRegistrationTokenUploader::StartUploaders() {
++  CHECK(profile_);
++  if (!uploaders_.empty()) {
++    return;
++  }
+   // Initialize now that profile creation is complete and the invalidation
+   // service can safely be initialized.
+   invalidation::ProfileInvalidationProvider* invalidation_provider =
+-      GetInvalidationProvider(profile);
++      GetInvalidationProvider(profile_);
+   if (!invalidation_provider) {
+     VLOG(1) << "Invalidation provider does not exist.";
+     return;
+diff --git a/chrome/browser/policy/cloud/user_fm_registration_token_uploader.h b/chrome/browser/policy/cloud/user_fm_registration_token_uploader.h
+index 8fcf54be081c7..c21baca09e6a0 100644
+--- a/chrome/browser/policy/cloud/user_fm_registration_token_uploader.h
++++ b/chrome/browser/policy/cloud/user_fm_registration_token_uploader.h
+@@ -8,9 +8,11 @@
+ #include <memory>
+ #include <vector>
+ 
++#include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
+ #include "chrome/browser/profiles/profile_observer.h"
+ #include "components/keyed_service/core/keyed_service.h"
++#include "components/policy/core/common/cloud/cloud_policy_core.h"
+ 
+ class Profile;
+ 
+@@ -22,7 +24,8 @@ class FmRegistrationTokenUploader;
+ // Uploads Firebase registration token to the backend server. Implemented as a
+ // KeyedService to allow profile-based lifetime management.
+ class UserFmRegistrationTokenUploader : public KeyedService,
+-                                        public ProfileObserver {
++                                        public ProfileObserver,
++                                        public CloudPolicyCore::Observer {
+  public:
+   // `profile` is profile associated with the invalidator. It is used to get
+   // a reference to the profile's invalidation service. Both the profile and
+@@ -43,8 +46,23 @@ class UserFmRegistrationTokenUploader : public KeyedService,
+   // ProfileObserver implementation:
+   void OnProfileInitializationComplete(Profile* profile) override;
+ 
++  // CloudPolicyCore::Observer:
++  void OnCoreConnected(CloudPolicyCore* core) override;
++  void OnRefreshSchedulerStarted(CloudPolicyCore* core) override {}
++  void OnCoreDisconnecting(CloudPolicyCore* core) override {}
++  void OnCoreDestruction(CloudPolicyCore* core) override;
++
+  private:
++  // Stedding (privacy Q11): one uploader per project number, each of which
++  // asks Google's push service for a token at once.
++  void StartUploaders();
++
+   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
++  base::ScopedObservation<CloudPolicyCore, CloudPolicyCore::Observer>
++      core_observation_{this};
++
++  // Set once the profile is initialized; the uploaders start from it.
++  raw_ptr<Profile> profile_ = nullptr;
+ 
+   raw_ptr<CloudPolicyManager> policy_manager_ = nullptr;
+ 
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
 index 2653e37becbfa..9ebf3e9605198 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
@@ -245,6 +356,22 @@ index 6b1628c9f6aa1..9bfa50aa4901c 100644
    return chrome_variations_client_.get();
  }
  
+diff --git a/chrome/browser/resources/settings/privacy_page/security/security_page.html b/chrome/browser/resources/settings/privacy_page/security/security_page.html
+index ee6059097c7f0..a96e45e5cf207 100644
+--- a/chrome/browser/resources/settings/privacy_page/security/security_page.html
++++ b/chrome/browser/resources/settings/privacy_page/security/security_page.html
+@@ -81,6 +81,11 @@
+       route-path$="[[routePath]]">
+     <div id="safeBrowsingSection">
+       <h2 class="cr-title-text">$i18n{safeBrowsingSectionLabel}</h2>
++      <div id="steddingSafeBrowsingUnavailable" class="cr-row first">
++        <div class="flex cr-padded-text">
++          $i18n{steddingSafeBrowsingUnavailable}
++        </div>
++      </div>
+       <settings-radio-group id="safeBrowsingRadioGroup" no-set-pref
+           pref="{{prefs.generated.safe_browsing}}"
+           selectable-elements="cr-radio-button, settings-collapse-radio-button"
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 index 927ae43153875..fd7a78d98c843 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
@@ -646,6 +773,29 @@ index e9c8ae5759b98..73a9a32b78c28 100644
  
  }  // namespace stedding::prefs
  
+diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+index 6c98b8d932fb0..de3a7846ff468 100644
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2856,6 +2856,18 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
+        IDS_SETTINGS_SECURITY_JAVASCRIPT_GUARDRAILS_MANAGE_SITE_EXCEPTIONS_DESCRIPTION}};
+   html_source->AddLocalizedStrings(kLocalizedStrings);
+ 
++  // Stedding (privacy Q13, PLAN.md WEB-5): Safe Browsing's lists come from
++  // Google with a key these builds do not carry, so its update is refused and
++  // no page is checked, whichever mode is chosen; the Security page says so
++  // above the modes rather than offer protection that is not there. English
++  // only, as the rest of Stedding's own text (docs/QUALITY.md).
++  html_source->AddString(
++      "steddingSafeBrowsingUnavailable",
++      u"Safe Browsing does not work in Stedding yet. Its lists of dangerous "
++      u"sites come from Google with a key that Stedding builds do not carry, "
++      u"so pages are not checked against them, whichever option is chosen "
++      u"below.");
++
+   html_source->AddString("cookiesSettingsHelpCenterURL",
+                          chrome::kCookiesSettingsHelpCenterURL);
+ 
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
 index 4ca1d74a5b34d..e2324e32d7acb 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
@@ -722,3 +872,64 @@ index 183e84960da3f..0b04ef72edb65 100644
        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
  }
  
+diff --git a/components/signin/internal/identity_manager/gaia_cookie_manager_service.cc b/components/signin/internal/identity_manager/gaia_cookie_manager_service.cc
+index db2e0266aa220..f567ea29999a9 100644
+--- a/components/signin/internal/identity_manager/gaia_cookie_manager_service.cc
++++ b/components/signin/internal/identity_manager/gaia_cookie_manager_service.cc
+@@ -525,6 +525,19 @@ GaiaCookieManagerService::GetCachedListAccounts() {
+ }
+ 
+ void GaiaCookieManagerService::TriggerListAccounts() {
++  // Stedding (privacy Q12): a profile in which browser sign-in is not allowed
++  // -- every Stedding build, which carries no OAuth client -- has no use for
++  // the Google accounts its cookies hold, and the check sent those cookies to
++  // accounts.google.com within a minute of every start, for a session-length
++  // metric, the account investigator and the trusted vault client (BACKLOG
++  // S-67). The jar then reads as empty and not fresh.
++  if (const PrefService* const pref_service = signin_client_->GetPrefs()) {
++    const PrefService::Preference* const allowed =
++        pref_service->FindPreference(prefs::kSigninAllowed);
++    if (allowed && !allowed->GetValue()->GetBool()) {
++      return;
++    }
++  }
+   // Callers suspect that a check to Gaia needs to be done, don't rely on the
+   // in progress request, conditions might have changed while the request is
+   // in-flight.
+diff --git a/components/signin/internal/identity_manager/gaia_cookie_manager_service_unittest.cc b/components/signin/internal/identity_manager/gaia_cookie_manager_service_unittest.cc
+index cc7388b2b6f3f..ef6bddfef90a0 100644
+--- a/components/signin/internal/identity_manager/gaia_cookie_manager_service_unittest.cc
++++ b/components/signin/internal/identity_manager/gaia_cookie_manager_service_unittest.cc
+@@ -149,6 +149,8 @@ class GaiaCookieManagerServiceTest : public testing::Test {
+         canceled_(GoogleServiceAuthError::CreateRequestCanceled()) {
+     AccountTrackerService::RegisterPrefs(pref_service_.registry());
+     GaiaCookieManagerService::RegisterPrefs(pref_service_.registry());
++    // Stedding (privacy Q12): sign-in allowed, as upstream's tests assume.
++    pref_service_.registry()->RegisterBooleanPref(prefs::kSigninAllowed, true);
+     signin_client_ = std::make_unique<CustomTestSigninClient>(&pref_service_);
+ 
+ #if BUILDFLAG(IS_ANDROID)
+@@ -712,6 +714,23 @@ TEST_F(GaiaCookieManagerServiceTest, ListAccountsFirstReturnsEmpty) {
+                   .empty());
+ }
+ 
++// Stedding (privacy Q12): with browser sign-in not allowed, as in every
++// Stedding build, nothing asks Google which accounts the cookies hold: no
++// /ListAccounts request starts, from a read, a trigger or a cookie change,
++// and the jar reads as empty and not fresh (BACKLOG S-67).
++TEST_F(GaiaCookieManagerServiceTest, NoListAccountsWhileSigninIsNotAllowed) {
++  signin_client()->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
++  InstrumentedGaiaCookieManagerService helper(account_tracker_service(),
++                                              token_service(), signin_client());
++  MockObserver observer(&helper);
++
++  EXPECT_CALL(helper, StartFetchingListAccounts()).Times(0);
++  EXPECT_EQ(helper.ListAccounts(), kCookiesEmptyStale);
++  helper.TriggerListAccounts();
++  helper.ForceOnCookieChangeProcessing();
++  EXPECT_EQ(helper.ListAccounts(), kCookiesEmptyStale);
++}
++
+ TEST_F(GaiaCookieManagerServiceTest, ListAccountsFindsOneAccount) {
+   InstrumentedGaiaCookieManagerService helper(account_tracker_service(),
+                                               token_service(), signin_client());

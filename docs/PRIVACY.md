@@ -63,10 +63,29 @@ window is still to do):
 | `update.googleapis.com`, `edgedl.me.gvt1.com` | Component updates and their downloads: the first check at about one minute, then roughly every five hours, the certificate CRLSet among them | Yes |
 | `safebrowsing.googleapis.com` | One Safe Browsing list update, refused (HTTP 400: no API key) | Yes |
 | `clients2.google.com/time/1/current` | Chromium's network time | Yes |
-| `android.clients.google.com/checkin`, `/c2dm/register3` | Google's push service: a device check-in and registrations | **No** (`BACKLOG.md` S-54) |
-| `accounts.google.com/ListAccounts` | The Google account check, with no account signed in | **No** (`BACKLOG.md` S-67) |
+| `android.clients.google.com/checkin`, `/c2dm/register3` | Google's push service: a device check-in and registrations | **No**; stopped in the series since 2026-10-12 (`BACKLOG.md` S-54) |
+| `accounts.google.com/ListAccounts` | The Google account check, with no account signed in | **No**; stopped in the series since 2026-10-12 (`BACKLOG.md` S-67) |
 
-The last two break principle 2 until they are removed. The new tab page is local
+The last two broke principle 2, and the series has stopped both since 2026-10-12; the
+next release carries it (`docs/features/privacy.md` Q11, Q12).
+
+2026-10-12, the release build of the series with that fix, a new profile in a temporary
+folder, nothing opened, from the same log: five minutes headless and ten with a window,
+each run beside the same run of beta 10 as a control:
+
+| Host | The fixed series | Beta 10 |
+|---|---|---|
+| `update.googleapis.com`, `edgedl.me.gvt1.com` | Component updates | The same |
+| `safebrowsing.googleapis.com` | The list update, refused | The same |
+| `clients2.google.com/time/1/current` | Network time | The same |
+| `accounts.google.com/ListAccounts` | **Not asked** | Asked, in both runs |
+| `android.clients.google.com` | Not contacted | Not contacted either |
+
+The account check is gone. The push service was not reached in these runs by either
+build, so they cannot show its part; that rests on the browser test that failed before the
+fix (`QuietStartTest.GooglesPushServiceStaysOff`: the policy invalidations no longer ask
+it for a token at start). The runs used a stand-in keychain, so as not to touch the
+login keychain; whether that keeps the push service from starting is not known. The new tab page is local
 and makes no request of its own (`features/new-tab.md` N1). Nothing here is telemetry, but "no telemetry" and "contacts nothing" are
 different claims, and only the first is true today, which is why `docs/QUALITY.md`
 makes an unexplained endpoint a release blocker.
@@ -109,7 +128,8 @@ after start, went to `safebrowsing.googleapis.com` with no key and Google answer
 HTTP 400. So the local lists stay empty and no listed site gets a warning page --
 while the requests themselves still reach Google, with your IP address. Only the
 local warnings for dangerous file types remain. Do not count on Safe Browsing to
-protect you in Stedding. The route the owner chose (2026-10-01, `BACKLOG.md` S-75) is
+protect you in Stedding. Settings → Privacy and security → Security says so too, above
+the modes it offers (since 2026-10-12; `docs/features/privacy.md` Q13). The route the owner chose (2026-10-01, `BACKLOG.md` S-75) is
 the lists through stedding.dev, with the key on the server and no Google API in the
 browser; it is set aside for now, on the owner's word.
 
@@ -219,8 +239,6 @@ patch has changed yet:
 
 | Still to do | Today |
 |---|---|
-| Google's push service at startup | A fresh profile checks in with it (`BACKLOG.md` S-54) |
-| The account check at startup | A fresh profile asks `accounts.google.com` (`BACKLOG.md` S-67) |
 | Network time queries off | On by default on desktop, and not gated on branding |
 | Translate off by default | `translate.enabled` defaults to true |
 | No navigation prediction or preconnect | `net.network_prediction_options` defaults to standard preloading |
