@@ -43,7 +43,7 @@ Eighty-odd traps follow. Read the one for the topic in front of you, not the lis
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
@@ -1090,6 +1090,18 @@ private window has.
     unanswered question and timed out, and the probe took 75 s instead of 7 (2026-10-12).
     The question is the operator's to answer; run `verify-build --offline` and say so in
     the notes, and count the questions left on screen for the operator.
+
+86. **A layout that is right at rest can be wrong for the length of an animation.** The
+    tests settled the sidebar before they measured, and every steady form cleared the Mac's
+    traffic lights; the operator saw the lights on Back and Forward in a test window, while
+    a hidden sidebar opened and its strip was still narrower than the lights, a state that
+    lasted seconds on a loaded Mac (2026-10-13). Seven live repros of steady states found
+    nothing. Two things found it: capturing the test processes' own windows a few times a
+    second while the suite ran (by window id and owner name, nothing else on the screen),
+    and a test that steps the animation by hand
+    (`BrowserAnimationController::SetAnimationContainerForTesting` with an
+    `AnimationContainerTestApi`) and checks every step
+    (`WindowButtonsTest.OpeningAHiddenSidebarKeepsTheRowOffTheLights`).
 
 ## The Windows build
 

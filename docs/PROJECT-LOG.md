@@ -7,7 +7,7 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
-## 2026-10-12 -- two privacy leaks and Phase 0's last code items (patches 0030, 0062)
+## 2026-10-12 and 13 -- two privacy leaks, Phase 0's last code items, and the operator's three (patches 0030, 0062)
 
 The operator asked for the two startup calls to Google (`S-54`, `S-67`) and the Phase 0
 items with code left (TAB-13, SPC-4, WEB-5, CMD-1), pushed without a release and tested
@@ -46,15 +46,53 @@ properly. Every fix has a test that failed with the fix taken out.
   patch, 0062, under the operator-round exception. A Mac checked configuration,
   `tooling/args/mac-checks.gn`, and a Mac-only unit filter table in `tooling/dev` (trap
   80's case: `HistoryMenuBridgeTest` exists only on the Mac).
-- **Tests**: on the release build, 921 of 921 unit tests and 20 of 20 component tests (the account-check
-  test among them), and 215 of 221 browser tests: the six others (four `SidebarRailTest`, two
-  `SidebarFormsRtlTest`) crashed or timed out at "CompleteShutdown took more than 30 seconds"
-  with the Mac at a load of 100 to 400 (trap 66), before any check of their own, and wait for
-  a quiet rerun. Each new test also ran on its own, three to five times, green.
-- **Not done**: the suites on the Mac's checked build (about 55,000 steps of it built overnight, stopped
-  when the Mac went on battery with its lid closed); the quiet rerun of the six sidebar tests;
-  live looks at the Settings note and at Recently Closed with a folder, which waited on a
-  `ps` that hung on the loaded machine. Committed, not pushed, until those are done.
+- **Tests**: on the release build with every change of the round in, 941 of 941 unit tests,
+  20 of 20 component tests (the account-check test among them) and 225 of 225 browser tests,
+  in one run at a load near 10. An earlier run, before the operator's three, had six sidebar
+  tests crash at "CompleteShutdown took more than 30 seconds" with the Mac at a load of 100 to
+  400 (trap 66); they passed on their own once it fell. Each new test also ran on its own.
+- **Seen live** with the real pointer and keyboard on fresh profiles: the lit chip (above);
+  Settings → Security's note above the Safe Browsing modes; a folder of three tabs closed from
+  its header's menu, the Mac's History menu holding it as one item, "New Folder - 3 Tabs",
+  with Restore Folder and its tabs in order, and ⇧⌘T bringing the folder back with its first
+  tab shown. That look found the unnamed folder's item reading " - 3 Tabs": the close now
+  records the name the header shows (`FolderTabsTest.AnUnnamedFolderKeepsItsHeadersName`,
+  red before the fix).
+- **The checked build** (`tooling/args/mac-checks.gn`, DCHECKs and the dangling-pointer
+  detector; the Mac's first). Its first run passed 922 of 922 unit tests and 20 of 20 component
+  tests, and 11 browser tests crashed with the detector's report: the tab layout's animation
+  maps (`TabCollectionAnimatingLayoutManager`) kept raw pointers to rows destroyed outright, a
+  folder closed or a window restored. The manager forgets a child now when its host loses it
+  (`TabCollectionAnimatingLayoutManagerTest.AChildDestroyedOutrightLeavesNoPointerBehind`,
+  which crashed with the report before the fix). With every change of the round in, the
+  checked build passed 941 of 941 unit tests, 20 of 20 component tests and 225 of 225 browser
+  tests, with no dangling-pointer report.
+- **The operator's three** (2026-10-13; patch 0062). Each test failed with its fix taken out.
+  - *Split view* (splits J7): Chromium padded each pane 5 DIP for its ring, so a band of the
+    mat ran between the address row and both pages and the pages were 20 DIP apart. A pane
+    is the page itself now: measured on the release build, the pages start under the row's
+    1 DIP hairline (a 6 DIP band before), lie 6 DIP apart and keep the card's 6 DIP gutter
+    to the window's edge (11 before); with the sidebar hidden, 6 DIP apart and edge to edge.
+    `SidebarFormsTest.SplitPanesAreThePageAGutterApart`.
+  - *The traffic lights on Back and Forward* (sidebar Y19). The operator saw it in a test
+    window. Every steady form cleared the lights in seven live repros; capturing the test
+    windows a few times a second found it: while a hidden sidebar opens, or the closed form
+    changes between the rail and nothing, the strip is narrower than the lights, and the
+    row started right after the strip, under them, for seconds on the loaded Mac (trap 86).
+    The row's contents now start past the lights while the strip is narrower than the rail.
+    `WindowButtonsTest.OpeningAHiddenSidebarKeepsTheRowOffTheLights` steps the animation by
+    hand (13 steps under the lights without the fix); live, Cmd-S toggled six times over an
+    orange page and captured about ten times a second: the seven frames with a strip narrower
+    than the rail all had Back at 127 pt, past the lights.
+  - *Back, Forward and Reload with no ground* (private V9, half of PLAN.md WIN-6). A private
+    or Guest window has no Space model, which owns the page's colour, so its row was never
+    painted and the buttons sat on the bare window ground. `BrowserWindowFeatures` owns the
+    colour for those windows; in a private window the row's supplier takes the colour key's
+    one slot, marked to stand for the private mark, so the window stays graphite.
+    `PrivateCoatTest.APrivateWindowsRowTakesThePagesColour`,
+    `SteddingColorMixerTest.AMarkedSupplierStandsForThePrivateMark`; live, a private window
+    over the incognito page, an orange page and a white one: the row in each page's colour,
+    the buttons on it, the ground graphite.
 
 ## 2026-10-12 -- the Mac's pass on betas 13 and 14 (beta 14's macOS image)
 

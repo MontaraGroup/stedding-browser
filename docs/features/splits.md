@@ -1,6 +1,6 @@
 # Feature: Splits
 
-Status: **J1, J4, J6 built; J2 partial**; **J3, J5 planned** (all three open in BACKLOG S-102).
+Status: **J1, J4, J6, J7 built; J2 partial**; **J3, J5 planned** (all three open in BACKLOG S-102).
 Owner docs: `docs/PRODUCT.md` §4. Patch: none of its own; each row lands with the item that implements it.
 
 A split is one row and one unit for every sidebar verb; the model is Chromium's
@@ -16,3 +16,4 @@ split view.
 | J4 | Move to Space, Sleep and ⌘D act on both panes together (the split is one selection, tabs R20–R22). A split sleeps as one row: Sleep Tab on the split on screen activates a visible row outside it, then discards both panes; if either pane is in use (tabs R6), neither sleeps and Sleep Tab on it is greyed. Sleep Other Tabs asked from one pane leaves the other awake, and never takes the split on screen. | SpaceWindowTest.SplitPanesTakeVerbsTogether (Move to Space and ⌘D reach both panes through `SpaceModel::SplitPeers`; the selection carries both panes, so `TabsToSleep` takes both); `SleepTabsTest.SleepTabOnTheActiveSplitSleepsBothPanes`; `SleepTabsTest.APaneInUseKeepsItsSplitAwake`; `SleepTabsTest.SleepOthersKeepsItsOwnRowAndTheScreen`. | built |
 | J5 | A Space-pinned tab that joins a split leaves the pinned run for the split's row: keep or fix is TBD; the answer is a row here. | TBD | planned · BACKLOG S-102 |
 | J6 | No ring around the panes: page U6–U7 (the outline colours mapped to the row-text tint; the 3 px highlight for a drop target only). | the U6 probe (page U6) | built |
+| J7 | Each pane is the page itself, cut as the one page is outside a split: no padding inside a pane, so both pages start right under the address row, keep the card's gutters to the window's edges (none with the sidebar hidden, sidebar Y19), and lie one card gutter (6 DIP) apart, the resize handle drawn in the gap. Square under the row, the card's radius at their feet (square with no gutter); stacked, the lower pane's top corners take the radius. Chromium padded each pane 5 DIP for its ring: a band of the mat ran between the row and both pages, and the pages were 20 DIP apart (operator, 2026-10-13). The ring shows only to mark a drop target (page U7). | browser: `SidebarFormsTest.SplitPanesAreThePageAGutterApart` (open and hidden: the panes' tops, outer edges and feet where the one page's were, a gutter apart, cut as the card is); live, Mac release build, 2026-10-13 | built |

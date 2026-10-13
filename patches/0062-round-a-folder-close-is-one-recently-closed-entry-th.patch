@@ -7,9 +7,9 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-The Mac's round of 2026-10-12 on the operator's word, as one patch: its
-fixups would conflict with the archive and test layouts that patches 0058
-to 0061 changed.
+The Mac's round of 2026-10-12 and 13 on the operator's word, as one
+patch: its fixups would conflict with the archive and test layouts that
+patches 0058 to 0061 changed.
 
 A folder close as one entry (PLAN.md TAB-13, folders F19): Close Folder's
 Tabs marks each tab with the close's batch and the folder's name. The app
@@ -27,9 +27,28 @@ Quiet starts (privacy Q11 to Q13): the browser tests of the code in patch
 0030, no push service and no Google account check at start, and the
 Security page's word on Safe Browsing.
 
+A dangling pointer the Mac's checked build found: the tab layout's
+animation maps kept rows that were destroyed outright (a folder closed, a
+window restored). The layout manager forgets a child when its host loses
+it.
+
+Split panes are the page (splits J7): no padding inside a pane, so both
+pages start right under the address row, keep the card's gutters and lie
+a card gutter apart.
+
+The row off the traffic lights (sidebar Y19): while the strip is narrower
+than the rail, as when a hidden sidebar opens, the row's contents start
+past the lights.
+
+A private window's row in the page's colour (private V9, half of PLAN.md
+WIN-6): a private or Guest window owns its page colour, and a private
+window's row supplier stands for the private mark in its colour key.
+
 Why: the operator asked for the Phase 0 items with code left and the two
-privacy leaks at startup, tested properly; each has its behaviour id and
-tests that failed before the fix.
+privacy leaks at startup, tested properly, and then reported the split
+view's gaps, the traffic lights on Back in a test window, and Back,
+Forward and Reload with no ground under them; each change has its
+behaviour id and tests that failed before the fix.
 Removable when: never; these are Stedding's own behaviours.
 ---
  chrome/browser/app_controller_mac.mm          |   8 +
@@ -42,29 +61,54 @@ Removable when: never; these are Stedding's own behaviours.
  chrome/browser/ui/archive/closed_folder.h     |  73 +++++++++
  .../ui/archive/closed_folder_unittest.cc      |  91 +++++++++++
  chrome/browser/ui/browser_tab_restorer.cc     |  13 ++
+ .../ui/browser_window/internal/BUILD.gn       |   2 +
+ .../internal/browser_window_features.cc       |   9 +
+ .../public/browser_window_features.h          |   5 +
  chrome/browser/ui/cocoa/BUILD.gn              |   1 +
  chrome/browser/ui/cocoa/history_menu_bridge.h |  15 ++
  .../browser/ui/cocoa/history_menu_bridge.mm   |  75 ++++++++-
  .../ui/cocoa/history_menu_bridge_unittest.mm  |  46 ++++++
  .../ui/cocoa/history_menu_cocoa_controller.mm |  17 ++
+ chrome/browser/ui/color/BUILD.gn              |  14 ++
+ .../browser/ui/color/stedding_color_mixer.cc  |   6 +-
+ .../ui/color/stedding_color_mixer_unittest.cc |  29 ++++
+ .../browser/ui/color/stedding_private_key.cc  |  40 +++++
+ .../browser/ui/color/stedding_private_key.h   |  28 ++++
+ chrome/browser/ui/stedding/theme/BUILD.gn     |   1 +
+ .../theme/page_theme_color_controller.cc      |  22 ++-
+ .../theme/page_theme_color_controller.h       |  12 +-
  chrome/browser/ui/tabs/BUILD.gn               |   2 +
  .../ui/tabs/recent_tabs_sub_menu_model.cc     |  54 +++++-
  .../ui/tabs/recent_tabs_sub_menu_model.h      |  11 ++
- chrome/browser/ui/tabs/tab_strip_model.cc     |  10 ++
+ chrome/browser/ui/tabs/tab_strip_model.cc     |  13 ++
+ .../browser/ui/views/frame/browser_widget.cc  |  23 +--
+ .../ui/views/frame/contents_container_view.cc |  20 ++-
+ .../ui/views/frame/contents_container_view.h  |   3 +
+ .../layout/stedding_browser_view_layout.cc    |  22 ++-
+ .../ui/views/frame/multi_contents_view.cc     |  34 +++-
+ .../ui/views/frame/multi_contents_view.h      |   4 +
  .../ui/views/spaces/space_drag_target.cc      |  15 +-
  .../spaces/space_drag_target_unittest.cc      |  41 +++++
  .../ui/views/spaces/space_switcher_view.cc    |  34 +++-
  .../ui/views/spaces/space_switcher_view.h     |  11 ++
- chrome/test/stedding/BUILD.gn                 |  10 ++
+ ...tab_collection_animating_layout_manager.cc |  46 ++++++
+ .../tab_collection_animating_layout_manager.h |  11 ++
+ ...ction_animating_layout_manager_unittest.cc |  28 ++++
+ chrome/test/stedding/BUILD.gn                 |  12 ++
  .../test/stedding/command_bar_browsertest.cc  |  79 +++++++++
- .../test/stedding/folder_tabs_browsertest.cc  | 106 ++++++++++++
+ .../test/stedding/folder_tabs_browsertest.cc  | 133 +++++++++++++++
+ .../test/stedding/private_coat_browsertest.cc |  57 +++++++
  .../test/stedding/quiet_start_browsertest.cc  | 154 ++++++++++++++++++
  .../stedding/settings_security_browsertest.cc |  73 +++++++++
+ .../stedding/sidebar_forms_browsertest.cc     |  57 +++++++
  chrome/test/stedding/tab_drop_browsertest.cc  |  65 ++++++++
- 29 files changed, 1195 insertions(+), 14 deletions(-)
+ .../stedding/window_buttons_browsertest.mm    |  67 ++++++++
+ 52 files changed, 1745 insertions(+), 36 deletions(-)
  create mode 100644 chrome/browser/ui/archive/closed_folder.cc
  create mode 100644 chrome/browser/ui/archive/closed_folder.h
  create mode 100644 chrome/browser/ui/archive/closed_folder_unittest.cc
+ create mode 100644 chrome/browser/ui/color/stedding_private_key.cc
+ create mode 100644 chrome/browser/ui/color/stedding_private_key.h
  create mode 100644 chrome/test/stedding/quiet_start_browsertest.cc
  create mode 100644 chrome/test/stedding/settings_security_browsertest.cc
 
@@ -607,6 +651,69 @@ index 0c83ecf469891..4a4e42399d9f0 100644
      service->RestoreMostRecentEntry(live_tab_context);
      return;
    }
+diff --git a/chrome/browser/ui/browser_window/internal/BUILD.gn b/chrome/browser/ui/browser_window/internal/BUILD.gn
+index 18c9aaf5ce2b5..175242a5d4237 100644
+--- a/chrome/browser/ui/browser_window/internal/BUILD.gn
++++ b/chrome/browser/ui/browser_window/internal/BUILD.gn
+@@ -87,6 +87,8 @@ source_set("internal") {
+       "//chrome/browser/ui:ui_features",
+       "//chrome/browser/ui/animation",
+       "//chrome/browser/ui/archive:undo",
++      "//chrome/browser/ui/stedding:private_window",
++      "//chrome/browser/ui/stedding/theme",
+       "//chrome/browser/ui/bookmarks",
+       "//chrome/browser/ui/browser_active_state_manager",
+       "//chrome/browser/ui/browser_ui_controller",
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+index 15206b56103cc..c634b69a0e3da 100644
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -91,6 +91,8 @@
+ #include "chrome/browser/ui/side_panel/side_panel_registry.h"
+ #include "chrome/browser/ui/signin/signin_view_controller.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/private_window.h"
++#include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/sync/browser_synced_window_delegate.h"
+ #include "chrome/browser/ui/tabs/organizer/organizer_panel_controller.h"
+ #include "chrome/browser/ui/tabs/saved_tab_groups/most_recent_shared_tab_update_store.h"
+@@ -287,6 +289,13 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
+     closed_tabs_undo_ = std::make_unique<stedding::ClosedTabsUndo>(*browser);
+     folder_session_ = std::make_unique<stedding::FolderSessionService>(
+         *browser);
++  } else if (browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
++    // docs/features/private.md V9 (PLAN.md WIN-6): the Space model owns the
++    // page's colour for the address row; a private or a Guest window has
++    // none, and its row sat on the bare ground, Back, Forward and Reload with
++    // it (operator, 2026-10-13).
++    page_theme_color_ = std::make_unique<stedding::PageThemeColorController>(
++        *browser, stedding::IsPrivateWindow(browser->GetProfile()));
+   }
+ 
+   if (base::FeatureList::IsEnabled(features::kGlicActorUi) &&
+diff --git a/chrome/browser/ui/browser_window/public/browser_window_features.h b/chrome/browser/ui/browser_window/public/browser_window_features.h
+index 76038dd3b8721..d485d806cec96 100644
+--- a/chrome/browser/ui/browser_window/public/browser_window_features.h
++++ b/chrome/browser/ui/browser_window/public/browser_window_features.h
+@@ -123,6 +123,7 @@ class SpaceModel;
+ 
+ namespace stedding {
+ class ClosedTabsUndo;
++class PageThemeColorController;
+ class TabArchiver;
+ }  // namespace stedding
+ 
+@@ -365,6 +366,10 @@ class BrowserWindowFeatures {
+   // docs/features/little.md E1: a popup opened for a link from another app.
+   bool little_window_ = false;
+   std::unique_ptr<stedding::FolderSessionService> folder_session_;
++  // docs/features/private.md V9 (PLAN.md WIN-6): the page's colour for the
++  // address row of a private or Guest window, which has no Space model to
++  // own it.
++  std::unique_ptr<stedding::PageThemeColorController> page_theme_color_;
+   std::unique_ptr<ActorBorderViewController> actor_border_view_controller_;
+   std::unique_ptr<ttc::AiOverlayDialogController> ai_overlay_dialog_controller_;
+ 
 diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
 index fcf3a297e1cd3..20029bc47268c 100644
 --- a/chrome/browser/ui/cocoa/BUILD.gn
@@ -892,6 +999,297 @@ index 67819c2389ccf..d4e994ad1cc7c 100644
    // If this item can be restored using TabRestoreService, do so. Otherwise,
    // just load the URL.
    if (node.session_id.is_valid()) {
+diff --git a/chrome/browser/ui/color/BUILD.gn b/chrome/browser/ui/color/BUILD.gn
+index 2df5946d9ca97..16814ccd5d2b2 100644
+--- a/chrome/browser/ui/color/BUILD.gn
++++ b/chrome/browser/ui/color/BUILD.gn
+@@ -16,6 +16,18 @@ source_set("color_headers") {
+   ]
+ }
+ 
++# docs/features/private.md V1, V9: which colour-key suppliers mark a private
++# window. Its own target: the page bar's supplier
++# (//chrome/browser/ui/stedding/theme) marks itself, and the mixers read it.
++source_set("stedding_private_key") {
++  sources = [
++    "stedding_private_key.cc",
++    "stedding_private_key.h",
++  ]
++  public_deps = [ "//ui/color:color_provider_key" ]
++  deps = [ "//base" ]
++}
++
+ source_set("mixers") {
+   sources = [
+     "chrome_color_mixer.cc",
+@@ -54,6 +66,7 @@ source_set("mixers") {
+   deps = [
+     "//chrome/browser/ui:stedding_ui_metrics",
+     ":color_headers",
++    ":stedding_private_key",
+     "//build:branding_buildflags",
+     "//chrome/app/theme:theme_resources",
+     "//chrome/browser/task_manager/common",
+@@ -187,6 +200,7 @@ source_set("stedding_unit_tests") {
+   sources = [ "stedding_color_mixer_unittest.cc" ]
+   deps = [
+     ":mixers",
++    ":stedding_private_key",
+     "//base/test:test_support",
+     "//chrome/browser/ui:stedding_ui_metrics",
+     "//testing/gtest",
+diff --git a/chrome/browser/ui/color/stedding_color_mixer.cc b/chrome/browser/ui/color/stedding_color_mixer.cc
+index bf4adf794a4ff..d9e6b84fdc02f 100644
+--- a/chrome/browser/ui/color/stedding_color_mixer.cc
++++ b/chrome/browser/ui/color/stedding_color_mixer.cc
+@@ -9,6 +9,7 @@
+ #include "base/feature_list.h"
+ #include "base/no_destructor.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/color/stedding_private_key.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "ui/color/color_id.h"
+ #include "ui/color/color_mixer.h"
+@@ -56,8 +57,11 @@ ui::ColorProviderKey::InitializerSupplier* SteddingPrivateWindowMark() {
+ }
+ 
+ bool IsPrivateColorKey(const ui::ColorProviderKey& key) {
++  // The mark, or the private window's page-bar supplier standing for it
++  // (private V9): the slot holds one supplier.
+   return key.app_controller &&
+-         key.app_controller.get() == SteddingPrivateWindowMark();
++         (key.app_controller.get() == SteddingPrivateWindowMark() ||
++          stedding::MarksPrivateWindow(key.app_controller.get()));
+ }
+ 
+ void AddSteddingColorMixer(ui::ColorProvider* provider,
+diff --git a/chrome/browser/ui/color/stedding_color_mixer_unittest.cc b/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
+index a339b77bc0eba..f6dfe8e66bfa7 100644
+--- a/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
++++ b/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
+@@ -7,6 +7,7 @@
+ #include "base/test/scoped_feature_list.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/color/chrome_color_mixers.h"
++#include "chrome/browser/ui/color/stedding_private_key.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -43,6 +44,34 @@ TEST(SteddingColorMixerTest, PrivateWindowsAreGraphite) {
+   EXPECT_NE(kSteddingPrivateWindow, tinted.GetColor(ui::kColorFrameActive));
+ }
+ 
++// private V9: a private window whose address row has a page colour carries
++// the row's supplier in the key's one slot, marked to stand for the private
++// mark: the key is still private and the ground still graphite. An unmarked
++// supplier -- a normal or a Guest window's -- is not private.
++TEST(SteddingColorMixerTest, AMarkedSupplierStandsForThePrivateMark) {
++  base::test::ScopedFeatureList features(stedding::kArcStyleWindow);
++  class Supplier : public ui::ColorProviderKey::InitializerSupplier {
++   public:
++    void AddColorMixers(ui::ColorProvider* provider,
++                        const ui::ColorProviderKey& key) const override {}
++  };
++  Supplier row;
++  ui::ColorProviderKey key;
++  key.color_mode = ui::ColorProviderKey::ColorMode::kDark;
++  key.app_controller = &row;
++  EXPECT_FALSE(IsPrivateColorKey(key)) << "unmarked, a normal window's";
++
++  stedding::SetMarksPrivateWindow(&row, true);
++  EXPECT_TRUE(IsPrivateColorKey(key));
++  ui::ColorProvider provider;
++  AddSteddingColorMixer(&provider, key);
++  provider.GenerateColorMapForTesting();
++  EXPECT_EQ(kSteddingPrivateWindow, provider.GetColor(ui::kColorFrameActive));
++
++  stedding::SetMarksPrivateWindow(&row, false);
++  EXPECT_FALSE(IsPrivateColorKey(key));
++}
++
+ // private V1, PLAN.md WIN-4: a normal window in dark mode with Chrome's Grey
+ // colour is keyed dark and grayscale, exactly as Chromium keys incognito. It
+ // keeps the navy ground: it keeps history, so it must not look private.
+diff --git a/chrome/browser/ui/color/stedding_private_key.cc b/chrome/browser/ui/color/stedding_private_key.cc
+new file mode 100644
+index 0000000000000..45c37f3567239
+--- /dev/null
++++ b/chrome/browser/ui/color/stedding_private_key.cc
+@@ -0,0 +1,40 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/color/stedding_private_key.h"
++
++#include "base/containers/flat_set.h"
++#include "base/no_destructor.h"
++
++namespace stedding {
++namespace {
++
++base::flat_set<const ui::ColorProviderKey::InitializerSupplier*>& Marked() {
++  static base::NoDestructor<
++      base::flat_set<const ui::ColorProviderKey::InitializerSupplier*>>
++      marked;
++  return *marked;
++}
++
++}  // namespace
++
++void SetMarksPrivateWindow(
++    const ui::ColorProviderKey::InitializerSupplier* supplier,
++    bool marks) {
++  if (!supplier) {
++    return;
++  }
++  if (marks) {
++    Marked().insert(supplier);
++  } else {
++    Marked().erase(supplier);
++  }
++}
++
++bool MarksPrivateWindow(
++    const ui::ColorProviderKey::InitializerSupplier* supplier) {
++  return supplier && Marked().contains(supplier);
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/color/stedding_private_key.h b/chrome/browser/ui/color/stedding_private_key.h
+new file mode 100644
+index 0000000000000..eb054abed6e68
+--- /dev/null
++++ b/chrome/browser/ui/color/stedding_private_key.h
+@@ -0,0 +1,28 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_COLOR_STEDDING_PRIVATE_KEY_H_
++#define CHROME_BROWSER_UI_COLOR_STEDDING_PRIVATE_KEY_H_
++
++#include "ui/color/color_provider_key.h"
++
++namespace stedding {
++
++// docs/features/private.md V1, V9: a private window's colour key carries, in
++// its app-controller slot, a supplier that marks the window private, and the
++// Stedding mixer paints such a key graphite (IsPrivateColorKey). The slot
++// holds one supplier: SteddingPrivateWindowMark() until the window's address
++// row has a page colour, then the row's own supplier (toolbar T7), which
++// flips the row's icons for contrast with the page and is marked here to
++// stand for the mark as well. A supplier is marked for its whole life and
++// unmarks itself before it goes. UI thread only.
++void SetMarksPrivateWindow(
++    const ui::ColorProviderKey::InitializerSupplier* supplier,
++    bool marks);
++bool MarksPrivateWindow(
++    const ui::ColorProviderKey::InitializerSupplier* supplier);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_COLOR_STEDDING_PRIVATE_KEY_H_
+diff --git a/chrome/browser/ui/stedding/theme/BUILD.gn b/chrome/browser/ui/stedding/theme/BUILD.gn
+index 9dce71bc60b4b..17fc7c4d916c3 100644
+--- a/chrome/browser/ui/stedding/theme/BUILD.gn
++++ b/chrome/browser/ui/stedding/theme/BUILD.gn
+@@ -28,6 +28,7 @@ source_set("theme") {
+   deps = [
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:color_headers",
++    "//chrome/browser/ui/color:stedding_private_key",
+     "//components/tabs:public",
+     "//components/viz/common",
+     "//ui/gfx",
+diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
+index 8b763749bf91a..4d3a5ca7ab8f0 100644
+--- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
++++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
+@@ -7,9 +7,11 @@
+ #include <algorithm>
+ 
+ #include "base/functional/bind.h"
++#include "base/no_destructor.h"
+ #include "base/task/bind_post_task.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/stedding_private_key.h"
+ #include "chrome/browser/ui/stedding/theme/page_top_color.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -68,8 +70,10 @@ PageThemeColorController* PageThemeColorController::From(
+ }
+ 
+ PageThemeColorController::PageThemeColorController(
+-    BrowserWindowInterface& browser)
++    BrowserWindowInterface& browser,
++    bool private_window)
+     : browser_(browser),
++      private_window_(private_window),
+       scoped_user_data_(browser.GetUnownedUserDataHost(), *this) {
+   browser_->GetTabStripModel()->AddObserver(this);
+   if (tabs::TabInterface* const active =
+@@ -93,6 +97,22 @@ PageThemeColorController::bar_supplier() const {
+   // Quantised to 16 levels per channel: the eye does not see the difference
+   // on the icons, and it bounds how many providers one window can create.
+   const SkColor key = *color_ & 0xFFF0F0F0;
++  if (private_window_) {
++    // private V9: a private window's key holds this supplier where it held
++    // the private mark, so the supplier is marked to stand for it. Shared by
++    // every private window and never freed, as the mark is: providers are
++    // cached by the key, and a freed supplier's address could come back for
++    // a normal window's key, whose provider would then be the graphite one.
++    static base::NoDestructor<
++        std::map<SkColor, std::unique_ptr<PageBarColorSupplier>>>
++        shared;
++    auto& supplier = (*shared)[key];
++    if (!supplier) {
++      supplier = std::make_unique<PageBarColorSupplier>(key);
++      SetMarksPrivateWindow(supplier.get(), true);
++    }
++    return supplier.get();
++  }
+   auto& supplier = const_cast<PageThemeColorController*>(this)->suppliers_[key];
+   if (!supplier) {
+     supplier = std::make_unique<PageBarColorSupplier>(key);
+diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
+index 12053e28665c4..a047d040b5084 100644
+--- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
++++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
+@@ -34,8 +34,10 @@ namespace stedding {
+ // the page card, can take the page's own colour the way Arc's does
+ // (docs/features/toolbar.md): the colour the page is drawn in along its top
+ // edge when that edge is one colour (T31), else its <meta name="theme-color">,
+-// else its document background (T3). One per normal window, owned by
+-// BrowserWindowFeatures; SteddingWindowBackground reads it while painting.
++// else its document background (T3). One per normal window: the Space model
++// owns it, and BrowserWindowFeatures owns it for a private or Guest window,
++// which has no Space model (private V9). SteddingWindowBackground reads it
++// while painting.
+ class PageThemeColorController : public TabStripModelObserver,
+                                  public content::WebContentsObserver {
+  public:
+@@ -43,7 +45,10 @@ class PageThemeColorController : public TabStripModelObserver,
+ 
+   static PageThemeColorController* From(BrowserWindowInterface* browser);
+ 
+-  explicit PageThemeColorController(BrowserWindowInterface& browser);
++  // `private_window`: the window is private (private V1, V9), and the
++  // supplier for its row's colour marks its colour key private as well.
++  explicit PageThemeColorController(BrowserWindowInterface& browser,
++                                    bool private_window = false);
+   PageThemeColorController(const PageThemeColorController&) = delete;
+   PageThemeColorController& operator=(const PageThemeColorController&) = delete;
+   ~PageThemeColorController() override;
+@@ -94,6 +99,7 @@ class PageThemeColorController : public TabStripModelObserver,
+                     const content::CopyFromSurfaceResult& result);
+ 
+   const raw_ref<BrowserWindowInterface> browser_;
++  const bool private_window_;
+   std::optional<SkColor> color_;
+   // The tab whose colour color_ is, so a page loading in that same tab keeps
+   // it until its own top edge is read (a reload, a link within the site).
 diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
 index 4155a21ba5c37..33bcbb5222829 100644
 --- a/chrome/browser/ui/tabs/BUILD.gn
@@ -1049,7 +1447,7 @@ index 52600474533fb..09ef701353ab4 100644
    // Split items for local recently closed splits.
    SplitItems local_split_items_;
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 083f8b5ebf331..f0169b15028c9 100644
+index 083f8b5ebf331..62c48adcda129 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -39,6 +39,7 @@
@@ -1068,21 +1466,245 @@ index 083f8b5ebf331..f0169b15028c9 100644
  #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
  #include "chrome/browser/ui/browser_command_controller.h"
  #include "chrome/browser/ui/browser_commands.h"
-@@ -5101,6 +5103,14 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
+@@ -5101,6 +5103,17 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
        delegate_->AddTabAt(GURL(), -1, /*foreground=*/true);
      }
    }
 +  // PLAN.md TAB-13, folders F19: the close's tabs carry its batch and the
 +  // folder's name into the recently-closed list, which shows them as one
 +  // folder and brings them back together (archive/closed_folder.h).
++  // An unnamed folder goes under the name its header shows (folder_view.cc).
 +  const std::string batch = base::Uuid::GenerateRandomV4().AsLowercaseString();
++  const std::string name =
++      folder->title().empty() ? std::string("New Folder") : folder->title();
 +  for (tabs::TabInterface* const tab : doomed) {
 +    stedding::MarkClosedWithFolder(tab->GetContents(),
-+                                   {.batch = batch, .name = folder->title()});
++                                   {.batch = batch, .name = name});
 +  }
    ExecuteCloseTabs(
        base::BindRepeating(
            [](const std::vector<tabs::TabInterface*>& list) { return list; },
+diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
+index 4c3d9f58f6ceb..1b74ad9b20128 100644
+--- a/chrome/browser/ui/views/frame/browser_widget.cc
++++ b/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -511,23 +511,24 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
+   // Apply BrowserWidget overrides:
+   key.app_controller =
+       web_app::AppBrowserController::From(browser_view_->browser());
+-  // Stedding (private V1, PLAN.md WIN-4): a private window says so on its
+-  // key, and the Stedding mixer paints it graphite; nothing is inferred from
+-  // the key's other fields, which a normal dark window with Chrome's Grey
+-  // colour shares with incognito. The mark takes the slot before the page
+-  // bar's supplier: private windows have no page colour today, and when they
+-  // get one (PLAN.md WIN-6) the two must share this slot.
+-  if (!key.app_controller && stedding::IsPrivateWindow(profile)) {
+-    key.app_controller = SteddingPrivateWindowMark();
+-  }
+-  // Stedding: in a normal window the address row takes the page's colour,
+-  // and the toolbar's icons and text flip for contrast with it (toolbar T7).
++  // Stedding: the address row takes the page's colour, and the toolbar's
++  // icons and text flip for contrast with it (toolbar T7). In a private
++  // window that supplier also marks the window private (private V9): the
++  // slot holds one supplier, and IsPrivateColorKey reads either.
+   if (!key.app_controller) {
+     if (const auto* page_color = stedding::PageThemeColorController::From(
+             browser_view_->browser())) {
+       key.app_controller = page_color->bar_supplier();
+     }
+   }
++  // Stedding (private V1, PLAN.md WIN-4): a private window says so on its
++  // key, and the Stedding mixer paints it graphite; nothing is inferred from
++  // the key's other fields, which a normal dark window with Chrome's Grey
++  // colour shares with incognito. Until its page has a colour, the mark
++  // itself holds the slot.
++  if (!key.app_controller && stedding::IsPrivateWindow(profile)) {
++    key.app_controller = SteddingPrivateWindowMark();
++  }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   // ChromeOS SystemWebApps use the OS theme all the time.
+diff --git a/chrome/browser/ui/views/frame/contents_container_view.cc b/chrome/browser/ui/views/frame/contents_container_view.cc
+index 099b89a24c048..cc963b189dc37 100644
+--- a/chrome/browser/ui/views/frame/contents_container_view.cc
++++ b/chrome/browser/ui/views/frame/contents_container_view.cc
+@@ -8,6 +8,7 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "base/feature_list.h"
+ #include "base/i18n/rtl.h"
+ #include "chrome/browser/actor/ui/actor_overlay_web_view.h"
+ #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
+@@ -18,6 +19,7 @@
+ #include "chrome/browser/ui/ai_overlay_dialog/ai_overlay_dialog_controller.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/read_anything/read_anything_immersive_overlay_view.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -212,13 +214,27 @@ void ContentsContainerView::UpdateBorderAndOverlay(bool is_in_split,
+       }
+     }
+   } else {
++    // Stedding (docs/features/splits.md J7): a pane is the page itself, as
++    // the one page is outside a split, with no room inside it for Chromium's
++    // ring: the pages start right under the address row and keep the card's
++    // gutters. Padded, a band of the mat ran between the row and both pages
++    // (operator, 2026-10-13). The ring shows only to mark where a dragged
++    // tab will drop (page U7).
++    const bool stedding_card =
++        base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
+     if (split_changed) {
+-      SetBorder(views::CreateEmptyBorder(gfx::Insets(
+-          kSplitViewContentPadding + ContentsContainerOutline::kThickness)));
++      SetBorder(stedding_card
++                    ? nullptr
++                    : views::CreateEmptyBorder(gfx::Insets(
++                          kSplitViewContentPadding +
++                          ContentsContainerOutline::kThickness)));
+       UpdateBorderRoundedCorners();
+     }
+ 
+     container_outline_->UpdateState(is_active, is_highlighted);
++    if (stedding_card) {
++      container_outline_->SetVisible(is_highlighted);
++    }
+     // Mini toolbar should only be visible for the inactive contents
+     // container view or both depending on configuration.
+     mini_toolbar_->UpdateState(is_active, is_highlighted);
+diff --git a/chrome/browser/ui/views/frame/contents_container_view.h b/chrome/browser/ui/views/frame/contents_container_view.h
+index e3ae9d104db2d..fd4792c676df7 100644
+--- a/chrome/browser/ui/views/frame/contents_container_view.h
++++ b/chrome/browser/ui/views/frame/contents_container_view.h
+@@ -140,6 +140,9 @@ class ContentsContainerView : public views::View,
+       std::optional<gfx::Outsets> target_contents_bounds);
+ 
+   void SetRoundedCorners(const gfx::RoundedCornersF& corner_radii);
++  const gfx::RoundedCornersF& GetRoundedCorners() const {
++    return rounded_corner_radii_;
++  }
+ 
+   views::View* GetToastAnchorView() { return toast_anchor_view_; }
+ 
+diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
+index 0225937770fa4..8de8f3913850c 100644
+--- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
++++ b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
+@@ -210,13 +210,31 @@ gfx::Rect SteddingBrowserViewLayout::CalculateTopContainerLayout(
+       trailing > 0) {
+     params.visual_client_area.Inset(gfx::Insets::TLBR(0, 0, 0, trailing));
+   }
++  // While the strip is narrower than the rail -- a hidden sidebar opening, or
++  // the closed form changing between the rail and nothing -- macOS's traffic
++  // lights reach past it into the row's column, and the row's contents start
++  // past them, where they are while the sidebar is hidden (sidebar Y19). They
++  // ran under the lights until the strip had grown past them, for seconds on
++  // a loaded machine (operator, 2026-10-13, on a test window). The rail and
++  // the open sidebar are as wide as the lights' box or wider, and what is
++  // left of the exclusion past them is then nothing.
++  int lights_inset = 0;
++  if (DrawsVerticalStrip(delegate()) && !hidden && needs_exclusion &&
++      views().vertical_tab_strip_region_view &&
++      views().vertical_tab_strip_region_view->width() <
++          VerticalTabStripRegionView::kCollapsedWidth) {
++    lights_inset = std::min(
++        base::ClampCeil(params.leading_exclusion.ContentWithPadding().width()),
++        params.visual_client_area.width());
++    params.visual_client_area.Inset(gfx::Insets::TLBR(0, lights_inset, 0, 0));
++  }
+   // With the sidebar hidden nothing else clears macOS's traffic lights, so
+   // the row keeps the exclusion a window without a vertical strip keeps.
+   gfx::Rect result = BrowserViewTabbedLayoutImpl::CalculateTopContainerLayout(
+       layout, std::move(params),
+       needs_exclusion && (!DrawsVerticalStrip(delegate()) || hidden));
+-  result.set_x(result.x() - kCardSideInset);
+-  result.set_width(result.width() + 2 * kCardSideInset);
++  result.set_x(result.x() - kCardSideInset - lights_inset);
++  result.set_width(result.width() + 2 * kCardSideInset + lights_inset);
+   // The same for the top: the toolbar was placed kCardSideInset down inside
+   // the container, so the container itself starts at the window's top edge or
+   // the gutter would apply twice (the bar sat 12 DIP down with its bottom
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
+index 54132fe154c95..e130b868d2724 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -233,7 +233,25 @@ void MultiContentsView::SetBackgroundRadii(const gfx::RoundedCornersF& radii) {
+     GetActiveContentsContainerView()->SetRoundedCorners(radii);
+     GetInactiveContentsContainerView()->SetRoundedCorners(
+         gfx::RoundedCornersF());
++  } else if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    for (size_t i = 0; i < contents_container_views_.size(); ++i) {
++      contents_container_views_[i]->SetRoundedCorners(SteddingPaneRadii(i));
++    }
++  }
++}
++
++gfx::RoundedCornersF MultiContentsView::SteddingPaneRadii(
++    size_t index) const {
++  // Each pane is cut like the one page outside a split: square under the
++  // address row, the card's radius at its foot, square with no gutter
++  // (splits J7). Stacked, the lower pane's top meets the gap, not the row.
++  gfx::RoundedCornersF radii = GetBackgroundRadii();
++  if (index == 1 &&
++      GetSplitLayout() == split_tabs::SplitTabLayout::kStacked) {
++    radii.set_upper_left(radii.lower_left());
++    radii.set_upper_right(radii.lower_right());
+   }
++  return radii;
+ }
+ 
+ ContentsContainerView* MultiContentsView::GetContentsContainerViewFor(
+@@ -766,6 +784,13 @@ MultiContentsView::ViewSizes MultiContentsView::GetViewSizes(
+     sizes.resize = GetSplitLayout() == split_tabs::SplitTabLayout::kSideBySide
+                        ? resize_area_->GetPreferredSize().width()
+                        : resize_area_->GetPreferredSize().height();
++    // Stedding (splits J7): the panes are a card gutter apart, the gap the
++    // page keeps from the window's edges; the resize handle is drawn in it.
++    // Chromium's 10 DIP area between two panes padded 5 DIP each was 20 DIP
++    // of mat between the pages (operator, 2026-10-13).
++    if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++      sizes.resize = stedding::kCardGutter.Get();
++    }
+     sizes.start = std::round(visual_data_.split_ratio() *
+                              (available_size - sizes.resize));
+     sizes.end = available_size - sizes.start - sizes.resize;
+@@ -818,12 +843,17 @@ int MultiContentsView::GetMinViewSize(gfx::Rect available_space) const {
+ 
+ void MultiContentsView::UpdateContentsBorderAndOverlay() {
+   const bool is_in_split = IsInSplitView();
+-  for (auto& contents_container_view : contents_container_views_) {
++  const bool stedding_card =
++      base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
++  for (size_t i = 0; i < contents_container_views_.size(); ++i) {
++    ContentsContainerView* const contents_container_view =
++        contents_container_views_[i];
+     const bool is_active =
+         contents_container_view->contents_view() == GetActiveContentsView();
+     contents_container_view->SetRoundedCorners(
+         is_in_split
+-            ? kSplitViewContentRoundedCorners
++            ? (stedding_card ? SteddingPaneRadii(i)
++                             : kSplitViewContentRoundedCorners)
+             : (is_active ? GetBackgroundRadii() : gfx::RoundedCornersF()));
+     contents_container_view->UpdateBorderAndOverlay(
+         is_in_split, is_active, is_active && active_contents_view_highlighted_);
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.h b/chrome/browser/ui/views/frame/multi_contents_view.h
+index 6ecb49a239f70..2636a17e91947 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.h
++++ b/chrome/browser/ui/views/frame/multi_contents_view.h
+@@ -281,6 +281,10 @@ class MultiContentsView
+ 
+   void UpdateContentsBorderAndOverlay();
+ 
++  // Stedding (docs/features/splits.md J7): the corners of the pane at `index`
++  // in a split, cut as the one page's card is.
++  gfx::RoundedCornersF SteddingPaneRadii(size_t index) const;
++
+   double CalculateRatioWithSnapPoints(double start_size,
+                                       double total_size) const;
+ 
 diff --git a/chrome/browser/ui/views/spaces/space_drag_target.cc b/chrome/browser/ui/views/spaces/space_drag_target.cc
 index 5556aa3dc8b50..af42c1cbe261d 100644
 --- a/chrome/browser/ui/views/spaces/space_drag_target.cc
@@ -1294,8 +1916,165 @@ index 244eacae5d791..8c1153eae6d8a 100644
    bool row_hovered_ = false;
    base::ScopedObservation<SpaceModel, SpaceModel::Observer> observation_{this};
    std::optional<size_t> drag_chip_;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+index c16f623b1645b..5c308a3b7e099 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+@@ -10,6 +10,7 @@
+ #include "base/check_deref.h"
+ #include "base/containers/flat_map.h"
+ #include "base/containers/flat_set.h"
++#include "base/scoped_observation.h"
+ #include "ui/base/class_property.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/gfx/animation/animation.h"
+@@ -17,6 +18,7 @@
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/view_observer.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ 
+@@ -70,6 +72,30 @@ std::optional<views::SizeBound> TabCollectionAnimatingLayoutManager::Delegate::
+ 
+ void TabCollectionAnimatingLayoutManager::Delegate::OnAnimationEnded() {}
+ 
++// Watches the host for a child leaving it: OnChildViewRemoved comes once the
++// child is out of the host's children and before it is deleted.
++class TabCollectionAnimatingLayoutManager::HostObserver
++    : public views::ViewObserver {
++ public:
++  HostObserver(TabCollectionAnimatingLayoutManager& owner, views::View* host)
++      : owner_(owner) {
++    observation_.Observe(host);
++  }
++
++  // views::ViewObserver:
++  void OnChildViewRemoved(views::View* observed_view,
++                          views::View* child) override {
++    owner_->ForgetChildView(child);
++  }
++  void OnViewIsDeleting(views::View* observed_view) override {
++    observation_.Reset();
++  }
++
++ private:
++  const raw_ref<TabCollectionAnimatingLayoutManager> owner_;
++  base::ScopedObservation<views::View, views::ViewObserver> observation_{this};
++};
++
+ TabCollectionAnimatingLayoutManager::TabCollectionAnimatingLayoutManager(
+     std::unique_ptr<LayoutManagerBase> target_layout_manager,
+     Delegate& delegate,
+@@ -250,9 +276,29 @@ void TabCollectionAnimatingLayoutManager::LayoutImpl() {
+ void TabCollectionAnimatingLayoutManager::OnInstalled(views::View* host) {
+   LayoutManagerBase::OnInstalled(host);
+   host->SetProperty(kHasAnimatingLayoutManagerKey, true);
++  host_observer_ = std::make_unique<HostObserver>(*this, host);
+   RecalculateTarget();
+ }
+ 
++void TabCollectionAnimatingLayoutManager::ForgetChildView(
++    const views::View* child) {
++  start_view_layout_map_.erase(child);
++  target_view_layout_map_.erase(child);
++  if (adding_views_start_x_) {
++    adding_views_start_x_->erase(child);
++  }
++  if (closing_views_target_x_) {
++    closing_views_target_x_->erase(child);
++  }
++  for (views::ProposedLayout* const layout :
++       {&starting_layout_, &target_layout_, &current_layout_}) {
++    std::erase_if(layout->child_layouts,
++                  [child](const views::ChildLayout& entry) {
++                    return entry.child_view == child;
++                  });
++  }
++}
++
+ void TabCollectionAnimatingLayoutManager::SetStartingLayout(
+     const views::ProposedLayout& starting_layout) {
+   // Create a set of current child views for fast lookup. This is necessary
+diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
+index 0407b26b8ae13..a453a62966e77 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
+@@ -139,7 +139,16 @@ class TabCollectionAnimatingLayoutManager
+   void LayoutImpl() override;
+   void OnInstalled(views::View* host) override;
+ 
++
+  private:
++  // Stedding: a child destroyed outright, not animated out
++  // (TabCollectionNode::RemoveChild with no remove callback), leaves the lookup
++  // maps and layouts below before it is deleted. Closing a folder's tabs left
++  // their rows' pointers there, and the next layout released them dangling
++  // (the Mac's checked build, 2026-10-13). HostObserver hears the removal.
++  class HostObserver;
++  void ForgetChildView(const views::View* child);
++
+   // Sets `starting_layout_` and `target_layout_` respectively. Clients must
+   // set these via the below helpers to ensure `start_view_bounds_map_` and
+   // `target_view_set_` reflect the current layout state.
+@@ -246,6 +255,8 @@ class TabCollectionAnimatingLayoutManager
+   // to its target size. In such cases animating the host's preferred size
+   // avoids clipping close / fade-out animations.
+   const bool animate_host_size_ = false;
++
++  std::unique_ptr<HostObserver> host_observer_;
+ };
+ 
+ extern const ui::ClassProperty<bool>* const kHasAnimatingLayoutManagerKey;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc
+index 5b7613f4a222c..0230641a33862 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc
+@@ -4,6 +4,9 @@
+ 
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ 
++#include <algorithm>
++#include <cstdint>
++
+ #include <memory>
+ #include <tuple>
+ #include <vector>
+@@ -302,6 +305,31 @@ TEST_P(TabCollectionAnimatingLayoutManagerTest,
+   }
+ }
+ 
++// Stedding: a child destroyed outright, not animated out, while an animation
++// runs, and then more layouts: the manager keeps no pointer to it, so on a
++// build with the dangling-pointer detector nothing is reported. Closing a
++// folder's tabs destroyed rows the lookup maps still named, and the Mac's
++// checked build reported each pointer when the next layout replaced the maps
++// (2026-10-13). On other builds the test only shows that nothing crashes.
++TEST_P(TabCollectionAnimatingLayoutManagerTest,
++       AChildDestroyedOutrightLeavesNoPointerBehind) {
++  widget()->SetBounds(gfx::Rect(0, 0, 100, 100));
++  host_view()->AddChildView(std::make_unique<views::View>());
++  views::View* const doomed =
++      host_view()->AddChildView(std::make_unique<views::View>());
++  widget()->LayoutRootViewIfNecessary();
++  // A third child starts an animation: the manager holds every child.
++  host_view()->AddChildView(std::make_unique<views::View>());
++  widget()->LayoutRootViewIfNecessary();
++  host_view()->RemoveChildViewT(doomed);
++  // More layouts replace what the manager held.
++  host_view()->AddChildView(std::make_unique<views::View>());
++  widget()->LayoutRootViewIfNecessary();
++  task_environment()->FastForwardBy(base::Seconds(1));
++  widget()->LayoutRootViewIfNecessary();
++  EXPECT_EQ(3u, host_view()->children().size());
++}
++
+ INSTANTIATE_TEST_SUITE_P(
+     All,
+     TabCollectionAnimatingLayoutManagerTest,
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
-index f15786564183c..db9c5427cd1c9 100644
+index f15786564183c..784634dfdbdc5 100644
 --- a/chrome/test/stedding/BUILD.gn
 +++ b/chrome/test/stedding/BUILD.gn
 @@ -31,10 +31,12 @@ test("stedding_browser_tests") {
@@ -1329,7 +2108,15 @@ index f15786564183c..db9c5427cd1c9 100644
      "//chrome/browser/ssl",
      "//chrome/browser/ui",
      "//chrome/browser/ui/animation",
-@@ -101,13 +106,17 @@ test("stedding_browser_tests") {
+@@ -71,6 +76,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/archive:mark",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:mixers",
++    "//chrome/browser/ui/stedding/theme",
+     "//chrome/browser/ui/spaces",
+     "//chrome/browser/ui/stedding:address_row",
+     "//chrome/browser/ui/stedding:little_window",
+@@ -101,13 +107,17 @@ test("stedding_browser_tests") {
      "//chrome/test/base:browser_tests_runner",
      "//chrome/test/base:ui_test_utils",
      "//components/history/core/browser",
@@ -1347,7 +2134,7 @@ index f15786564183c..db9c5427cd1c9 100644
      "//components/sessions",
      "//components/split_tabs",
      "//components/tabs:public",
-@@ -116,6 +125,7 @@ test("stedding_browser_tests") {
+@@ -116,6 +126,7 @@ test("stedding_browser_tests") {
      "//extensions:test_support",
      "//extensions/browser:test_support",
      "//extensions/common",
@@ -1355,6 +2142,14 @@ index f15786564183c..db9c5427cd1c9 100644
      "//media",
      "//net:test_support",
      "//services/network/public/cpp",
+@@ -142,6 +153,7 @@ test("stedding_browser_tests") {
+     deps += [
+       "//chrome/browser:global_keyboard_shortcuts_mac",
+       "//ui/base:test_support",
++      "//ui/gfx:test_support",
+     ]
+     frameworks = [ "Carbon.framework" ]
+     data_deps += [
 diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
 index ed39a94983c24..23798c7f6586e 100644
 --- a/chrome/test/stedding/command_bar_browsertest.cc
@@ -1460,7 +2255,7 @@ index ed39a94983c24..23798c7f6586e 100644
  // The tabs are data: pages, which history does not keep, so the rows for a
  // query are the typed text, the tabs and the archived tabs, and nothing else;
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index 891503dd9d3ce..23129a1af3d94 100644
+index 891503dd9d3ce..7485dd3c59dc4 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -28,6 +28,7 @@
@@ -1495,7 +2290,7 @@ index 891503dd9d3ce..23129a1af3d94 100644
  #include "ui/base/page_transition_types.h"
  #include "ui/base/window_open_disposition.h"
  #include "ui/events/event.h"
-@@ -374,6 +378,108 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, AMiddleTabReopenedComesBackInPlace) {
+@@ -374,6 +378,135 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, AMiddleTabReopenedComesBackInPlace) {
    EXPECT_EQ(folder, ParentOf(back)) << "in its folder";
  }
  
@@ -1601,9 +2396,121 @@ index 891503dd9d3ce..23129a1af3d94 100644
 +  })) << "⇧⌘T brought back \"" << in_reading() << "\"";
 +}
 +
++// PLAN.md TAB-13: an unnamed folder goes into Recently Closed under the
++// name its header shows, "New Folder". The Mac's History menu read
++// " - 3 Tabs" for one (2026-10-13).
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, AnUnnamedFolderKeepsItsHeadersName) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  OpenLoaded("a.test");
++  OpenLoaded("b.test");
++  tabs::FolderTabCollection* const folder =
++      tab_strip_model()->AddToNewFolder({1, 2});
++  ASSERT_TRUE(folder);
++  ASSERT_EQ("", folder->title()) << "the folder is not unnamed";
++  tab_strip_model()->ActivateTabAt(0);
++  tab_strip_model()->CloseFolderTabs(folder);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return tab_strip_model()->count() == 1; }));
++
++  RecentTabsSubMenuModel menu(nullptr, browser());
++  std::u16string labels;
++  for (size_t i = 0; i < menu.GetItemCount(); ++i) {
++    if (menu.GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
++      labels += menu.GetLabelAt(i) + u" | ";
++    }
++  }
++  EXPECT_NE(std::u16string::npos, labels.find(u"New Folder"))
++      << "the folder's item reads: " << labels;
++}
++
  // TAB-6: Move Tab to New Folder on a split inside F[X, split, Y] nests the
  // split, whole and in place.
  IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitInsideAFolderNestsInPlace) {
+diff --git a/chrome/test/stedding/private_coat_browsertest.cc b/chrome/test/stedding/private_coat_browsertest.cc
+index de00f318afa2b..0d1592768fe73 100644
+--- a/chrome/test/stedding/private_coat_browsertest.cc
++++ b/chrome/test/stedding/private_coat_browsertest.cc
+@@ -18,18 +18,24 @@
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/themes/theme_service_factory.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/color/stedding_color_mixer.h"
++#include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
++#include "chrome/browser/ui/stedding/theme/page_top_color.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
+ #include "content/public/test/browser_test.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
+ #include "ui/color/color_provider_key.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget.h"
++#include "url/gurl.h"
+ 
+ namespace {
+ 
+@@ -107,4 +113,55 @@ IN_PROC_BROWSER_TEST_F(PrivateCoatTest, OnlyAnIncognitoWindowIsGraphite) {
+   EXPECT_FALSE(SaysPrivate(guest));
+ }
+ 
++// private V9 (PLAN.md WIN-6): a private window's address row takes the
++// page's colour, as a normal window's does, and the window stays graphite:
++// its colour key holds the row's supplier, which stands for the private mark.
++// The Space model owns the page's colour, and a private window has none; its
++// row sat on the bare ground, Back, Forward and Reload with it (operator,
++// 2026-10-13). A Guest window's row takes the colour too, in the ordinary
++// coat.
++IN_PROC_BROWSER_TEST_F(PrivateCoatTest, APrivateWindowsRowTakesThePagesColour) {
++  // A colour the supplier keeps as it is (it drops each channel's low four
++  // bits), so the row's icons can be checked against it exactly.
++  constexpr SkColor kPage = SkColorSetRGB(0xF0, 0x80, 0x00);
++  const GURL page("data:text/html,<style>html{background:%23f08000}</style>");
++
++  BrowserWindowInterface* const incognito = CreateIncognitoBrowser();
++  ASSERT_TRUE(incognito);
++  const stedding::PageThemeColorController* const private_row =
++      stedding::PageThemeColorController::From(incognito);
++  ASSERT_TRUE(private_row) << "a private window's row has no page colour";
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(incognito, page));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return private_row->color() &&
++           stedding::PageColorsMatch(*private_row->color(), kPage);
++  }));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return Widget(incognito)->GetColorProvider()->GetColor(
++               kColorToolbarButtonIcon) ==
++           color_utils::GetColorWithMaxContrast(kPage);
++  })) << "the row's icons follow the page";
++  const ui::ColorProviderKey key =
++      Widget(incognito)->GetColorProviderKeyForTesting();
++  EXPECT_NE(SteddingPrivateWindowMark(), key.app_controller.get())
++      << "the row's supplier holds the slot";
++  EXPECT_TRUE(IsPrivateColorKey(key));
++  EXPECT_EQ(kSteddingPrivateWindow, Ground(incognito))
++      << "the window stays graphite";
++
++  BrowserWindowInterface* const guest = CreateGuestBrowser();
++  ASSERT_TRUE(guest);
++  const stedding::PageThemeColorController* const guest_row =
++      stedding::PageThemeColorController::From(guest);
++  ASSERT_TRUE(guest_row);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(guest, page));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return guest_row->color() &&
++           stedding::PageColorsMatch(*guest_row->color(), kPage);
++  }));
++  EXPECT_FALSE(
++      IsPrivateColorKey(Widget(guest)->GetColorProviderKeyForTesting()));
++  EXPECT_NE(kSteddingPrivateWindow, Ground(guest));
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/quiet_start_browsertest.cc b/chrome/test/stedding/quiet_start_browsertest.cc
 new file mode 100644
 index 0000000000000..2328499579f92
@@ -1843,6 +2750,93 @@ index 0000000000000..462e616442b20
 +}
 +
 +}  // namespace
+diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
+index 873a30c73b751..faf2327e78a96 100644
+--- a/chrome/test/stedding/sidebar_forms_browsertest.cc
++++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
+@@ -33,11 +33,13 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/contents_container_view.h"
+ #include "chrome/browser/ui/views/frame/contents_web_view.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/stedding_window_background.h"
+@@ -52,6 +54,8 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
+ #include "components/prefs/pref_service.h"
++#include "components/split_tabs/split_tab_id.h"
++#include "components/split_tabs/split_tab_visual_data.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_delegate.h"
+ #include "content/public/test/browser_test.h"
+@@ -267,6 +271,59 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, HiddenTheWindowIsThePage) {
+   EXPECT_EQ(Window().x(), Page().x());
+ }
+ 
++// splits J7: in a split each pane is the page itself, as the one page is
++// outside a split: the pages start right under the address row where the
++// page did, keep its gutters to the window's edges, and lie one card gutter
++// apart, the resize handle drawn between them. Chromium padded each pane for
++// its ring: a band of the mat ran between the row and both pages, and the
++// pages were 20 DIP apart (operator, 2026-10-13). The same with the sidebar
++// hidden, where the page meets the window's edges.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, SplitPanesAreThePageAGutterApart) {
++  AppendTab();
++  Settle();
++  MultiContentsView* const multi = browser_view()->multi_contents_view();
++  TabStripModel* const tabs = browser()->tab_strip_model();
++  for (const bool hidden : {false, true}) {
++    SCOPED_TRACE(hidden ? "the sidebar hidden" : "the sidebar open");
++    if (hidden) {
++      CloseTo(stedding::prefs::kSidebarClosedHidden);
++    }
++    const gfx::Rect page = Page();
++    tabs->ActivateTabAt(0);
++    const split_tabs::SplitTabId split = tabs->AddToNewSplit(
++        {1}, split_tabs::SplitTabVisualData(),
++        split_tabs::SplitTabCreatedSource::kTabContextMenu);
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      views::test::RunScheduledLayout(browser_view()->GetWidget());
++      return multi->IsInSplitView();
++    }));
++    views::test::RunScheduledLayout(browser_view()->GetWidget());
++    const gfx::Rect start =
++        InRoot(multi->contents_container_views()[0]->contents_view());
++    const gfx::Rect end =
++        InRoot(multi->contents_container_views()[1]->contents_view());
++    EXPECT_EQ(page.y(), start.y()) << "a band between the row and the page";
++    EXPECT_EQ(page.y(), end.y()) << "a band between the row and the page";
++    EXPECT_EQ(page.x(), start.x());
++    EXPECT_EQ(page.right(), end.right());
++    EXPECT_EQ(page.bottom(), start.bottom());
++    EXPECT_EQ(page.bottom(), end.bottom());
++    EXPECT_EQ(stedding::kCardGutter.Get(), end.x() - start.right())
++        << "the pages are a card gutter apart";
++    // Each pane is cut as the page was: square under the row, the card's
++    // radius at its foot, or square where there is no gutter.
++    for (ContentsContainerView* const pane :
++         multi->contents_container_views()) {
++      EXPECT_EQ(multi->GetBackgroundRadii(), pane->GetRoundedCorners());
++    }
++    tabs->RemoveSplit(split);
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      views::test::RunScheduledLayout(browser_view()->GetWidget());
++      return !multi->IsInSplitView();
++    }));
++  }
++}
++
+ // sidebar Y19: hidden, the pointer at the window's leading edge slides the
+ // sidebar in over the page, which stays where it is, and leaving the sidebar
+ // slides it away again. No expand-on-hover switch is needed: it is the way
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
 index 1052a048cb2b3..f98c27763edca 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
@@ -1914,6 +2908,97 @@ index 1052a048cb2b3..f98c27763edca 100644
 +                                chip_again);
 +  base::RunLoop().RunUntilIdle();
 +  EXPECT_TRUE(essential->IsPinned());
++}
++
+ }  // namespace
+diff --git a/chrome/test/stedding/window_buttons_browsertest.mm b/chrome/test/stedding/window_buttons_browsertest.mm
+index 970970601a77f..59337bd52a274 100644
+--- a/chrome/test/stedding/window_buttons_browsertest.mm
++++ b/chrome/test/stedding/window_buttons_browsertest.mm
+@@ -13,7 +13,9 @@
+ 
+ #include <algorithm>
+ 
++#include "base/memory/scoped_refptr.h"
+ #include "base/test/run_until.h"
++#include "base/time/time.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -37,6 +39,8 @@
+ #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
+ #include "ui/events/event.h"
+ #include "ui/events/event_constants.h"
++#include "ui/gfx/animation/animation_container.h"
++#include "ui/gfx/animation/animation_test_api.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/mac/coordinate_conversion.h"
+@@ -224,4 +228,67 @@ IN_PROC_BROWSER_TEST_F(WindowButtonsTest, HiddenTheLightsSitOnTheRowsBar) {
+   }
+ }
+ 
++// sidebar Y19: a hidden sidebar opens from nothing, and for the first part
++// of its animation the strip is narrower than the traffic lights: the row's
++// contents keep clear of them at every step, as while the sidebar is hidden.
++// They ran under the lights until the strip had grown past them, for seconds
++// on a loaded machine (operator, 2026-10-13, on a test window). Each step of
++// the animation is laid out by hand.
++IN_PROC_BROWSER_TEST_F(WindowButtonsTest,
++                       OpeningAHiddenSidebarKeepsTheRowOffTheLights) {
++  BrowserView* const browser_view =
++      BrowserView::GetBrowserViewForBrowser(browser());
++  VerticalTabStripRegionView* const strip =
++      browser_view->vertical_tab_strip_region_view_for_testing();
++  BrowserAnimationController* const animations =
++      BrowserAnimationController::From(browser());
++  tabs::VerticalTabStripStateController* const state =
++      tabs::VerticalTabStripStateController::From(browser());
++  browser()->GetProfile()->GetPrefs()->SetInteger(
++      stedding::prefs::kSidebarClosedForm,
++      stedding::prefs::kSidebarClosedHidden);
++  state->RequestCollapse(true);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    views::test::RunScheduledLayout(browser_view->GetWidget());
++    return !animations->IsAnimating(TabStripAnimations::kVerticalTabStrip) &&
++           strip->IsHiddenCompletely() && strip->width() == 0;
++  }));
++
++  NSWindow* const window =
++      browser_view->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++  int lights_right = 0;
++  for (NSWindowButton kind :
++       {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton}) {
++    NSButton* const button = [window standardWindowButton:kind];
++    ASSERT_TRUE(button);
++    lights_right =
++        std::max(lights_right, ScreenFrame(window, button).right());
++  }
++  const int window_left = browser_view->GetBoundsInScreen().x();
++
++  auto container = base::MakeRefCounted<gfx::AnimationContainer>();
++  animations->SetAnimationContainerForTesting(
++      TabStripAnimations::kVerticalTabStrip, container.get());
++  gfx::AnimationContainerTestApi clock(container.get());
++  state->RequestCollapse(false);
++  int narrow_steps = 0;
++  for (int step = 0;
++       step < 200 &&
++       animations->IsAnimating(TabStripAnimations::kVerticalTabStrip);
++       ++step) {
++    clock.IncrementTime(base::Milliseconds(4));
++    views::test::RunScheduledLayout(browser_view->GetWidget());
++    if (window_left + strip->width() < lights_right) {
++      ++narrow_steps;
++    }
++    EXPECT_LT(lights_right, browser_view->toolbar()->GetBoundsInScreen().x())
++        << "step " << step << ": the strip is " << strip->width()
++        << " wide and the row's contents run under the traffic lights";
++  }
++  EXPECT_FALSE(animations->IsAnimating(TabStripAnimations::kVerticalTabStrip));
++  EXPECT_GT(narrow_steps, 0)
++      << "no step saw the strip narrower than the traffic lights";
++  EXPECT_FALSE(state->IsCollapsed());
 +}
 +
  }  // namespace

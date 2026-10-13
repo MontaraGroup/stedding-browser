@@ -1,6 +1,6 @@
 # Feature: Private windows wear a different coat
 
-Status: **V1–V3, V7, V8 built**; **V6 partial** (it does not arise while Peek is off, BACKLOG S-93); **V4, V5 withdrawn**.
+Status: **V1–V3, V7–V9 built**; **V6 partial** (it does not arise while Peek is off, BACKLOG S-93); **V4, V5 withdrawn**.
 Owner docs: `docs/PRIVACY.md`, `docs/PRODUCT.md` §7. Patch: 0034.
 
 A private window (⇧⌘N) must be told apart at a glance and must leave nothing in the
@@ -20,6 +20,7 @@ avatar badge stays hidden (V4 withdrawn).
 | V6 | Peek and its promotion into a split stay inside the private window. | by construction: `PeekView::PromoteToTab` and `PromoteToSplit` insert into the peek's own window; live: ⌘O on a private peek stays private | partial · does not arise while Peek is off (BACKLOG S-93) |
 | V7 | A Guest window is not private. Its profile is off the record, so it has no Spaces and no archive, and it gets the private window's rows -- the New Tab row, no Clear line, no Space switcher, no "+" pill -- but it wears the ordinary coat (the sand or navy ground, not graphite), its title row stays empty, and its window title has no " – Private" (`PLAN.md` WIN-F8). | `PrivateWindowTest.OffTheRecordAloneIsNotPrivate`; browser: `PrivateCoatTest.OnlyAnIncognitoWindowIsGraphite` (a Guest window: not graphite, no " – Private" in its title, no "Private" row); live: a Guest window (`tooling/capture-state --guest`): the navy ground, the New Tab row, no title row | built |
 | V8 | ⇧⌘K (and the Clear rows of the menus) closes a private window's tabs and keeps the window and its private session, with one New Tab; the window has no Spaces, so no pinned run and no Clear line (spaces B17; PLAN.md CMD-3). | browser: `ClearSpaceTest.ClearingAPrivateWindowKeepsIt` | built |
+| V9 | A private window's address row takes the page's colour, as a normal window's does (toolbar T3, T7, T31), and a Guest window's too; the private window stays graphite. The page's colour belongs to the Space model, which neither window has, so `BrowserWindowFeatures` owns a `PageThemeColorController` for them; without it the row sat on the bare ground, Back, Forward and Reload with it, under a page of another colour (operator, 2026-10-13). The colour key has one app-controller slot: the private mark holds it until the page has a colour, then the row's own supplier, marked to stand for the mark (`stedding::SetMarksPrivateWindow`, read by `IsPrivateColorKey`); private windows share those suppliers, and they are never freed, as the mark is not. The rest of PLAN.md WIN-6 (the address row's own rules, the density at startup) is open. | browser: `PrivateCoatTest.APrivateWindowsRowTakesThePagesColour` (an orange page: the private row's colour, its icons' contrast, the key still private and graphite; a Guest window's row in the ordinary coat); unit: `SteddingColorMixerTest.AMarkedSupplierStandsForThePrivateMark`; live, Mac release build, 2026-10-13: a private window over the incognito page, an orange page and a white one, the row in each page's colour with Back, Forward and Reload on it, the ground graphite | built |
 
 ## Notes
 
@@ -28,8 +29,8 @@ avatar badge stays hidden (V4 withdrawn).
   say "private". The window says it instead: `BrowserWidget` puts Stedding's private
   mark (`SteddingPrivateWindowMark()`) in the key's app-controller slot for a window
   `stedding::IsPrivateWindow` calls private, and `AddSteddingColorMixer` paints graphite
-  for that key. When private windows get a page colour (`PLAN.md` WIN-6) the mark and
-  the page bar's supplier must share that slot.
+  for that key. Once the page has a colour, the row's supplier holds the slot instead,
+  marked to stand for the mark (V9).
 - The Space chords (⌃1–9, ⌥⌘←/→) do nothing in a private window: there is no model to
   act on (spaces B29).
 - "Private" as the title row's text is a VoiceOver label too (critic #31).
