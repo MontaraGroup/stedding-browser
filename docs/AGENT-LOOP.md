@@ -174,8 +174,7 @@ research  →  spec  →  failing test  →  implement  →  build  →  test  �
 
 ## How the tests are shaped
 
-The suites were cut on 2026-10-14 from 930 unit and 233 browser tests by merging and
-deleting what repeated itself; keep them that way.
+The suites were cut by merging and deleting what repeated itself; keep them that way.
 
 - **A unit test names one behaviour and fails for one reason.** Near-copies with different
   inputs are one table-driven test (a struct array, a loop, `SCOPED_TRACE` per row). A unit
@@ -189,7 +188,8 @@ deleting what repeated itself; keep them that way.
   or a new row in an existing table, is the default; a new test needs a setup no other has.
 - **Which leg runs it.** `tooling/dev` runs the browser suite four at a time on Windows and,
   after it, the fixtures in `SERIAL_BROWSER_TESTS` one at a time: those that need the real
-  pointer over their window, the active window, the clipboard or picture-in-picture (trap 88). A new fixture
+  pointer over their window, the active window, the clipboard or picture-in-picture (trap 88).
+  It defaults to one job, and four only on Windows, until `S-178`. A new fixture
   of that kind goes on that list, or it fails the parallel leg now and then. Chromium's own
   suites over the code the series changes are the `upstream` line; the wider ring runs with
   `tooling/dev test rebase` after a pin bump.

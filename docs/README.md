@@ -37,7 +37,7 @@ Everything under `docs/`, grouped by who it is for.
 | [AGENT-LOOP.md](AGENT-LOOP.md) | The working procedure: ask once, order of evidence, supervise long jobs, one pass finds everything, then the loop for one change |
 | [PROJECT-LOG.md](PROJECT-LOG.md) | What was built, round by round, with the evidence: history, not instructions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Fork strategy, the build, patch management, branding, updater, signing, measured numbers |
-| [features/](features/) | One specification per feature: each behaviour, its test and whether it is built, partial or planned. The definition of done |
+| [features/](features/) | One specification per feature: each behaviour, its test and whether it is built, partial or planned |
 | [decisions/](decisions/) | Architecture decision records |
 | [history/](history/) | Finished plans and ledgers that specs, patches and release notes still cite: the 2026-09-26 audit and its item ids (TAB-1, SPC-4, ...), round 6's plan (R6-nn), the operator's rounds 2 to 11 |
 | [perf/](perf/) | How to measure the performance budgets, and the one comparison so far (2026-09-02, Chromium 153; nothing current) |

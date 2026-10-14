@@ -13,7 +13,7 @@ amends its feature's, and `tooling/dev status` is where the count lives.
 
 The one exception: a round of operator feedback that touches many features at once lands
 as one patch when its fixups would conflict with every later patch that touched the same
-lines; the next rebase folds them where they belong (`PLAN.md` Phase 4, SER-4). These are:
+lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-26.md`, SER-4). These are:
 
 - 0013 (round 5), 0037 (round 7) and 0039 (round 8);
 - 0040 and 0041, M8's first slice; 0042, the refresh features privacy Q10 keeps on; 0043,
@@ -32,8 +32,9 @@ lines; the next rebase folds them where they belong (`PLAN.md` Phase 4, SER-4). 
   apart, the row kept off the traffic lights while a hidden sidebar opens, and a private
   window's row in the page's colour; 0063, the round of 2026-10-14: a split keeps its
   folder, a closed folder comes back in its order, a chip lit only once the drag says
-  what it carries and kept through a rebuild, a Space's name shown once, and the restore
-  bar out of full screen.;
+  what it carries and kept through a rebuild, a Space's name shown once, the restore
+  bar out of full screen, and that evening a folder closed in part back in its places and
+  Restore Folder with Shift held in one window;
 - 0064, the tests of 2026-10-14: Stedding's browser tests merged into scenarios that share a
   browser, with a `SCOPED_TRACE` per step; near-copy unit tests made table-driven; the drag
   fixtures kept above other windows. Test files only, touched by most patches since 0057,

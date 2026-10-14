@@ -25,12 +25,17 @@ a pointer to the command bar is looked up again after a wait (the bar closes whe
 window loses focus); a merged step that changes Spaces runs last; the typed text is
 waited for before it is read.
 
+It also holds the tests of patch 0063's evening fixes, in the files this
+patch rewrote: a folder closed in part comes back in its places, whole or
+one row at a time (FolderTabsTest, FolderSessionTest, TabStripModelTest),
+and Restore Folder with Shift held keeps the folder in one new window.
+
 Why: 233 browser tests took 208 s one at a time; the same checks in 103 tests take about
 65 s, most of them four at a time (tooling/dev, SERIAL_BROWSER_TESTS).
 Removable when: never; these are Stedding's own tests.
 ---
  .../render_view_context_menu_unittest.cc      |   85 +-
- .../ui/archive/archived_tabs_unittest.cc      |    8 +-
+ .../ui/archive/archived_tabs_unittest.cc      |   31 +-
  .../ui/archive/tab_archiver_unittest.cc       |   42 +-
  .../ui/color/stedding_color_mixer_unittest.cc |   55 +-
  .../ui/spaces/session_rebuild_unittest.cc     |   74 +-
@@ -48,42 +53,46 @@ Removable when: never; these are Stedding's own tests.
  .../ui/stedding/tab_menu_verbs_unittest.cc    |   10 +
  .../page_theme_color_controller_unittest.cc   |    2 +-
  .../stedding/theme/page_top_color_unittest.cc |   81 +-
- .../commandbar/command_bar_view_unittest.cc   |  350 ++--
+ chrome/browser/ui/tabs/BUILD.gn               |    1 +
+ .../tabs/stedding_folder_session_unittest.cc  |   90 +
+ .../ui/tabs/tab_strip_model_unittest.cc       |  147 ++
+ .../commandbar/command_bar_view_unittest.cc   |  350 +--
  chrome/browser/ui/views/peek/peek_unittest.cc |  140 +-
  .../common/stedding_tab_row_rules_unittest.cc |  172 +-
  .../ui/views/tabs/tab_container_unittest.cc   |  142 +-
  ...rtical_tab_strip_top_container_unittest.cc |  106 +-
+ chrome/test/stedding/BUILD.gn                 |    1 +
  .../test/stedding/address_band_browsertest.cc |  102 +-
- .../test/stedding/clear_space_browsertest.cc  |  262 +--
- .../test/stedding/command_bar_browsertest.cc  |  983 ++++++-----
+ .../test/stedding/clear_space_browsertest.cc  |  262 ++-
+ .../test/stedding/command_bar_browsertest.cc  |  983 ++++----
  chrome/test/stedding/copy_link_browsertest.cc |   90 +-
  chrome/test/stedding/defaults_browsertest.cc  |  290 +--
  .../external_extensions_browsertest.cc        |    2 -
- .../test/stedding/folder_tabs_browsertest.cc  | 1572 +++++++++--------
+ .../test/stedding/folder_tabs_browsertest.cc  | 2014 ++++++++++-------
  .../test/stedding/https_first_browsertest.cc  |   66 +-
  chrome/test/stedding/import_browsertest.cc    |  122 +-
- chrome/test/stedding/link_drop_browsertest.cc |  359 ++--
+ chrome/test/stedding/link_drop_browsertest.cc |  359 +--
  .../stedding/little_window_browsertest.cc     |   74 +-
  .../test/stedding/media_keys_browsertest.cc   |  130 +-
  .../test/stedding/pinned_run_browsertest.cc   |   37 +-
  .../test/stedding/private_coat_browsertest.cc |  170 +-
  .../test/stedding/quiet_start_browsertest.cc  |   51 +-
- chrome/test/stedding/restore_browsertest.cc   |  947 +++++-----
+ chrome/test/stedding/restore_browsertest.cc   |  947 ++++----
  .../restored_page_state_browsertest.cc        |   81 +-
  .../test/stedding/screenshot_browsertest.cc   |  102 +-
  .../stedding/settings_spaces_browsertest.cc   |   59 +-
- .../stedding/sidebar_click_browsertest.cc     |  924 +++++-----
- .../stedding/sidebar_forms_browsertest.cc     | 1117 ++++++------
+ .../stedding/sidebar_click_browsertest.cc     |  924 ++++----
+ .../stedding/sidebar_forms_browsertest.cc     | 1117 ++++-----
  .../test/stedding/sidebar_rail_browsertest.cc |  100 +-
  chrome/test/stedding/sidebar_test_util.cc     |   34 +
  chrome/test/stedding/sidebar_test_util.h      |   36 +-
  .../test/stedding/sleep_gate_browsertest.cc   |  128 +-
  .../test/stedding/sleep_in_use_browsertest.cc |  108 +-
- chrome/test/stedding/space_jar_browsertest.cc | 1182 +++++++------
- .../test/stedding/space_switch_browsertest.cc |  605 ++++---
- chrome/test/stedding/tab_drop_browsertest.cc  |  616 ++++---
+ chrome/test/stedding/space_jar_browsertest.cc | 1182 +++++-----
+ .../test/stedding/space_switch_browsertest.cc |  605 +++--
+ chrome/test/stedding/tab_drop_browsertest.cc  |  616 ++---
  chrome/test/stedding/welcome_browsertest.cc   |  258 +--
- 54 files changed, 6730 insertions(+), 5838 deletions(-)
+ 58 files changed, 7428 insertions(+), 5844 deletions(-)
 
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
 index c097d1acc04b9..b87eeb8e2fffc 100644
@@ -188,10 +197,18 @@ index c097d1acc04b9..b87eeb8e2fffc 100644
         DisableOpenInIncognitoWindowWhenIncognitoIsDisabled) {
    std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
 diff --git a/chrome/browser/ui/archive/archived_tabs_unittest.cc b/chrome/browser/ui/archive/archived_tabs_unittest.cc
-index 211d01f9b94b8..6fdc0ca0bbd0a 100644
+index 211d01f9b94b8..33139c3e77804 100644
 --- a/chrome/browser/ui/archive/archived_tabs_unittest.cc
 +++ b/chrome/browser/ui/archive/archived_tabs_unittest.cc
-@@ -71,8 +71,12 @@ TEST(ArchivePageTest, RetentionFiltersOldEntries) {
+@@ -6,6 +6,7 @@
+ 
+ #include <memory>
+ #include <string>
++#include <vector>
+ 
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/archive/archive_mark.h"
+@@ -71,8 +72,12 @@ TEST(ArchivePageTest, RetentionFiltersOldEntries) {
    EXPECT_TRUE(shown[1].reason.empty()) << "a plain close has no reason";
    EXPECT_EQ(3u, ListArchivedTabs(entries, now, base::Days(90)).size());
    const base::DictValue value = ArchivedTabToValue(shown[0]);
@@ -206,6 +223,35 @@ index 211d01f9b94b8..6fdc0ca0bbd0a 100644
  }
  
  // A9: the row names the tab's folders by their titles, outermost first, not
+@@ -157,6 +162,28 @@ TEST_F(ArchivePageWindowTest, ClearedMarkRecordsAPlainClose) {
+   EXPECT_FALSE(TakeArchiveMark(tab->GetContents()).has_value());
+ }
+ 
++// BACKLOG S-137: the slot string is how many tabs the close left in each
++// ancestor before this one, outermost first. Empty is no slot. A value
++// that is not those counts is no slot, so a bad record does not place a row.
++TEST(ArchivePageTest, ClosedFolderSlotsRoundTrip) {
++  EXPECT_EQ("", FormatClosedFolderSlots({}));
++  EXPECT_TRUE(ParseClosedFolderSlots("").empty());
++
++  const std::vector<int> one = {0};
++  EXPECT_EQ("0", FormatClosedFolderSlots(one));
++  EXPECT_EQ(one, ParseClosedFolderSlots(FormatClosedFolderSlots(one)));
++
++  const std::vector<int> nested = {1, 0};
++  EXPECT_EQ("1,0", FormatClosedFolderSlots(nested));
++  EXPECT_EQ(nested, ParseClosedFolderSlots("1,0"));
++
++  EXPECT_TRUE(ParseClosedFolderSlots("1,x").empty())
++      << "a bad part drops the whole slot";
++  EXPECT_TRUE(ParseClosedFolderSlots("-1").empty());
++  EXPECT_TRUE(ParseClosedFolderSlots("1,").empty());
++  EXPECT_TRUE(ParseClosedFolderSlots("1,-2").empty());
++}
++
+ // PLAN.md WEB-7: the closed entry carries what a restore needs -- the
+ // Space's id, the pin and its home as the session writes them, the user's
+ // name for the tab, its folders, and the Space's own name -- for a tab
 diff --git a/chrome/browser/ui/archive/tab_archiver_unittest.cc b/chrome/browser/ui/archive/tab_archiver_unittest.cc
 index 166a2b0cb8f4e..d0b7e46176029 100644
 --- a/chrome/browser/ui/archive/tab_archiver_unittest.cc
@@ -1602,6 +1648,290 @@ index 253e39787f951..6514c931ae01a 100644
  // A sample a step away from the last is not a new colour for the window.
  TEST(PageTopColorTest, ColoursTwoStepsApartMatch) {
    EXPECT_TRUE(PageColorsMatch(SkColorSetRGB(10, 20, 30),
+diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
+index 33bcbb5222829..6208399ae8a0d 100644
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -956,6 +956,7 @@ source_set("stedding_unit_tests") {
+   deps = [
+     ":tab_strip",
+     "//base",
++    "//chrome/browser/ui/archive:mark",
+     "//chrome/browser/ui/spaces",
+     "//chrome/test:test_support",
+     "//components/tabs:public",
+diff --git a/chrome/browser/ui/tabs/stedding_folder_session_unittest.cc b/chrome/browser/ui/tabs/stedding_folder_session_unittest.cc
+index ebf61f318ef47..d323ee76a2dab 100644
+--- a/chrome/browser/ui/tabs/stedding_folder_session_unittest.cc
++++ b/chrome/browser/ui/tabs/stedding_folder_session_unittest.cc
+@@ -14,6 +14,7 @@
+ 
+ #include "base/strings/stringprintf.h"
+ #include "chrome/browser/sessions/stedding_session_rebuild.h"
++#include "chrome/browser/ui/archive/archive_mark.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+@@ -31,6 +32,7 @@
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+ 
+@@ -426,5 +428,93 @@ TEST_F(FolderSessionTest, PinnedTabStaysOutOfItsSavedFolder) {
+   EXPECT_EQ(1u, folder->TabCountRecursive());
+ }
+ 
++// S-137: a row brought back before a restart keeps the close's batch and
++// its order. The next row of that close counts it. The slot is not saved
++// on the open tab: a startup rebuild would place it again.
++TEST_F(FolderSessionTest, ARowBroughtBackBeforeARestartIsCounted) {
++  for (int i = 0; i < 4; ++i) {
++    AddTab(browser(), GURL("https://example.com/"));
++  }
++  TabStripModel* const tabs = browser()->tab_strip_model();
++  ASSERT_EQ(4, tabs->count());
++  // F[a, b, d]. c is the row still to come back.
++  tabs::TabInterface* const a = tabs->GetTabAtIndex(0);
++  tabs::TabInterface* const b = tabs->GetTabAtIndex(1);
++  tabs::TabInterface* const d = tabs->GetTabAtIndex(2);
++  tabs::TabInterface* const c = tabs->GetTabAtIndex(3);
++  tabs::FolderTabCollection* const folder = tabs->AddToNewFolder({0, 1, 2});
++  ASSERT_NE(nullptr, folder);
++  spaces::ClosedFolderPlace::CreateForWebContents(a->GetContents(), "batch-1",
++                                                   0);
++
++  const std::unique_ptr<sessions::SessionWindow> window =
++      RebuildAndRestore(browser());
++  const auto extra_of = [&](tabs::TabInterface* tab)
++      -> std::map<std::string, std::string> {
++    const SessionID id =
++        sessions::SessionTabHelper::IdForTab(tab->GetContents());
++    for (const auto& saved : window->tabs) {
++      if (saved->tab_id == id) {
++        return saved->extra_data;
++      }
++    }
++    return {};
++  };
++  const std::map<std::string, std::string> saved = extra_of(a);
++  const std::map<std::string, std::string> survivor = extra_of(b);
++  const auto batch = saved.find(kClosedFolderKey);
++  const auto order = saved.find(kClosedFolderOrderKey);
++  const auto path = saved.find(kSessionTabFolderPathKey);
++  ASSERT_NE(batch, saved.end());
++  ASSERT_NE(order, saved.end());
++  ASSERT_NE(path, saved.end());
++  EXPECT_EQ("batch-1", batch->second);
++  EXPECT_EQ("0", order->second);
++  EXPECT_EQ(saved.end(), saved.find(kClosedFolderSlotKey));
++  EXPECT_FALSE(path->second.empty());
++  EXPECT_EQ(survivor.end(), survivor.find(kClosedFolderKey));
++
++  // The next start: the mark comes back from that entry, and not a slot.
++  a->GetContents()->RemoveUserData(spaces::ClosedFolderPlace::UserDataKey());
++  ASSERT_EQ(nullptr,
++            spaces::ClosedFolderPlace::FromWebContents(a->GetContents()));
++  spaces::RestoreSpaceFromExtraData(a->GetContents(), saved);
++  const spaces::ClosedFolderPlace* const brought_back =
++      spaces::ClosedFolderPlace::FromWebContents(a->GetContents());
++  ASSERT_NE(nullptr, brought_back);
++  EXPECT_EQ("batch-1", brought_back->batch());
++  EXPECT_EQ(0, brought_back->order());
++  const spaces::FolderRestorePath* const parked =
++      spaces::FolderRestorePath::FromWebContents(a->GetContents());
++  ASSERT_NE(nullptr, parked);
++  EXPECT_TRUE(parked->slots().empty());
++
++  // c's close left one survivor before it. With a already back, c lands
++  // after b. Without the mark it would land before b.
++  const std::map<std::string, std::string> closed = {
++      {kSessionTabFolderPathKey, path->second},
++      {kClosedFolderKey, "batch-1"},
++      {kClosedFolderOrderKey, "1"},
++      {kClosedFolderSlotKey, "1"},
++  };
++  spaces::RestoreSpaceFromExtraData(c->GetContents(), closed);
++
++  FolderSessionService service(*browser());
++  service.OnSessionRestored(profile(), tabs->count());
++
++  EXPECT_EQ(folder, a->GetParentCollection());
++  EXPECT_EQ(folder, b->GetParentCollection());
++  EXPECT_EQ(folder, c->GetParentCollection());
++  EXPECT_EQ(folder, d->GetParentCollection());
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(a).has_value());
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(b).has_value());
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(c).has_value());
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(d).has_value());
++  EXPECT_EQ(0u, folder->GetIndexOfTabRecursive(a).value());
++  EXPECT_EQ(1u, folder->GetIndexOfTabRecursive(b).value());
++  EXPECT_EQ(2u, folder->GetIndexOfTabRecursive(c).value());
++  EXPECT_EQ(3u, folder->GetIndexOfTabRecursive(d).value());
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+index b1b6ad4c6e2b0..4868d415c4ba3 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+@@ -6770,6 +6770,153 @@ TEST_F(TabStripModelTest, MoveTabsToFolderAppends) {
+   tabstrip()->CloseAllTabs();
+ }
+ 
++// Stedding (folders F19, BACKLOG S-137): a row joins a folder at a slot
++// counted from its first tab. Past the end it is appended. A slot inside a
++// split lands before the split, so the insert does not open it.
++TEST_F(TabStripModelTest, MoveTabsToFolderAtPlacesTheRowAtItsSlot) {
++  ASSERT_NO_FATAL_FAILURE(
++      PrepareTabstripForSelectionTest(tabstrip(), 12, 0, {0}));
++  tabs::TabInterface* const left = tabstrip()->GetTabAtIndex(1);
++  tabs::TabInterface* const split_left = tabstrip()->GetTabAtIndex(2);
++  tabs::TabInterface* const split_right = tabstrip()->GetTabAtIndex(3);
++  tabs::TabInterface* const right = tabstrip()->GetTabAtIndex(4);
++  tabs::TabInterface* const into_split = tabstrip()->GetTabAtIndex(5);
++  tabs::TabInterface* const a = tabstrip()->GetTabAtIndex(6);
++  tabs::TabInterface* const b = tabstrip()->GetTabAtIndex(7);
++  tabs::TabInterface* const c = tabstrip()->GetTabAtIndex(8);
++  tabs::TabInterface* const at_start = tabstrip()->GetTabAtIndex(9);
++  tabs::TabInterface* const in_middle = tabstrip()->GetTabAtIndex(10);
++  tabs::TabInterface* const past_end = tabstrip()->GetTabAtIndex(11);
++
++  tabs::FolderTabCollection* const split_folder =
++      tabstrip()->AddToNewFolder({1, 2, 3, 4});
++  ASSERT_NE(nullptr, split_folder);
++  tabstrip()->ActivateTabAt(tabstrip()->GetIndexOfTab(split_left));
++  tabstrip()->AddToNewSplit(
++      {tabstrip()->GetIndexOfTab(split_right)}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kToolbarButton);
++  ASSERT_TRUE(split_left->IsSplit());
++  ASSERT_EQ(split_left->GetSplit(), split_right->GetSplit());
++  ASSERT_EQ(split_folder, split_left->GetParentCollection()->GetParentCollection());
++
++  const int a_index = tabstrip()->GetIndexOfTab(a);
++  const int b_index = tabstrip()->GetIndexOfTab(b);
++  const int c_index = tabstrip()->GetIndexOfTab(c);
++  ASSERT_LT(a_index, b_index);
++  ASSERT_LT(b_index, c_index);
++  tabs::FolderTabCollection* const folder =
++      tabstrip()->AddToNewFolder({a_index, b_index, c_index});
++  ASSERT_NE(nullptr, folder);
++
++  // Slot 2 is the split's second pane. The row lands before the split.
++  EXPECT_TRUE(tabstrip()->MoveTabsToFolderAt(
++      {tabstrip()->GetIndexOfTab(into_split)}, split_folder, 2));
++  EXPECT_EQ(split_folder, into_split->GetParentCollection());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(left),
++            tabstrip()->GetIndexOfTab(into_split));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(into_split),
++            tabstrip()->GetIndexOfTab(split_left));
++  EXPECT_TRUE(split_left->IsSplit());
++  EXPECT_EQ(split_left->GetSplit(), split_right->GetSplit());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(split_right),
++            tabstrip()->GetIndexOfTab(right));
++
++  EXPECT_TRUE(tabstrip()->MoveTabsToFolderAt(
++      {tabstrip()->GetIndexOfTab(at_start)}, folder, 0));
++  EXPECT_EQ(folder, at_start->GetParentCollection());
++  ASSERT_TRUE(folder->GetIndexOfTab(at_start).has_value());
++  EXPECT_EQ(0u, folder->GetIndexOfTab(at_start).value());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(at_start), tabstrip()->GetIndexOfTab(a));
++
++  // Slot 2 is b, now that at_start occupies slot 0. The row lands before b.
++  EXPECT_TRUE(tabstrip()->MoveTabsToFolderAt(
++      {tabstrip()->GetIndexOfTab(in_middle)}, folder, 2));
++  EXPECT_EQ(folder, in_middle->GetParentCollection());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(a), tabstrip()->GetIndexOfTab(in_middle));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(in_middle), tabstrip()->GetIndexOfTab(b));
++
++  EXPECT_TRUE(tabstrip()->MoveTabsToFolderAt(
++      {tabstrip()->GetIndexOfTab(past_end)}, folder, 100));
++  EXPECT_EQ(folder, past_end->GetParentCollection());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(c), tabstrip()->GetIndexOfTab(past_end));
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(past_end).has_value());
++  EXPECT_EQ(folder->TabCountRecursive() - 1,
++            folder->GetIndexOfTabRecursive(past_end).value());
++
++  tabstrip()->CloseAllTabs();
++}
++
++// Stedding (folders F19, BACKLOG S-137): a row already in the folder moves
++// to its slot. The slot counts the other tabs. Counting the row, then
++// taking one off for a move within the folder, landed it one short when it
++// sat before the slot.
++TEST_F(TabStripModelTest, MoveTabsToFolderAtMovesARowAlreadyInTheFolder) {
++  ASSERT_NO_FATAL_FAILURE(
++      PrepareTabstripForSelectionTest(tabstrip(), 5, 0, {0}));
++  tabs::TabInterface* const b = tabstrip()->GetTabAtIndex(1);
++  tabs::TabInterface* const k1 = tabstrip()->GetTabAtIndex(2);
++  tabs::TabInterface* const k2 = tabstrip()->GetTabAtIndex(3);
++  tabs::TabInterface* const k3 = tabstrip()->GetTabAtIndex(4);
++  tabs::FolderTabCollection* const folder =
++      tabstrip()->AddToNewFolder({1, 2, 3, 4});
++  ASSERT_NE(nullptr, folder);
++  ASSERT_EQ(0u, folder->GetIndexOfTab(b).value());
++
++  // b is the first row. Slot 3 is past k1, k2 and k3.
++  EXPECT_TRUE(
++      tabstrip()->MoveTabsToFolderAt({tabstrip()->GetIndexOfTab(b)}, folder, 3));
++  EXPECT_EQ(folder, b->GetParentCollection());
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(b).has_value());
++  EXPECT_EQ(3u, folder->GetIndexOfTabRecursive(b).value());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k1), tabstrip()->GetIndexOfTab(k2));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k2), tabstrip()->GetIndexOfTab(k3));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k3), tabstrip()->GetIndexOfTab(b));
++
++  // b is now last. Slot 1 is after k1 only.
++  EXPECT_TRUE(
++      tabstrip()->MoveTabsToFolderAt({tabstrip()->GetIndexOfTab(b)}, folder, 1));
++  EXPECT_EQ(folder, b->GetParentCollection());
++  ASSERT_TRUE(folder->GetIndexOfTabRecursive(b).has_value());
++  EXPECT_EQ(1u, folder->GetIndexOfTabRecursive(b).value());
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k1), tabstrip()->GetIndexOfTab(b));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(b), tabstrip()->GetIndexOfTab(k2));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k2), tabstrip()->GetIndexOfTab(k3));
++
++  // A split is one row. It sits at the end; slot 0 puts it first, then
++  // slot 2, which is the two tabs that are not the split, puts it back.
++  tabstrip()->ActivateTabAt(tabstrip()->GetIndexOfTab(k2));
++  tabstrip()->AddToNewSplit(
++      {tabstrip()->GetIndexOfTab(k3)}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kToolbarButton);
++  ASSERT_TRUE(k2->IsSplit());
++  ASSERT_EQ(k2->GetSplit(), k3->GetSplit());
++  ASSERT_EQ(folder, k2->GetParentCollection()->GetParentCollection());
++
++  const int split_left = tabstrip()->GetIndexOfTab(k2);
++  const int split_right = tabstrip()->GetIndexOfTab(k3);
++  ASSERT_LT(split_left, split_right);
++  EXPECT_TRUE(tabstrip()->MoveTabsToFolderAt({split_left, split_right}, folder,
++                                             0));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k2), tabstrip()->GetIndexOfTab(k1));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k3), tabstrip()->GetIndexOfTab(k1));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k1), tabstrip()->GetIndexOfTab(b));
++  EXPECT_EQ(k2->GetSplit(), k3->GetSplit());
++  EXPECT_EQ(folder, k2->GetParentCollection()->GetParentCollection());
++
++  const int again_left = tabstrip()->GetIndexOfTab(k2);
++  const int again_right = tabstrip()->GetIndexOfTab(k3);
++  ASSERT_LT(again_left, again_right);
++  EXPECT_TRUE(
++      tabstrip()->MoveTabsToFolderAt({again_left, again_right}, folder, 2));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k1), tabstrip()->GetIndexOfTab(b));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(b), tabstrip()->GetIndexOfTab(k2));
++  EXPECT_LT(tabstrip()->GetIndexOfTab(k2), tabstrip()->GetIndexOfTab(k3));
++  EXPECT_EQ(k2->GetSplit(), k3->GetSplit());
++  EXPECT_EQ(folder, k2->GetParentCollection()->GetParentCollection());
++
++  tabstrip()->CloseAllTabs();
++}
++
+ // Moving every tab of a folder into another folder moves the tabs, not the
+ // folder node.
+ TEST_F(TabStripModelTest, FoldersDoNotMoveAsUnits) {
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 index 3777ee68b2b44..f9bbb25bb4154 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
@@ -2648,6 +2978,18 @@ index 4032a4fa0e4a0..9cc33f05de9df 100644
 -}
 -
  }  // namespace
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 4d16fbafcd042..a8cdc9edf3096 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -73,6 +73,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui",
+     "//chrome/browser/ui/animation",
+     "//chrome/browser/ui/archive",
++    "//chrome/browser/ui/archive:closed_folder",
+     "//chrome/browser/ui/archive:mark",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:mixers",
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
 index ccc8c5937ead9..ecacfddb41128 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
@@ -4648,7 +4990,7 @@ index 32492985e51eb..7b2843f2a2bbd 100644
      provider->ServiceShutdown();
    }
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index a75b863dffbfb..027daf28df1ed 100644
+index a75b863dffbfb..35445c5c20130 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -14,7 +14,9 @@
@@ -4662,7 +5004,19 @@ index a75b863dffbfb..027daf28df1ed 100644
  
  #include <algorithm>
  #include <memory>
-@@ -143,293 +145,88 @@ class FolderTabsTest
+@@ -31,8 +33,11 @@
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
+ #include "chrome/browser/extensions/api/tabs/tabs_api.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_live_tab_context.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/spaces/space.h"
+@@ -143,293 +148,88 @@ class FolderTabsTest
    const tabs::TabCollection* ParentOf(int index) {
      return tab_strip_model()->GetTabAtIndex(index)->GetParentCollection();
    }
@@ -4673,7 +5027,7 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  ASSERT_TRUE(folder);
 -  tab_strip_model()->ActivateTabAt(1);
 -  content::WebContents* const opener = tab_strip_model()->GetWebContentsAt(1);
--
+ 
 -  NavigateParams params(browser(), GURL("about:blank#child"),
 -                        ui::PAGE_TRANSITION_LINK);
 -  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
@@ -4709,7 +5063,7 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  EXPECT_EQ(folder, ParentOf(child)) << "inside its opener's folder";
 -  EXPECT_NE(folder, ParentOf(4)) << "the tab after the folder stays out";
 -}
- 
+-
 -IN_PROC_BROWSER_TEST_F(FolderTabsTest, DuplicatingAFolderTabKeepsItInside) {
 -  tabs::FolderTabCollection* const folder = MakeFolder();
 -  ASSERT_TRUE(folder);
@@ -4828,6 +5182,24 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  std::vector<int> indices;
 -  for (int i = 1; i < tab_strip_model()->count(); ++i) {
 -    indices.push_back(i);
+-  }
+-  tabs::FolderTabCollection* const folder =
+-      tab_strip_model()->AddToNewFolder(indices);
+-  ASSERT_TRUE(folder);
+-  ASSERT_EQ(11u, folder->TabCountRecursive());
+-  tab_strip_model()->ActivateTabAt(tab_strip_model()->GetIndexOfTab(awake));
+-  stedding::SleepTabList(sleepers);
+-  ASSERT_TRUE(base::test::RunUntil([&]() {
+-    return std::ranges::all_of(sleepers, [](tabs::TabInterface* tab) {
+-      return tab->GetContents()->WasDiscarded();
+-    });
+-  }));
+-
+-  int loads = 0;
+-  std::vector<std::unique_ptr<NavigationCounter>> counters;
+-  for (tabs::TabInterface* const tab : sleepers) {
+-    counters.push_back(
+-        std::make_unique<NavigationCounter>(tab->GetContents(), &loads));
 +  // Tabs of the folder titled `title`, in the strip's order, by host. A pane
 +  // of a split is marked with `|` when `mark_splits` is set.
 +  std::string HostsInFolder(const std::string& title, bool mark_splits) {
@@ -4851,35 +5223,6 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    }
 +    return hosts;
    }
--  tabs::FolderTabCollection* const folder =
--      tab_strip_model()->AddToNewFolder(indices);
--  ASSERT_TRUE(folder);
--  ASSERT_EQ(11u, folder->TabCountRecursive());
--  tab_strip_model()->ActivateTabAt(tab_strip_model()->GetIndexOfTab(awake));
--  stedding::SleepTabList(sleepers);
--  ASSERT_TRUE(base::test::RunUntil([&]() {
--    return std::ranges::all_of(sleepers, [](tabs::TabInterface* tab) {
--      return tab->GetContents()->WasDiscarded();
--    });
--  }));
--
--  int loads = 0;
--  std::vector<std::unique_ptr<NavigationCounter>> counters;
--  for (tabs::TabInterface* const tab : sleepers) {
--    counters.push_back(
--        std::make_unique<NavigationCounter>(tab->GetContents(), &loads));
-+
-+  // Back to the window's first tab. CLOSE_NONE, so a pad close is not the
-+  // newest restore entry.
-+  // Closes every tab but the first, one try each: a tab that will not close
-+  // fails the step instead of spinning.
-+  void CloseDownToOne() {
-+    for (int left = tab_strip_model()->count(); left > 1; --left) {
-+      tab_strip_model()->CloseWebContentsAt(tab_strip_model()->count() - 1,
-+                                            TabCloseTypes::CLOSE_NONE);
-+    }
-+    EXPECT_EQ(1, tab_strip_model()->count()) << "a tab would not close";
-   }
 -  tab_strip_model()->CloseFolderTabs(folder);
 -  ASSERT_TRUE(
 -      base::test::RunUntil([&]() { return tab_strip_model()->count() == 1; }));
@@ -4902,15 +5245,7 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  EXPECT_EQ(folder, ParentOf(2)) << "right after its opener, in the folder";
 -  EXPECT_NE(folder, ParentOf(4));
 -}
-+  // A previous step's folder close must not be the item this step reads.
-+  void ClearClosedTabs() {
-+    if (sessions::TabRestoreService* const service =
-+            TabRestoreServiceFactory::GetForProfile(
-+                browser()->GetProfile())) {
-+      service->ClearEntries();
-+    }
-+  }
- 
+-
 -// TAB-6: a folder of three tabs; its middle one closed and brought back
 -// with ⇧⌘T returns to its place in the folder.
 -IN_PROC_BROWSER_TEST_F(FolderTabsTest, AMiddleTabReopenedComesBackInPlace) {
@@ -4941,22 +5276,16 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  EXPECT_EQ(2, back) << "in its place";
 -  EXPECT_EQ(folder, ParentOf(back)) << "in its folder";
 -}
-+  // Closes the folder holding the tab at `index`, then the tabs between the
-+  // first and it with no record, so the folder stays the newest close.
-+  void CloseFolderAndPad(int index) {
-+    const tabs::TabCollection* parent = ParentOf(index);
-+    if (parent->type() == tabs::TabCollection::Type::SPLIT) {
-+      parent = parent->GetParentCollection();
++  // Back to the window's first tab. CLOSE_NONE, so a pad close is not the
++  // newest restore entry.
++  // Closes every tab but the first, one try each: a tab that will not close
++  // fails the step instead of spinning.
++  void CloseDownToOne() {
++    for (int left = tab_strip_model()->count(); left > 1; --left) {
++      tab_strip_model()->CloseWebContentsAt(tab_strip_model()->count() - 1,
++                                            TabCloseTypes::CLOSE_NONE);
 +    }
-+    ASSERT_EQ(tabs::TabCollection::Type::FOLDER, parent->type());
-+    tab_strip_model()->ActivateTabAt(0);
-+    tab_strip_model()->CloseFolderTabs(const_cast<tabs::FolderTabCollection*>(
-+        static_cast<const tabs::FolderTabCollection*>(parent)));
-+    ASSERT_TRUE(base::test::RunUntil(
-+        [&]() { return tab_strip_model()->count() == index; }));
-+    while (tab_strip_model()->count() > 1) {
-+      tab_strip_model()->CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
-+    }
++    EXPECT_EQ(1, tab_strip_model()->count()) << "a tab would not close";
 +  }
  
 -// PLAN.md TAB-13, folders F19: Close Folder's Tabs is one entry of Recently
@@ -4971,19 +5300,13 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  ASSERT_TRUE(service);
 -  for (const char* const host : {"a.test", "b.test", "c.test"}) {
 -    OpenLoaded(host);
-+  // Two loaded tabs, folded, titled `name`, then closed.
-+  void CloseNamedPair(const char* name, const char* a, const char* b) {
-+    OpenLoaded(a);
-+    OpenLoaded(b);
-+    const int count = tab_strip_model()->count();
-+    tabs::FolderTabCollection* const folder =
-+        tab_strip_model()->AddToNewFolder({count - 2, count - 1});
-+    ASSERT_TRUE(folder);
-+    folder->SetTitle(name);
-+    tab_strip_model()->ActivateTabAt(0);
-+    tab_strip_model()->CloseFolderTabs(folder);
-+    ASSERT_TRUE(base::test::RunUntil(
-+        [&]() { return tab_strip_model()->count() == count - 2; }));
++  // A previous step's folder close must not be the item this step reads.
++  void ClearClosedTabs() {
++    if (sessions::TabRestoreService* const service =
++            TabRestoreServiceFactory::GetForProfile(
++                browser()->GetProfile())) {
++      service->ClearEntries();
++    }
    }
 -  ASSERT_EQ(4, tab_strip_model()->count());
 -  tabs::FolderTabCollection* folder =
@@ -5008,11 +5331,27 @@ index a75b863dffbfb..027daf28df1ed 100644
 -                                 .host()) +
 -                 " ";
 -      }
--    }
++  // Closes the folder holding the tab at `index`, then the tabs between the
++  // first and it with no record, so the folder stays the newest close.
++  void CloseFolderAndPad(int index) {
++    const tabs::TabCollection* parent = ParentOf(index);
++    if (parent->type() == tabs::TabCollection::Type::SPLIT) {
++      parent = parent->GetParentCollection();
+     }
 -    return hosts;
 -  };
 -  ASSERT_EQ("a.test b.test c.test ", in_reading());
--
++    ASSERT_EQ(tabs::TabCollection::Type::FOLDER, parent->type());
++    tab_strip_model()->ActivateTabAt(0);
++    tab_strip_model()->CloseFolderTabs(const_cast<tabs::FolderTabCollection*>(
++        static_cast<const tabs::FolderTabCollection*>(parent)));
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return tab_strip_model()->count() == index; }));
++    while (tab_strip_model()->count() > 1) {
++      tab_strip_model()->CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
++    }
++  }
+ 
 -  const size_t entries_before = service->entries().size();
 -  tab_strip_model()->ActivateTabAt(0);
 -  tab_strip_model()->CloseFolderTabs(folder);
@@ -5021,7 +5360,21 @@ index a75b863dffbfb..027daf28df1ed 100644
 -    return tab_strip_model()->count() == 1 &&
 -           service->entries().size() == entries_before + 3;
 -  }));
--
++  // Two loaded tabs, folded, titled `name`, then closed.
++  void CloseNamedPair(const char* name, const char* a, const char* b) {
++    OpenLoaded(a);
++    OpenLoaded(b);
++    const int count = tab_strip_model()->count();
++    tabs::FolderTabCollection* const folder =
++        tab_strip_model()->AddToNewFolder({count - 2, count - 1});
++    ASSERT_TRUE(folder);
++    folder->SetTitle(name);
++    tab_strip_model()->ActivateTabAt(0);
++    tab_strip_model()->CloseFolderTabs(folder);
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return tab_strip_model()->count() == count - 2; }));
++  }
+ 
 -  // One item for the folder, none for its tabs on their own.
 -  {
 +  // Recently Closed has one "Reading" item, none of its tabs on their own,
@@ -5030,7 +5383,7 @@ index a75b863dffbfb..027daf28df1ed 100644
      RecentTabsSubMenuModel menu(nullptr, browser());
      int folder_items = 0;
      int restore_folder = -1;
-@@ -450,7 +247,8 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
+@@ -450,7 +250,8 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
        for (size_t j = 2; j < sub->GetItemCount(); ++j) {
          tabs_listed += sub->GetLabelAt(j) + u" ";
        }
@@ -5040,7 +5393,7 @@ index a75b863dffbfb..027daf28df1ed 100644
        EXPECT_LT(tabs_listed.find(u"a.test"), tabs_listed.find(u"b.test"))
            << "the folder's tabs are listed in its order: " << tabs_listed;
        EXPECT_LT(tabs_listed.find(u"b.test"), tabs_listed.find(u"c.test"))
-@@ -459,83 +257,457 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
+@@ -459,536 +260,808 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
      ASSERT_EQ(1, folder_items) << "Recently Closed has no item for the folder";
      menu.ExecuteCommand(restore_folder, 0);
    }
@@ -5063,8 +5416,24 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  ASSERT_TRUE(base::test::RunUntil([&]() {
 -    return in_reading() == "a.test b.test c.test ";
 -  })) << "⇧⌘T brought back \"" << in_reading() << "\"";
+-}
 +};
-+
+ 
+-// PLAN.md TAB-13: an unnamed folder goes into Recently Closed under the
+-// name its header shows, "New Folder". The Mac's History menu read
+-// " - 3 Tabs" for one (2026-10-13).
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, AnUnnamedFolderKeepsItsHeadersName) {
+-  ASSERT_TRUE(embedded_test_server()->Start());
+-  OpenLoaded("a.test");
+-  OpenLoaded("b.test");
+-  tabs::FolderTabCollection* const folder =
+-      tab_strip_model()->AddToNewFolder({1, 2});
+-  ASSERT_TRUE(folder);
+-  ASSERT_EQ("", folder->title()) << "the folder is not unnamed";
+-  tab_strip_model()->ActivateTabAt(0);
+-  tab_strip_model()->CloseFolderTabs(folder);
+-  ASSERT_TRUE(base::test::RunUntil(
+-      [&]() { return tab_strip_model()->count() == 1; }));
 +// folders F25: a background link, from the folder's last tab too, a
 +// duplicate, a target=_blank link, a restored middle tab and an extension's
 +// tabs.create and tabs.move all land inside the folder. The slot after a
@@ -5094,7 +5463,13 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    EXPECT_EQ(folder, ParentOf(child)) << "inside its opener's folder";
 +    EXPECT_EQ(1, tab_strip_model()->active_index()) << "a background tab";
 +  }
-+
+ 
+-  RecentTabsSubMenuModel menu(nullptr, browser());
+-  std::u16string labels;
+-  for (size_t i = 0; i < menu.GetItemCount(); ++i) {
+-    if (menu.GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
+-      labels += menu.GetLabelAt(i) + u" | ";
+-    }
 +  {
 +    SCOPED_TRACE("background link from the last tab");
 +    CloseDownToOne();
@@ -5116,8 +5491,16 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    EXPECT_EQ(3, child) << "right after its opener";
 +    EXPECT_EQ(folder, ParentOf(child)) << "inside its opener's folder";
 +    EXPECT_NE(folder, ParentOf(4)) << "the tab after the folder stays out";
-+  }
-+
+   }
+-  EXPECT_NE(std::u16string::npos, labels.find(u"New Folder"))
+-      << "the folder's item reads: " << labels;
+-}
+ 
+-// TAB-6: Move Tab to New Folder on a split inside F[X, split, Y] nests the
+-// split, whole and in place.
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitInsideAFolderNestsInPlace) {
+-  for (int i = 0; i < 4; ++i) {
+-    AppendTab();
 +  {
 +    SCOPED_TRACE("duplicate");
 +    CloseDownToOne();
@@ -5131,8 +5514,31 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    const int index = tab_strip_model()->GetIndexOfWebContents(copy);
 +    EXPECT_EQ(2, index);
 +    EXPECT_EQ(folder, ParentOf(index));
-+  }
-+
+   }
+-  // F[1, split(2, 3), 4]
+-  tabs::FolderTabCollection* const folder =
+-      tab_strip_model()->AddToNewFolder({1, 2, 3, 4});
+-  ASSERT_TRUE(folder);
+-  tab_strip_model()->ActivateTabAt(2);
+-  tab_strip_model()->AddToNewSplit(
+-      {3}, split_tabs::SplitTabVisualData(),
+-      split_tabs::SplitTabCreatedSource::kTabContextMenu);
+-  tabs::TabInterface* const left = tab_strip_model()->GetTabAtIndex(2);
+-  tabs::TabInterface* const right = tab_strip_model()->GetTabAtIndex(3);
+-  ASSERT_TRUE(left->IsSplit());
+-  ASSERT_EQ(left->GetSplit(), right->GetSplit());
+ 
+-  tabs::FolderTabCollection* const nested =
+-      tab_strip_model()->AddToNewFolder({2, 3}, folder);
+-  ASSERT_TRUE(nested);
+-  EXPECT_EQ(static_cast<const tabs::TabCollection*>(folder),
+-            nested->GetParentCollection());
+-  EXPECT_TRUE(left->IsSplit()) << "the split stays whole";
+-  EXPECT_EQ(left->GetSplit(), right->GetSplit());
+-  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(left)) << "in place";
+-  EXPECT_EQ(folder, ParentOf(1));
+-  EXPECT_EQ(folder, ParentOf(4));
+-}
 +  {
 +    // TAB-6: a target=_blank link from a folder's first tab opens right
 +    // after it, inside the folder.
@@ -5151,7 +5557,11 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    EXPECT_EQ(folder, ParentOf(2)) << "right after its opener, in the folder";
 +    EXPECT_NE(folder, ParentOf(4));
 +  }
-+
+ 
+-// TAB-6: Move Tabs Out of Folder on a nested folder that has a later sibling
+-// leaves its tabs in the parent folder, where they were.
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, MovingTabsOutOfANestedFolderKeepsThem) {
+-  for (int i = 0; i < 3; ++i) {
 +  {
 +    // TAB-6: a folder of three tabs; its middle one closed and brought back
 +    // with ⇧⌘T returns to its place in the folder. The same RestoreTab into
@@ -5160,7 +5570,7 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    CloseDownToOne();
 +    ClearClosedTabs();
 +    AppendTab();
-+    AppendTab();
+     AppendTab();
 +    AppendTab();
 +    AppendTab();
 +    tabs::FolderTabCollection* const folder =
@@ -5186,8 +5596,21 @@ index a75b863dffbfb..027daf28df1ed 100644
 +        tab_strip_model()->GetActiveWebContents());
 +    EXPECT_EQ(2, back) << "in its place";
 +    EXPECT_EQ(folder, ParentOf(back)) << "in its folder";
-+  }
-+
+   }
+-  // Outer[1, Inner[2], 3]
+-  tabs::FolderTabCollection* const outer =
+-      tab_strip_model()->AddToNewFolder({1, 2, 3});
+-  ASSERT_TRUE(outer);
+-  tabs::FolderTabCollection* const inner =
+-      tab_strip_model()->AddToNewFolder({2}, outer);
+-  ASSERT_TRUE(inner);
+-  tabs::TabInterface* const moved = tab_strip_model()->GetTabAtIndex(2);
+ 
+-  tab_strip_model()->MoveTabsOutOfFolder(inner);
+-  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(moved)) << "where it was";
+-  EXPECT_EQ(outer, ParentOf(2)) << "in the parent folder";
+-  EXPECT_EQ(outer, ParentOf(1));
+-  EXPECT_EQ(outer, ParentOf(3));
 +  {
 +    // TAB-6: an extension's tabs.create and tabs.move at an index inside a
 +    // folder land there, in the folder.
@@ -5222,8 +5645,40 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(last));
 +    EXPECT_EQ(folder, ParentOf(2)) << "moved inside the folder";
 +  }
-+}
-+
+ }
+ 
+-// TAB-6: an extension's tabs.create and tabs.move at an index inside a
+-// folder land there, in the folder.
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, AnExtensionCreatesAndMovesIntoAFolder) {
+-  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
+-  ASSERT_TRUE(folder);
+-  scoped_refptr<const extensions::Extension> extension =
+-      extensions::ExtensionBuilder("Stedding folder test").Build();
+-
+-  auto create = base::MakeRefCounted<extensions::TabsCreateFunction>();
+-  create->set_extension(extension.get());
+-  std::optional<base::Value> created =
+-      extensions::api_test_utils::RunFunctionAndReturnSingleResult(
+-          create, R"([{"index": 2, "url": "about:blank#created"}])",
+-          browser()->GetProfile());
+-  ASSERT_TRUE(created.has_value());
+-  ASSERT_EQ(5, tab_strip_model()->count());
+-  EXPECT_EQ(folder, ParentOf(2)) << "created inside the folder";
+-
+-  // The last tab, outside the folder, moved to the folder's middle.
+-  tabs::TabInterface* const last = tab_strip_model()->GetTabAtIndex(4);
+-  const int tab_id =
+-      extensions::ExtensionTabUtil::GetTabId(last->GetContents());
+-  auto move = base::MakeRefCounted<extensions::TabsMoveFunction>();
+-  move->set_extension(extension.get());
+-  std::optional<base::Value> moved =
+-      extensions::api_test_utils::RunFunctionAndReturnSingleResult(
+-          move, "[" + base::NumberToString(tab_id) + R"(, {"index": 2}])",
+-          browser()->GetProfile());
+-  ASSERT_TRUE(moved.has_value());
+-  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(last));
+-  EXPECT_EQ(folder, ParentOf(2)) << "moved inside the folder";
+-}
 +// Decision 6 (PLAN.md TAB-11): collapsing the folder that holds the tab on
 +// screen keeps that tab's row; a collapsed folder stays collapsed (SPC-5);
 +// its header shows the count (folders F33); Ctrl+Shift+E collapses every
@@ -5250,12 +5705,20 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    EXPECT_EQ(active->GetContents(),
 +              BrowserView::GetBrowserViewForBrowser(browser())
 +                  ->GetActiveWebContents());
-+
+ 
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, RestoringAClosedFolderTabDoesNotCrash) {
+-  ASSERT_TRUE(MakeFolder());
+-  tab_strip_model()->CloseWebContentsAt(
+-      2, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+-  ASSERT_EQ(3, tab_strip_model()->count());
 +    tab_strip_model()->ActivateTabAt(0);
 +    EXPECT_FALSE(DrawnRow(active)) << "the folder is fully collapsed now";
 +    EXPECT_TRUE(folder->collapsed());
 +  }
-+
+ 
+-  ui_test_utils::TabAddedWaiter added(browser());
+-  chrome::RestoreTab(browser());
+-  added.Wait();
 +  {
 +    // folders F33: a collapsed folder's header draws how many of its tabs
 +    // are in the Space, at its right, after the name.
@@ -5278,7 +5741,8 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    EXPECT_TRUE(header->GetHeaderBoundsInScreen().Contains(number))
 +        << "inside the header";
 +  }
-+
+ 
+-  EXPECT_EQ(4, tab_strip_model()->count());
 +#if !BUILDFLAG(IS_MAC)
 +  {
 +    // folders F30, windows N7: Ctrl+Shift+E reaches its command the way a
@@ -5361,32 +5825,54 @@ index a75b863dffbfb..027daf28df1ed 100644
 +  }
  }
  
--// PLAN.md TAB-13: an unnamed folder goes into Recently Closed under the
--// name its header shows, "New Folder". The Mac's History menu read
--// " - 3 Tabs" for one (2026-10-13).
--IN_PROC_BROWSER_TEST_F(FolderTabsTest, AnUnnamedFolderKeepsItsHeadersName) {
+-// folders F32: New Tab in Folder, on the drawn header's menu, opens a New
+-// Tab page as the folder's last row and the command bar over it, as "+ New
+-// Tab" does; the address typed there loads in that tab (commandbar K21),
+-// which stays in the folder.
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, NewTabInFolderOpensTheBarOnItsLastRow) {
 +// PLAN.md TAB-13, folders F19: Close Folder's Tabs closes this Space's tabs
 +// and wakes nothing, and the close is one Recently Closed entry that comes
 +// back by its header's name.
 +IN_PROC_BROWSER_TEST_F(FolderTabsTest, AClosedFolderComesBackAsOneEntry) {
    ASSERT_TRUE(embedded_test_server()->Start());
--  OpenLoaded("a.test");
--  OpenLoaded("b.test");
--  tabs::FolderTabCollection* const folder =
--      tab_strip_model()->AddToNewFolder({1, 2});
+-  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
 -  ASSERT_TRUE(folder);
--  ASSERT_EQ("", folder->title()) << "the folder is not unnamed";
--  tab_strip_model()->ActivateTabAt(0);
--  tab_strip_model()->CloseFolderTabs(folder);
--  ASSERT_TRUE(base::test::RunUntil(
--      [&]() { return tab_strip_model()->count() == 1; }));
+-  FolderView* const header = DrawnFolder(folder);
+-  ASSERT_TRUE(header);
+ 
+-  header->ExecuteCommand(FolderView::kNewTabCommand, /*event_flags=*/0);
+-  ASSERT_EQ(5, tab_strip_model()->count());
+-  tabs::TabInterface* const fresh = tab_strip_model()->GetActiveTab();
+-  ASSERT_TRUE(fresh);
+-  EXPECT_EQ(3, tab_strip_model()->GetIndexOfTab(fresh))
+-      << "the folder's last row";
+-  EXPECT_EQ(folder, ParentOf(3));
+-  EXPECT_NE(folder, ParentOf(4)) << "the tab after the folder stays out";
+-  stedding::CommandBarView* const bar = stedding::CommandBarView::GetOpenBar(
+-      BrowserView::GetBrowserViewForBrowser(browser()));
+-  ASSERT_TRUE(bar) << "the bar opens over the new tab";
 -
--  RecentTabsSubMenuModel menu(nullptr, browser());
--  std::u16string labels;
--  for (size_t i = 0; i < menu.GetItemCount(); ++i) {
--    if (menu.GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
--      labels += menu.GetLabelAt(i) + u" | ";
-+
+-  // K21 takes the tab once its New Tab page has loaded. The address is typed
+-  // whole, scheme included, so no completion can change where it goes.
+-  ASSERT_TRUE(content::WaitForLoadStop(fresh->GetContents()));
+-  const GURL url = embedded_test_server()->GetURL("/title1.html");
+-  content::TestNavigationObserver navigation(url);
+-  navigation.WatchExistingWebContents();
+-  navigation.StartWatchingNewWebContents();
+-  const std::u16string typed = base::UTF8ToUTF16(url.spec());
+-  bar->field_for_testing()->SetText(typed);
+-  bar->ContentsChanged(bar->field_for_testing(), typed);
+-  // Enter, as the bar's field receives it.
+-  views::View* const field = bar->field_for_testing();
+-  field->OnKeyPressed(
+-      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE));
+-  ASSERT_EQ(5, tab_strip_model()->count()) << "no second tab beside it";
+-  navigation.Wait();
+-  EXPECT_EQ(fresh, tab_strip_model()->GetActiveTab());
+-  EXPECT_EQ(url, fresh->GetContents()->GetLastCommittedURL());
+-  EXPECT_EQ(3, tab_strip_model()->GetIndexOfTab(fresh));
+-  EXPECT_EQ(folder, ParentOf(3)) << "it stays in the folder";
+-}
 +  {
 +    // Close Folder's Tabs closes what the folder holds in this Space. A
 +    // folder tab moved to another Space stays open there.
@@ -5402,7 +5888,40 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    model->SetSpaceForTab(moved, other);  // Move to Space.
 +    ASSERT_EQ(other, model->SpaceForTab(moved));
 +    tab_strip_model()->ActivateTabAt(tab_strip_model()->GetIndexOfTab(stays));
-+
+ 
+-// folders F31: Alphabetize, on the drawn header's menu, sorts the folder's
+-// rows by the names they show -- here names the user gave -- case ignored,
+-// and the drawn rows follow.
+-IN_PROC_BROWSER_TEST_F(FolderTabsTest, AlphabetizeFromTheHeaderSortsTheRows) {
+-  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
+-  ASSERT_TRUE(folder);
+-  tabs::TabInterface* const zebra = tab_strip_model()->GetTabAtIndex(1);
+-  tabs::TabInterface* const apple = tab_strip_model()->GetTabAtIndex(2);
+-  stedding::SetTabName(browser(), zebra, u"Zebra");
+-  stedding::SetTabName(browser(), apple, u"apple");
+-  FolderView* const header = DrawnFolder(folder);
+-  ASSERT_TRUE(header);
+-  ASSERT_TRUE(header->IsCommandIdEnabled(FolderView::kAlphabetizeCommand));
+-
+-  header->ExecuteCommand(FolderView::kAlphabetizeCommand, /*event_flags=*/0);
+-  EXPECT_EQ(1, tab_strip_model()->GetIndexOfTab(apple));
+-  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(zebra));
+-  EXPECT_EQ(folder, ParentOf(1)) << "both stay in the folder";
+-  EXPECT_EQ(folder, ParentOf(2));
+-  // The rows' views follow the model's moves as they arrive, which can be
+-  // after the rows first look settled. The check only finds the rows:
+-  // DrawnRow waits in a run loop of its own, and on the Mac that wait,
+-  // nested in RunUntil's, never returned (2026-10-12).
+-  EXPECT_TRUE(base::test::RunUntil([&]() {
+-    views::test::RunScheduledLayout(widget());
+-    TabView* const apple_row =
+-        stedding::test::FindDrawnRow(widget()->GetRootView(), apple);
+-    TabView* const zebra_row =
+-        stedding::test::FindDrawnRow(widget()->GetRootView(), zebra);
+-    return apple_row && zebra_row &&
+-           apple_row->GetBoundsInScreen().y() <
+-               zebra_row->GetBoundsInScreen().y();
+-  })) << "the drawn rows follow the order";
 +    tab_strip_model()->CloseFolderTabs(folder);
 +    ASSERT_TRUE(base::test::RunUntil([&]() {
 +      return tab_strip_model()->GetIndexOfTab(stays) == TabStripModel::kNoTab;
@@ -5427,7 +5946,7 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    std::vector<int> indices;
 +    for (int i = 1; i < tab_strip_model()->count(); ++i) {
 +      indices.push_back(i);
-     }
++    }
 +    tabs::FolderTabCollection* const folder =
 +        tab_strip_model()->AddToNewFolder(indices);
 +    ASSERT_TRUE(folder);
@@ -5450,16 +5969,8 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    ASSERT_TRUE(base::test::RunUntil(
 +        [&]() { return tab_strip_model()->count() == 1; }));
 +    EXPECT_EQ(0, loads) << "a sleeping tab was woken on its way out";
-   }
--  EXPECT_NE(std::u16string::npos, labels.find(u"New Folder"))
--      << "the folder's item reads: " << labels;
--}
- 
--// TAB-6: Move Tab to New Folder on a split inside F[X, split, Y] nests the
--// split, whole and in place.
--IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitInsideAFolderNestsInPlace) {
--  for (int i = 0; i < 4; ++i) {
--    AppendTab();
++  }
++
 +  {
 +    // Close Folder's Tabs is one entry of Recently Closed. The menu shows
 +    // the folder by its name and its count where its tabs were an entry
@@ -5512,30 +6023,8 @@ index a75b863dffbfb..027daf28df1ed 100644
 +    ASSERT_TRUE(base::test::RunUntil([&]() {
 +      return HostsInFolder("Reading", false) == "a.test b.test c.test ";
 +    })) << "⇧⌘T brought back \"" << HostsInFolder("Reading", false) << "\"";
-   }
--  // F[1, split(2, 3), 4]
--  tabs::FolderTabCollection* const folder =
--      tab_strip_model()->AddToNewFolder({1, 2, 3, 4});
--  ASSERT_TRUE(folder);
--  tab_strip_model()->ActivateTabAt(2);
--  tab_strip_model()->AddToNewSplit(
--      {3}, split_tabs::SplitTabVisualData(),
--      split_tabs::SplitTabCreatedSource::kTabContextMenu);
--  tabs::TabInterface* const left = tab_strip_model()->GetTabAtIndex(2);
--  tabs::TabInterface* const right = tab_strip_model()->GetTabAtIndex(3);
--  ASSERT_TRUE(left->IsSplit());
--  ASSERT_EQ(left->GetSplit(), right->GetSplit());
- 
--  tabs::FolderTabCollection* const nested =
--      tab_strip_model()->AddToNewFolder({2, 3}, folder);
--  ASSERT_TRUE(nested);
--  EXPECT_EQ(static_cast<const tabs::TabCollection*>(folder),
--            nested->GetParentCollection());
--  EXPECT_TRUE(left->IsSplit()) << "the split stays whole";
--  EXPECT_EQ(left->GetSplit(), right->GetSplit());
--  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(left)) << "in place";
--  EXPECT_EQ(folder, ParentOf(1));
--  EXPECT_EQ(folder, ParentOf(4));
++  }
++
 +  {
 +    // An unnamed folder goes into Recently Closed under the name its header
 +    // shows, "New Folder". The Mac's History menu read " - 3 Tabs" for one
@@ -5566,140 +6055,6 @@ index a75b863dffbfb..027daf28df1ed 100644
 +  }
  }
  
- // TAB-6: Move Tabs Out of Folder on a nested folder that has a later sibling
-@@ -558,437 +730,335 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, MovingTabsOutOfANestedFolderKeepsThem) {
-   EXPECT_EQ(outer, ParentOf(2)) << "in the parent folder";
-   EXPECT_EQ(outer, ParentOf(1));
-   EXPECT_EQ(outer, ParentOf(3));
-+  EXPECT_EQ(3u, outer->ChildCount()) << "the emptied folder left the tree";
- }
- 
--// TAB-6: an extension's tabs.create and tabs.move at an index inside a
--// folder land there, in the folder.
--IN_PROC_BROWSER_TEST_F(FolderTabsTest, AnExtensionCreatesAndMovesIntoAFolder) {
--  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
--  ASSERT_TRUE(folder);
--  scoped_refptr<const extensions::Extension> extension =
--      extensions::ExtensionBuilder("Stedding folder test").Build();
--
--  auto create = base::MakeRefCounted<extensions::TabsCreateFunction>();
--  create->set_extension(extension.get());
--  std::optional<base::Value> created =
--      extensions::api_test_utils::RunFunctionAndReturnSingleResult(
--          create, R"([{"index": 2, "url": "about:blank#created"}])",
--          browser()->GetProfile());
--  ASSERT_TRUE(created.has_value());
--  ASSERT_EQ(5, tab_strip_model()->count());
--  EXPECT_EQ(folder, ParentOf(2)) << "created inside the folder";
--
--  // The last tab, outside the folder, moved to the folder's middle.
--  tabs::TabInterface* const last = tab_strip_model()->GetTabAtIndex(4);
--  const int tab_id =
--      extensions::ExtensionTabUtil::GetTabId(last->GetContents());
--  auto move = base::MakeRefCounted<extensions::TabsMoveFunction>();
--  move->set_extension(extension.get());
--  std::optional<base::Value> moved =
--      extensions::api_test_utils::RunFunctionAndReturnSingleResult(
--          move, "[" + base::NumberToString(tab_id) + R"(, {"index": 2}])",
--          browser()->GetProfile());
--  ASSERT_TRUE(moved.has_value());
--  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(last));
--  EXPECT_EQ(folder, ParentOf(2)) << "moved inside the folder";
--}
--
--IN_PROC_BROWSER_TEST_F(FolderTabsTest, RestoringAClosedFolderTabDoesNotCrash) {
--  ASSERT_TRUE(MakeFolder());
--  tab_strip_model()->CloseWebContentsAt(
--      2, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
--  ASSERT_EQ(3, tab_strip_model()->count());
--
--  ui_test_utils::TabAddedWaiter added(browser());
--  chrome::RestoreTab(browser());
--  added.Wait();
--
--  EXPECT_EQ(4, tab_strip_model()->count());
--}
--
--// folders F32: New Tab in Folder, on the drawn header's menu, opens a New
--// Tab page as the folder's last row and the command bar over it, as "+ New
--// Tab" does; the address typed there loads in that tab (commandbar K21),
--// which stays in the folder.
--IN_PROC_BROWSER_TEST_F(FolderTabsTest, NewTabInFolderOpensTheBarOnItsLastRow) {
--  ASSERT_TRUE(embedded_test_server()->Start());
--  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
--  ASSERT_TRUE(folder);
--  FolderView* const header = DrawnFolder(folder);
--  ASSERT_TRUE(header);
--
--  header->ExecuteCommand(FolderView::kNewTabCommand, /*event_flags=*/0);
--  ASSERT_EQ(5, tab_strip_model()->count());
--  tabs::TabInterface* const fresh = tab_strip_model()->GetActiveTab();
--  ASSERT_TRUE(fresh);
--  EXPECT_EQ(3, tab_strip_model()->GetIndexOfTab(fresh))
--      << "the folder's last row";
--  EXPECT_EQ(folder, ParentOf(3));
--  EXPECT_NE(folder, ParentOf(4)) << "the tab after the folder stays out";
--  stedding::CommandBarView* const bar = stedding::CommandBarView::GetOpenBar(
--      BrowserView::GetBrowserViewForBrowser(browser()));
--  ASSERT_TRUE(bar) << "the bar opens over the new tab";
--
--  // K21 takes the tab once its New Tab page has loaded. The address is typed
--  // whole, scheme included, so no completion can change where it goes.
--  ASSERT_TRUE(content::WaitForLoadStop(fresh->GetContents()));
--  const GURL url = embedded_test_server()->GetURL("/title1.html");
--  content::TestNavigationObserver navigation(url);
--  navigation.WatchExistingWebContents();
--  navigation.StartWatchingNewWebContents();
--  const std::u16string typed = base::UTF8ToUTF16(url.spec());
--  bar->field_for_testing()->SetText(typed);
--  bar->ContentsChanged(bar->field_for_testing(), typed);
--  // Enter, as the bar's field receives it.
--  views::View* const field = bar->field_for_testing();
--  field->OnKeyPressed(
--      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE));
--  ASSERT_EQ(5, tab_strip_model()->count()) << "no second tab beside it";
--  navigation.Wait();
--  EXPECT_EQ(fresh, tab_strip_model()->GetActiveTab());
--  EXPECT_EQ(url, fresh->GetContents()->GetLastCommittedURL());
--  EXPECT_EQ(3, tab_strip_model()->GetIndexOfTab(fresh));
--  EXPECT_EQ(folder, ParentOf(3)) << "it stays in the folder";
--}
--
--// folders F31: Alphabetize, on the drawn header's menu, sorts the folder's
--// rows by the names they show -- here names the user gave -- case ignored,
--// and the drawn rows follow.
--IN_PROC_BROWSER_TEST_F(FolderTabsTest, AlphabetizeFromTheHeaderSortsTheRows) {
--  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
--  ASSERT_TRUE(folder);
--  tabs::TabInterface* const zebra = tab_strip_model()->GetTabAtIndex(1);
--  tabs::TabInterface* const apple = tab_strip_model()->GetTabAtIndex(2);
--  stedding::SetTabName(browser(), zebra, u"Zebra");
--  stedding::SetTabName(browser(), apple, u"apple");
--  FolderView* const header = DrawnFolder(folder);
--  ASSERT_TRUE(header);
--  ASSERT_TRUE(header->IsCommandIdEnabled(FolderView::kAlphabetizeCommand));
--
--  header->ExecuteCommand(FolderView::kAlphabetizeCommand, /*event_flags=*/0);
--  EXPECT_EQ(1, tab_strip_model()->GetIndexOfTab(apple));
--  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(zebra));
--  EXPECT_EQ(folder, ParentOf(1)) << "both stay in the folder";
--  EXPECT_EQ(folder, ParentOf(2));
--  // The rows' views follow the model's moves as they arrive, which can be
--  // after the rows first look settled. The check only finds the rows:
--  // DrawnRow waits in a run loop of its own, and on the Mac that wait,
--  // nested in RunUntil's, never returned (2026-10-12).
--  EXPECT_TRUE(base::test::RunUntil([&]() {
--    views::test::RunScheduledLayout(widget());
--    TabView* const apple_row =
--        stedding::test::FindDrawnRow(widget()->GetRootView(), apple);
--    TabView* const zebra_row =
--        stedding::test::FindDrawnRow(widget()->GetRootView(), zebra);
--    return apple_row && zebra_row &&
--           apple_row->GetBoundsInScreen().y() <
--               zebra_row->GetBoundsInScreen().y();
--  })) << "the drawn rows follow the order";
--}
--
 -// folders F33: a collapsed folder's header draws how many of its tabs are in
 -// the Space, at its right, after the name.
 -IN_PROC_BROWSER_TEST_F(FolderTabsTest, ACollapsedHeaderShowsItsCount) {
@@ -5720,7 +6075,21 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  EXPECT_TRUE(header->GetHeaderBoundsInScreen().Contains(number))
 -      << "inside the header";
 -}
--
++// TAB-6: Move Tabs Out of Folder on a nested folder that has a later sibling
++// leaves its tabs in the parent folder, where they were.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, MovingTabsOutOfANestedFolderKeepsThem) {
++  for (int i = 0; i < 3; ++i) {
++    AppendTab();
++  }
++  // Outer[1, Inner[2], 3]
++  tabs::FolderTabCollection* const outer =
++      tab_strip_model()->AddToNewFolder({1, 2, 3});
++  ASSERT_TRUE(outer);
++  tabs::FolderTabCollection* const inner =
++      tab_strip_model()->AddToNewFolder({2}, outer);
++  ASSERT_TRUE(inner);
++  tabs::TabInterface* const moved = tab_strip_model()->GetTabAtIndex(2);
+ 
 -#if !BUILDFLAG(IS_MAC)
 -// folders F30, windows N7: Ctrl+Shift+E reaches its command the way a key
 -// press does, through the window's accelerators (the Mac's table is
@@ -5750,9 +6119,15 @@ index a75b863dffbfb..027daf28df1ed 100644
 -  EXPECT_FALSE(folder->collapsed());
 -  EXPECT_TRUE(DrawnRow(first));
 -  EXPECT_TRUE(DrawnRow(second));
--}
++  tab_strip_model()->MoveTabsOutOfFolder(inner);
++  EXPECT_EQ(2, tab_strip_model()->GetIndexOfTab(moved)) << "where it was";
++  EXPECT_EQ(outer, ParentOf(2)) << "in the parent folder";
++  EXPECT_EQ(outer, ParentOf(1));
++  EXPECT_EQ(outer, ParentOf(3));
++  EXPECT_EQ(3u, outer->ChildCount()) << "the emptied folder left the tree";
+ }
 -#endif  // !BUILDFLAG(IS_MAC)
--
+ 
 -// folders F19, TAB-13: a split inside the folder is closed as a split entry
 -// of its own; ⇧⌘T brings it back with the folder, whole and in place. It
 -// was left behind.
@@ -6304,6 +6679,438 @@ index a75b863dffbfb..027daf28df1ed 100644
  }
  
  // folders, BACKLOG S-136: a split made of a folder's tabs stays in the
+@@ -1027,4 +1100,431 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitOfAFoldersTabsStaysInIt) {
+   EXPECT_NE(folder, ParentOf(4)) << "the tab after the folder stays out";
+ }
+ 
++// BACKLOG S-137, folders F19, F20: Close Folder's Tabs leaves a tab that is
++// in another Space, and the folder stays. ⇧⌘T puts the closed rows back at
++// the slots they had. Before the fix they were appended: the middle tab
++// came back first, and a split from the middle came back at the end.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, AFolderClosedInPartComesBackAtItsSlots) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++
++  {
++    // F[a, b, c], b in another Space. The close takes a and c.
++    SCOPED_TRACE("middle tab in another Space");
++    CloseDownToOne();
++    ClearClosedTabs();
++    for (const char* const host : {"a.test", "b.test", "c.test"}) {
++      OpenLoaded(host);
++    }
++    ASSERT_EQ(4, tab_strip_model()->count());
++    tabs::FolderTabCollection* const folder =
++        tab_strip_model()->AddToNewFolder({1, 2, 3});
++    ASSERT_TRUE(folder);
++    folder->SetTitle("Part");
++    ASSERT_EQ("a.test b.test c.test ", HostsInFolder("Part", false));
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    ASSERT_TRUE(model);
++    const spaces::SpaceId other = model->AddSpace("Other", SK_ColorBLUE)->id();
++    model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(2), other);
++    tab_strip_model()->ActivateTabAt(1);
++
++    tab_strip_model()->CloseFolderTabs(folder);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "b.test ";
++    })) << "the close left \"" << HostsInFolder("Part", false) << "\"";
++
++    chrome::RestoreTab(browser());
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "a.test b.test c.test ";
++    })) << "the folder came back as \"" << HostsInFolder("Part", false)
++        << "\"";
++  }
++
++  {
++    // F[a, split(b, c), d], d in another Space. The split was the middle
++    // row; it came back after d.
++    SCOPED_TRACE("split from the middle");
++    CloseDownToOne();
++    ClearClosedTabs();
++    for (const char* const host : {"a.test", "b.test", "c.test", "d.test"}) {
++      OpenLoaded(host);
++    }
++    ASSERT_EQ(5, tab_strip_model()->count());
++    tab_strip_model()->ActivateTabAt(2);
++    tab_strip_model()->AddToNewSplit(
++        {3}, split_tabs::SplitTabVisualData(),
++        split_tabs::SplitTabCreatedSource::kTabContextMenu);
++    tabs::FolderTabCollection* const folder =
++        tab_strip_model()->AddToNewFolder({1, 2, 3, 4});
++    ASSERT_TRUE(folder);
++    folder->SetTitle("Middle");
++    ASSERT_EQ("a.test b.test| c.test| d.test ", HostsInFolder("Middle", true));
++    const tabs::TabCollection* const split =
++        tab_strip_model()->GetTabAtIndex(2)->GetParentCollection();
++    ASSERT_TRUE(split);
++    ASSERT_EQ(static_cast<const tabs::TabCollection*>(folder),
++              split->GetParentCollection());
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    ASSERT_TRUE(model);
++    const spaces::SpaceId other = model->AddSpace("Else", SK_ColorRED)->id();
++    model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(4), other);
++    tab_strip_model()->ActivateTabAt(1);
++
++    tab_strip_model()->CloseFolderTabs(folder);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Middle", true) == "d.test ";
++    })) << "the close left \"" << HostsInFolder("Middle", true) << "\"";
++
++    chrome::RestoreTab(browser());
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Middle", true) ==
++             "a.test b.test| c.test| d.test ";
++    })) << "the folder came back as \"" << HostsInFolder("Middle", true)
++        << "\"";
++    tabs::TabInterface* left = nullptr;
++    tabs::TabInterface* right = nullptr;
++    for (int i = 0; i < tab_strip_model()->count(); ++i) {
++      tabs::TabInterface* const tab = tab_strip_model()->GetTabAtIndex(i);
++      // host() is a view of the temporary URL. Compare it in this expression.
++      if (tab->GetContents()->GetLastCommittedURL().host() == "b.test") {
++        left = tab;
++      } else if (tab->GetContents()->GetLastCommittedURL().host() == "c.test") {
++        right = tab;
++      }
++    }
++    ASSERT_TRUE(left && right);
++    EXPECT_TRUE(left->IsSplit() && left->GetSplit() == right->GetSplit())
++        << "the split comes back as one split";
++  }
++
++  {
++    // Outer[a, Inner[b, c], d], d in another Space. The close empties Inner.
++    // It used to be made again after d.
++    SCOPED_TRACE("nested folder at its slot");
++    CloseDownToOne();
++    ClearClosedTabs();
++    for (const char* const host : {"a.test", "b.test", "c.test", "d.test"}) {
++      OpenLoaded(host);
++    }
++    ASSERT_EQ(5, tab_strip_model()->count());
++    tabs::FolderTabCollection* const outer =
++        tab_strip_model()->AddToNewFolder({1, 2, 3, 4});
++    ASSERT_TRUE(outer);
++    outer->SetTitle("Outer");
++    tabs::FolderTabCollection* const inner =
++        tab_strip_model()->AddToNewFolder({2, 3}, outer);
++    ASSERT_TRUE(inner);
++    inner->SetTitle("Inner");
++    ASSERT_EQ(outer, ParentOf(1));
++    ASSERT_EQ(inner, ParentOf(2));
++    ASSERT_EQ(inner, ParentOf(3));
++    ASSERT_EQ(outer, ParentOf(4));
++    ASSERT_EQ(static_cast<const tabs::TabCollection*>(outer),
++              inner->GetParentCollection());
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    ASSERT_TRUE(model);
++    const spaces::SpaceId other = model->AddSpace("Nest", SK_ColorGREEN)->id();
++    model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(4), other);
++    tab_strip_model()->ActivateTabAt(1);
++
++    tab_strip_model()->CloseFolderTabs(outer);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Outer", false) == "d.test ";
++    })) << "the close left \"" << HostsInFolder("Outer", false) << "\"";
++
++    chrome::RestoreTab(browser());
++    const auto hosts_under_outer = [&]() {
++      std::string hosts;
++      for (int i = 0; i < tab_strip_model()->count(); ++i) {
++        tabs::TabInterface* const tab = tab_strip_model()->GetTabAtIndex(i);
++        for (const tabs::TabCollection* collection = tab->GetParentCollection();
++             collection; collection = collection->GetParentCollection()) {
++          if (collection->type() == tabs::TabCollection::Type::FOLDER &&
++              static_cast<const tabs::FolderTabCollection*>(collection)
++                      ->title() == "Outer") {
++            hosts += std::string(
++                tab->GetContents()->GetLastCommittedURL().host());
++            hosts += " ";
++            break;
++          }
++        }
++      }
++      return hosts;
++    };
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return hosts_under_outer() == "a.test b.test c.test d.test ";
++    })) << "the folder came back as \"" << hosts_under_outer() << "\"";
++
++    tabs::TabInterface* a_tab = nullptr;
++    tabs::TabInterface* b_tab = nullptr;
++    tabs::TabInterface* c_tab = nullptr;
++    tabs::TabInterface* d_tab = nullptr;
++    for (int i = 0; i < tab_strip_model()->count(); ++i) {
++      tabs::TabInterface* const tab = tab_strip_model()->GetTabAtIndex(i);
++      // host() is a view of the temporary URL. Compare it in this expression.
++      const std::string host(tab->GetContents()->GetLastCommittedURL().host());
++      if (host == "a.test") {
++        a_tab = tab;
++      } else if (host == "b.test") {
++        b_tab = tab;
++      } else if (host == "c.test") {
++        c_tab = tab;
++      } else if (host == "d.test") {
++        d_tab = tab;
++      }
++    }
++    ASSERT_TRUE(a_tab && b_tab && c_tab && d_tab);
++    const tabs::TabCollection* const outer_back = a_tab->GetParentCollection();
++    ASSERT_TRUE(outer_back);
++    EXPECT_EQ(tabs::TabCollection::Type::FOLDER, outer_back->type());
++    EXPECT_EQ("Outer",
++              static_cast<const tabs::FolderTabCollection*>(outer_back)->title());
++    EXPECT_EQ(outer_back, d_tab->GetParentCollection());
++    const tabs::TabCollection* const inner_back = b_tab->GetParentCollection();
++    ASSERT_TRUE(inner_back);
++    EXPECT_EQ(tabs::TabCollection::Type::FOLDER, inner_back->type());
++    EXPECT_EQ("Inner",
++              static_cast<const tabs::FolderTabCollection*>(inner_back)->title());
++    EXPECT_EQ(inner_back, c_tab->GetParentCollection());
++    EXPECT_EQ(outer_back, inner_back->GetParentCollection());
++  }
++}
++
++// BACKLOG S-137: ⇧⌘T restores the close newest first, each plain row at the
++// index recorded when that row was removed. The folder was a, k1, b, k2,
++// k3, and the k tabs are in another Space. a goes back at the folder's
++// first index, in front of the folder; b at k2's index, inside it after k1,
++// which is its slot. The rebuild moves a in to slot 0 and leaves b's place
++// as it is. Both rows come back in the order the folder had.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest,
++                       AFolderClosedInPartComesBackWhenRestoreDropsARowInside) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  CloseDownToOne();
++  ClearClosedTabs();
++  for (const char* const host :
++       {"a.test", "k1.test", "b.test", "k2.test", "k3.test"}) {
++    OpenLoaded(host);
++  }
++  ASSERT_EQ(6, tab_strip_model()->count());
++  tabs::FolderTabCollection* const folder =
++      tab_strip_model()->AddToNewFolder({1, 2, 3, 4, 5});
++  ASSERT_TRUE(folder);
++  folder->SetTitle("Inside");
++  ASSERT_EQ("a.test k1.test b.test k2.test k3.test ",
++            HostsInFolder("Inside", false));
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  const spaces::SpaceId other = model->AddSpace("Other", SK_ColorBLUE)->id();
++  model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(2), other);
++  model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(4), other);
++  model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(5), other);
++  tab_strip_model()->ActivateTabAt(1);
++
++  tab_strip_model()->CloseFolderTabs(folder);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return HostsInFolder("Inside", false) == "k1.test k2.test k3.test ";
++  })) << "the close left \"" << HostsInFolder("Inside", false) << "\"";
++
++  chrome::RestoreTab(browser());
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return HostsInFolder("Inside", false) ==
++           "a.test k1.test b.test k2.test k3.test ";
++  })) << "the folder came back as \"" << HostsInFolder("Inside", false)
++      << "\"";
++}
++
++// BACKLOG S-137, folders F19: the folder submenu restores one row. F[a, b,
++// c, d] with b and d in another Space; the close takes a and c. c alone
++// lands between the tabs that stayed, then a in front of them. Restoring
++// a first, on a fresh folder, lands the same way.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest,
++                       AFolderClosedInPartComesBackOneRowAtATime) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  sessions::TabRestoreService* const service =
++      TabRestoreServiceFactory::GetForProfile(browser()->GetProfile());
++  ASSERT_TRUE(service);
++
++  const auto host_of = [](const sessions::tab_restore::Tab& tab) {
++    return std::string(tab.navigations.at(tab.normalized_navigation_index())
++                           .virtual_url()
++                           .host());
++  };
++  // Closes F[a, b, c, d] after moving b and d to another Space.
++  const auto close_leaving_b_and_d = [&](const char* space_name,
++                                         SkColor color) {
++    CloseDownToOne();
++    ClearClosedTabs();
++    for (const char* const host : {"a.test", "b.test", "c.test", "d.test"}) {
++      OpenLoaded(host);
++    }
++    ASSERT_EQ(5, tab_strip_model()->count());
++    tabs::FolderTabCollection* const folder =
++        tab_strip_model()->AddToNewFolder({1, 2, 3, 4});
++    ASSERT_TRUE(folder);
++    folder->SetTitle("Part");
++    ASSERT_EQ("a.test b.test c.test d.test ", HostsInFolder("Part", false));
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    ASSERT_TRUE(model);
++    const spaces::SpaceId other = model->AddSpace(space_name, color)->id();
++    model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(2), other);
++    model->SetSpaceForTab(tab_strip_model()->GetTabAtIndex(4), other);
++    tab_strip_model()->ActivateTabAt(1);
++    tab_strip_model()->CloseFolderTabs(folder);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "b.test d.test ";
++    })) << "the close left \"" << HostsInFolder("Part", false) << "\"";
++  };
++  const auto restore_one = [&](SessionID id) {
++    service->RestoreEntryById(BrowserLiveTabContext::From(browser()), id,
++                              WindowOpenDisposition::NEW_FOREGROUND_TAB);
++  };
++
++  {
++    // ClosedFolderAt lists the close in folder order: a, then c.
++    SCOPED_TRACE("c then a");
++    ASSERT_NO_FATAL_FAILURE(close_leaving_b_and_d("Other", SK_ColorBLUE));
++    ASSERT_FALSE(service->entries().empty());
++    const std::optional<stedding::ClosedFolder> closed =
++        stedding::ClosedFolderAt(service->entries(),
++                                 service->entries().begin());
++    ASSERT_TRUE(closed);
++    ASSERT_EQ(2u, closed->tabs.size());
++    ASSERT_EQ("a.test", host_of(*closed->tabs[0]));
++    ASSERT_EQ("c.test", host_of(*closed->tabs[1]));
++    const SessionID a_id = closed->tabs[0]->id;
++    const SessionID c_id = closed->tabs[1]->id;
++
++    restore_one(c_id);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "b.test c.test d.test ";
++    })) << "c alone came back as \"" << HostsInFolder("Part", false) << "\"";
++
++    restore_one(a_id);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "a.test b.test c.test d.test ";
++    })) << "a then joined as \"" << HostsInFolder("Part", false) << "\"";
++  }
++
++  {
++    SCOPED_TRACE("a then c");
++    ASSERT_NO_FATAL_FAILURE(close_leaving_b_and_d("Else", SK_ColorRED));
++    ASSERT_FALSE(service->entries().empty());
++    const std::optional<stedding::ClosedFolder> closed =
++        stedding::ClosedFolderAt(service->entries(),
++                                 service->entries().begin());
++    ASSERT_TRUE(closed);
++    ASSERT_EQ(2u, closed->tabs.size());
++    ASSERT_EQ("a.test", host_of(*closed->tabs[0]));
++    ASSERT_EQ("c.test", host_of(*closed->tabs[1]));
++    const SessionID a_id = closed->tabs[0]->id;
++    const SessionID c_id = closed->tabs[1]->id;
++
++    restore_one(a_id);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "a.test b.test d.test ";
++    })) << "a alone came back as \"" << HostsInFolder("Part", false) << "\"";
++
++    restore_one(c_id);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return HostsInFolder("Part", false) == "a.test b.test c.test d.test ";
++    })) << "c then joined as \"" << HostsInFolder("Part", false) << "\"";
++  }
++}
++
++// folders F19: shift-click Restore Folder is a new window. Every tab of the
++// folder comes back in that one window, in order, in one folder. The later
++// entries used to go back to the window the menu was opened from.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest,
++                       AFolderRestoredToANewWindowStaysTogether) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  CloseDownToOne();
++  ClearClosedTabs();
++  sessions::TabRestoreService* const service =
++      TabRestoreServiceFactory::GetForProfile(browser()->GetProfile());
++  ASSERT_TRUE(service);
++  for (const char* const host : {"a.test", "b.test", "c.test"}) {
++    OpenLoaded(host);
++  }
++  ASSERT_EQ(4, tab_strip_model()->count());
++  tabs::FolderTabCollection* const folder =
++      tab_strip_model()->AddToNewFolder({1, 2, 3});
++  ASSERT_TRUE(folder);
++  folder->SetTitle("Away");
++  ASSERT_EQ("a.test b.test c.test ", HostsInFolder("Away", false));
++  tab_strip_model()->ActivateTabAt(0);
++  tab_strip_model()->CloseFolderTabs(folder);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return tab_strip_model()->count() == 1; }));
++
++  const sessions::TabRestoreService::Entries& entries = service->entries();
++  ASSERT_FALSE(entries.empty());
++  const std::optional<stedding::ClosedFolder> closed =
++      stedding::ClosedFolderAt(entries, entries.begin());
++  ASSERT_TRUE(closed);
++  ASSERT_EQ(3u, closed->tabs.size());
++
++  std::vector<BrowserWindowInterface*> before;
++  GlobalBrowserCollection::GetInstance()->ForEach(
++      [&](BrowserWindowInterface* window) {
++        before.push_back(window);
++        return true;
++      });
++  stedding::RestoreClosedFolder(*service, BrowserLiveTabContext::From(browser()),
++                                closed->batch, WindowOpenDisposition::NEW_WINDOW);
++  // The later entries used to append into this window.
++  EXPECT_EQ(1, tab_strip_model()->count());
++
++  BrowserWindowInterface* opened = nullptr;
++  int new_windows = 0;
++  GlobalBrowserCollection::GetInstance()->ForEach(
++      [&](BrowserWindowInterface* window) {
++        if (std::ranges::find(before, window) == before.end()) {
++          opened = window;
++          ++new_windows;
++        }
++        return true;
++      });
++  ASSERT_EQ(1, new_windows);
++  ASSERT_TRUE(opened);
++  ASSERT_NE(browser(), opened);
++
++  TabStripModel* const strip = opened->GetTabStripModel();
++  const auto hosts = [&]() {
++    std::string out;
++    for (int i = 0; i < strip->count(); ++i) {
++      tabs::TabInterface* const tab = strip->GetTabAtIndex(i);
++      const tabs::TabCollection* const parent = tab->GetParentCollection();
++      if (!parent || parent->type() != tabs::TabCollection::Type::FOLDER ||
++          static_cast<const tabs::FolderTabCollection*>(parent)->title() !=
++              "Away") {
++        continue;
++      }
++      out += std::string(tab->GetContents()->GetLastCommittedURL().host());
++      out += " ";
++    }
++    return out;
++  };
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return hosts() == "a.test b.test c.test ";
++  })) << "the folder came back as \"" << hosts() << "\"";
++  const tabs::TabCollection* one_folder = nullptr;
++  int away = 0;
++  for (int i = 0; i < strip->count(); ++i) {
++    tabs::TabInterface* const tab = strip->GetTabAtIndex(i);
++    const tabs::TabCollection* const parent = tab->GetParentCollection();
++    if (!parent || parent->type() != tabs::TabCollection::Type::FOLDER ||
++        static_cast<const tabs::FolderTabCollection*>(parent)->title() !=
++            "Away") {
++      continue;
++    }
++    if (!one_folder) {
++      one_folder = parent;
++    }
++    EXPECT_EQ(one_folder, parent);
++    ++away;
++  }
++  EXPECT_EQ(3, away);
++  chrome::CloseWindow(opened);
++  ui_test_utils::WaitForBrowserToClose(opened);
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/https_first_browsertest.cc b/chrome/test/stedding/https_first_browsertest.cc
 index 2e16106c9f27c..3a09011b07fd1 100644
 --- a/chrome/test/stedding/https_first_browsertest.cc

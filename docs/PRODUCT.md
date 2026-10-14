@@ -10,8 +10,7 @@ given beside Arc's (Favorites are Stedding's **essentials**, Air Traffic Control
 
 It is a specification, not a status report. Each item names its home: the feature spec
 under `features/` that says what is built, partial or planned, a `BACKLOG.md` id, a
-milestone, or the decision that deferred or cut it. The order of work is `PLAN.md`, then
-`BACKLOG.md`.
+milestone, or the decision that deferred or cut it. The order of work is `BACKLOG.md`.
 
 Arc is a fixed target: its maker put it in maintenance mode in May 2025 and moved to Dia
 (`COMPETITORS.md`). That is what makes parity finishable.
@@ -26,7 +25,7 @@ Arc is a fixed target: its maker put it in maintenance mode in May 2025 and move
 | **[not applicable]** | Exists in Arc but is a property of Arc's business, not a browser capability. |
 | **[deferred]** | Real Arc behaviour, kept here but not in the first releases (ADR 0012). |
 | **[never]** | Decided against for good (ADR 0020). |
-| **[cut]** | Taken out by the owner's decision of 2026-09-26 (`PLAN.md`, decision 4, and the cuts in its section 2). |
+| **[cut]** | Taken out by the owner's decision of 2026-09-26 (`PLAN.md`, decision 4; the cuts are in `docs/history/plan-2026-09-26.md`, section 2). |
 | **[M10]** | Beyond parity: `ROADMAP.md` M10, one `BACKLOG.md` id each, built from written descriptions (ADR 0021). Not a condition of 1.0 unless it says so. |
 
 "No spec row yet" marks a feature with no home but this document: it is in the plan only

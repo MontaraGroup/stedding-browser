@@ -839,7 +839,16 @@ private window has.
     context decided it. Before calling one of these tests a regression, run `qwinsta` and
     see `Active`. A run meant to go on overnight needs the session kept connected; a
     window a test opens is, for the operator at the screen, a black rectangle for the few
-    seconds it lives, and a slow build (ASan) keeps it up longer.
+    seconds it lives, and a slow build (ASan) keeps it up longer. Seen again on 2026-10-14:
+    disconnected, 104 of 107 browser tests passed, four at a time and one at a time alike,
+    and the three that failed were the drags (`TabDropTest` and `SidebarClickTest`'s row drag:
+    no window is under the pointer). `tooling/dev` warns and runs the rest. On the checked
+    build (`win-checks`) two more things went wrong while disconnected: three `SpaceJarTest`
+    cases passed and then failed at exit with a dangling `Profile` (freed by
+    `ProfileDestroyer::Timeout`, the renderers not gone in time; the same with the day's
+    change taken out), and `SidebarFormsTest.FullScreenIsEdgeToEdge` missed its full-screen
+    step. Connected, both
+    were clean on the same build. Do not chase either before `qwinsta` says `Active`.
 
 60. **A check that aborts at its first failure hides the rest, and a build with DCHECKs on
     found twelve defects in a tree whose suites were green.** With `dcheck_always_on` and the

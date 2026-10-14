@@ -462,22 +462,27 @@ def test_definitions() -> dict[tuple[str, str], tuple[str, str]]:
     """(suite, name) -> (macro, file) for every test the whole series defines. A
     later patch that deletes a test takes it out again, so a spec cannot cite a
     test that no longer exists; one that moves it records its new file. A test a
-    hunk shows unchanged is on both sides of it, so it is taken out and put back."""
+    hunk shows unchanged is on both sides of it: neither added nor removed, only
+    its file is refreshed when an earlier patch defined it."""
     if _DEFINITIONS:
         return _DEFINITIONS[0]
     defs: dict[tuple[str, str], tuple[str, str]] = {}
     for patch in sorted((ROOT / "patches").glob("*.patch")):
         added: list[tuple[str, str, str, str]] = []
         removed: list[tuple[str, str]] = []
+        kept: list[tuple[str, str, str, str]] = []
         path = ""
         before: list[str] = []
         after: list[str] = []
 
         def end_hunk() -> None:
-            for m in TEST_DECL.finditer("\n".join(before)):
-                removed.append((m.group(2), m.group(3)))
-            for m in TEST_DECL.finditer("\n".join(after)):
-                added.append((m.group(2), m.group(3), m.group(1), path))
+            old = {(m.group(2), m.group(3)): m.group(1)
+                   for m in TEST_DECL.finditer("\n".join(before))}
+            new = {(m.group(2), m.group(3)): m.group(1)
+                   for m in TEST_DECL.finditer("\n".join(after))}
+            removed.extend(old.keys() - new.keys())
+            for key, macro in new.items():
+                (kept if key in old else added).append((key[0], key[1], macro, path))
             before.clear()
             after.clear()
 
@@ -506,10 +511,15 @@ def test_definitions() -> dict[tuple[str, str], tuple[str, str]]:
                 # The signature line after the last file ("-- ", the git version).
                 in_hunk = False
         end_hunk()
+        # Once per patch, removals first: a test the patch moves is removed in one
+        # hunk and added in another, in either order.
         for suite, name in removed:
             defs.pop((suite, name), None)
         for suite, name, macro, where in added:
             defs[(suite, name)] = (macro, where)
+        for suite, name, macro, where in kept:
+            if (suite, name) in defs:
+                defs[(suite, name)] = (macro, where)
     _DEFINITIONS.append(defs)
     return defs
 
@@ -705,6 +715,7 @@ def check_wiring() -> None:
 ARGS_REQUIRED = (
     "disable_fieldtrial_testing_config = true",
     "proprietary_codecs = true",
+    'ffmpeg_branding = "Chrome"',
 )
 
 

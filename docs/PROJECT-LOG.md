@@ -7,6 +7,35 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-14, evening -- the day reviewed: a folder closed in part, a Shift-click, the tooling
+
+The operator asked for every doc brought up to date, the day's work reviewed, its bugs fixed and
+everything pushed. Four reviews read the day again: the docs, the tooling, the product code of
+patch 0063 afresh, and S-137.
+
+- `S-137` fixed: a folder that Close Folder's Tabs left open, because a tab of it is in another
+  Space, takes its closed rows back in their places, whether it comes back whole or one row at a
+  time from its submenu, in any order (folders F19, F20). The first design counted the tabs the
+  close took as well, so a single row came back too far down; its review found that, and the
+  close now records the survivors before each tab, and a row goes after them and after the rows
+  of the same close already back.
+- A Shift-click on Restore Folder put the first tab in a new window and the rest in the old one;
+  all of them follow the first now. Both new browser tests failed on the code before the fixes.
+- Tooling: `tooling/dev test browser` on the Mac would have stopped before running anything (a
+  Windows-only fixture on the serial list); `check-repo`'s test parser counted tests a patch only
+  showed as context (574 now, as a strict replay counts); the build-settings check requires
+  `ffmpeg_branding` too; `tooling/status` sees every build folder.
+- Docs: five new BACKLOG rows claimed things missing that the code has (S-145, S-153, S-164,
+  S-174, S-176), and a dozen lines elsewhere were stale after the afternoon's moves; all fixed.
+
+Tests: 764 unit tests on both Windows builds, the new ones included; each new browser test
+failed on the code before its fix. The remote session was disconnected all evening, so the
+browser suite ran without a desktop: everything passed but the three drag tests, which need
+one, and on the checked build three cookie-jar tests failing at exit and one full-screen step,
+which failed the same with the evening's code taken out (trap 59). Those were green with the
+session connected that afternoon. `tooling/fold-fix` can now replace the folded patch's
+message (`STEDDING_FOLD_MESSAGE`), and `STEDDING_TEST_LOG` keeps both browser legs.
+
 ## 2026-10-14 -- fewer tests, a faster run, the plan into the backlog (patch 0064)
 
 The operator asked to cut the number of tests radically without losing quality, to make the
@@ -91,7 +120,7 @@ folder's end. The three sidebar hover tests of trap 78 failed once more, after a
 left the cursor mid-screen: the parking trap 78 credited to "the PC's suite scripts" lived in
 uncommitted scripts, and `tooling/dev` now parks it on Windows
 (`tooling/win/park-cursor.ps1`).
-Tests: on the final code, on both the release and the DCHECK build (DCHECKs and the dangling-pointer detector), 930 of 930 unit tests and 233 of 233 browser tests. Each new test was run against the code without its fix and failed: `TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere`, `FolderTabsTest.ASplitOfAFoldersTabsStaysInIt`, `FolderTabsTest.AFolderRestoredFromAnotherWindowKeepsItsOrder`, `FolderTabsTest.AFolderComesBackInOrderToAShortWindow`, the shown-tab check in `FolderTabsTest.AFolderHoldingASplitComesBackWhole`, `SpaceSwitchTest.FindingTheDropTargetLightsNoChip`, `SpaceSwitchTest.AChipShowsItsNameOnce`, `SidebarFormsTest.TheRestoreBarLeavesAPagesFullScreen` and `TabDropTest.AChipRebuiltMidDragStillTakesTheDrop`. `TabDropTest.*` passed 8 runs in a row after the chip fix. Used by hand on the Windows release build: the floating Space name alone over a chip after a two-second rest, no tooltip window; the restore bar gone in F11 and in a video's own full screen and back after each; a split of a folder's two tabs inside the folder; a folder holding a split and a tab, closed, its window left shorter than its place, restored with ⇧⌘T from a second window, whole and in order, the split first and shown. The macOS build is not run (`S-105`).
+Tests: on the final code, on both the release and the DCHECK build (DCHECKs and the dangling-pointer detector), 930 of 930 unit tests and 233 of 233 browser tests. Each new test was run against the code without its fix and failed: `TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere`, `FolderTabsTest.ASplitOfAFoldersTabsStaysInIt`, `FolderTabsTest.AFolderRestoredFromAnotherWindowKeepsItsOrder`, `FolderTabsTest.AFolderComesBackInOrderToAShortWindow`, the shown-tab check in `FolderTabsTest.AFolderHoldingASplitComesBackWhole`, `SpaceSwitchTest.FindingTheDropTargetLightsNoChip`, `SpaceSwitchTest.AChipShowsItsNameOnce`, `SidebarFormsTest.TheRestoreBarLeavesAPagesFullScreen` and `TabDropTest.AChipRebuiltMidDragStillTakesTheDrop`. `TabDropTest.*` passed 8 runs in a row after the chip fix. Used by hand on the Windows release build: the floating Space name alone over a chip after a two-second rest, no tooltip window; the restore bar gone in F11 and in a video's own full screen and back after each; a split of a folder's two tabs inside the folder; a folder holding a split and a tab, closed, its window left shorter than its place, restored with ⇧⌘T from a second window, whole and in order, the split first and shown. The macOS build is not run (`S-178`). The 930 of 930 and 233 of 233 are that morning's counts; that afternoon, patch 0064 merged the tests named here: `TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere`, `FolderTabsTest.ASplitOfAFoldersTabsStaysInIt`, `SpaceSwitchTest.FindingTheDropTargetLightsNoChip` and `SpaceSwitchTest.AChipShowsItsNameOnce` kept those names, `FolderTabsTest.AFolderRestoredFromAnotherWindowKeepsItsOrder`, `FolderTabsTest.AFolderComesBackInOrderToAShortWindow` and the shown-tab check in `FolderTabsTest.AFolderHoldingASplitComesBackWhole` are now `FolderTabsTest.AFolderComesBackInOrder`, `SidebarFormsTest.TheRestoreBarLeavesAPagesFullScreen` is now `SidebarFormsTest.FullScreenIsEdgeToEdge`, and `TabDropTest.TheChipUnderADraggedRowIsLit` with `TabDropTest.AChipRebuiltMidDragStillTakesTheDrop` are now `TabDropTest.ChipDropsMoveLightAndSurviveARebuild`, which calls `TheChipLightsAndGoesDark`.
 
 ## 2026-10-13 -- the Mac's round checked on Windows (patches 0030, 0062)
 

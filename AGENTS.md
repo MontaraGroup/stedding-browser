@@ -145,7 +145,7 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 | `docs/README.md` | The index of everything under `docs/`, grouped by who it is for |
 | `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | The user-facing pages the README links: installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
 | `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch |
-| `docs/features/` | One spec per feature; numbered behaviours, each with its test id. The definition of done |
+| `docs/features/` | One spec per feature; numbered behaviours, each with its test id |
 | `PLAN.md` | The owner's standing decisions and when an item counts as done |
 | `docs/history/` | Finished plans and ledgers still cited by id: the 2026-09-26 audit (TAB-1, SPC-4, ...), round 6, the operator's rounds 2 to 11 |
 | `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids |

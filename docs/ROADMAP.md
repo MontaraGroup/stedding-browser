@@ -38,6 +38,8 @@ Scope:
   build section of `docs/ARCHITECTURE.md`.
 - Verify the result with `tooling/verify-build --app <path to the built Chromium.app>`,
   which is what checks the "launches, browses, plays video and WebGL" criterion below.
+  That was a stock app at pin time. Today's `verify-build` expects a build from a
+  Stedding args file (it requires H.264 and AAC, ADR 0008).
 - Record the vanilla performance baselines defined in `docs/QUALITY.md` with
   `tooling/measure/harness.py`. These are the *vanilla* numbers; they become the
   baseline proper at M1, when Stedding is measured against them at the same pin.
@@ -297,7 +299,7 @@ Acceptance criteria:
 **Where this stands (2026-10-12):** the preview ships with beta 14 on 155.0.8059.12. Both
 suites passed with DCHECKs and the dangling-pointer detector on and under AddressSanitizer
 on 2026-09-30, and with DCHECKs and the detector again on the series through patch 0061 on
-2026-10-11, after one fix; ASan has not run on 0058 to 0061 yet (`S-106`). A second release
+2026-10-11, after one fix; ASan has not run on 0058 to 0063 (`S-106`). A second release
 on one Chromium number installs as a repair that needs Stedding closed (`S-72`). Built so
 far: the series and the Stedding window on Windows (round 8, patch 0039); branding -- the
 name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM classes and

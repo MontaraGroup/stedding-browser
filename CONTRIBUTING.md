@@ -2,8 +2,8 @@
 
 Thanks for your interest. The project ships **betas** for macOS (Apple silicon), signed
 and notarized, and an unsigned **Windows preview**, built from a patch series on
-Chromium stable (see [README.md](README.md)). Where each milestone stands is the table
-at the top of [docs/ROADMAP.md](docs/ROADMAP.md), the open work is
+Chromium stable (see [README.md](README.md)). What is left of each milestone is the note
+under its heading in [docs/ROADMAP.md](docs/ROADMAP.md). The open work is
 [BACKLOG.md](BACKLOG.md), and `tooling/dev status` prints the live counts. That shapes
 what kinds of contributions are useful right now.
 

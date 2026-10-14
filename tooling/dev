@@ -140,7 +140,12 @@ REBASE_FILTERS='TabTest.*:TabContainerTest.*:*TabStripTest.*'
 # window loses focus). Run in parallel, these failed now and then and every other test
 # passed (docs/HANDOFF.md, trap 88), so the browser leg runs them one at a time after the
 # rest.
-SERIAL_BROWSER_TESTS='TabDropTest.*:FolderTabsTest.TheHeadersMenuSortsAndOpensATab:SpaceSwitchTest.CommandsChordsAndTheLastTab:SleepInUseTest.*:PrivateCoatTest.*:CommandBarKeysTest.*:SidebarClickTest.*:SidebarRailTest.*:SidebarFormsTest.*:SidebarFormsRtlTest.*:CopyLinkClipboardHistoryTest.*:LinkDropTest.*:MediaKeysWindowTest.*'
+SERIAL_BROWSER_TESTS='TabDropTest.*:FolderTabsTest.TheHeadersMenuSortsAndOpensATab:SpaceSwitchTest.CommandsChordsAndTheLastTab:SleepInUseTest.*:PrivateCoatTest.*:CommandBarKeysTest.*:SidebarClickTest.*:SidebarRailTest.*:SidebarFormsTest.*:SidebarFormsRtlTest.*:LinkDropTest.*:MediaKeysWindowTest.*'
+# Windows alone builds the clipboard-history fixture; a part that matches nothing would
+# stop the Mac's sweep (trap 80).
+if is_windows; then
+  SERIAL_BROWSER_TESTS="$SERIAL_BROWSER_TESTS:CopyLinkClipboardHistoryTest.*"
+fi
 
 # The same, for components_unittests.
 COMPONENT_FILTERS='
@@ -306,7 +311,10 @@ run_leg() {
   if grep -qE 'AddressSanitizer|DanglingPtr\]\(1/3\)|FATAL:' "$out"; then
     "$STEDDING_ROOT/tooling/digest-sanitizer" "$out" || true
   fi
-  if [ -n "${STEDDING_TEST_LOG:-}" ]; then cp "$out" "$STEDDING_TEST_LOG.$name" || true; fi
+  # Appended, one file per binary: the browser suite runs in two legs. cmd_test empties it.
+  if [ -n "${STEDDING_TEST_LOG:-}" ]; then
+    { printf '=== %s --gtest_filter=%s\n' "$name" "$filter"; cat "$out"; } >>"$STEDDING_TEST_LOG.$name" || true
+  fi
   rm -f "$out"
   return "$status"
 }
@@ -325,6 +333,7 @@ cmd_test() {
       -*) die "unknown option $1 (tooling/dev test <feature|all|browser [filter]> [--no-build|--list])" ;;
       *)
         [ "$feature" = browser ] || die "only 'tooling/dev test browser' takes a filter; got '$1'"
+        [ "$browser_filter" = "*" ] || die "one filter only; join its parts with ':' (got '$browser_filter' and '$1')"
         browser_filter="$1" ;;
     esac
     shift
@@ -357,6 +366,13 @@ cmd_test() {
     cmd_build "$@"
   fi
 
+  if [ -n "${STEDDING_TEST_LOG:-}" ] && [ "$show" -eq 0 ]; then
+    local log_name
+    for log_name in unit_tests components_unittests stedding_browser_tests; do
+      : >"$STEDDING_TEST_LOG.$log_name" 2>/dev/null || true
+    done
+  fi
+
   # Every leg is listed before any runs, so one pass names every part of every
   # filter that matches nothing, and a sweep with such a part runs nothing.
   local listed=0
@@ -368,6 +384,10 @@ cmd_test() {
   fi
   if [ -n "$browser" ]; then
     list_leg stedding_browser_tests "$browser" "$feature" "" "$show" || listed=1
+    # A filter's exclusions ("A.*-B.*") must name tests as well, or they exclude nothing.
+    case "$browser" in
+      *-*) list_leg stedding_browser_tests "${browser#*-}" "exclusions" "" 0 || listed=1 ;;
+    esac
     # The serial list is checked too, so a renamed fixture cannot slip into the parallel leg.
     list_leg stedding_browser_tests "$SERIAL_BROWSER_TESTS" "serial" "" 0 || listed=1
   fi
@@ -391,10 +411,10 @@ cmd_test() {
     # A cursor resting where test windows open fails the hover and edge tests
     # (docs/HANDOFF.md, trap 78); the script leaves it alone while it is in use.
     if is_windows; then
-      # A disconnected remote session has no desktop to draw on, and every window test
-      # fails (trap 59): stop here instead of spending the run.
+      # In a disconnected remote session the drags (TabDropTest, SidebarClickTest's row
+      # drag) find no window under the pointer and fail; the rest pass (trap 59).
       if command -v qwinsta >/dev/null 2>&1 && ! qwinsta 2>/dev/null | grep -q '^>.*Active'; then
-        die "this Windows session is not Active (qwinsta): reconnect it before the browser tests"
+        warn "this Windows session is not Active (qwinsta): the drag tests will fail (trap 59)"
       fi
       powershell.exe -NoProfile -File "$(cygpath -w "$STEDDING_ROOT/tooling/win/park-cursor.ps1")" || true
     fi
@@ -405,9 +425,8 @@ cmd_test() {
       if is_windows; then jobs=4; fi
       run_leg stedding_browser_tests "*-$SERIAL_BROWSER_TESTS" \
         --test-launcher-jobs="${STEDDING_BROWSER_JOBS:-$jobs}" || status=$?
-      # Again before the serial leg: after the parallel one the drag tests failed under
-      # tooling/dev and passed when a short process ran between the legs, as this one
-      # does (trap 88).
+      # Again before the serial leg, which holds the hover and edge tests (trap 78): the
+      # operator may have moved the pointer during the parallel leg.
       if is_windows; then
         powershell.exe -NoProfile -File "$(cygpath -w "$STEDDING_ROOT/tooling/win/park-cursor.ps1")" || true
       fi

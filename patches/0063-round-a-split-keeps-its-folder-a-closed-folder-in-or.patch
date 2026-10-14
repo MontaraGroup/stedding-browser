@@ -27,6 +27,16 @@ before any tab of the close, so the close marks each tab's place in the
 folder and the list is read in that order. The folder's first tab is
 shown.
 
+A folder closed in part comes back in its places (folders F19, F20;
+BACKLOG S-137): Close Folder's Tabs leaves a tab that is in another
+Space, so the folder stays; the close now records how many of the
+folder's tabs it leaves before each closed tab, and the rebuild puts a
+returning row after those and after the rows of the same close already
+back (a mark kept on the tab, across a restart too), whole or one row at
+a time; before, every row was appended. Restore Folder with Shift held
+opens one new window and brings every tab into it; before, only the
+first went there.
+
 The chip under a drag (spaces B12; BACKLOG S-135): lit once the drag has
 said what it carries, never at the lookup of the drop target; a chip
 rebuilt during the drag keeps its bounds until the row is laid out, so a
@@ -46,15 +56,20 @@ that failed before the fix.
 Removable when: never; these are Stedding's own behaviours.
 ---
  chrome/browser/ui/archive/BUILD.gn            |   9 +-
- chrome/browser/ui/archive/archive_mark.h      |   5 +
- chrome/browser/ui/archive/archived_tabs.cc    |   1 +
- chrome/browser/ui/archive/closed_folder.cc    | 212 ++++++++++++++----
+ chrome/browser/ui/archive/archive_mark.cc     |  30 +++
+ chrome/browser/ui/archive/archive_mark.h      |  18 ++
+ chrome/browser/ui/archive/archived_tabs.cc    |   4 +
+ chrome/browser/ui/archive/closed_folder.cc    | 218 ++++++++++++++----
  chrome/browser/ui/archive/closed_folder.h     |  11 +-
  .../ui/archive/closed_folder_unittest.cc      |  27 +++
  chrome/browser/ui/browser_commands.cc         |   9 +-
+ .../ui/cocoa/history_menu_cocoa_controller.mm |   4 +-
  .../ui/infobars/browser_infobar_registry.cc   |   2 +
- chrome/browser/ui/tabs/tab_strip_model.cc     |  36 ++-
- chrome/browser/ui/tabs/tab_strip_model.h      |   6 +-
+ .../ui/spaces/tab_space_restore_data.cc       |  52 ++++-
+ .../ui/spaces/tab_space_restore_data.h        |  45 +++-
+ .../ui/tabs/stedding_folder_session.cc        | 192 +++++++++++++--
+ chrome/browser/ui/tabs/tab_strip_model.cc     | 168 +++++++++++++-
+ chrome/browser/ui/tabs/tab_strip_model.h      |  16 +-
  .../ui/tabs/tab_strip_model_unittest.cc       | 149 ++++++++++++
  .../frame/vertical_tab_strip_region_view.cc   |   9 +-
  .../frame/vertical_tab_strip_region_view.h    |   2 +
@@ -63,13 +78,13 @@ Removable when: never; these are Stedding's own behaviours.
  .../ui/views/spaces/space_switcher_view.cc    |  79 +++++--
  .../ui/views/spaces/space_switcher_view.h     |   9 +-
  chrome/test/stedding/BUILD.gn                 |   3 +
- .../test/stedding/folder_tabs_browsertest.cc  | 202 +++++++++++++++++
+ .../test/stedding/folder_tabs_browsertest.cc  | 202 ++++++++++++++++
  .../stedding/sidebar_forms_browsertest.cc     |  42 ++++
  .../test/stedding/space_switch_browsertest.cc |  72 ++++++
- chrome/test/stedding/tab_drop_browsertest.cc  |  38 ++++
- components/tabs/impl/tab_strip_collection.cc  |  35 ++-
- components/tabs/public/tab_strip_collection.h |  21 +-
- 24 files changed, 901 insertions(+), 86 deletions(-)
+ chrome/test/stedding/tab_drop_browsertest.cc  |  38 +++
+ components/tabs/impl/tab_strip_collection.cc  |  55 ++++-
+ components/tabs/public/tab_strip_collection.h |  31 ++-
+ 29 files changed, 1393 insertions(+), 111 deletions(-)
 
 diff --git a/chrome/browser/ui/archive/BUILD.gn b/chrome/browser/ui/archive/BUILD.gn
 index 63c4768f928dd..5b8e035073717 100644
@@ -91,15 +106,80 @@ index 63c4768f928dd..5b8e035073717 100644
  }
  
  source_set("archive") {
+diff --git a/chrome/browser/ui/archive/archive_mark.cc b/chrome/browser/ui/archive/archive_mark.cc
+index 291f90e029c20..a7035043fd752 100644
+--- a/chrome/browser/ui/archive/archive_mark.cc
++++ b/chrome/browser/ui/archive/archive_mark.cc
+@@ -6,8 +6,11 @@
+ 
+ #include <string_view>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "content/public/browser/web_contents_user_data.h"
+@@ -146,6 +149,33 @@ void ClearArchiveMark(content::WebContents* contents) {
+   }
+ }
+ 
++std::string FormatClosedFolderSlots(const std::vector<int>& slots) {
++  std::string out;
++  for (const int slot : slots) {
++    if (!out.empty()) {
++      out.push_back(',');
++    }
++    out += base::NumberToString(slot);
++  }
++  return out;
++}
++
++std::vector<int> ParseClosedFolderSlots(std::string_view slots) {
++  std::vector<int> out;
++  if (slots.empty()) {
++    return out;
++  }
++  for (const std::string_view part : base::SplitStringPiece(
++           slots, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL)) {
++    int value = 0;
++    if (!base::StringToInt(part, &value) || value < 0) {
++      return {};
++    }
++    out.push_back(value);
++  }
++  return out;
++}
++
+ void MarkClosedWithFolder(content::WebContents* contents,
+                           ClosedFolderMark mark) {
+   if (!contents) {
 diff --git a/chrome/browser/ui/archive/archive_mark.h b/chrome/browser/ui/archive/archive_mark.h
-index 6655c0e6ff5ba..6623590c4fb8d 100644
+index 6655c0e6ff5ba..76bd755370664 100644
 --- a/chrome/browser/ui/archive/archive_mark.h
 +++ b/chrome/browser/ui/archive/archive_mark.h
-@@ -49,10 +49,15 @@ void ClearArchiveMark(content::WebContents* contents);
+@@ -8,6 +8,7 @@
+ #include <optional>
+ #include <string>
+ #include <string_view>
++#include <vector>
+ 
+ #include "base/functional/callback.h"
+ 
+@@ -49,10 +50,24 @@ void ClearArchiveMark(content::WebContents* contents);
  // answered Stay.
  inline constexpr char kClosedFolderKey[] = "stedding.closedfolder";
  inline constexpr char kClosedFolderNameKey[] = "stedding.closedfolder.name";
 +inline constexpr char kClosedFolderOrderKey[] = "stedding.closedfolder.order";
++// How many tabs the close leaves in each ancestor folder before this tab,
++// outermost first, comma-separated. One number when the tab sits directly
++// in the folder. A restore adds the tabs of the same close already back
++// before it (BACKLOG S-137). Empty when the close recorded none. An open
++// tab does not carry this: a startup rebuild would read it as a new
++// placement. The batch and the order are what an open tab keeps.
++inline constexpr char kClosedFolderSlotKey[] = "stedding.closedfolder.slot";
  
  struct ClosedFolderMark {
    std::string batch;
@@ -108,23 +188,38 @@ index 6655c0e6ff5ba..6623590c4fb8d 100644
 +  // records a split that closes before any tab of the close, so its order
 +  // is not the folder's (BACKLOG S-135).
 +  int order = 0;
++  // kClosedFolderSlotKey. Empty for a close that recorded no slot.
++  std::string slots;
  };
  void MarkClosedWithFolder(content::WebContents* contents,
                            ClosedFolderMark mark);
+@@ -60,6 +75,9 @@ void MarkClosedWithFolder(content::WebContents* contents,
+ std::optional<ClosedFolderMark> TakeClosedFolderMark(
+     content::WebContents* contents);
+ 
++std::string FormatClosedFolderSlots(const std::vector<int>& slots);
++std::vector<int> ParseClosedFolderSlots(std::string_view slots);
++
+ // Tests watch the marks go on, since the tab is gone a moment later.
+ using ArchiveMarkObserver =
+     base::RepeatingCallback<void(content::WebContents*, ArchiveReason)>;
 diff --git a/chrome/browser/ui/archive/archived_tabs.cc b/chrome/browser/ui/archive/archived_tabs.cc
-index 18109e537e6d9..c2f3edf6dede2 100644
+index 18109e537e6d9..1fefb35fdff9e 100644
 --- a/chrome/browser/ui/archive/archived_tabs.cc
 +++ b/chrome/browser/ui/archive/archived_tabs.cc
-@@ -192,6 +192,7 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
+@@ -192,6 +192,10 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
    if (std::optional<ClosedFolderMark> folder = TakeClosedFolderMark(contents)) {
      (*extra_data)[kClosedFolderKey] = std::move(folder->batch);
      (*extra_data)[kClosedFolderNameKey] = std::move(folder->name);
 +    (*extra_data)[kClosedFolderOrderKey] = base::NumberToString(folder->order);
++    if (!folder->slots.empty()) {
++      (*extra_data)[kClosedFolderSlotKey] = std::move(folder->slots);
++    }
    }
    // The user's name for the tab (tabs R14), which a restore reads back.
    if (const std::u16string name = TabName(contents); !name.empty()) {
 diff --git a/chrome/browser/ui/archive/closed_folder.cc b/chrome/browser/ui/archive/closed_folder.cc
-index 0779343b0bf77..63c09443eaedb 100644
+index 0779343b0bf77..80fd97d1b4725 100644
 --- a/chrome/browser/ui/archive/closed_folder.cc
 +++ b/chrome/browser/ui/archive/closed_folder.cc
 @@ -4,10 +4,19 @@
@@ -250,7 +345,7 @@ index 0779343b0bf77..63c09443eaedb 100644
      }
    }
    if (!folder.tabs.empty()) {
-@@ -95,49 +179,97 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
+@@ -95,49 +179,103 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
      sessions::LiveTabContext* context,
      std::string_view batch,
      WindowOpenDisposition disposition) {
@@ -330,9 +425,15 @@ index 0779343b0bf77..63c09443eaedb 100644
 +    disposition = WindowOpenDisposition::UNKNOWN;
 +  }
 +  if (disposition != WindowOpenDisposition::UNKNOWN) {
-+    for (size_t i = 0; i < items.size(); ++i) {
-+      restore(context, items[i].id,
-+              i == 0 ? disposition : WindowOpenDisposition::NEW_BACKGROUND_TAB);
++    restore(context, items.front().id, disposition);
++    // NEW_WINDOW opens a window for the first entry. RestoreTab returns that
++    // window, and the rest go after the first, in it (closed_folder.h).
++    sessions::LiveTabContext* const landed =
++        disposition == WindowOpenDisposition::NEW_WINDOW ? WindowOf(first)
++                                                         : context;
++    for (size_t i = 1; i < items.size(); ++i) {
++      restore(landed ? landed : context, items[i].id,
++              WindowOpenDisposition::NEW_BACKGROUND_TAB);
      }
      return restored;
    }
@@ -474,6 +575,21 @@ index c11160bac610e..8621dbb51e2b3 100644
  
    tab_strip_model->ActivateTabAt(active_index + 1);
  }
+diff --git a/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm b/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
+index d4e994ad1cc7c..2e8f5a1da77a7 100644
+--- a/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
++++ b/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
+@@ -42,8 +42,8 @@ void OpenURLForItem(HistoryMenuBridge::HistoryItem node,
+   if (!profile) {
+     return;  // Failed to load profile, ignore.
+   }
+-  // Stedding (PLAN.md TAB-13): a folder close's own item brings every tab of
+-  // the folder back, into the profile's window, or a new one.
++  // Stedding (folders F19): a folder close's own item brings every tab back
++  // to the window it was closed in, or to a new window when that one is gone.
+   if (!node.closed_folder_batch.empty()) {
+     sessions::TabRestoreService* const service =
+         TabRestoreServiceFactory::GetForProfile(profile);
 diff --git a/chrome/browser/ui/infobars/browser_infobar_registry.cc b/chrome/browser/ui/infobars/browser_infobar_registry.cc
 index 1e83612fa63a4..e5e5e06ee7c99 100644
 --- a/chrome/browser/ui/infobars/browser_infobar_registry.cc
@@ -487,8 +603,460 @@ index 1e83612fa63a4..e5e5e06ee7c99 100644
              .SetBrowserFilter(base::BindRepeating(
                  [](BrowserWindowInterface* browser) {
                    return session_restore_infobar::
+diff --git a/chrome/browser/ui/spaces/tab_space_restore_data.cc b/chrome/browser/ui/spaces/tab_space_restore_data.cc
+index 950f698f094b1..4e087b97ee573 100644
+--- a/chrome/browser/ui/spaces/tab_space_restore_data.cc
++++ b/chrome/browser/ui/spaces/tab_space_restore_data.cc
+@@ -5,7 +5,10 @@
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+ 
+ #include <utility>
++#include <vector>
+ 
++#include "base/strings/string_number_conversions.h"
++#include "chrome/browser/ui/archive/archive_mark.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "content/public/browser/web_contents.h"
+ 
+@@ -33,7 +36,34 @@ void RestoreSpaceFromExtraData(
+        {"stedding.folderpath", "stedding.archive.folderpath"}) {
+     if (const auto folder = extra_data.find(key);
+         folder != extra_data.end() && !folder->second.empty()) {
+-      FolderRestorePath::CreateForWebContents(web_contents, folder->second);
++      std::vector<int> slots;
++      if (const auto slot = extra_data.find(stedding::kClosedFolderSlotKey);
++          slot != extra_data.end()) {
++        slots = stedding::ParseClosedFolderSlots(slot->second);
++      }
++      std::string batch;
++      int order = 0;
++      if (const auto batch_it = extra_data.find(stedding::kClosedFolderKey);
++          batch_it != extra_data.end()) {
++        batch = batch_it->second;
++      }
++      if (const auto order_it =
++              extra_data.find(stedding::kClosedFolderOrderKey);
++          order_it != extra_data.end()) {
++        base::StringToInt(order_it->second, &order);
++      }
++      // The batch and the order, with or without a slot. An open tab
++      // persists them and not the slot, so a restart puts the mark back
++      // and RebuildFromRestoredTabs does not place that tab again. A
++      // closed tab carries the slot too; the mark is on the contents
++      // before the folder rebuild counts it.
++      if (!batch.empty() &&
++          !ClosedFolderPlace::FromWebContents(web_contents)) {
++        ClosedFolderPlace::CreateForWebContents(web_contents, batch, order);
++      }
++      FolderRestorePath::CreateForWebContents(web_contents, folder->second,
++                                              std::move(slots),
++                                              std::move(batch), order);
+       break;
+     }
+   }
+@@ -50,13 +80,29 @@ void RestoreSpaceFromExtraData(
+ }
+ 
+ FolderRestorePath::FolderRestorePath(content::WebContents* contents,
+-                                     std::string path)
++                                     std::string path,
++                                     std::vector<int> slots,
++                                     std::string batch,
++                                     int order)
+     : content::WebContentsUserData<FolderRestorePath>(*contents),
+-      path_(std::move(path)) {}
++      path_(std::move(path)),
++      slots_(std::move(slots)),
++      batch_(std::move(batch)),
++      order_(order) {}
+ 
+ FolderRestorePath::~FolderRestorePath() = default;
+ 
++ClosedFolderPlace::ClosedFolderPlace(content::WebContents* contents,
++                                     std::string batch,
++                                     int order)
++    : content::WebContentsUserData<ClosedFolderPlace>(*contents),
++      batch_(std::move(batch)),
++      order_(order) {}
++
++ClosedFolderPlace::~ClosedFolderPlace() = default;
++
+ WEB_CONTENTS_USER_DATA_KEY_IMPL(TabSpaceRestoreData);
+ WEB_CONTENTS_USER_DATA_KEY_IMPL(FolderRestorePath);
++WEB_CONTENTS_USER_DATA_KEY_IMPL(ClosedFolderPlace);
+ 
+ }  // namespace spaces
+diff --git a/chrome/browser/ui/spaces/tab_space_restore_data.h b/chrome/browser/ui/spaces/tab_space_restore_data.h
+index 3306acf790ddd..c41fa9a15ef16 100644
+--- a/chrome/browser/ui/spaces/tab_space_restore_data.h
++++ b/chrome/browser/ui/spaces/tab_space_restore_data.h
+@@ -7,6 +7,7 @@
+ 
+ #include <map>
+ #include <string>
++#include <vector>
+ 
+ #include "content/public/browser/web_contents_user_data.h"
+ 
+@@ -57,13 +58,55 @@ class FolderRestorePath
+   ~FolderRestorePath() override;
+ 
+   const std::string& path() const { return path_; }
++  // How many tabs the close left in each ancestor before this tab,
++  // outermost first. Empty when the close recorded none: a restart, a
++  // plain close, a close from before the slot (archive_mark.h,
++  // kClosedFolderSlotKey).
++  const std::vector<int>& slots() const { return slots_; }
++  // The close's batch (kClosedFolderKey) and this tab's order in it
++  // (kClosedFolderOrderKey). Empty batch when the close recorded none.
++  const std::string& batch() const { return batch_; }
++  int order() const { return order_; }
+ 
+  private:
+   friend class content::WebContentsUserData<FolderRestorePath>;
+ 
+-  FolderRestorePath(content::WebContents* contents, std::string path);
++  FolderRestorePath(content::WebContents* contents,
++                    std::string path,
++                    std::vector<int> slots = {},
++                    std::string batch = {},
++                    int order = 0);
+ 
+   const std::string path_;
++  const std::vector<int> slots_;
++  const std::string batch_;
++  const int order_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++// A tab brought back from a folder close. It stays for the life of the tab,
++// so a later row of the same close can count the tabs already back at a
++// lower order and land between them (BACKLOG S-137). The session writes the
++// batch and the order next to the folder path, and a restore puts the mark
++// back. The slot is not written on an open tab.
++class ClosedFolderPlace
++    : public content::WebContentsUserData<ClosedFolderPlace> {
++ public:
++  ~ClosedFolderPlace() override;
++
++  const std::string& batch() const { return batch_; }
++  int order() const { return order_; }
++
++ private:
++  friend class content::WebContentsUserData<ClosedFolderPlace>;
++
++  ClosedFolderPlace(content::WebContents* contents,
++                    std::string batch,
++                    int order);
++
++  const std::string batch_;
++  const int order_;
+ 
+   WEB_CONTENTS_USER_DATA_KEY_DECL();
+ };
+diff --git a/chrome/browser/ui/tabs/stedding_folder_session.cc b/chrome/browser/ui/tabs/stedding_folder_session.cc
+index 266d0491755dd..202825f08c606 100644
+--- a/chrome/browser/ui/tabs/stedding_folder_session.cc
++++ b/chrome/browser/ui/tabs/stedding_folder_session.cc
+@@ -21,6 +21,7 @@
+ #include "base/location.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/json/json_writer.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/token.h"
+ #include "base/values.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -28,6 +29,7 @@
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+ #include "chrome/browser/sessions/stedding_session_rebuild.h"
++#include "chrome/browser/ui/archive/archive_mark.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -116,6 +118,22 @@ std::vector<int> IndicesMovingWith(const TabStripModel& strip,
+   return indices;
+ }
+ 
++// The path plus the close mark last written for a tab. A mark gained
++// without a path change still differs, so it is written. The slot is not
++// part of it.
++std::string WrittenRecord(const std::string& path,
++                          const spaces::ClosedFolderPlace* place) {
++  std::string record = path;
++  record.push_back('\n');
++  if (!place) {
++    return record;
++  }
++  record.append(place->batch());
++  record.push_back('\n');
++  record.append(base::NumberToString(place->order()));
++  return record;
++}
++
+ // Every folder under `collection`, at any depth, by id.
+ void CollectFolders(const tabs::TabCollection* collection,
+                     std::map<std::string, tabs::FolderTabCollection*>* out) {
+@@ -143,6 +161,28 @@ std::map<std::string, tabs::FolderTabCollection*> FoldersById(
+   return folders;
+ }
+ 
++// Tabs of `batch` now in `folder` that this close brought back at an order
++// below `order`. A row's place is the tabs the close left before it, plus
++// these, so the rows interleave whichever of them come back (BACKLOG S-137).
++int AlreadyBackBefore(const tabs::FolderTabCollection& folder,
++                      const std::string& batch,
++                      int order) {
++  if (batch.empty()) {
++    return 0;
++  }
++  int count = 0;
++  for (tabs::TabInterface* const tab : folder.GetTabsRecursive()) {
++    content::WebContents* const contents = tab->GetContents();
++    const spaces::ClosedFolderPlace* const place =
++        contents ? spaces::ClosedFolderPlace::FromWebContents(contents)
++                 : nullptr;
++    if (place && place->batch() == batch && place->order() < order) {
++      ++count;
++    }
++  }
++  return count;
++}
++
+ }  // namespace
+ 
+ std::string FolderPathForTab(const tabs::TabInterface* tab) {
+@@ -254,10 +294,24 @@ void FolderSessionService::AppendRebuildCommands(
+     }
+     const SessionID tab_id =
+         sessions::SessionTabHelper::IdForTab(tab->GetContents());
+-    if (tab_id.is_valid()) {
+-      commands->push_back(sessions::CreateAddTabExtraDataCommand(
+-          tab_id, kSessionTabFolderPathKey, path));
++    if (!tab_id.is_valid()) {
++      continue;
++    }
++    commands->push_back(sessions::CreateAddTabExtraDataCommand(
++        tab_id, kSessionTabFolderPathKey, path));
++    // The batch and the order, not the slot. A slot on an open tab is a
++    // new placement to RebuildFromRestoredTabs.
++    content::WebContents* const contents = tab->GetContents();
++    const spaces::ClosedFolderPlace* const place =
++        contents ? spaces::ClosedFolderPlace::FromWebContents(contents)
++                 : nullptr;
++    if (!place) {
++      continue;
+     }
++    commands->push_back(sessions::CreateAddTabExtraDataCommand(
++        tab_id, kClosedFolderKey, place->batch()));
++    commands->push_back(sessions::CreateAddTabExtraDataCommand(
++        tab_id, kClosedFolderOrderKey, base::NumberToString(place->order())));
+   }
+ }
+ 
+@@ -282,12 +336,26 @@ void FolderSessionService::PersistAllPaths() {
+       continue;
+     }
+     std::string path = BuildPath(tab);
++    content::WebContents* const contents = tab->GetContents();
++    const spaces::ClosedFolderPlace* const place =
++        contents ? spaces::ClosedFolderPlace::FromWebContents(contents)
++                 : nullptr;
++    const std::string record = WrittenRecord(path, place);
+     const auto it = written_.find(tab_id);
+-    if (it == written_.end() || it->second != path) {
++    if (it == written_.end() || it->second != record) {
+       session_service->AddTabExtraData(session_id_, tab_id,
+                                        kSessionTabFolderPathKey, path);
++      // The batch and the order, not the slot. A slot on an open tab is a
++      // new placement to RebuildFromRestoredTabs.
++      if (place) {
++        session_service->AddTabExtraData(session_id_, tab_id, kClosedFolderKey,
++                                         place->batch());
++        session_service->AddTabExtraData(
++            session_id_, tab_id, kClosedFolderOrderKey,
++            base::NumberToString(place->order()));
++      }
+     }
+-    written.emplace(tab_id, std::move(path));
++    written.emplace(tab_id, record);
+   }
+   written_ = std::move(written);
+ }
+@@ -310,6 +378,13 @@ void FolderSessionService::RebuildFromRestoredTabs() {
+   struct Pending {
+     tabs::TabHandle handle;
+     std::vector<RestoredEntry> path;
++    // Empty, or one count per path entry: the tabs the close left in that
++    // ancestor before this tab. A different length is no slot.
++    std::vector<int> slots;
++    // The close's batch and this tab's order in it. Empty batch when the
++    // close recorded none.
++    std::string batch;
++    int order = 0;
+   };
+   std::vector<Pending> pending;
+   for (tabs::TabInterface* const tab : *strip) {
+@@ -321,9 +396,13 @@ void FolderSessionService::RebuildFromRestoredTabs() {
+       continue;
+     }
+     std::vector<RestoredEntry> path = ParsePath(parked->path());
++    std::vector<int> slots = parked->slots();
++    std::string batch = parked->batch();
++    const int order = parked->order();
+     contents->RemoveUserData(spaces::FolderRestorePath::UserDataKey());
+     if (!path.empty()) {
+-      pending.push_back({tab->GetHandle(), std::move(path)});
++      pending.push_back({tab->GetHandle(), std::move(path), std::move(slots),
++                         std::move(batch), order});
+     }
+   }
+   if (pending.empty()) {
+@@ -334,27 +413,59 @@ void FolderSessionService::RebuildFromRestoredTabs() {
+     const base::AutoReset<bool> rebuilding(&rebuilding_, true);
+     // Folders by saved id: those still in the window, which take a tab
+     // brought back from the recently-closed list, then those made here.
+-    // Tabs move into these only from outside them, or from one of them into
+-    // a folder made inside it, so none is emptied and peeled while this
+-    // runs.
++    // A row already in one of them moves to its slot. That move stays
++    // inside the folder, so none is emptied and peeled while this runs.
+     std::map<std::string, tabs::FolderTabCollection*> made =
+         FoldersById(*strip);
+     std::set<split_tabs::SplitTabId> placed_splits;
+-    for (const Pending& item : pending) {
++    // The tab came back from this close, at this order. Later rows of the
++    // same close count it while it stays open.
++    const auto remember_place = [](const Pending& item) {
++      if (item.batch.empty() || item.slots.size() != item.path.size()) {
++        return;
++      }
++      tabs::TabInterface* const placed = item.handle.Get();
++      content::WebContents* const contents =
++          placed ? placed->GetContents() : nullptr;
++      // Already on the tab when its session entry put the mark back, or
++      // when this closed tab's extra data was read. The first mark is the
++      // one a later row counts.
++      if (!contents || spaces::ClosedFolderPlace::FromWebContents(contents)) {
++        return;
++      }
++      spaces::ClosedFolderPlace::CreateForWebContents(contents, item.batch,
++                                                      item.order);
++    };
++    const auto place = [&](const Pending& item) {
+       tabs::TabInterface* const tab = item.handle.Get();
+       // Neither the essentials row nor a tab group can hold a folder, so a
+       // path saved for such a tab is stale.
+       if (!tab || tab->IsPinned() || tab->GetGroup()) {
+-        continue;
++        return;
+       }
+-      // The split's first pane in strip order has placed both panes.
++      // Equal lengths are a new placement. An open tab persists the batch
++      // and the order only, so a restart does not place it again.
++      const bool slotted = item.slots.size() == item.path.size();
++      // The first pane this pass reaches places both. With no slot the pass
++      // is in strip order, so that is the first pane in the strip. With a
++      // slot the pass is the close's order, so the pane with the lower
++      // order places the split, and both panes record the close (S-137).
+       if (const std::optional<split_tabs::SplitTabId> split = tab->GetSplit();
+           split && !placed_splits.insert(*split).second) {
+-        continue;
++        remember_place(item);
++        return;
+       }
++      // Survivors the close left before this tab, plus tabs of the same
++      // close already back at a lower order.
++      const auto index_in = [&](const tabs::FolderTabCollection& folder,
++                                int survivors_before) {
++        return survivors_before +
++               AlreadyBackBefore(folder, item.batch, item.order);
++      };
+       tabs::FolderTabCollection* parent = nullptr;
+       bool made_for_this_tab = false;
+-      for (const RestoredEntry& entry : item.path) {
++      for (size_t depth = 0; depth < item.path.size(); ++depth) {
++        const RestoredEntry& entry = item.path[depth];
+         if (const auto found = made.find(entry.id); found != made.end()) {
+           // Only the leading ancestors of a path can exist already. One
+           // after a folder made for this tab means the path is inconsistent;
+@@ -365,13 +476,20 @@ void FolderSessionService::RebuildFromRestoredTabs() {
+           parent = found->second;
+           continue;
+         }
++        // The folder this entry names is gone. Inside a folder that is
++        // still here, put the row where this close left it. AddToNewFolder
++        // then makes the new folder where that row sits. At the top level
++        // the row's strip index is the place, as before. `depth` is past
++        // the ancestor that set `parent`.
++        if (parent && slotted && !made_for_this_tab) {
++          strip->MoveTabsToFolderAt(IndicesMovingWith(*strip, *tab), parent,
++                                    index_in(*parent, item.slots[depth - 1]));
++        }
+         std::optional<tabs::FolderId> id;
+         if (const std::optional<base::Token> token =
+                 base::Token::FromString(entry.id)) {
+           id = tabs::FolderId::FromRawToken(*token);
+         }
+-        // Nested inside `parent` this lands at its end, which in strip order
+-        // is where the folder's first tab belongs.
+         tabs::FolderTabCollection* const folder = strip->AddToNewFolder(
+             IndicesMovingWith(*strip, *tab), parent, id);
+         if (!folder) {
+@@ -383,12 +501,46 @@ void FolderSessionService::RebuildFromRestoredTabs() {
+         parent = folder;
+         made_for_this_tab = true;
+       }
+-      // A tab already in its folder -- a reopened tab lands by index, which
+-      // may be inside it -- stays where it is.
+-      if (parent && !made_for_this_tab &&
+-          tab->GetParentCollection() != parent) {
++      if (!parent || made_for_this_tab) {
++        if (parent) {
++          remember_place(item);
++        }
++        return;
++      }
++      // ⇧⌘T and Undo can drop the row inside the folder, ahead of its
++      // slot. Move it anyway. The slot does not count the row itself.
++      if (slotted) {
++        strip->MoveTabsToFolderAt(IndicesMovingWith(*strip, *tab), parent,
++                                  index_in(*parent, item.slots.back()));
++        remember_place(item);
++      } else if (tab->GetParentCollection() != parent) {
+         strip->MoveTabsToFolder(IndicesMovingWith(*strip, *tab), parent);
+       }
++    };
++    // No slot: today's pass, strip order. A slot: the close's order, so a
++    // row is placed after the tabs of the same close already back before
++    // it, and the tab that creates a nested folder is that folder's first
++    // row.
++    std::vector<const Pending*> plain;
++    std::vector<const Pending*> slotted;
++    for (const Pending& item : pending) {
++      if (item.slots.size() == item.path.size()) {
++        slotted.push_back(&item);
++      } else {
++        plain.push_back(&item);
++      }
++    }
++    for (const Pending* const item : plain) {
++      place(*item);
++    }
++    std::ranges::stable_sort(slotted, [](const Pending* a, const Pending* b) {
++      if (a->batch != b->batch) {
++        return a->batch < b->batch;
++      }
++      return a->order < b->order;
++    });
++    for (const Pending* const item : slotted) {
++      place(*item);
+     }
+   }
+   PersistAllPaths();
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 62c48adcda129..2a8ceb270bc37 100644
+index 62c48adcda129..dd7a18974dd59 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -4634,10 +4634,21 @@ split_tabs::SplitTabId TabStripModel::AddToSplitImpl(
@@ -515,20 +1083,163 @@ index 62c48adcda129..2a8ceb270bc37 100644
  
    contents_data_->CreateSplit(split_id, tabs, visual_data);
    selection_model_.InvalidateListSelectionModel(base::PassKey<TabStripModel>());
-@@ -5110,9 +5121,10 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
+@@ -5107,12 +5118,49 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
+   // folder's name into the recently-closed list, which shows them as one
+   // folder and brings them back together (archive/closed_folder.h).
+   // An unnamed folder goes under the name its header shows (folder_view.cc).
++  // The slot is how many tabs this close leaves in each ancestor before
++  // this tab, taken while the folder is whole. A restore adds the tabs of
++  // the same close already back at a lower order, so one row, every row,
++  // or the rows one after another land in the order they had (S-137).
++  // `order` counts only the tabs this close takes.
    const std::string batch = base::Uuid::GenerateRandomV4().AsLowercaseString();
    const std::string name =
        folder->title().empty() ? std::string("New Folder") : folder->title();
++  const auto slots_of = [&doomed](const tabs::TabInterface* tab) {
++    std::vector<const tabs::TabCollection*> folders;
++    for (const tabs::TabCollection* collection = tab->GetParentCollection();
++         collection; collection = collection->GetParentCollection()) {
++      if (collection->type() == tabs::TabCollection::Type::SPLIT) {
++        continue;
++      }
++      if (collection->type() != tabs::TabCollection::Type::FOLDER) {
++        break;
++      }
++      folders.push_back(collection);
++    }
++    std::vector<int> slots;
++    for (auto it = folders.rbegin(); it != folders.rend(); ++it) {
++      // Survivors before this tab: the tabs the close leaves, in order.
++      int survivors_before = 0;
++      for (tabs::TabInterface* const other : (*it)->GetTabsRecursive()) {
++        if (other == tab) {
++          break;
++        }
++        if (!std::ranges::contains(doomed, other)) {
++          ++survivors_before;
++        }
++      }
++      slots.push_back(survivors_before);
++    }
++    return stedding::FormatClosedFolderSlots(slots);
++  };
 +  int order = 0;
    for (tabs::TabInterface* const tab : doomed) {
--    stedding::MarkClosedWithFolder(tab->GetContents(),
+     stedding::MarkClosedWithFolder(tab->GetContents(),
 -                                   {.batch = batch, .name = name});
-+    stedding::MarkClosedWithFolder(
-+        tab->GetContents(), {.batch = batch, .name = name, .order = order++});
++                                   {.batch = batch,
++                                    .name = name,
++                                    .order = order++,
++                                    .slots = slots_of(tab)});
    }
    ExecuteCloseTabs(
        base::BindRepeating(
-@@ -5247,7 +5259,8 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
+@@ -5167,6 +5215,104 @@ bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
+   return moved;
+ }
+ 
++bool TabStripModel::MoveTabsToFolderAt(const std::vector<int> indices,
++                                       tabs::FolderTabCollection* folder,
++                                       int slot) {
++  CHECK(folder);
++  if (indices.empty()) {
++    return false;
++  }
++  for (const int index : indices) {
++    CHECK(ContainsIndex(index));
++    if (IsTabPinned(index)) {
++      return false;
++    }
++  }
++  const size_t folder_tabs = folder->TabCountRecursive();
++  if (folder_tabs == 0 ||
++      !contents_data_->CanMoveTabsIntoFolder(indices, folder)) {
++    return false;
++  }
++  const size_t clamped =
++      std::min(static_cast<size_t>(std::max(slot, 0)), folder_tabs);
++  // The slot counts tabs that are not this row. A row already in the folder
++  // is still moved: CanMoveTabsIntoFolder allows it, and MoveTabImpl or
++  // MoveCollectionImpl takes one off the child index when that row sits
++  // before the destination. Counting the row here would land it one slot
++  // early (BACKLOG S-137).
++  absl::flat_hash_set<const tabs::TabInterface*> moving;
++  for (const int index : indices) {
++    moving.insert(GetTabAtIndex(index));
++  }
++  const auto row_moves = [&moving](const tabs::Child& child) {
++    if (const auto* tab = std::get_if<tabs::ScopedTab>(&child)) {
++      return moving.contains(tab->get());
++    }
++    for (tabs::TabInterface* tab :
++         std::get<std::unique_ptr<tabs::TabCollection>>(child)
++             ->GetTabsRecursive()) {
++      if (!moving.contains(tab)) {
++        return false;
++      }
++    }
++    return true;
++  };
++  const auto first_of = [](const tabs::Child& child) -> tabs::TabInterface* {
++    if (const auto* tab = std::get_if<tabs::ScopedTab>(&child)) {
++      return tab->get();
++    }
++    return std::get<std::unique_ptr<tabs::TabCollection>>(child)
++        ->GetTabAtIndexRecursive(0);
++  };
++  size_t seen = 0;
++  size_t child_index = 0;
++  for (const tabs::Child& child : folder->GetChildren()) {
++    if (row_moves(child)) {
++      ++child_index;
++      continue;
++    }
++    const size_t size = std::holds_alternative<tabs::ScopedTab>(child)
++                            ? 1u
++                            : std::get<std::unique_ptr<tabs::TabCollection>>(
++                                  child)
++                                  ->TabCountRecursive();
++    if (clamped < seen + size) {
++      break;
++    }
++    seen += size;
++    ++child_index;
++  }
++  // The child the row is inserted before, as the folder reads now. `seen`
++  // omits this row, so it is not that child's index once the row sits
++  // earlier. The move takes one off the child index in that case, and the
++  // row still lands before this same child. The notification predicts
++  // this child's first tab; the tabs of the row that sit before it are
++  // taken off below. Predicting the tab at `clamped` instead shifts the
++  // selection into the row the insert stays in front of (BACKLOG S-137).
++  const tabs::ChildrenVector& children = folder->GetChildren();
++  const int destination =
++      child_index == children.size()
++          ? GetIndexOfTab(folder->GetTabAtIndexRecursive(folder_tabs - 1)) + 1
++          : GetIndexOfTab(first_of(children[child_index]));
++  int num_tabs_to_left = 0;
++  for (const int index : indices) {
++    if (index < destination) {
++      ++num_tabs_to_left;
++    }
++  }
++  bool moved = false;
++  MoveTabsWithNotifications(
++      indices, destination - num_tabs_to_left,
++      base::BindOnce(
++          [](tabs::TabStripCollection* contents, const std::vector<int>& indices,
++             tabs::FolderTabCollection* folder, size_t child_index, bool* out) {
++            *out = contents->MoveTabsIntoFolderAtChild(indices, folder,
++                                                       child_index);
++          },
++          contents_data_.get(), indices, folder, child_index, &moved));
++  return moved;
++}
++
+ namespace {
+ 
+ // Stedding (folders F31): what a folder's child is -- the tab, or the split
+@@ -5247,7 +5393,8 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
      const std::vector<int>& indices,
      int destination_index,
      std::optional<tab_groups::TabGroupId> group,
@@ -538,7 +1249,7 @@ index 62c48adcda129..2a8ceb270bc37 100644
    if (!group_model_) {
      return;
    }
-@@ -5266,11 +5279,18 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
+@@ -5266,11 +5413,18 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
    }
    destination_index -= num_tabs_to_left_of_destination;
  
@@ -561,10 +1272,27 @@ index 62c48adcda129..2a8ceb270bc37 100644
  
  void TabStripModel::AddToReadLaterImpl(const std::vector<int>& indices) {
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
-index 8317c10097c03..9b1f47820231c 100644
+index 8317c10097c03..cf7b510658cd9 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.h
 +++ b/chrome/browser/ui/tabs/tab_strip_model.h
-@@ -1316,11 +1316,13 @@ class TabStripModel {
+@@ -741,6 +741,16 @@ class TabStripModel {
+   bool MoveTabsToFolder(const std::vector<int> indices,
+                         tabs::FolderTabCollection* folder);
+ 
++  // Stedding (folders F19, BACKLOG S-137): moves `indices` into `folder` so
++  // the row's first tab sits `slot` tabs from the folder's first tab, as the
++  // folder reads now, not counting this row. Past the end, the row is
++  // appended. A slot that falls inside a split or a nested folder lands
++  // before that row. A split moves whole. A row already in `folder` moves
++  // within it.
++  bool MoveTabsToFolderAt(const std::vector<int> indices,
++                          tabs::FolderTabCollection* folder,
++                          int slot);
++
+   // Stedding (docs/features/menus.md M7): moves every tab of `folder` out
+   // to where the folder sits, in order; the emptied folder leaves the tree.
+   // A nested folder's tabs come out with the rest.
+@@ -1316,11 +1326,13 @@ class TabStripModel {
    // `indices` to the `destination_index` and updates the tabs to the
    // appropriate `group` and `pinned` properties.
    // Note: `destination_index` refers to a place in the tabstrip prior to the
@@ -1444,10 +2172,37 @@ index f98c27763edca..6ed41fc90d4bb 100644
 +
  }  // namespace
 diff --git a/components/tabs/impl/tab_strip_collection.cc b/components/tabs/impl/tab_strip_collection.cc
-index 240ef6ed5f431..2728ed6b24ed0 100644
+index 240ef6ed5f431..02886e048f014 100644
 --- a/components/tabs/impl/tab_strip_collection.cc
 +++ b/components/tabs/impl/tab_strip_collection.cc
-@@ -400,6 +400,29 @@ void TabStripCollection::MoveTabsRecursive(
+@@ -286,6 +286,26 @@ bool TabStripCollection::MoveTabsIntoFolderRecursive(
+   return true;
+ }
+ 
++bool TabStripCollection::MoveTabsIntoFolderAtChild(
++    const std::vector<int>& tab_indices,
++    FolderTabCollection* folder,
++    size_t child_index) {
++  if (!CanMoveTabsIntoFolder(tab_indices, folder)) {
++    return false;
++  }
++  // A strip index inside a split or a nested folder is not this. That path
++  // (MoveTabsIntoFolderAtRecursive) descends, and a slot in the middle of a
++  // split has no position there: the index walks past it and CHECKs. The
++  // slot lands before that row, which is a direct child of this folder.
++  if (child_index > folder->ChildCount()) {
++    child_index = folder->ChildCount();
++  }
++  MoveNodesIntoFolder(
++      GetTabsAndCollectionsForMove(tab_indices, FolderMoveRetainSet()), folder,
++      {folder->GetHandle(), child_index});
++  return true;
++}
++
+ bool TabStripCollection::AddTabAfterInFolder(ScopedTab& tab,
+                                              const TabInterface* anchor) {
+   CHECK(tab);
+@@ -400,6 +420,29 @@ void TabStripCollection::MoveTabsRecursive(
      std::optional<tab_groups::TabGroupId> new_group_id,
      bool new_pinned_state,
      const TabCollection::TypeEnumSet retain_collection_types) {
@@ -1477,7 +2232,7 @@ index 240ef6ed5f431..2728ed6b24ed0 100644
    CHECK(destination_index >= 0);
    ChildrenPtrs tab_or_collections =
        GetTabsAndCollectionsForMove(tab_indices, retain_collection_types);
-@@ -407,8 +430,9 @@ void TabStripCollection::MoveTabsRecursive(
+@@ -407,8 +450,9 @@ void TabStripCollection::MoveTabsRecursive(
    // If new group collection is created, we can find the first position of the
    // tab as though it was moving to the unpinned container and then update the
    // positions.
@@ -1489,7 +2244,7 @@ index 240ef6ed5f431..2728ed6b24ed0 100644
    if (new_group_id.has_value() &&
        !GetTabGroupCollection(new_group_id.value())) {
      TabCollection::Position group_insertion_details = move_position;
-@@ -458,7 +482,8 @@ TabCollection::Position TabStripCollection::GetMovePosition(
+@@ -458,7 +502,8 @@ TabCollection::Position TabStripCollection::GetMovePosition(
      ChildrenPtrs tab_or_collections,
      size_t destination_index,
      std::optional<tab_groups::TabGroupId> new_group_id,
@@ -1499,7 +2254,7 @@ index 240ef6ed5f431..2728ed6b24ed0 100644
    // Calculate destination collection.
    TabCollection* dst_collection = nullptr;
    if (new_pinned_state) {
-@@ -466,6 +491,10 @@ TabCollection::Position TabStripCollection::GetMovePosition(
+@@ -466,6 +511,10 @@ TabCollection::Position TabStripCollection::GetMovePosition(
    } else if (new_group_id.has_value() &&
               group_mapping_.contains(new_group_id.value())) {
      dst_collection = GetTabGroupCollection(new_group_id.value());
@@ -1511,10 +2266,27 @@ index 240ef6ed5f431..2728ed6b24ed0 100644
      dst_collection = unpinned_collection_;
    }
 diff --git a/components/tabs/public/tab_strip_collection.h b/components/tabs/public/tab_strip_collection.h
-index 9b5f987d65530..7c9f0f91ae6b0 100644
+index 9b5f987d65530..dc70ed57aa3a3 100644
 --- a/components/tabs/public/tab_strip_collection.h
 +++ b/components/tabs/public/tab_strip_collection.h
-@@ -123,6 +123,15 @@ class TabStripCollection : public TabCollection {
+@@ -77,6 +77,16 @@ class TabStripCollection : public TabCollection {
+   bool MoveTabsIntoFolderRecursive(const std::vector<int>& tab_indices,
+                                    FolderTabCollection* folder);
+ 
++  // Stedding (folders F19, BACKLOG S-137): as MoveTabsIntoFolderRecursive,
++  // at `child_index` among the folder's own children instead of at the end.
++  // `child_index` is counted in the folder as it reads before the move. A
++  // row that is already one of those children moves within the folder;
++  // MoveTabImpl or MoveCollectionImpl takes one off the index when that
++  // child sits before `child_index`. A split moves whole.
++  bool MoveTabsIntoFolderAtChild(const std::vector<int>& tab_indices,
++                                 FolderTabCollection* folder,
++                                 size_t child_index);
++
+   // Stedding: whether MoveTabsIntoFolderRecursive would accept the move.
+   bool CanMoveTabsIntoFolder(const std::vector<int>& tab_indices,
+                              const FolderTabCollection* folder);
+@@ -123,6 +133,15 @@ class TabStripCollection : public TabCollection {
        std::optional<tab_groups::TabGroupId> new_group_id,
        bool new_pinned_state,
        const TabCollection::TypeEnumSet retain_collection_types);
@@ -1530,7 +2302,7 @@ index 9b5f987d65530..7c9f0f91ae6b0 100644
  
    // Removes the tab present at a recursive index in the collection and
    // returns the unique_ptr to the tab model. If there is no tab present
-@@ -197,7 +206,17 @@ class TabStripCollection : public TabCollection {
+@@ -197,7 +216,17 @@ class TabStripCollection : public TabCollection {
        ChildrenPtrs tab_or_collections,
        size_t destination_index,
        std::optional<tab_groups::TabGroupId> new_group_id,

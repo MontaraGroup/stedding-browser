@@ -5,7 +5,7 @@ every fifteen minutes and starting the next chunk by hand.
 
 Usage (PowerShell, from anywhere; run it detached, see below):
   tooling\win\build-until-done.ps1 -Config win-checks -Targets unit_tests,stedding_browser_tests
-  tooling\win\build-until-done.ps1 -Jobs 16 -ChunkMinutes 45 -MaxChunks 30
+  tooling\win\build-until-done.ps1 -Jobs 12 -ChunkMinutes 45 -MaxChunks 30
 
 It calls tooling\win\build.ps1 (which owns gn gen, the progress line every minute and the
 budget) over and over. build.ps1's exit code says what happened:

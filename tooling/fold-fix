@@ -3,6 +3,9 @@
 #
 # Usage:
 #   tooling/fold-fix <commit> <file>...     on the work branch, with the fixes made in the tree
+#   STEDDING_FOLD_MESSAGE=<file> tooling/fold-fix <commit> <file>...
+#                                           the same, and <commit>'s message replaced by the
+#                                           file's, when the fix changes what the patch says
 #
 # The series is amended with `git commit --fixup=<sha>` and `git rebase --autosquash`
 # (docs/HANDOFF.md, "The loop that works"). That rebase checks out every commit from the
@@ -40,6 +43,9 @@ main() {
   [ "$branch" != HEAD ] || die "HEAD is detached; run this on the work branch"
   old_tip="$(git rev-parse HEAD)"
   git merge-base --is-ancestor "$target" "$old_tip" || die "$1 is not below HEAD"
+  if [ -n "${STEDDING_FOLD_MESSAGE:-}" ]; then
+    [ -s "$STEDDING_FOLD_MESSAGE" ] || die "STEDDING_FOLD_MESSAGE is not a file with a message"
+  fi
 
   work="$(mktemp -d)"
   # shellcheck disable=SC2064  # expand $work now, not at trap time
@@ -70,7 +76,11 @@ main() {
       GIT_INDEX_FILE="$idx" git update-index --cacheinfo \
         "$(git ls-tree "$c" -- "$f" | awk '{print $1}'),$(git hash-object -w "$work/merged"),$f"
     done
-    git cat-file commit "$c" | sed '1,/^$/d' > "$work/message"
+    if [ "$c" = "$target" ] && [ -n "${STEDDING_FOLD_MESSAGE:-}" ]; then
+      cp "$STEDDING_FOLD_MESSAGE" "$work/message"
+    else
+      git cat-file commit "$c" | sed '1,/^$/d' > "$work/message"
+    fi
     prev="$(
       GIT_AUTHOR_NAME="$(git log -1 --format=%an "$c")" \
       GIT_AUTHOR_EMAIL="$(git log -1 --format=%ae "$c")" \
