@@ -1,6 +1,6 @@
 # Feature: Splits
 
-Status: **J1, J4, J6, J7 built; J2 partial**; **J3, J5 planned** (all three open in BACKLOG S-102).
+Status: **J1, J4, J6–J8 built; J2 partial**; **J3, J5 planned** (all three open in BACKLOG S-102).
 Owner docs: `docs/PRODUCT.md` §4. Patch: none of its own; each row lands with the item that implements it.
 
 A split is one row and one unit for every sidebar verb; the model is Chromium's
@@ -17,3 +17,4 @@ split view.
 | J5 | A Space-pinned tab that joins a split leaves the pinned run for the split's row: keep or fix is TBD; the answer is a row here. | TBD | planned · BACKLOG S-102 |
 | J6 | No ring around the panes: page U6–U7 (the outline colours mapped to the row-text tint; the 3 px highlight for a drop target only). | the U6 probe (page U6) | built |
 | J7 | Each pane is the page itself, cut as the one page is outside a split: no padding inside a pane, so both pages start right under the address row, keep the card's gutters to the window's edges (none with the sidebar hidden, sidebar Y19), and lie one card gutter (6 DIP) apart, the resize handle drawn in the gap. Square under the row, the card's radius at their feet (square with no gutter); stacked, the lower pane's top corners take the radius. Chromium padded each pane 5 DIP for its ring: a band of the mat ran between the row and both pages, and the pages were 20 DIP apart (operator, 2026-10-13). The ring shows only to mark a drop target (page U7). | browser: `SidebarFormsTest.SplitPanesAreThePageAGutterApart` (open and hidden: the panes' tops, outer edges and feet where the one page's were, a gutter apart, cut as the card is); live, Mac release build, 2026-10-13 | built |
+| J8 | A split made of tabs in a folder stays in that folder, in their place, and a split with a new tab made from a folder's tab keeps the new tab there too (folders F34, BACKLOG S-136). | `TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere`; browser: `FolderTabsTest.ASplitOfAFoldersTabsStaysInIt` | built |

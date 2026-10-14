@@ -7,6 +7,41 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-14 -- a split keeps its folder, a folder comes back in order, five small defects (patch 0063)
+
+The operator asked for `S-135`, `S-136` and the other small defects known, tested thoroughly.
+Each root cause was traced through the code before its fix, the whole diff was reviewed against
+its callers, each new test was run against the code without its fix and failed, and the build
+was used by hand. One patch, 0063, as the rounds before it.
+
+A split made of a folder's tabs stays in the folder (folders F34, splits J8): Chromium gathers
+the tabs by strip index, and a folder's first and last slots resolve in its parent; they now
+gather into the pivot tab's folder, as into its tab group, and a split with a new tab keeps the
+tab it splits as the pivot. ⇧⌘T, or the Mac's History menu, from another window brought a folder
+back reversed, the order judged by the command's window while the tabs go back to their own
+(folders F19). Using the build found more in the same place: with the folder's own window left
+shorter than the folder's old place, the tabs restored first grew the window past it, and a later
+tab went back at that place, in front of them and, in one case, between a split's panes, which
+broke the split. Chromium records a closing split before any tab of the close, so the list does
+not hold a folder in its order; the close now marks each tab's place, and a folder whose place is
+past its window's end comes back at the end, in order. The chip under a drag was lit at the lookup
+of the drop target, before the drag said it carried an essential (spaces B12). A Space chip in the
+open sidebar showed its floating name and a tooltip (sidebar Y14, `S-70`); the Mac's ⌃N badges on
+the chips went by position, wrong with Focus on, and put a glyph on a dot. "Continue where you
+left off" stayed across a page's full screen (toolbar T33, `S-69`).
+
+`TabDropTest.TheChipUnderADraggedRowIsLit` failed one run in three or four, before this round as
+after. Logging found a product race, not the machine (compare trap 77): a theme change rebuilt
+the Space chips during the drag, a new chip had no bounds until the next paint, the drag's next
+move found no chip under the pointer, and the release dropped nothing. A rebuilt chip now keeps
+its old bounds until the row is laid out (`TabDropTest.AChipRebuiltMidDragStillTakesTheDrop`).
+Left as `S-137`: a folder closed in part, a tab of it in another Space, comes back at the
+folder's end. The three sidebar hover tests of trap 78 failed once more, after a live check
+left the cursor mid-screen: the parking trap 78 credited to "the PC's suite scripts" lived in
+uncommitted scripts, and `tooling/dev` now parks it on Windows
+(`tooling/win/park-cursor.ps1`).
+Tests: on the final code, on both the release and the DCHECK build (DCHECKs and the dangling-pointer detector), 930 of 930 unit tests and 233 of 233 browser tests. Each new test was run against the code without its fix and failed: `TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere`, `FolderTabsTest.ASplitOfAFoldersTabsStaysInIt`, `FolderTabsTest.AFolderRestoredFromAnotherWindowKeepsItsOrder`, `FolderTabsTest.AFolderComesBackInOrderToAShortWindow`, the shown-tab check in `FolderTabsTest.AFolderHoldingASplitComesBackWhole`, `SpaceSwitchTest.FindingTheDropTargetLightsNoChip`, `SpaceSwitchTest.AChipShowsItsNameOnce`, `SidebarFormsTest.TheRestoreBarLeavesAPagesFullScreen` and `TabDropTest.AChipRebuiltMidDragStillTakesTheDrop`. `TabDropTest.*` passed 8 runs in a row after the chip fix. Used by hand on the Windows release build: the floating Space name alone over a chip after a two-second rest, no tooltip window; the restore bar gone in F11 and in a video's own full screen and back after each; a split of a folder's two tabs inside the folder; a folder holding a split and a tab, closed, its window left shorter than its place, restored with ⇧⌘T from a second window, whole and in order, the split first and shown. The macOS build is not run (`S-105`).
+
 ## 2026-10-13 -- the Mac's round checked on Windows (patches 0030, 0062)
 
 The Mac's round (the entry below) pulled onto the PC: the branch rebuilt from patch 0030 on out

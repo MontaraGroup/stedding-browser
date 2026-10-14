@@ -30,7 +30,10 @@ lines; the next rebase folds them where they belong (`PLAN.md` Phase 4, SER-4). 
   0030), a dangling pointer in the tab layout's animation maps that the Mac's checked build
   found, and the operator's three of 2026-10-13: split panes that are the page a gutter
   apart, the row kept off the traffic lights while a hidden sidebar opens, and a private
-  window's row in the page's colour.
+  window's row in the page's colour; 0063, the round of 2026-10-14: a split keeps its
+  folder, a closed folder comes back in its order, a chip lit only once the drag says
+  what it carries and kept through a rebuild, a Space's name shown once, and the restore
+  bar out of full screen.
 
 Most branding is **not** here: it is asset replacement in [../branding/](../branding/),
 which costs no patches at all. A patch is the last resort, not the first.

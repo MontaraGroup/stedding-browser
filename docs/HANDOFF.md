@@ -44,7 +44,7 @@ Eighty-odd traps follow. Read the one for the topic in front of you, not the lis
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
@@ -1041,7 +1041,10 @@ private window has.
     `SidebarRailTest.HoveringTheRailLeavesOneClickHandler`, `.ADriftedPinShowsTheDotOrTheSlash`)
     failed when the cursor rested near the screen's top left, where test windows open, and
     passed with it parked in the bottom-right corner (2026-10-12). Park the cursor before a
-    browser-suite run (the PC's suite scripts now do), and only while the operator is idle.
+    browser-suite run, and only while the operator is idle: `tooling/dev` does it on Windows
+    through `tooling/win/park-cursor.ps1`, which leaves a cursor in use alone (the earlier
+    parking lived in uncommitted scripts, and the suite failed the three again on
+    2026-10-14 after a live check left the cursor mid-screen).
 
 79. **A `base::test::RunUntil` check must only look, never wait.**
     `FolderTabsTest.AlphabetizeFromTheHeaderSortsTheRows` called a helper that runs a loop of
@@ -1103,6 +1106,17 @@ private window has.
     (`BrowserAnimationController::SetAnimationContainerForTesting` with an
     `AnimationContainerTestApi`) and checks every step
     (`WindowButtonsTest.OpeningAHiddenSidebarKeepsTheRowOffTheLights`).
+
+87. **A test that fails one run in three can be the product's race, not the machine: log it
+    before trap 77's rebuild.** `TabDropTest.TheChipUnderADraggedRowIsLit` lost its drop one
+    run in three or four on 2026-10-14, on the round's code and on the code before it. A
+    `LOG(ERROR)` in each of the drag target's calls and in the chip hit test, run until it
+    failed (a loop over the one test with `STEDDING_TEST_LOG` keeping each run's output),
+    showed the chips at 0x0 in the failing run: a theme change had rebuilt them between two
+    drag passes, a new view has no bounds until the next layout, and the one drag event that
+    reached the chip found none. The product had the same gap, one frame wide (a release in it
+    dropped nothing); the fix and its own test followed. Six runs found it, where a rebuild of
+    the old code alone would have blamed the machine.
 
 ## The Windows build
 

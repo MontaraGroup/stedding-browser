@@ -92,7 +92,7 @@ run_test_binary() {
 FEATURE_FILTERS='
 spaces:SpaceWindowTest.*:SpaceModelTest.*:SpaceDragTargetTest.*:SessionRebuildTest.*:CommandBarViewTest.*:SpaceCommandTest.*:SwitcherRulesTest.*:SpaceRegistryTest.Isolated*:SpaceRegistryTest.TwoIsolated*:SpaceStoragePartitionTest.*:SpaceSlideTest.*:SpaceSwipeTest.*:PopupSpaceTest.*:ClearLineTest.*:TabContainerTest.FilteredOut*:*TabStripTest.FilteredOutTabsHideAndComeBack*:SpaceDragTargetTest.*
 sessions:SpaceRegistryTest.Isolated*:SpaceRegistryTest.TwoIsolated*:SpaceStoragePartitionTest.*:SpaceWindowTest.Isolated*:SpaceWindowTest.SharedSpaceStaysOnDefaultPartition:SpaceWindowTest.TwoIsolatedSpacesDoNotShareAPartition:SpaceWindowTest.TurningIsolationOffUsesTheDefaultPartition:SpaceWindowTest.EssentialTabStaysOnTheDefaultPartition:SpaceWindowTest.MovingATabIntoAnIsolatedSpaceRebindsIt:SpaceWindowTest.WindowOpenFromIsolatedTabKeepsThePartition:SpaceWindowTest.RestoredTabInIsolatedSpaceUsesItsPartition:SpaceWindowTest.WipeIsolatedSessionKeepsTheSpaceAndTheId:SpaceWindowTest.DeletingAnIsolatedSpaceWipesItsPartition:SpaceWindowTest.TurningIsolationOffKeepsTheJarForNextTime:SpaceWindowTest.RebindKeepsASleepingTabAsleepWithItsHistory:SpaceWindowTest.BlankWindowIsolationIsOnDisk:SpaceRegistryTest.OldRegistryTokenMeansIsolated:SpaceJarChromeBrowsingDataRemoverDelegateTest.*:SpacePartitionNamesTest.*:SpacePartitionsTest.*:SiteCookiesTest.*
-folders:FolderSessionTest.*:FolderDragTargetTest.*:FolderRowsTest.*:TabCollectionObserverTest.FolderDataChangesReachTheRoot:TabStripModelTest.MoveToNewFolderTakesAWholeSplit:TabStripModelTest.ASplitInsideAFolderNestsInPlace:TabStripModelTest.ANestedFolderStaysWhereItsTabWas:TabStripModelTest.AddToNewFolder*:TabStripModelTest.MoveTabsToFolder*:TabStripModelTest.FoldersDoNotMoveAsUnits:FolderViewTest.*:FolderCommandsTest.*:TabStripModelTest.ReorderFolder*
+folders:FolderSessionTest.*:FolderDragTargetTest.*:FolderRowsTest.*:TabCollectionObserverTest.FolderDataChangesReachTheRoot:TabStripModelTest.MoveToNewFolderTakesAWholeSplit:TabStripModelTest.ASplitInsideAFolderNestsInPlace:TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere:TabStripModelTest.ANestedFolderStaysWhereItsTabWas:TabStripModelTest.AddToNewFolder*:TabStripModelTest.MoveTabsToFolder*:TabStripModelTest.FoldersDoNotMoveAsUnits:FolderViewTest.*:FolderCommandsTest.*:TabStripModelTest.ReorderFolder*
 splits:SpaceWindowTest.SplitDoesNotRestoreFromSessionExtraData:SpaceWindowTest.SplitPanesTakeVerbsTogether:SpaceWindowTest.RecentTabsCountASplitOnce:SessionRebuildTest.SplitTokenIsNotReemitted
 commandbar:CommandBarViewTest.*:SpaceQueryTest.*:SiteCookiesTest.*:NewDocumentsTest.*
 peek:ShouldPeekTest.*:PeekThrottleTest.*:PeekViewTest.*:PeekNewTabTest.*
@@ -363,6 +363,11 @@ cmd_test() {
   # through the widget's event path (clicks on rows, the rail, restore). They
   # open windows on screen but post no OS-level input.
   if [ -n "$browser" ]; then
+    # A cursor resting where test windows open fails the hover and edge tests
+    # (docs/HANDOFF.md, trap 78); the script leaves it alone while it is in use.
+    if is_windows; then
+      powershell.exe -NoProfile -File "$(cygpath -w "$STEDDING_ROOT/tooling/win/park-cursor.ps1")" || true
+    fi
     run_leg stedding_browser_tests "$browser" --test-launcher-jobs=1 || status=$?
   fi
   return "$status"
