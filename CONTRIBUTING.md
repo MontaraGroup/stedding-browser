@@ -11,8 +11,8 @@ what kinds of contributions are useful right now.
 
 - **Running the betas and saying what is wrong.** The fastest way to help: install the
   latest pre-release, use it for a day against whatever you use now, and open an issue
-  for each thing that is worse. `docs/ARC-ROUND2.md` is the ledger of exactly this kind
-  of feedback, round by round, and it is what most of the work has followed.
+  for each thing that is worse. Most of the work so far has followed exactly this kind
+  of feedback; what is open from it is in `BACKLOG.md`.
 - **Discussions and issues.** Questions, critiques of the plan, prior art we missed,
   Chromium fork experience, packaging and signing knowledge — open a GitHub issue or
   discussion. Disagreement with a documented decision is welcome; argue against the

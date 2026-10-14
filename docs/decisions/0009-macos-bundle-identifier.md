@@ -38,9 +38,10 @@ Chromium's default is `org.chromium.Chromium`. We own `stedding.dev`
 
 ## Consequences
 
-- The profile path becomes `~/Library/Application Support/Stedding`. There is no
-  migration story from a Chromium profile and none is promised — importing from other
-  browsers is a separate feature (M6), not a rename.
+- The profile path becomes `~/Library/Application Support/Stedding`. Importing from other
+  browsers is a separate feature (M6), not a rename. (Amended: from beta 8 the first launch
+  copies a profile left in `~/Library/Application Support/Chromium` by the betas before the
+  rename, when Stedding's own folder has none; `docs/INSTALL.md`.)
 - A Developer ID certificate at M7 must be issued for this identifier. Changing it
   afterwards would orphan every installed copy, so M7 signing is a downstream
   consumer of this decision rather than an opportunity to revisit it.

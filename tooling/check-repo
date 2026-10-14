@@ -14,6 +14,7 @@ into something a machine can fail on:
   tests    every test a 'built' behaviour row names exists in the patch series, and
            every test a spec row or BACKLOG cites is in a tooling/dev filter
   wiring   every source the series adds is in a GN sources list, so it compiles
+  args     every build configuration keeps the settings every Stedding build shares
   truth    docs carry no known-stale phrases, feature specs are well formed, and
            every backlog id cited anywhere exists in BACKLOG.md
 
@@ -315,7 +316,7 @@ STALE_PHRASES = [
 ]
 
 # A behaviour row is | <letter><n> | text | test | state |. The letter is the spec's
-# series (B for spaces, Z for shortcuts, ...); "planned" is a row from docs/ROUND6-PLAN.md
+# series (B for spaces, Z for shortcuts, ...); "planned" is a row from docs/history/round6-plan.md
 # whose test is named but not yet green.
 # Ids are a capital and a number (T3), or a capital, a small letter and a
 # number (Cf1) in the specs that share a first letter with another.
@@ -445,13 +446,14 @@ def check_eol() -> None:
 
 # --------------------------------------------------------------------------- tests
 
-# TEST(Suite, Name) and the wrapped TEST_F(Suite,\n    Name) form clang-format
-# produces once the line is too long. Both are added lines in the patch series, which
-# is the only place this repository holds code.
+# TEST(Suite, Name), and the wrapped TEST_F(Suite,\n    Name) form clang-format
+# produces once the line is too long. The patch series is the only place this repository
+# holds code, so a hunk's text before and after is read whole: a renamed test whose first
+# line did not change, or whose diff git aligned with another test's first line, is still
+# one declaration on each side.
 TEST_MACRO = r"(TEST|TEST_F|TEST_P|IN_PROC_BROWSER_TEST_F|IN_PROC_BROWSER_TEST_P)"
-TEST_ONE_LINE = re.compile(r"^([+-])" + TEST_MACRO + r"\(\s*([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*\)")
-TEST_OPEN = re.compile(r"^([+-])" + TEST_MACRO + r"\(\s*([A-Za-z_]\w*)\s*,\s*$")
-TEST_CONT = re.compile(r"^[+-]\s*([A-Za-z_]\w*)\s*\)")
+TEST_DECL = re.compile(r"^[ \t]*" + TEST_MACRO + r"\(\s*([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*\)",
+                       re.MULTILINE)
 # gtest's own filter syntax, which is what these citations are meant to be pasted into.
 TEST_REF = re.compile(r"\b([A-Z][A-Za-z0-9_]*(?:Test|Tests))\.([A-Za-z_*][\w*]*)")
 
@@ -459,41 +461,51 @@ TEST_REF = re.compile(r"\b([A-Z][A-Za-z0-9_]*(?:Test|Tests))\.([A-Za-z_*][\w*]*)
 def test_definitions() -> dict[tuple[str, str], tuple[str, str]]:
     """(suite, name) -> (macro, file) for every test the whole series defines. A
     later patch that deletes a test takes it out again, so a spec cannot cite a
-    test that no longer exists; one that moves it records its new file."""
+    test that no longer exists; one that moves it records its new file. A test a
+    hunk shows unchanged is on both sides of it, so it is taken out and put back."""
     if _DEFINITIONS:
         return _DEFINITIONS[0]
     defs: dict[tuple[str, str], tuple[str, str]] = {}
     for patch in sorted((ROOT / "patches").glob("*.patch")):
         added: list[tuple[str, str, str, str]] = []
         removed: list[tuple[str, str]] = []
-        pending = None
         path = ""
+        before: list[str] = []
+        after: list[str] = []
+
+        def end_hunk() -> None:
+            for m in TEST_DECL.finditer("\n".join(before)):
+                removed.append((m.group(2), m.group(3)))
+            for m in TEST_DECL.finditer("\n".join(after)):
+                added.append((m.group(2), m.group(3), m.group(1), path))
+            before.clear()
+            after.clear()
+
+        in_hunk = False
         for raw in patch.read_text(encoding="utf-8", errors="replace").splitlines():
             if raw.startswith("diff --git "):
+                end_hunk()
+                in_hunk = False
                 path = raw.split(" b/", 1)[-1]
-                pending = None
                 continue
-            m = TEST_ONE_LINE.match(raw)
-            if m:
-                if m.group(1) == "+":
-                    added.append((m.group(3), m.group(4), m.group(2), path))
-                else:
-                    removed.append((m.group(3), m.group(4)))
-                pending = None
+            if raw.startswith("@@"):
+                end_hunk()
+                in_hunk = True
                 continue
-            m = TEST_OPEN.match(raw)
-            if m:
-                pending = (m.group(1), m.group(2), m.group(3), path)
+            if not in_hunk or raw.startswith("\\"):
                 continue
-            if pending:
-                cont = TEST_CONT.match(raw)
-                if cont:
-                    sign, macro, suite, where = pending
-                    if sign == "+":
-                        added.append((suite, cont.group(1), macro, where))
-                    else:
-                        removed.append((suite, cont.group(1)))
-                pending = None
+            sign, text = raw[:1], raw[1:]
+            if sign in (" ", ""):
+                before.append(text)
+                after.append(text)
+            elif sign == "-":
+                before.append(text)
+            elif sign == "+":
+                after.append(text)
+            else:
+                # The signature line after the last file ("-- ", the git version).
+                in_hunk = False
+        end_hunk()
         for suite, name in removed:
             defs.pop((suite, name), None)
         for suite, name, macro, where in added:
@@ -561,7 +573,7 @@ def check_tests() -> None:
     to name one.
 
     Existing is not enough: six tests that 'built' rows cite as proof were in no
-    tooling/dev filter, so no sweep ever ran them (PLAN.md REPO-2). So every test
+    tooling/dev filter, so no sweep ever ran them (docs/history/plan-2026-09-26.md REPO-2). So every test
     the series defines that a spec row (any state) or BACKLOG cites must match a
     part of a tooling/dev filter, or be one of Stedding's browser tests in
     chrome/test/stedding, which `tooling/dev test browser` runs whole. A citation
@@ -686,6 +698,25 @@ def check_wiring() -> None:
                       "so nothing compiles it")
 
 
+# Settings every file under tooling/args/ must keep. Each was a decision, and a new
+# configuration copied from Chromium's defaults would drop it without a word: the
+# field-trial config switches Google's experiments on in any build that does not set
+# it (docs/features/privacy.md Q10, trap 41), and the codecs are ADR 0008.
+ARGS_REQUIRED = (
+    "disable_fieldtrial_testing_config = true",
+    "proprietary_codecs = true",
+)
+
+
+def check_args() -> None:
+    for path in sorted((ROOT / "tooling" / "args").glob("*.gn")):
+        text = path.read_text(encoding="utf-8")
+        lines = {re.sub(r"\s+", " ", ln.split("#", 1)[0]).strip() for ln in text.splitlines()}
+        for setting in ARGS_REQUIRED:
+            if setting not in lines:
+                fail(path.relative_to(ROOT).as_posix(), f"does not set `{setting}`")
+
+
 CHECKS = {
     "shell": check_shell,
     "links": check_links,
@@ -699,6 +730,7 @@ CHECKS = {
     "truth": check_truth,
     "tests": check_tests,
     "wiring": check_wiring,
+    "args": check_args,
 }
 
 

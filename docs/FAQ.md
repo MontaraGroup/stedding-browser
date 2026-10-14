@@ -32,7 +32,8 @@ anyone's surveillance or control. How the name was chosen: [NAMING.md](NAMING.md
 
 **Who makes it?**
 One maintainer, in the open, on this repository. Most of the work follows feedback
-from real use recorded in [ARC-ROUND2.md](ARC-ROUND2.md).
+from real use: open work is in [BACKLOG.md](../BACKLOG.md), and what each round built is
+in [PROJECT-LOG.md](PROJECT-LOG.md).
 
 ## Installing and updating
 

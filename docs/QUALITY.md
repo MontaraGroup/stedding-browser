@@ -129,7 +129,7 @@ are the record so far.
 - **VoiceOver:** every Stedding surface (sidebar, Spaces, command bar, split
   controls, settings) is navigable and operable with VoiceOver: elements have correct
   roles and labels, focus is announced, no unreachable controls. Verified by a scripted
-  VoiceOver walkthrough per release. Not yet done for any release (`PLAN.md` WIN-3).
+  VoiceOver walkthrough per release. Not yet done for any release (`S-129`, `docs/history/plan-2026-09-26.md` WIN-3).
 - **Full keyboard navigation:** every action available by mouse is available by
   keyboard; focus is always visible; no focus traps. Verified by completing the UX
   walkthrough with the mouse disconnected.

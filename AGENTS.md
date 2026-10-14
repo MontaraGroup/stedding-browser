@@ -4,7 +4,8 @@ You are an AI agent (or a human) opening this repository cold. This file is the 
 what the project is, the rules, how to work, where to look. It is model-agnostic and
 tool-agnostic; everything you need is in this repo, nothing depends on a particular
 assistant, session or machine. What was built and when is `docs/PROJECT-LOG.md`; the order
-of work is `PLAN.md`; the procedure is `docs/AGENT-LOOP.md`; the traps are `docs/HANDOFF.md`.
+of work is `BACKLOG.md`; the owner's decisions and the rules of done are `PLAN.md`; the
+procedure is `docs/AGENT-LOOP.md`; the traps are `docs/HANDOFF.md`.
 
 ## What this project is
 
@@ -65,8 +66,8 @@ Concretely (full detail in `docs/QUALITY.md`):
 
 1. `tooling/dev status`: the pin, the patch count, whether the checkout and the test
    binaries exist. Every number in a doc comes from here or from a command, never from prose.
-2. `PLAN.md`: the owner's decisions and the status block at the top, then the work order
-   until its Phase 1 is done; `BACKLOG.md` after that.
+2. `PLAN.md` (short: the owner's decisions, when an item is done), then `BACKLOG.md`, the
+   order of work.
 3. `docs/HANDOFF.md`: the "Fast path" and the trap index at its top. Read a trap when its
    topic comes up.
 4. Ask the operator **once**, in one message, for what you would otherwise find out hours in
@@ -130,9 +131,9 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 `docs/PROJECT-LOG.md` exists for the record.
 
 - The pin and the series: `tooling/dev status`. The Windows PC is the development machine
-  since 2026-09-29; the Mac holds the Mac-only checks (`PLAN.md` lists which).
-- The work order: `PLAN.md`. Phase 0 is the proof that what exists works; "Where Phase 0
-  stands", at the end of its Phase 0, says what each open item still waits on.
+  since 2026-09-29; the Mac holds the Mac-only checks (`BACKLOG.md` rows say which wait on it).
+- The work order: `BACKLOG.md`, in priority order; its first "Checks still owed" row is the
+  core-loop gate that new features wait for (`PLAN.md`).
 - What is released: `docs/release-notes/` has one file per release; `gh release list` is
   the truth. The site (`stedding.dev`) reads the same list.
 - What is open: `BACKLOG.md`, by id.
@@ -145,7 +146,8 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 | `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | The user-facing pages the README links: installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
 | `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch |
 | `docs/features/` | One spec per feature; numbered behaviours, each with its test id. The definition of done |
-| `PLAN.md` | The order of work until its Phase 1 is done: the 2026-09-26 audit's items by phase, the owner's decisions, dated status blocks |
+| `PLAN.md` | The owner's standing decisions and when an item counts as done |
+| `docs/history/` | Finished plans and ledgers still cited by id: the 2026-09-26 audit (TAB-1, SPC-4, ...), round 6, the operator's rounds 2 to 11 |
 | `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids |
 | `docs/HANDOFF.md` | Where things live, the fast path, dev parameters, the traps already paid for (with an index) |
 | `docs/PROJECT-LOG.md` | What was built, round by round, with the evidence. History, not instructions |
@@ -173,7 +175,7 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
   needs a number we don't have, mark it `TBD`.
 - **Keep this file true, and short.** If you change direction (platforms, fork strategy,
   license), update AGENTS.md and the relevant ADR in the same commit. Put history in
-  `docs/PROJECT-LOG.md`, status in `PLAN.md`, and nothing dated or counted here.
+  `docs/PROJECT-LOG.md`, open work in `BACKLOG.md`, and nothing dated or counted here.
 - Commit messages: conventional, imperative, explain why when it isn't obvious.
 - When a task is ambiguous, the tiebreaker is the mandate above: what gets a polished,
   installable browser into users' hands sooner?

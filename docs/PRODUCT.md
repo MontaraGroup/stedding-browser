@@ -43,7 +43,8 @@ in-product reference (`features/shortcuts.md`) and in `SHORTCUTS.md`.
 ## 1. Sidebar and tabs
 
 Top to bottom: the essentials, the Space title, **Pinned Tabs**, a divider (Stedding's
-Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library and a `+`.
+Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library (not built
+yet, `docs/features/library.md`) and a `+`.
 
 - **Sidebar** **[1.0]** — a vertical tab strip in place of the horizontal one, on
   Chromium's own vertical tabs (ADR 0010). `⌘S` closes and opens it. Closed, it shrinks to
@@ -122,7 +123,7 @@ Clear line), **Unpinned Tabs**, and at the bottom the Space icons, the Library a
   unpinned section, colour and icon: one tab strip filtered by the active Space (ADR 0015)
   and one Space list for every window (ADR 0016; `features/spaces.md`). `⌃1`…`⌃9` focuses
   a Space and `⌥⌘←/→` moves to the next or previous one; a two-finger swipe in the sidebar
-  switches, on the Mac only so far (`PLAN.md` TAB-31); the icons live at the sidebar's
+  switches, on the Mac only so far (`docs/history/plan-2026-09-26.md` TAB-31); the icons live at the sidebar's
   bottom.
 - **Create, rename, reorder, delete** **[1.0]** — `+` creates; the Space's title row opens
   its menu (rename, colour, icon, delete); drag a Space icon, or Move Left / Move Right, to

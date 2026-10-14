@@ -5,7 +5,7 @@ every fifteen minutes and starting the next chunk by hand.
 
 Usage (PowerShell, from anywhere; run it detached, see below):
   tooling\win\build-until-done.ps1 -Config win-checks -Targets unit_tests,stedding_browser_tests
-  tooling\win\build-until-done.ps1 -Jobs 22 -ChunkMinutes 45 -MaxChunks 30
+  tooling\win\build-until-done.ps1 -Jobs 16 -ChunkMinutes 45 -MaxChunks 30
 
 It calls tooling\win\build.ps1 (which owns gn gen, the progress line every minute and the
 budget) over and over. build.ps1's exit code says what happened:
@@ -32,14 +32,14 @@ last line is SUPERVISOR_EXIT=<code>. Wait for that line, never for a clock:
 
 Start it detached so the tool that started it cannot take it down (trap 54):
   Start-Process powershell -ArgumentList '-NoProfile','-File','tooling\win\build-until-done.ps1',
-    '-Config','win-checks','-Jobs','22' -WindowStyle Hidden
+    '-Config','win-checks','-Jobs','12' -WindowStyle Hidden
 
 Environment as build.ps1: STEDDING_CHROMIUM_SRC, STEDDING_DEPOT_TOOLS, STEDDING_VPYTHON_ROOT.
 #>
 param(
   [string]$Config = "win-release",
   [string[]]$Targets = @("chrome", "mini_installer", "unit_tests", "stedding_browser_tests"),
-  [int]$Jobs = 22,
+  [int]$Jobs = 12,  # 22 ran win-checks out of commit on 32 GB (docs/HANDOFF.md, trap 74)
   [int]$ChunkMinutes = 45,
   [int]$MaxChunks = 40,
   [string]$Src = $env:STEDDING_CHROMIUM_SRC

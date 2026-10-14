@@ -2,7 +2,7 @@
 # is routed: a click reaches a window as WM_NCHITTEST first, and a frame that calls a
 # point HTCAPTION turns the press into a window drag before any view sees it. A posted
 # WM_LBUTTONDOWN (tooling\win\capture.ps1's Post-Click) never asks that question, so a
-# row that the frame calls caption looks fine to it and dead to a person (PLAN.md
+# row that the frame calls caption looks fine to it and dead to a person (the 2026-09-26 audit
 # TAB-1; docs/features/tabs.md R24: "the window treats every row as client area,
 # never as caption"). SendMessage of WM_NCHITTEST moves nothing and types nothing:
 # it needs neither focus nor input (docs/HANDOFF.md, trap 36).

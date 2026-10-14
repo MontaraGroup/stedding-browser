@@ -13,33 +13,11 @@ below always means: a fresh macOS user account can install the artifact and run 
 without developer tools, without terminal commands, and without reading build docs
 (Windows/Linux equivalents apply from M8/M9 on).
 
-**Where this stands (2026-10-12):** the current release is `v0.2.0-beta.14` on Chromium
-155.0.8059.12, a Windows x64 preview (unsigned) out first, its macOS image to follow from
-the Mac; until it does, beta 12's macOS image (Apple silicon, signed and notarized, as every
-macOS image is from beta 10 on) is the newest one. The ladder was climbed out of order,
-chasing feedback from real use (`docs/ARC-ROUND2.md`), and each feature's own spec under
-`docs/features/` is the record of what passes. `PLAN.md` is the finish-or-cut pass over the
-features of M2 to M6 that the 2026-09-26 audit asked for; its items keep their own ids there
-and are not repeated here. Beta 14's patches 0060 and 0061 closed sixteen `BACKLOG.md` ids
-and three parts of `S-125` (BACKLOG's Done table). In short, with every open `BACKLOG.md` id
-under the milestone it belongs to:
-
-| Milestone | State | Open in `BACKLOG.md` |
-|---|---|---|
-| M0 vanilla build | Done | -- |
-| M1 branded build | Done, except the recorded ten-minute idle-network run and two calls to Google a fresh profile makes unasked; Safe Browsing does not work without a key | `S-50`, `S-54`, `S-67`, `S-75` |
-| M2 sidebar | Done, and past it: three forms (open, a rail of icons, hidden), density and text size, folders, pins | `S-65` (fixed; the owner's confirmation), `S-107` (folders in the pinned run), `S-111`, `S-112`, `S-115` |
-| M3 workspaces (Spaces) | Done, with independent cookie jars per Space (ADR 0019) | `S-70`, `S-126` |
-| M4 command bar | Done but K12 (⌘L's prefilled address, partial); the address row stayed beside it | `S-104`, `S-127` |
-| M5 split view | Partly: Chromium's own split view, with Stedding's verbs on both panes; a split comes back whole after a restart (J1); ⌘W on a split (J3), a pin joining a split (J5) and ⌘1–9 counting a split once (J2) are open | `S-102`, `S-113` |
-| M6 settings, import, polish | Done but for importing from Chrome, Brave and the new Edge (`PLAN.md` decision 8, Phase 2) and the VoiceOver pass (`PLAN.md` WIN-3) | `S-48`, `S-51`, `S-57`, `S-69`, `S-79`, `S-103`, `S-110`, `S-117`, `S-134` |
-| M7 signed, updating, site | The site (https://stedding.dev) and the Mac's signing are done; automatic updates are next, the Mac first | `S-74`, `S-49`, `S-59` |
-| M8 Windows | A preview with every feature, Arc's keys for Windows and a per-user installer; little windows, signing, updates and CI open | `S-56`, `S-55`, `S-71`, `S-72`, `S-81` |
-| M9 Linux | Not started; there is no Intel Mac build either | -- |
-| M10 beyond parity | Added 2026-10-11 (ADR 0021): the ideas taken from Nook and Aura; seven of them, and three parts of `S-125`, built in beta 14 | `S-88` to `S-96`, `S-98` to `S-101`, `S-118`, `S-125` |
-| 1.0 quality gate | Not reached | `S-61` (the rows `docs/PRODUCT.md` marks [1.0] that no milestone names: the Library, the mini player), `S-66`, `S-106`, `S-128`, `S-129` (spec rows short of a test or a look) |
-
-Outside the ladder: `S-47` (a capture probe) and `S-58` (the Mac's disk).
+**Where this stands.** What is released is `docs/release-notes/` (and `gh release list`); what
+is open is `BACKLOG.md`, whose rows name their milestone where it matters; what each feature
+does today is its spec under `docs/features/`. The ladder was climbed out of order, chasing
+feedback from real use (`docs/PROJECT-LOG.md`). The note under each milestone's heading says
+what is left of it; this page keeps no table of open ids, because one went stale within days.
 
 ---
 
@@ -79,7 +57,8 @@ Acceptance criteria:
 > baselines are in `docs/perf/README.md` (`S-13`, `S-31`, `S-37`). The first recorded
 > idle-network run (2026-09-28, headless, about four and a half minutes, `docs/PRIVACY.md`)
 > found three contacts the list lacked: network time, Google's push service (`S-54`) and
-> the account check (`S-67`). The ten-minute run with a window is `S-50`.
+> the account check (`S-67`), both stopped since (patch 0030). The ten-minute run with a
+> window followed on 2026-10-12; what it could not show is `S-50`.
 
 **Goal:** the same browser, but ours: name, icons, defaults, and zero telemetry —
 delivered as a .dmg a user can install.
@@ -135,7 +114,8 @@ Scope:
   scope here rather than there is how a phantom requirement gets built.
 - Collapse/expand the sidebar; toggle shortcut; state persists across restarts.
 - Vertical tabs on by default: the `vertical_tabs.enabled` pref defaults on, so the
-  sidebar fully replaces the horizontal strip as specified in `docs/PRODUCT.md`. Any
+  sidebar replaces the horizontal strip; the switch back to horizontal tabs stays
+  (`PLAN.md`, decision 1; `docs/PRODUCT.md`). Any
   look-and-feel divergence lives in a subclass in new files, never as edits to
   `browser_view.cc` or `vertical_tab_strip_region_view.cc` — 412 and 181 commits a
   year respectively.
@@ -239,8 +219,8 @@ Acceptance criteria:
 ## M6 — Settings, import, polish (public beta)
 
 > **Done but for two things:** importing from Chrome, Brave and the new Edge (`PLAN.md`
-> decision 8, Phase 2; Arc, Safari and Firefox import today on the Mac, and Arc is the Mac's
-> alone, `S-81`) and the VoiceOver pass (`PLAN.md` WIN-3). Two planned rows of the Arc import
+> decision 8, `S-101`; Arc, Safari and Firefox import today on the Mac, and Arc is the Mac's
+> alone, `S-81`) and the VoiceOver pass (`docs/history/plan-2026-09-26.md` WIN-3). Two planned rows of the Arc import
 > are open too: Arc's splits and archived items, and a 400-tab import inside the budgets
 > (`S-103`). Settings → Stedding reads in sections since beta 13 (settings T13).
 

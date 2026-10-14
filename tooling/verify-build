@@ -17,10 +17,9 @@ the screen (macOS gives a full-screen window a Space of its own). Skip it with
 Required to pass: the app launches, renders a page, WebGL 1 and 2 draw and read back
 a known colour, and at least one royalty-free video codec decodes a real frame.
 
-Not required: H.264 and AAC. A vanilla Chromium build is compiled without proprietary
-codecs, so those are reported and expected to fail. That gap is real and a shipping
-browser cannot keep it — the decision belongs to M1 and is a licensing question, not
-a technical one. See the "Codecs" section of docs/ARCHITECTURE.md.
+H.264 and AAC are required as well: every Stedding configuration builds the proprietary
+codecs (ADR 0008, every file under tooling/args/), so a build that cannot play an MP4 of
+H.264 and AAC is a broken build, not a vanilla one.
 """
 
 from __future__ import annotations
@@ -219,8 +218,10 @@ def report(results: dict, offline: bool) -> int:
         elif required:
             line("FAIL", label, m.get("reason", "did not decode a frame"))
         else:
-            line("note", label, (m.get("reason") or "did not decode")
-                 + "  — expected on a vanilla build, see docs/ARCHITECTURE.md")
+            # Not royalty-free, but every Stedding build has it (ADR 0008).
+            line("FAIL", label, (m.get("reason") or "did not decode")
+                 + "  — every Stedding config builds proprietary codecs (ADR 0008)")
+            failures += 1
 
     if not royalty_free_ok:
         failures += 1

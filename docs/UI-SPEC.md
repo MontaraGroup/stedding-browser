@@ -94,7 +94,8 @@ The captures above are beta 7's, taken with `tooling/capture-state` at 1400×880
 needs neither the keyboard nor the pointer. The measurements that matter are probes in
 `tooling/probes/window.json`; `tooling/dev capture --assert tooling/probes/window.json`
 checks them against a fresh capture, and `tooling/check-geometry` re-measures the gutters
-and the corner radius in the committed images. Both capture tools run on macOS.
+and the corner radius in the committed images. Both capture tools run on macOS; on Windows the
+capture is `tooling\win\capture.ps1`.
 
 The corner radius, the row height and the pill radius are feature parameters, not
 constants, so a value can be tried on a build that already exists, with no compile:

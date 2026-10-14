@@ -244,13 +244,13 @@ pin, upstream commits mixed in — is refused.
 |---|---|---|
 | `release` | Day-to-day development, and every published image so far | Optimised, no symbols, single binary, no PGO or LTO. **Never quote performance numbers from this config.** |
 | `debug` | Debugging Chromium and our patches | Component build: one target relinks a small library, not the browser. |
-| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet: every image so far is `release` on the Mac or `win-release` on Windows. Which configuration should ship is TBD (`PLAN.md` PLT-9, REPO-13). |
+| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet: every image so far is `release` on the Mac or `win-release` on Windows. Which configuration should ship is TBD (`docs/history/plan-2026-09-26.md` PLT-9, REPO-13). |
 | `vanilla` | The vanilla half of a performance comparison | Identical to `official`, built from the checkout detached at the pin with the branding reverted, so the patch series is the only difference (`docs/perf/README.md`). |
 | `win-release` | The Windows build and its installer | The Mac's `release` on the other platform: non-component, no symbols, no PGO (ADR 0018). |
-| `win-asan` | AddressSanitizer runs of the lifetime tests (PLAN.md TAB-7, TAB-8, TAB-9, SPC-1 to SPC-3, WIN-1, WEB-2) | `is_asan`, line-table symbols so a report names functions. Test targets only; the Mac has no counterpart. |
+| `win-asan` | AddressSanitizer runs of the lifetime tests (docs/history/plan-2026-09-26.md TAB-7, TAB-8, TAB-9, SPC-1 to SPC-3, WIN-1, WEB-2) | `is_asan`, line-table symbols so a report names functions. Test targets only; the Mac has no counterpart. |
 | `win-checks` | The dangling-pointer detector with DCHECKs on (the same items, and WIN-2) | Release code with `dcheck_always_on` and BackupRefPtr; needs `--enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr` at run time. Test targets only. |
 | `mac-checks` | The same checks on the Mac, whose own code paths `win-checks` never compiles (since 2026-10-12) | `win-checks` for arm64 Mac, with no line tables (they would not fit beside `out/release` above the build's disk floor); the same run-time flag, which `STEDDING_TEST_OUT=mac-checks tooling/dev test` adds. Test targets only. |
-| `win-debug` | A debug build for the checks PLAN.md asks of one (WIN-2) and for debugging on Windows | `debug` for the other platform: a component build. Test target only; the largest output this project asks a disk for. |
+| `win-debug` | A debug build for the checks the 2026-09-26 audit asked of one (WIN-2) and for debugging on Windows | `debug` for the other platform: a component build. Test target only; the largest output this project asks a disk for. |
 
 The full args, with the reasoning for each, are in `tooling/args/`. The four sanitizer
 and check configurations are throwaway: build the test targets, run the tests, delete
@@ -262,8 +262,9 @@ has not been measured (TBD).
 
 ### Codecs
 
-The M0 build is vanilla: upstream defaults, which means `ffmpeg_branding = "Chromium"`
-and no proprietary codecs. Video plays via VP8/VP9/AV1/Opus, so WebM and YouTube work,
+The M0 build was vanilla: upstream defaults, which means `ffmpeg_branding = "Chromium"`
+and no proprietary codecs. Every Stedding configuration has built them since (ADR 0008);
+what follows is why. Video plays via VP8/VP9/AV1/Opus, so WebM and YouTube work,
 but H.264 and AAC do not. Shipping a browser without H.264 is not viable for a real
 product, and enabling it carries patent-licensing consequences rather than merely
 technical ones. ADR 0008 decides it for Stedding's builds.
@@ -466,7 +467,7 @@ features that users expect from a real product just to make a purity claim.
   hash-prefix Safe Browsing on by default, real-time "Enhanced" never turned on.
   Today the builds carry no Google API key, which list updates need: on a
   running build the first update was refused with HTTP 400 and the lists stay
-  empty (PLAN.md WEB-5, 2026-09-28; `PRIVACY.md`, the recorded run).
+  empty (docs/history/plan-2026-09-26.md WEB-5, 2026-09-28; `PRIVACY.md`, the recorded run).
 - **Component updater: kept, to be pointed at infrastructure we control where feasible.**
   Some components matter for security and site compatibility (certificate revocation
   lists, Widevine for DRM playback). Today every component comes from Google, as in
@@ -540,8 +541,8 @@ Three findings worth knowing before M1 is planned:
   Two more surfaces hardcode ids — `chrome/updater/branding.gni` and
   `chrome/enterprise_companion/branding.gni` — but neither ships for us:
   `enable_updater = is_chrome_branded && …` (`chrome/browser/buildflags.gni:16`), and we
-  build unbranded. They become relevant only if the Chromium updater is adopted at M7,
-  which is an open ADR.
+  build unbranded. They become relevant only if the Chromium updater is adopted, which ADR 0014
+  did not choose (update checks go to GitHub Releases).
 
   Some hardcoded `org.chromium.*` strings should deliberately **stay**: the
   `org.chromium.extension` and `org.chromium.shortcut` UTIs and the clipboard pasteboard

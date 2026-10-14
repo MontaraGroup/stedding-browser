@@ -82,8 +82,8 @@ tooling/update-pin                # is there a newer stable? changes nothing
 tooling/update-pin --apply        # take it, sync, check the series still applies
 ```
 
-A scheduled workflow (`.github/workflows/upstream.yml`) runs this comparison daily and
-opens a single tracking issue when we fall behind. A patch that conflicts on a routine
+A scheduled workflow (`.github/workflows/upstream.yml`) runs the same comparison daily
+through `tooling/check-pin`, and opens a single tracking issue when we fall behind. A patch that conflicts on a routine
 point release is in the wrong layer — see
 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 

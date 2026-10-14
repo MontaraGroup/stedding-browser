@@ -11,7 +11,10 @@
 #                                             tests (what `all` runs, less those two)
 #   tooling/dev test browser [filter] [--no-build|--list]
 #                                             build and run stedding_browser_tests
-#                                             (real windows; `all` runs them too)
+#                                             (real windows; `all` runs them too;
+#                                             STEDDING_BROWSER_JOBS at a time: 4 on Windows, 1 on the Mac)
+#   tooling/dev test rebase [--no-build|--list]
+#                                             Chromium's wider tab suites, after a pin bump
 #   tooling/dev capture [capture-ui args...]  screenshot the built window
 #   tooling/dev capture --assert <probes.json> capture as the spec says, check its probes
 #   tooling/dev patch                         commits on stedding-work -> patches/, then check-repo
@@ -30,11 +33,11 @@
 # running anything when a part matches no test: a renamed, deleted or disabled
 # test cannot drop out of a sweep that still says SUCCESS. --list does only that
 # and prints the tests; it builds nothing. tooling/check-repo fails a spec or
-# BACKLOG row that cites a test no filter here runs (PLAN.md REPO-2).
+# BACKLOG row that cites a test no filter here runs (docs/history/plan-2026-09-26.md REPO-2).
 #
-# "upstream" is not a feature: it is Chromium's own suites around what the series
-# touches (docs/HANDOFF.md, trap 31), so `tooling/dev test all` is the release sweep
-# and `tooling/dev test upstream` the half of it nobody used to run.
+# "upstream" is not a feature: it is Chromium's own suites over the code the series
+# changes (docs/HANDOFF.md, trap 31), so `tooling/dev test all` is the release sweep.
+# `rebase` is the wider ring of Chromium suites, run after a pin bump (REBASE_FILTERS).
 #
 # Under Git for Windows the same command runs the same filters against
 # out/win-release/<binary>.exe. The build itself is `tooling\win\build.ps1`
@@ -90,16 +93,16 @@ run_test_binary() {
 
 # name:filter, one per line. bash 3.2 has no associative arrays.
 FEATURE_FILTERS='
-spaces:SpaceWindowTest.*:SpaceModelTest.*:SpaceDragTargetTest.*:SessionRebuildTest.*:CommandBarViewTest.*:SpaceCommandTest.*:SwitcherRulesTest.*:SpaceRegistryTest.Isolated*:SpaceRegistryTest.TwoIsolated*:SpaceStoragePartitionTest.*:SpaceSlideTest.*:SpaceSwipeTest.*:PopupSpaceTest.*:ClearLineTest.*:TabContainerTest.FilteredOut*:*TabStripTest.FilteredOutTabsHideAndComeBack*:SpaceDragTargetTest.*
-sessions:SpaceRegistryTest.Isolated*:SpaceRegistryTest.TwoIsolated*:SpaceStoragePartitionTest.*:SpaceWindowTest.Isolated*:SpaceWindowTest.SharedSpaceStaysOnDefaultPartition:SpaceWindowTest.TwoIsolatedSpacesDoNotShareAPartition:SpaceWindowTest.TurningIsolationOffUsesTheDefaultPartition:SpaceWindowTest.EssentialTabStaysOnTheDefaultPartition:SpaceWindowTest.MovingATabIntoAnIsolatedSpaceRebindsIt:SpaceWindowTest.WindowOpenFromIsolatedTabKeepsThePartition:SpaceWindowTest.RestoredTabInIsolatedSpaceUsesItsPartition:SpaceWindowTest.WipeIsolatedSessionKeepsTheSpaceAndTheId:SpaceWindowTest.DeletingAnIsolatedSpaceWipesItsPartition:SpaceWindowTest.TurningIsolationOffKeepsTheJarForNextTime:SpaceWindowTest.RebindKeepsASleepingTabAsleepWithItsHistory:SpaceWindowTest.BlankWindowIsolationIsOnDisk:SpaceRegistryTest.OldRegistryTokenMeansIsolated:SpaceJarChromeBrowsingDataRemoverDelegateTest.*:SpacePartitionNamesTest.*:SpacePartitionsTest.*:SiteCookiesTest.*
-folders:FolderSessionTest.*:FolderDragTargetTest.*:FolderRowsTest.*:TabCollectionObserverTest.FolderDataChangesReachTheRoot:TabStripModelTest.MoveToNewFolderTakesAWholeSplit:TabStripModelTest.ASplitInsideAFolderNestsInPlace:TabStripModelTest.SplittingTwoTabsOfAFolderKeepsTheSplitThere:TabStripModelTest.ANestedFolderStaysWhereItsTabWas:TabStripModelTest.AddToNewFolder*:TabStripModelTest.MoveTabsToFolder*:TabStripModelTest.FoldersDoNotMoveAsUnits:FolderViewTest.*:FolderCommandsTest.*:TabStripModelTest.ReorderFolder*
+spaces:SpaceWindowTest.*:SpaceModelTest.*:SpaceDragTargetTest.*:SessionRebuildTest.*:CommandBarViewTest.*:SpaceCommandTest.*:SwitcherRulesTest.*:SpaceRegistryTest.Isolated*:SpaceRegistryTest.TwoIsolated*:SpaceStoragePartitionTest.*:SpaceSlideTest.*:SpaceSwipeTest.*:PopupSpaceTest.*:ClearLineTest.*:TabContainerTest.FilteredOut*:*TabStripTest.FilteredOutTabsHideAndComeBack*
+sessions:SpaceRegistryTest.Isolated*:SpaceRegistryTest.TwoIsolated*:SpaceStoragePartitionTest.*:SpaceWindowTest.Isolated*:SpaceWindowTest.SharedSpaceStaysOnDefaultPartition:SpaceWindowTest.TwoIsolatedSpacesDoNotShareAPartition:SpaceWindowTest.TurningIsolationOffUsesTheDefaultPartition:SpaceWindowTest.EssentialTabStaysOnTheDefaultPartition:SpaceWindowTest.MovingATabIntoAnIsolatedSpaceRebindsIt:SpaceWindowTest.WindowOpenFromIsolatedTabKeepsThePartition:SpaceWindowTest.RestoredTabInIsolatedSpaceUsesItsPartition:SpaceWindowTest.WipeIsolatedSessionKeepsTheSpaceAndTheId:SpaceWindowTest.DeletingAnIsolatedSpaceWipesItsPartition:SpaceWindowTest.TurningIsolationOffKeepsTheJarForNextTime:SpaceWindowTest.RebindKeepsASleepingTabAsleepWithItsHistory:SpaceWindowTest.BlankWindowIsolationIsOnDisk:SpaceRegistryTest.OldRegistryTokenMeansIsolated:SpaceJarChromeBrowsingDataRemoverDelegateTest.*:SpacePartitionNamesTest.*:SpacePartitionsTest.*:SiteCookiesTest.*:SpaceWindowTest.IsolationReachesEveryWindow:SpaceWindowTest.ReplacedContentsKeepTheNameAndTheJar
+folders:FolderSessionTest.*:FolderDragTargetTest.*:FolderRowsTest.*:FolderViewTest.*:FolderCommandsTest.*:TabCollectionObserverTest.FolderDataChangesReachTheRoot:TabStripModelTest.*Folder*
 splits:SpaceWindowTest.SplitDoesNotRestoreFromSessionExtraData:SpaceWindowTest.SplitPanesTakeVerbsTogether:SpaceWindowTest.RecentTabsCountASplitOnce:SessionRebuildTest.SplitTokenIsNotReemitted
 commandbar:CommandBarViewTest.*:SpaceQueryTest.*:SiteCookiesTest.*:NewDocumentsTest.*
 peek:ShouldPeekTest.*:PeekThrottleTest.*:PeekViewTest.*:PeekNewTabTest.*
 settings:SteddingPrefsTest.*:SteddingVersionTest.*
 windows:SpaceRegistryTest.*:SpaceWindowTest.SecondWindowSeesTheSameSpaces:SpaceWindowTest.BlankWindowHasItsOwnSpaces:SessionRebuildTest.*:SpaceWindowTest.Isolated*:SpaceWindowTest.SharedSpaceStaysOnDefaultPartition:SpaceWindowTest.TwoIsolatedSpacesDoNotShareAPartition:SpaceWindowTest.TurningIsolationOffUsesTheDefaultPartition:SpaceWindowTest.EssentialTabStaysOnTheDefaultPartition:SpaceWindowTest.MovingATabIntoAnIsolatedSpaceRebindsIt:SpaceWindowTest.WindowOpenFromIsolatedTabKeepsThePartition:SpaceWindowTest.RestoredTabInIsolatedSpaceUsesItsPartition:SpaceStoragePartitionTest.*:ChromePaths.*
 little:LittleWindowTest.*
-private:SteddingColorMixerTest.*:TabArchiverTest.SkipsOffTheRecordWindows:SpaceWindowTest.PrivateWindowHasNoSpaceModel:PrivateWindowTest.*
+private:SteddingColorMixerTest.*:TabArchiverTest.SkipsOffTheRecordWindows:PrivateWindowTest.*
 screenshot:ScreenshotFileTest.*:SteddingStringsTest.*
 backups:SidebarBackupTest.*
 bookmarks:BookmarksToPinsTest.*
@@ -114,14 +117,30 @@ menus:MenuRulesTest.*:TabMenuModelTest.SteddingMoveToSpaceAndSplitRows:TabStripM
 switcher:SpaceWindowTest.ActivationHistoryIsPerSpace:SpaceWindowTest.RecentTabsFallBackToSidebarOrder:SpaceWindowTest.CtrlTab*:SpaceWindowTest.RecentTabsCountASplitOnce:RecentTabsSwitcherViewTest.*:TabStripModelTest.MoveTabRelativeStaysInsideItsFolder:SwitcherRulesTest.*
 focus:SpaceModelTest.FocusHidesOtherSpaces
 import:ArcSidebarImporterTest.*:ArcSidebarImportWindowTest.*:ArcDataImporterTest.*:BookmarksToPinsTest.*
-routing:SpaceRouterTest.*:SpaceWindowTest.InsertedTabFollowsRoute:SpaceWindowTest.RestoredTabIsNotRouted:SpaceWindowTest.TypedAddressInAFreshTabFollowsRoute:SpaceWindowTest.UndoMovesTheTabBack:SpaceWindowTest.ExternalOpenLandsInTheDefaultSpace
+routing:SpaceRouterTest.*:SpaceWindowTest.InsertedTabFollowsRoute:SpaceWindowTest.RestoredTabIsNotRouted:SpaceWindowTest.TypedAddressInAFreshTabFollowsRoute:SpaceWindowTest.UndoMovesTheTabBack:SpaceWindowTest.ExternalOpenLandsInTheDefaultSpace:SpaceWindowTest.ATypedRoutedAddressMovesTheFreshTabsContents:SpaceWindowTest.ASearchIsNotRoutedByAContainsRule:SpaceWindowTest.ATabNotMadeHereIsNotRouted:SpaceWindowTest.ARoutedTabIsMadeInItsSpacesJar
 pins:SpaceWindowTest.CloseOnLastPinnedTab*:SpaceWindowTest.PinsJoinTheEndOfTheRunAndUnpinsLeaveIt:TabHoverCardBubbleViewTest.SteddingPinLineJoinsTheDomain:PinLifecycleTest.*:SpaceWindowTest.PinRecordsHomeUrl:SpaceWindowTest.CloseOnPinned*:SessionRebuildTest.PinnedUrlSurvivesRebuild:ShouldPeekTest.*:TabRowRulesTest.DriftShowsASlashOnRowsAndADotOnCards:PinHomeWindowTest.*:PinHomeImportTest.*:PinHomeImportWindowTest.*:SpaceWindowTest.ACollapsedPinnedRun*:SpaceModelTest.ACollapsedPinnedRun*:SpaceRegistryTest.ACollapsedPinnedRunRoundTrips:TabRowRulesTest.ACollapsedPinnedRunKeepsTheClearLine:CommandBarViewTest.PinnedTabsRowsCollapseAndExpandTheRun
 copy-link:CleanLinkTest.*:CopyLinkTest.*
 motion:MotionTest.*
 player:MediaKeysTest.*
 welcome:SteddingWelcomeHandlerTest.*
-upstream:TabTest.*:TabStripModelTest.*:TabContainerTest.*:*TabStripTest.*:VerticalTabStripStateControllerTest.*:AcceleratorTableTest.*:TabMenuModelTest.*:ThemeServiceTest.*:*TabCollectionAnimatingLayoutManagerTest.*
+upstream:TabStripModelTest.*:VerticalTabStripStateControllerTest.*:AcceleratorTableTest.*:TabMenuModelTest.*:*TabCollectionAnimatingLayoutManagerTest.*:TabTest.DiscardIndicatorResponsiveness:TabTest.SingleElementCentering
 '
+
+# Chromium's suites over code the series changes only at its edges (a filtered-out tab, a
+# favicon column), where every case but the ones already on a feature line lays out a strip
+# with nothing of Stedding's in it. Not in `all`: `tooling/dev test rebase` runs them after a
+# pin bump or a patch to tab.cc, tab_style.cc, tab_icon.cc, tab_container_impl.cc or
+# tab_strip.cc.
+REBASE_FILTERS='TabTest.*:TabContainerTest.*:*TabStripTest.*'
+
+# Browser tests that need the desktop to themselves: a row drag (it asks the system which
+# window is under each point), the pointer over their window, keys through the window's
+# accelerators or into a page, the clipboard, picture-in-picture, a page that must paint
+# for its colour to be read, or a command bar kept open across a wait (it closes when its
+# window loses focus). Run in parallel, these failed now and then and every other test
+# passed (docs/HANDOFF.md, trap 88), so the browser leg runs them one at a time after the
+# rest.
+SERIAL_BROWSER_TESTS='TabDropTest.*:FolderTabsTest.TheHeadersMenuSortsAndOpensATab:SpaceSwitchTest.CommandsChordsAndTheLastTab:SleepInUseTest.*:PrivateCoatTest.*:CommandBarKeysTest.*:SidebarClickTest.*:SidebarRailTest.*:SidebarFormsTest.*:SidebarFormsRtlTest.*:CopyLinkClipboardHistoryTest.*:LinkDropTest.*:MediaKeysWindowTest.*'
 
 # The same, for components_unittests.
 COMPONENT_FILTERS='
@@ -141,8 +160,8 @@ if [ "$(uname -s)" = Darwin ]; then
 fi
 
 # Chromium's own suites around the series that unit_tests does not contain, so
-# `upstream` never ran them while it listed them (PLAN.md PLT-T4). No leg runs
-# them yet (PLAN.md PLT-12, WEB-4): browser_tests has LocationBarViewBrowserTest,
+# `upstream` never ran them while it listed them (docs/history/plan-2026-09-26.md PLT-T4). No leg runs
+# them yet (docs/history/plan-2026-09-26.md PLT-12, WEB-4): browser_tests has LocationBarViewBrowserTest,
 # BrowserCommandControllerBrowserTest, AppMenuModelTest, BrowserViewTest and
 # SearchTest; interactive_ui_tests has ToolbarViewTest and
 # BrowserCommandControllerInteractiveTest. (LocationBarViewTest and
@@ -180,7 +199,7 @@ cmd_build() {
 
 # Lists what one test binary would run for a filter, and fails when a part of
 # the filter matches nothing: a renamed, deleted or disabled test must not drop
-# out of a sweep that still says SUCCESS (PLAN.md REPO-2). One listing, every
+# out of a sweep that still says SUCCESS (docs/history/plan-2026-09-26.md REPO-2). One listing, every
 # part matched against it the way gtest matches (* and ?): the verdict of a
 # --gtest_list_tests run per part, in one launch instead of one per part.
 # Prints the count, by feature for `all`, and with show=1 the tests themselves.
@@ -265,7 +284,7 @@ PY
 
 # Runs one test binary on a filter: failures in full, then the launcher's own
 # summary. No retries: a test that passes only on its second run is reported
-# as the failure it is (PLAN.md PLT-12).
+# as the failure it is (docs/history/plan-2026-09-26.md PLT-12).
 #   run_leg <binary> <filter> [launcher flags...]
 run_leg() {
   local name="$1" filter="$2" out status
@@ -321,6 +340,8 @@ cmd_test() {
       unit="$(all_filters "$FEATURE_FILTERS")" ;;
     browser)
       browser="$browser_filter" ;;
+    rebase)
+      unit="$REBASE_FILTERS" ;;
     *)
       unit="$(filter_for "$FEATURE_FILTERS" "$feature")"
       components="$(filter_for "$COMPONENT_FILTERS" "$feature")"
@@ -347,6 +368,8 @@ cmd_test() {
   fi
   if [ -n "$browser" ]; then
     list_leg stedding_browser_tests "$browser" "$feature" "" "$show" || listed=1
+    # The serial list is checked too, so a renamed fixture cannot slip into the parallel leg.
+    list_leg stedding_browser_tests "$SERIAL_BROWSER_TESTS" "serial" "" 0 || listed=1
   fi
   [ "$listed" -eq 0 ] ||
     die "a filter part matches no test (above), so nothing ran: fix its line in tooling/dev, or build the binary again"
@@ -361,14 +384,37 @@ cmd_test() {
   fi
   # Stedding's browser tests: a real BrowserView in a real window, driven
   # through the widget's event path (clicks on rows, the rail, restore). They
-  # open windows on screen but post no OS-level input.
+  # open windows on screen but post no OS-level input. The whole suite runs in two
+  # legs: most of it STEDDING_BROWSER_JOBS at a time, then SERIAL_BROWSER_TESTS one
+  # at a time. A filter given on the command line runs one at a time.
   if [ -n "$browser" ]; then
     # A cursor resting where test windows open fails the hover and edge tests
     # (docs/HANDOFF.md, trap 78); the script leaves it alone while it is in use.
     if is_windows; then
+      # A disconnected remote session has no desktop to draw on, and every window test
+      # fails (trap 59): stop here instead of spending the run.
+      if command -v qwinsta >/dev/null 2>&1 && ! qwinsta 2>/dev/null | grep -q '^>.*Active'; then
+        die "this Windows session is not Active (qwinsta): reconnect it before the browser tests"
+      fi
       powershell.exe -NoProfile -File "$(cygpath -w "$STEDDING_ROOT/tooling/win/park-cursor.ps1")" || true
     fi
-    run_leg stedding_browser_tests "$browser" --test-launcher-jobs=1 || status=$?
+    if [ "$browser" = "*" ]; then
+      # Four at a time was measured on Windows (trap 88). The Mac runs one at a time until
+      # it is measured there: its background tabs and data clearing are slower (trap 66).
+      local jobs=1
+      if is_windows; then jobs=4; fi
+      run_leg stedding_browser_tests "*-$SERIAL_BROWSER_TESTS" \
+        --test-launcher-jobs="${STEDDING_BROWSER_JOBS:-$jobs}" || status=$?
+      # Again before the serial leg: after the parallel one the drag tests failed under
+      # tooling/dev and passed when a short process ran between the legs, as this one
+      # does (trap 88).
+      if is_windows; then
+        powershell.exe -NoProfile -File "$(cygpath -w "$STEDDING_ROOT/tooling/win/park-cursor.ps1")" || true
+      fi
+      run_leg stedding_browser_tests "$SERIAL_BROWSER_TESTS" --test-launcher-jobs=1 || status=$?
+    else
+      run_leg stedding_browser_tests "$browser" --test-launcher-jobs=1 || status=$?
+    fi
   fi
   return "$status"
 }

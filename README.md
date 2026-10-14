@@ -299,7 +299,7 @@ page.
 
 Stedding is an early **beta**. A review of the whole code in September 2026 found many
 defects, some of them in the basics (selecting a tab, the collapsed sidebar, restoring a
-session); the betas since then carry the fixes so far, and `PLAN.md` lists the rest. What is out
+session); the betas since then carry the fixes so far, and `BACKLOG.md` lists the rest. What is out
 and what comes next:
 
 | | State |

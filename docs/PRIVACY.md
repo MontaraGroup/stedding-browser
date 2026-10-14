@@ -56,7 +56,7 @@ bug. Report it through SECURITY.md.
 2026-09-28, the release build of 155.0.8059.12 (patch 0057), a new profile in a
 temporary folder, started headless with nothing opened, about four and a half
 minutes, from Chromium's own network log (`BACKLOG.md` S-50; the ten-minute run with a
-window is still to do):
+window followed on 2026-10-12, below):
 
 | Host | What | Listed above? |
 |---|---|---|
@@ -83,7 +83,7 @@ each run beside the same run of beta 10 as a control:
 
 The account check is gone. The push service was not reached in these runs by either
 build, so they cannot show its part; that rests on the browser test that failed before the
-fix (`QuietStartTest.GooglesPushServiceStaysOff`: the policy invalidations no longer ask
+fix (`QuietStartTest.AFreshProfileCallsNoGoogleService`: the policy invalidations no longer ask
 it for a token at start). The runs used a stand-in keychain, so as not to touch the
 login keychain; whether that keeps the push service from starting is not known. The new tab page is local
 and makes no request of its own (`features/new-tab.md` N1). Nothing here is telemetry, but "no telemetry" and "contacts nothing" are
@@ -123,7 +123,7 @@ history, but does receive occasional partial-hash queries and your IP.
 
 Where it stands (2026-09-28): the setting is on, but Stedding's builds carry no
 Google API key, and Chromium's list updates need one. Confirmed on a running build
-(PLAN.md WEB-5; the recorded run above): the first list update, about four minutes
+(docs/history/plan-2026-09-26.md WEB-5; the recorded run above): the first list update, about four minutes
 after start, went to `safebrowsing.googleapis.com` with no key and Google answered
 HTTP 400. So the local lists stay empty and no listed site gets a warning page --
 while the requests themselves still reach Google, with your IP address. Only the
@@ -141,7 +141,7 @@ Our stance, once it is settled:
 - **Available by choice:** turning it off entirely, one switch, clearly explained.
 - **Never by default:** "Enhanced" Safe Browsing modes that send full URLs or page
   content in real time. Stedding never turns it on, but Chromium's Security page
-  still offers it as a choice; taking the option out is open (PLAN.md WEB-5).
+  still offers it as a choice; taking the option out is open (docs/history/plan-2026-09-26.md WEB-5).
 
 ### Data earlier betas left on disk
 

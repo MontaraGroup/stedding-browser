@@ -9,7 +9,7 @@ in one contributor's head. Read both.
 The long form of each step is `docs/AGENT-LOOP.md`; the numbers behind it are from the run
 of 2026-09-29 to 30.
 
-1. **Orient, five minutes.** `tooling/dev status`; the top of `PLAN.md`; `BACKLOG.md`.
+1. **Orient, five minutes.** `tooling/dev status`; `PLAN.md` (short); `BACKLOG.md`.
 2. **Ask the operator once** for the things you would find out hours in; the list is
    `docs/AGENT-LOOP.md`, "Ask once, up front" (the screen and keyboard, push and release,
    what to delete, the machine overnight, a setting only they may flip, their own Stedding
@@ -44,7 +44,7 @@ Eighty-odd traps follow. Read the one for the topic in front of you, not the lis
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
 | Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
@@ -416,18 +416,17 @@ private window has.
     a margin around them, not the glyphs themselves: the glyphs are 12 DIP circles
     at the box's top inset, so half the box's height sits a button 3 DIP low.
 
-31. **Chromium's own suites are not in the Stedding filters, and two of its tab
-    tests had been red since patch 0002.** `tooling/dev test <feature>` runs our
-    filters; nothing ran `TabTest.*`, which reads the favicon column's width and
-    the discard ring -- both of which this fork changes on purpose. Before a
-    release, run the suites around what the series touches, not only ours.
-    Since 2026-09-10 that set is one command, `tooling/dev test upstream`
-    (`TabTest`, `TabStripModelTest`, `VerticalTabStripStateControllerTest`,
-    the accelerator, menu and theme suites; since 2026-09-28 the suites that
-    live in other test programs -- `ToolbarViewTest` and `AppMenuModelTest` in
-    Chromium's browser tests -- are listed in `tooling/dev` but not run until
-    that leg exists, and every filter part must match a test or the sweep
-    stops), and `tooling/dev test all` is the release sweep. The Mac pass on beta 6 found eight red cases there,
+31. **Chromium's own suites over the code the series changes must run too: two of its
+    tab tests had been red since patch 0002.** Until 2026-09-10 nothing ran `TabTest.*`,
+    which reads the favicon column's width and the discard ring -- both of which this
+    fork changes on purpose. Now `tooling/dev test upstream` runs the Chromium suites
+    over code the series changes (`TabStripModelTest`, `VerticalTabStripStateControllerTest`,
+    the accelerator, tab menu and tab layout suites, and the two `TabTest` cases on the
+    favicon column), `tooling/dev test all` includes them, and `tooling/dev test rebase`
+    runs the wider ring (`TabTest`, `TabContainerTest`, `TabStripTest`) after a pin bump.
+    Every filter part must match a test or the sweep stops. Chromium's `browser_tests`
+    and `interactive_ui_tests` are not built: their cases over the series' files assert
+    the product from before it. The Mac pass on beta 6 found eight red cases there,
     none a product bug: five read Chromium's horizontal tab, its icons and its
     group colours under the 2026 refresh that patch 0042 turns on in code
     (unit tests never see the field-trial config, so upstream's tests had never
@@ -435,7 +434,7 @@ private window has.
     hangs it from the card since round 6, and one dereferenced the horizontal
     strip an Arc window does not have -- a crash, which prints no FAILED line and
     which `tooling/dev test` used to swallow: it reports crashes and timeouts now
-    (`docs/ARC-ROUND2.md`, *The Mac pass*).
+    (`docs/history/operator-rounds.md`, *The Mac pass*).
 
 32. **Windows' caption buttons are on the right, and the frame reports them as
     the trailing exclusion.** The layout skipped every exclusion with a vertical
@@ -675,7 +674,7 @@ private window has.
 51. **Chromium's search suites assert a Google default and an EEA-only choice.**
     Stedding changed both on purpose: DuckDuckGo is the fallback engine in
     every region, and the search engine choice program runs in every country
-    (`docs/PRIVACY.md`; PLAN.md WEB-4). The cases that are about those two
+    (`docs/PRIVACY.md`; docs/history/plan-2026-09-26.md WEB-4). The cases that are about those two
     hunks assert Stedding's behaviour now and run in `tooling/dev test
     search`: `TemplateURLPrepopulateDataTest.DuckDuckGoIsTheFallbackInEveryRegion`
     (every `regional_settings` entry and an unknown country), and the
@@ -717,8 +716,8 @@ private window has.
     renderer runs at a low priority on the Mac, so waiting for a background
     tab to load can take half a minute (open it in the foreground, or do not
     wait); and the rail expands on hover only in the active window, so the
-    suite runs with one job (`tooling/dev test browser` does), since with
-    several a test's window can lose focus to another's. And three found on
+    rail and hover fixtures run one at a time (`SERIAL_BROWSER_TESTS`, trap
+    88), since with several a test's window can lose focus to another's. And three found on
     2026-09-29: the generator's click reaches the window's views but not a
     page's content on the Mac, so a test cannot press a button inside a
     page that way (use `content::SimulateMouseClickAt`, which skips the
@@ -775,13 +774,13 @@ private window has.
     at once (a tab a close makes active starts its page), so keep its handle. A test
     that asserts one platform's behaviour says which (`#if BUILDFLAG(IS_MAC)` with the
     reason beside it), and the platform without it gets a case of its own or a
-    WIN- id in PLAN.md, not a skipped line.
+    WIN- id in the 2026-09-26 audit, not a skipped line.
 
 56. **A Windows test binary started straight from a bash script under an agent's tool
     fails the tests that need a really active window.** On 2026-09-29
     `tooling/dev test browser --no-build` failed the same four of 150 on every run --
     `SidebarClickTest.EveryPartOfEveryRowSelects`, the three `TabDropTest` drags, and
-    sometimes `SleepInUseTest.ALeftSpaceKeepsItsTabsInUseAwake`, whose typed keys never
+    sometimes `SleepInUseTest.LeavingASpaceAndSleepingOthersKeepWhatIsInUse`, whose typed keys never
     reached the page -- while the same binary with the same arguments passed all 150
     whenever `timeout` was its parent (`timeout N exe`, `timeout --foreground N exe`),
     when it was detached from the tool, and from a hidden `cmd`. Ruled out: the
@@ -1037,8 +1036,8 @@ private window has.
 
 78. **The real cursor over a test window's sidebar fails the hover and edge tests.** The
     sidebar expands on hover and the hidden form's edge re-checks the real pointer, so four
-    tests (`SidebarFormsTest.TheLeadingEdgeSlidesItInOverThePage`, `.TheEdgeDoesNothingInFullScreen`,
-    `SidebarRailTest.HoveringTheRailLeavesOneClickHandler`, `.ADriftedPinShowsTheDotOrTheSlash`)
+    tests (`SidebarFormsTest.TheRailAndTheLeadingEdge`, `.TheEdgeDoesNothingInFullScreen`,
+    `SidebarRailTest.TheFormFollowsTheWidthAndOneHoverHandler`, `.ADriftedPinShowsTheDotOrTheSlash`)
     failed when the cursor rested near the screen's top left, where test windows open, and
     passed with it parked in the bottom-right corner (2026-10-12). Park the cursor before a
     browser-suite run, and only while the operator is idle: `tooling/dev` does it on Windows
@@ -1047,7 +1046,7 @@ private window has.
     2026-10-14 after a live check left the cursor mid-screen).
 
 79. **A `base::test::RunUntil` check must only look, never wait.**
-    `FolderTabsTest.AlphabetizeFromTheHeaderSortsTheRows` called a helper that runs a loop of
+    `FolderTabsTest.TheHeadersMenuSortsAndOpensATab` called a helper that runs a loop of
     its own (`WaitForRowsToSettle`, inside `DrawnRow`) from `RunUntil`'s condition. Windows
     got away with it; on the Mac the nested loop, entered from the message pump's pre-wait
     observer, never returned, and the test timed out every run (2026-10-12). Settle before
@@ -1108,7 +1107,7 @@ private window has.
     (`WindowButtonsTest.OpeningAHiddenSidebarKeepsTheRowOffTheLights`).
 
 87. **A test that fails one run in three can be the product's race, not the machine: log it
-    before trap 77's rebuild.** `TabDropTest.TheChipUnderADraggedRowIsLit` lost its drop one
+    before trap 77's rebuild.** `TabDropTest.ChipDropsMoveLightAndSurviveARebuild` lost its drop one
     run in three or four on 2026-10-14, on the round's code and on the code before it. A
     `LOG(ERROR)` in each of the drag target's calls and in the chip hit test, run until it
     failed (a loop over the one test with `STEDDING_TEST_LOG` keeping each run's output),
@@ -1117,6 +1116,22 @@ private window has.
     reached the chip found none. The product had the same gap, one frame wide (a release in it
     dropped nothing); the fix and its own test followed. Six runs found it, where a rebuild of
     the old code alone would have blamed the machine.
+88. **Most browser tests share the desktop; a few cannot, and a covered window fails a
+    drag.** The browser suite ran one test at a time until 2026-10-14 (208 s for the whole
+    suite). Run four or eight at a time, every test passed except those that need the
+    desktop to themselves: a row drag, the pointer over the window, keys through the window's
+    accelerators or typed into a page, the clipboard, picture-in-picture, and a command bar
+    held open across a wait (the bar closes when its window loses focus, so another test's
+    window taking the focus left a pointer to a closed bar). A failure there looks like a
+    30 s timeout. They are `SERIAL_BROWSER_TESTS` in `tooling/dev`, run one at a time after
+    the rest run four at a time; eight jobs also slowed every test by contention. One more
+    cause took an hour to see: a tab drag asks Windows which window is under each point
+    (`WindowFinder`), and a new test window does not always get the foreground, so it can
+    open behind the agent's own window, which covers the screen; the drag then finds that
+    window and drops nothing. A screen capture every three seconds during the run showed it.
+    Drag fixtures call `stedding::test::KeepAboveOtherWindows` on their widget (z-order needs
+    no foreground right). A new fixture that drags, hovers, types or needs its window in
+    front goes on the serial list.
 
 ## The Windows build
 
@@ -1130,12 +1145,13 @@ path (`/c/...`). Then:
 
 1. `tooling/sync-chromium` moves the checkout to the pin and `tooling/apply-patches`
    puts the series on it, in that order and both before the branding: the apply
-   refuses a tree with uncommitted changes, and the branding leaves about 200 tracked
-   files modified on purpose. There is no git cache on Windows: `src` is one commit of
-   the pinned tag fetched by name (the sequence the `series` workflow runs), the
-   dependencies are shallow clones (`gclient sync --no-history`), and `--all-tags` is
-   refused. The floor is the Mac's 150 GB. Trap 53 says what a milestone move really
-   costs there.
+   refuses a tree with uncommitted changes, and the branding leaves a few hundred tracked
+   files modified on purpose (`tooling/status` counts what is left besides them). There
+   is no git cache on Windows: `src` is one commit of the pinned tag fetched by name (the
+   sequence the `series` workflow runs), the dependencies come from `gclient sync
+   --no-history`, and `--all-tags` is refused. The floor is 150 GB free, on every host.
+   Trap 53 says what a milestone move really costs there (an update of an existing
+   dependency is not shallowed).
 2. `tooling/apply-branding` from Git for Windows: the BRANDING file, the logos, the
    Windows icons and the product-name rewrite over every locale's tables. Before
    `gn gen`, as on the Mac.
@@ -1147,15 +1163,16 @@ path (`/c/...`). Then:
    `stedding_version` appended, `gn gen`, `autoninja`, a progress line every minute
    (steps done, compilers, commit charge), a budget (`-BudgetMinutes`, exit 2 means it
    stopped on it and a rerun resumes), `-KeepGoing` for one pass that lists every error
-   (trap 50), `-Jobs` to keep the commit charge inside memory (trap 54). The default
-   config is `win-release` (`chrome` and `mini_installer`; `unit_tests` and
-   `stedding_browser_tests` by `-Targets`). The other three are test-target builds only:
+   (trap 50), `-Jobs` to keep the commit charge inside memory (traps 54, 74; the
+   supervisor's default is 12). `build.ps1` alone builds `win-release`'s `chrome` and
+   `mini_installer` by default; the supervisor builds those and both test binaries. The other three are test-target builds only:
    `win-checks` (DCHECKs and the dangling-pointer detector), `win-asan` and `win-debug`
    (docs/ARCHITECTURE.md, "Build configurations"). A build is refused while a browser from
    that output directory runs (the link fails with "permission denied" otherwise).
 4. `tooling/dev test all --no-build` (or one feature) runs the same filters against
    `out/win-release/*.exe`; `tooling/dev test browser --no-build` runs
-   `stedding_browser_tests` with one job (both through `timeout`, trap 56). On a
+   `stedding_browser_tests` in two legs, most of it four at a time and the tests that need
+   the desktop to themselves one at a time (both through `timeout`, traps 56, 88). On a
    sanitizer build the same commands with `STEDDING_TEST_OUT=win-checks` or `win-asan`:
    the run-time flags and options are set for you and a finding is printed as a digest
    (`STEDDING_TEST_LOG=<path>` keeps the raw output). A browser-suite run under ASan takes
@@ -1175,17 +1192,10 @@ path (`/c/...`). Then:
 
 ## Open items
 
-`PLAN.md` sets the order until Phase 1 is done: its top says how to read it, the owner's
-decisions of 2026-09-26 head it, and "Where Phase 0 stands" lists what each open Phase 0
-item waits on. Everything else open is `BACKLOG.md`, in priority order. This file keeps no
-list of its own.
-
-Beta 14 carries patches 0060 and 0061 on beta 13's 0059. Its Windows installer was built
-from the tag's commit; its macOS image (2026-10-12, signed and notarized) from the series at
-commit `2e48d01`, with the fixes the Mac's pass found folded into 0059 and 0060. The next
-Windows build picks those up and should run `SidebarFormsTest.*` and `WelcomeFlowTest.*`
-(`PLAN.md`, the Mac's block of 2026-10-12). Beta 13 has no macOS image. `docs/PROJECT-LOG.md`
-has what each patch was seen to do.
+Everything open is `BACKLOG.md`, in priority order; `PLAN.md` holds the owner's standing
+decisions and the definition of done. This file keeps no list of its own. What each patch
+was seen to do, and which release carries it, is `docs/PROJECT-LOG.md` and
+`docs/release-notes/`.
 
 ## Release channel
 
@@ -1210,8 +1220,8 @@ platform publishes first creates the release, the other uploads into it and the
 notes are refreshed (ADR 0018). Which platform went first for each beta is in
 `docs/PROJECT-LOG.md` and the notes. A Windows
 release on the same Chromium number as the installed one installs as a repair and needs
-Stedding closed (trap 62). The PC can be driven from the Mac over SSH, with the browser
-suite in a temporary task in the operator's session (traps 67, 68), as beta 12 was.
+Stedding closed (trap 62). The PC builds and tests its own image; driving it from the Mac
+over SSH (beta 12) put the browser suite in session 0, where it fails (traps 67, 68).
 After `publish-release`, nothing is needed on the site: its scheduled rebuild
 (every six hours) reads the release list, pre-releases included. To see the new
 version at once, `gh workflow run rebuild.yml -R ysalitrynskyi/stedding.dev`

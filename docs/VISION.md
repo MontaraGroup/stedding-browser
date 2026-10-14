@@ -32,8 +32,9 @@ Look at the alternatives and there is a gap:
 - Helium (de-Googled) and Thorium (performance-focused) are minimal Chromium
   forks that keep Chrome's UI; neither rethinks the interface.
 - Nook and Aura, newer open-source Arc-style browsers, are built on WebKit for
-  Apple's platforms under copyleft licences, so they carry no Chrome extensions
-  and no Windows build; Aura is archived.
+  Apple's platforms under copyleft licences, so they have no Windows build and only
+  WebKit's partial support for Chrome's extensions (`docs/COMPETITORS.md`); Aura is
+  archived.
 
 A fuller comparison lives in `docs/COMPETITORS.md`. The short version: **no
 fully open, permissively licensed Chromium browser carries the Arc workflow

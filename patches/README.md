@@ -33,7 +33,15 @@ lines; the next rebase folds them where they belong (`PLAN.md` Phase 4, SER-4). 
   window's row in the page's colour; 0063, the round of 2026-10-14: a split keeps its
   folder, a closed folder comes back in its order, a chip lit only once the drag says
   what it carries and kept through a rebuild, a Space's name shown once, and the restore
-  bar out of full screen.
+  bar out of full screen.;
+- 0064, the tests of 2026-10-14: Stedding's browser tests merged into scenarios that share a
+  browser, with a `SCOPED_TRACE` per step; near-copy unit tests made table-driven; the drag
+  fixtures kept above other windows. Test files only, touched by most patches since 0057,
+  so one patch at the tip rather than a fixup into each.
+
+Patch messages cite the docs as they were when each was written: `PLAN.md`'s item ids
+(TAB-1, SPC-4, ...), `docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` now live under
+`docs/history/` (`docs/history/README.md`).
 
 Most branding is **not** here: it is asset replacement in [../branding/](../branding/),
 which costs no patches at all. A patch is the last resort, not the first.

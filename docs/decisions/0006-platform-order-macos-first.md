@@ -15,8 +15,9 @@ three targets well, so the constraint is our capacity, not the engine.
 
 Target platforms ship in this order:
 
-1. **macOS first.** It is the primary development machine, so the edit-build-test
-   loop is fastest there, and it is where Arc's audience — the users most likely to
+1. **macOS first.** It was the primary development machine when this was decided, so
+   the edit-build-test loop was fastest there (since 2026-09-29 a Windows PC is; the Mac
+   keeps the Mac-only checks, signing and notarization), and it is where Arc's audience — the users most likely to
    want an Arc-style browser after Arc's deprioritization — predominantly lives.
 2. **Windows second.** The largest desktop population; comes after the product has
    proven itself on macOS.

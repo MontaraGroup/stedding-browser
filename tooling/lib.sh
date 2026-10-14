@@ -250,7 +250,7 @@ app_instance_pids() {
 
 # Refuses to go on while another instance of the app runs. The owner's own
 # Stedding shares the bundle id with every build, and a tool that starts beside
-# it could photograph it or type into it (PLAN.md PLT-3).
+# it could photograph it or type into it (docs/history/plan-2026-09-26.md PLT-3).
 require_no_other_instance() {
   local app="$1" id pids
   id="$(app_bundle_id "$app")" || die "no CFBundleIdentifier in $app/Contents/Info.plist"

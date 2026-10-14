@@ -24,7 +24,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
 | In a little window (macOS): move the page into your window as a tab | ⌘O | — |
 | In a little window (macOS): send the page into a split of your window | ⇧⌘O | — |
-| In a little window (macOS): close it (the bare key may not reach the window yet, `PLAN.md` CMD-15) | Esc | — |
+| In a little window (macOS): close it (the bare key may not reach the window yet, `docs/history/plan-2026-09-26.md` CMD-15) | Esc | — |
 
 ## Tabs and the bar
 

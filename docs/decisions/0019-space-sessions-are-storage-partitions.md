@@ -47,7 +47,7 @@ Three designs were weighed.
   (they are in every Space, B6). Private windows have no Spaces. A Blank
   Window has no Space registry, so its Spaces cannot be isolated (amended
   2026-09-28: the in-memory partitions this bullet described were cut in patch
-  0055, and the isolation toggle still shows there, PLAN.md SPC-32).
+  0055, and the isolation toggle still shows there, docs/history/plan-2026-09-26.md SPC-32).
 - New files under `chrome/browser/ui/spaces/` own the helper. The one
   upstream hunk is `CreateTargetContents` in `browser_navigator.cc`, which
   already chooses the `SiteInstance`. No `content/`, `blink/` or `net/`

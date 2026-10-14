@@ -8,7 +8,7 @@ Date: 2026-09-05
 `docs/PRIVACY.md` promises defaults Chromium does not ship with: third-party cookies
 blocked, HTTPS-First on, no web service asked about navigation errors, Global Privacy
 Control sent, quiet permission prompts, the Privacy Sandbox off, search suggestions
-off. Until now these were a to-do table. Round 6 (`docs/ROUND6-PLAN.md` R6-26) ships
+off. Until now these were a to-do table. Round 6 (`docs/history/round6-plan.md` R6-26) ships
 them.
 
 Two ways to ship a default: flip the value where Chromium registers the preference,

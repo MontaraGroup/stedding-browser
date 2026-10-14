@@ -1,11 +1,62 @@
 # Project log -- what was built, in order, with the evidence
 
 History for orientation. Nothing here is needed to do a task: `AGENTS.md` carries what is
-true now, `PLAN.md` the order of work, `docs/ARC-ROUND2.md` the operator-feedback ledger.
+true now, `BACKLOG.md` the order of work, `PLAN.md` the owner's decisions.
 This file was the "State of the project" section of `AGENTS.md` until 2026-09-30, moved
 unchanged, and is where the dated record goes from now on: an agent opening the repo cold
 should not have to read four hundred lines of rounds to learn the rules.
 
+
+## 2026-10-14 -- fewer tests, a faster run, the plan into the backlog (patch 0064)
+
+The operator asked to cut the number of tests radically without losing quality, to make the
+runs faster, and to clear the repo of what is outdated. Every test was read against the specs
+before anything moved: three reviews of the browser tests, two of the unit tests, one of
+Chromium's own suites in the sweep, one of the docs and the tooling.
+
+What the time went on: all unit tests took 13 s; the browser suite took 208 s, one test at a
+time; a build after an edit takes one to two minutes. So the cut that saves time is in the
+browser tests, and the unit tests were cut for clarity only.
+
+- Browser tests, 233 to 103: tests that shared a setup are one scenario, each old test a step
+  under a `SCOPED_TRACE` with its expectations kept and the state put back between steps;
+  tests whose checks another test already made are gone. 73 run four at a time and 30 one at a
+  time (`SERIAL_BROWSER_TESTS`): the drags, hovers and keys, the clipboard, picture-in-picture,
+  a page that must paint for its colour, a command bar held across a wait. The suite takes about
+  65 s on the release build and 130 s on the checked one.
+- Unit tests, 930 to 760: Chromium's suites over code the series changes only at its edges
+  moved to `tooling/dev test rebase` (`TabTest`, `TabContainerTest`, `TabStripTest`), and
+  `ThemeServiceTest`, over code the series does not change, left the sweep (476 to 336 of
+  Chromium's). Stedding's own 454 to 424: duplicates deleted, near-copies made tables, and
+  different behaviours kept as separate tests, since a unit test costs nothing to run.
+- Checks that could not fail were tightened on the way: a context menu's rows asserted present
+  before hidden, the tab strip internals page showing the folder, a link drop below a folder's
+  last row and on a collapsed folder, the settings page's address loading in the profile's jar,
+  the isolation question skipping pins and sleeping tabs, the emptied nested folder going.
+- The merges were reviewed three more times against the old tests: thirteen findings (three
+  tests deleted without a real cover and brought back, a wait made shorter, steps that leaned on
+  the step before), all fixed before the runs below.
+- Parallel runs found what the serial ones hid (trap 88): a tab drag asks Windows which window is
+  under each point and a new test window is not always in front, so the agent's own window took
+  the drop (the drag fixtures now keep their window above others); a command bar closes when its
+  window loses focus, and two tests held a pointer to it across a wait.
+- The one product change: the hidden sidebar's test path reveals without the frame painting
+  active, as it already did without the real cursor (patch 0059).
+
+The docs: the 2026-09-26 plan, round 6's plan and the operator's rounds 2 to 11 moved to
+`docs/history/`; `PLAN.md` is now the owner's decisions and when an item is done;
+`BACKLOG.md` is the order of work, its rows `S-138` to `S-177` carrying the 225 items of the
+old plan still open, by root cause, and `S-178` the Mac's half of this round. The roadmap's
+status table, stale within days, is gone; the contradictions a review found between the docs,
+the ADRs and the tooling are fixed (codecs, the updater, the development machine, Nook's
+extensions, the idle-network run). Tooling: `tooling/status` sees the Windows builds,
+`check-repo` keeps every build configuration's shared settings and reads a renamed test's
+declaration whole, the build supervisor defaults to 12 jobs, `verify-build` requires H.264.
+
+Tests: on `win-release` and on `win-checks` (DCHECKs and the dangling-pointer detector), 760
+unit tests and 103 browser tests, both suites green twice on each build and the browser suite
+green four times more on the release build. Not run: the Mac (`S-178`), `components_unittests`
+(not built on Windows), ASan (`S-106`).
 
 ## 2026-10-14 -- a split keeps its folder, a folder comes back in order, five small defects (patch 0063)
 
@@ -349,7 +400,7 @@ Patch 0058 (the owner's report on beta 10) had passed its tests without anyone l
 it; the Mac then used the release build with the real pointer and keyboard on a copy of the
 owner's profile and on a fresh one.
 
-- **Round 11's live column, filled in** (`docs/ARC-ROUND2.md`): three restarts of the copy with
+- **Round 11's live column, filled in** (`docs/history/operator-rounds.md`): three restarts of the copy with
   no "reason 332" and the imported tabs loading; rows clicked in the open sidebar and the rail;
   ⌘S keeping the address row; the swipe following the fingers; the eight Spaces as icons; the
   row's colour against the page on five pages and in full screen. TAB-3's and WIN-29's Mac
@@ -484,7 +535,7 @@ Built, by the old measure (each has open findings in `PLAN.md`):
 - **Auto-archive**: unpinned tabs outside folders that nobody has looked at
   for 12 hours (a setting) close into the recently-closed list
   (`docs/features/archive.md`).
-- **Round 5 Arc parity** (`docs/ARC-ROUND2.md`): the bar sits on the page and
+- **Round 5 Arc parity** (`docs/history/operator-rounds.md`): the bar sits on the page and
   takes its colour, the Space title heads the list with its pinned run and
   the Clear line, ⌘S toggles the sidebar, ⌘T classifies and suggests,
   downloads at the bottom-left, the sidebar edge drags, a swipe changes Space.
@@ -493,7 +544,7 @@ Built, by the old measure (each has open findings in `PLAN.md`):
 - **Welcome flow**: `chrome://stedding-welcome` over a profile's first window:
   search engine, import, appearance, default browser, shortcuts
   (`docs/features/welcome.md`).
-- **Round 6, wave 1** (`docs/ROUND6-PLAN.md`, patches 0016–0018): Arc's keys for
+- **Round 6, wave 1** (`docs/history/round6-plan.md`, patches 0016–0018): Arc's keys for
   Spaces (⌃1–9, ⌥⌘←/→, ⌘D pins, ⇧⌘K clears, ⌥⇧⌘←/→ moves the tab) and a
   Spaces menu in the menu bar; ⇧⌘C copies a clean link, ⌥⇧⌘C a Markdown one;
   the close glyph only on hover, alerts as a corner badge on essentials; the
@@ -537,7 +588,7 @@ Built, by the old measure (each has open findings in `PLAN.md`):
   become pins on demand from ⌘T, and a Space exports to a file in the importer's
   format and imports back (`docs/features/import.md` I13–I20; the hourly backups
   were cut in patch 0055).
-- **Round 7** (2026-09-05, `docs/ARC-ROUND2.md`; patches 0037 and 0038, with a
+- **Round 7** (2026-09-05, `docs/history/operator-rounds.md`; patches 0037 and 0038, with a
   second pass the same evening on the operator's replies): the row is the page's
   colour exactly, square under it, the address centred on the row in a field with
   no chrome around it, 560 DIP where the row has the room and shrinking when it
@@ -550,7 +601,7 @@ Built, by the old measure (each has open findings in `PLAN.md`):
   W8). Two of Chromium's own suites had been red since patch 0002 because nothing
   ran them: they now assert what this fork does (`docs/HANDOFF.md`, trap 31).
 
-- **Round 8** (2026-09-08, `docs/ARC-ROUND2.md`; patch 0039): the series built
+- **Round 8** (2026-09-08, `docs/history/operator-rounds.md`; patch 0039): the series built
   and ran on Windows for the first time -- nine `FilePath` portability fixes, then
   the operator's look at it, in four passes the same day. The address row under
   Windows' caption buttons with their glyphs in its colour and the buttons on the
@@ -579,7 +630,7 @@ Built, by the old measure (each has open findings in `PLAN.md`):
   0042). Still to come: little windows and links from other applications;
   unsigned; no updates (`S-56`).
 
-- **Round 9** (2026-09-09, `docs/ARC-ROUND2.md`; patches 0043–0045): the
+- **Round 9** (2026-09-09, `docs/history/operator-rounds.md`; patches 0043–0045): the
   operator's first three minutes in the Windows preview. Arc's keyboard for
   Windows -- ⌘ read as Ctrl, ⌥⌘ as Ctrl+Alt, Alt+1–9 for the Spaces (windows
   N7) -- with the shortcut reference reading the platform's own table on every
@@ -591,7 +642,7 @@ Built, by the old measure (each has open findings in `PLAN.md`):
   screen, no floating name over the downloads button (sidebar Y12–Y14).
   Published as beta 6 from Windows.
 
-- **The Mac pass on beta 6** (2026-09-10, `docs/ARC-ROUND2.md`, *The Mac pass*):
+- **The Mac pass on beta 6** (2026-09-10, `docs/history/operator-rounds.md`, *The Mac pass*):
   the checkout had been deleted for disk and was re-synced (HANDOFF trap 44); the
   first macOS build of the Windows-written patches needed a guard on a Windows-only
   colour id and a UTF-8 export file name (fixups into 0039); the first multi-tab
@@ -623,7 +674,7 @@ the Windows keyboard map, the first start, the rail); the DMG and its checksum i
 the notes were the Mac's to add to beta 6, and it did on 2026-09-10 -- after
 re-syncing a checkout that had been deleted for disk (`docs/HANDOFF.md`, trap 44),
 with two fixups into patch 0039 that the first macOS build of the Windows-written
-patches turned up (`docs/ARC-ROUND2.md`, *The Mac pass*). Beta 5 stays a
+patches turned up (`docs/history/operator-rounds.md`, *The Mac pass*). Beta 5 stays a
 Windows-only preview. Signing: the Developer ID certificate and the notary profile
 exist since 2026-09-23, and the signer works end to end (`S-17`, patch 0051).
 The pin is 155.0.8059.12 (2026-09-24, `S-64`: Google's early-stable build of M155,

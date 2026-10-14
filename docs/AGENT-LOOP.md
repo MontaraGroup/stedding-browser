@@ -172,6 +172,28 @@ research  →  spec  →  failing test  →  implement  →  build  →  test  �
 8. **Commit this repo.** Docs, spec status, backlog item closed, in the same commit as the
    regenerated patches.
 
+## How the tests are shaped
+
+The suites were cut on 2026-10-14 from 930 unit and 233 browser tests by merging and
+deleting what repeated itself; keep them that way.
+
+- **A unit test names one behaviour and fails for one reason.** Near-copies with different
+  inputs are one table-driven test (a struct array, a loop, `SCOPED_TRACE` per row). A unit
+  test is cheap to run (the whole sweep takes seconds), so do not merge different behaviours
+  into one to save time.
+- **A browser test is a scenario.** Each one starts a browser (half a second to a few), so
+  steps that share a setup are one test, each step under `SCOPED_TRACE("<what it proves>")`
+  with its own expectations, the state put back between steps. Keep a body near 150 lines;
+  past that, split along its steps. A `PRE_` chain is one test however many restarts it has.
+- **Before adding a test, look for the one it extends.** A new step in an existing scenario,
+  or a new row in an existing table, is the default; a new test needs a setup no other has.
+- **Which leg runs it.** `tooling/dev` runs the browser suite four at a time on Windows and,
+  after it, the fixtures in `SERIAL_BROWSER_TESTS` one at a time: those that need the real
+  pointer over their window, the active window, the clipboard or picture-in-picture (trap 88). A new fixture
+  of that kind goes on that list, or it fails the parallel leg now and then. Chromium's own
+  suites over the code the series changes are the `upstream` line; the wider ring runs with
+  `tooling/dev test rebase` after a pin bump.
+
 ## Rules that are not optional
 
 - **No behaviour ships without a test id in its feature spec.** A row whose Test column
@@ -185,8 +207,8 @@ research  →  spec  →  failing test  →  implement  →  build  →  test  �
   another build is running.
 - **Numbers in docs come from `tooling/dev status`.** Do not hand-type test counts, patch
   counts, or the pin. `tooling/check-repo truth` fails on known stale phrases.
-- **One backlog.** `BACKLOG.md`, by S- id. Until `PLAN.md`'s Phase 1 is done, `PLAN.md`
-  sets the order and its own ids (TAB-1, PLT-3) are cited as they are. `AGENTS.md`,
+- **One backlog.** `BACKLOG.md`, by S- id, is the order of work. Ids of the 2026-09-26 audit
+  (TAB-1, PLT-3) are cited as they are and resolve in `docs/history/plan-2026-09-26.md`. `AGENTS.md`,
   `HANDOFF.md` and feature specs cite ids (`S-12`); they do not carry their own lists.
 - **Anything that owns a tab needs a test, not a screenshot** (trap 2 in
   `docs/HANDOFF.md`; the folder close-crash was invisible to every capture), and **anything a

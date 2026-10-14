@@ -5,7 +5,7 @@
 # Usage: tooling/status [--markdown]
 #
 # Counts come from the artifacts themselves: patches from patches/, tests by
-# asking the built unit_tests binary (if present) with the same filters
+# asking the built test binaries (if present) with the same filters
 # tooling/dev uses, the pin from tooling/chromium-version, the branch state from
 # the checkout. Nothing here is typed by hand, which is the point.
 
@@ -32,8 +32,13 @@ main() {
       | grep -c . || true)"
   fi
 
-  local bin="$CHROMIUM_SRC/out/release/unit_tests"
-  local test_lines=""
+  # The test binaries tooling/dev runs: out/release on the Mac, out/win-release on Windows.
+  local out_dir="$CHROMIUM_SRC/out/release" exe=""
+  if is_windows; then
+    out_dir="$CHROMIUM_SRC/out/win-release" exe=".exe"
+  fi
+  local bin="$out_dir/unit_tests$exe"
+  local test_lines="" browser_tests=""
   if [ -x "$bin" ]; then
     # tooling/dev owns the feature->filter table; read it rather than copy it.
     local features
@@ -48,10 +53,16 @@ main() {
 $features
 EOF
   fi
+  if [ -x "$out_dir/stedding_browser_tests$exe" ]; then
+    browser_tests="$("$out_dir/stedding_browser_tests$exe" --gtest_list_tests 2>/dev/null \
+      | grep '^  ' | grep -vc 'DISABLED_' || true)"
+  fi
 
-  local built=""
-  [ -d "$CHROMIUM_SRC/out/release" ] && built="release"
-  [ -d "$CHROMIUM_SRC/out/official" ] && built="$built official"
+  local built="" config
+  for config in release official win-release win-checks win-asan; do
+    if [ -d "$CHROMIUM_SRC/out/$config" ]; then built="$built $config"; fi
+  done
+  built="${built# }"
 
   local backlog_open backlog_done
   backlog_open="$(sed -n '/^## Open/,/^## Done/p' "$STEDDING_ROOT/BACKLOG.md" | grep -c '^| S-' || true)"
@@ -62,14 +73,16 @@ EOF
     printf '| Chromium pin | %s (M%s, %s) |\n' "$CHROMIUM_TAG" "$CHROMIUM_MILESTONE" "$CHROMIUM_PIN_DATE"
     printf '| Patches in series | %s |\n' "$patch_count"
     printf '| Checkout branch | %s, %s commits above the pin, %s uncommitted files |\n' "${branch:-none}" "${ahead:-?}" "${dirty:-?}"
-    printf '| Tests by feature | %s |\n' "${test_lines:-unit_tests not built}"
+    printf '| Unit tests by feature | %s |\n' "${test_lines:-unit_tests not built}"
+    printf '| Browser tests | %s |\n' "${browser_tests:-stedding_browser_tests not built}"
     printf '| Built configurations | %s |\n' "${built:-none}"
     printf '| Backlog | %s open, %s done |\n' "$backlog_open" "$backlog_done"
   else
     printf 'pin:       %s (M%s, pinned %s)\n' "$CHROMIUM_TAG" "$CHROMIUM_MILESTONE" "$CHROMIUM_PIN_DATE"
     printf 'patches:   %s\n' "$patch_count"
     printf 'checkout:  %s, %s commits above pin, %s uncommitted (branding excluded)\n' "${branch:-none}" "${ahead:-?}" "${dirty:-?}"
-    printf 'tests:     %s\n' "${test_lines:-unit_tests not built}"
+    printf 'unit:      %s\n' "${test_lines:-unit_tests not built}"
+    printf 'browser:   %s\n' "${browser_tests:-stedding_browser_tests not built}"
     printf 'built:     %s\n' "${built:-none}"
     printf 'backlog:   %s open, %s done\n' "$backlog_open" "$backlog_done"
   fi

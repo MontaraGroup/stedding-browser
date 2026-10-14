@@ -17,7 +17,7 @@ Everything under `docs/`, grouped by who it is for.
 | Document | Contents |
 |---|---|
 | [VISION.md](VISION.md) | Why this exists, values, explicit non-goals |
-| [ROADMAP.md](ROADMAP.md) | Milestones from zero to 1.0, with acceptance criteria and where each stands |
+| [ROADMAP.md](ROADMAP.md) | Milestones from zero to 1.0, with acceptance criteria |
 | [PRODUCT.md](PRODUCT.md) | The full feature specification, Arc parity and what goes beyond it, each feature with its home |
 | [COMPETITORS.md](COMPETITORS.md) | Arc, Dia, Zen, Helium, Vivaldi, Brave, Thorium — and the gap Stedding fills |
 | [EVIDENCE.md](EVIDENCE.md) | What Arc switchers actually ask for, with counts |
@@ -25,7 +25,6 @@ Everything under `docs/`, grouped by who it is for.
 | [BRAND.md](BRAND.md) | Name meaning, voice, taglines, trademark hygiene |
 | [QUALITY.md](QUALITY.md) | The "ready-to-use" bar: performance budgets, release checklist |
 | [UI-SPEC.md](UI-SPEC.md) | The measured match to Arc's interface: the targets and the values Stedding ships |
-| [ARC-ROUND2.md](ARC-ROUND2.md) | The ledger of what real use turned up on each build, round by round, and what changed |
 | [../BACKLOG.md](../BACKLOG.md) | The one list of open work |
 
 ## For contributors
@@ -33,14 +32,14 @@ Everything under `docs/`, grouped by who it is for.
 | Document | Contents |
 |---|---|
 | [../AGENTS.md](../AGENTS.md) | Start here: the project, the rules, how to work, the red lines |
-| [../PLAN.md](../PLAN.md) | The order of work until Phase 1 is done; the status blocks are at the top |
+| [../PLAN.md](../PLAN.md) | The owner's standing decisions and the definition of done |
 | [HANDOFF.md](HANDOFF.md) | The fast path, where things live, the dev parameters, the traps already paid for (with an index) |
 | [AGENT-LOOP.md](AGENT-LOOP.md) | The working procedure: ask once, order of evidence, supervise long jobs, one pass finds everything, then the loop for one change |
 | [PROJECT-LOG.md](PROJECT-LOG.md) | What was built, round by round, with the evidence: history, not instructions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Fork strategy, the build, patch management, branding, updater, signing, measured numbers |
 | [features/](features/) | One specification per feature: each behaviour, its test and whether it is built, partial or planned. The definition of done |
 | [decisions/](decisions/) | Architecture decision records |
-| [ROUND6-PLAN.md](ROUND6-PLAN.md) | Round 6, the Zen-mods review: the plan and how each part landed |
+| [history/](history/) | Finished plans and ledgers that specs, patches and release notes still cite: the 2026-09-26 audit and its item ids (TAB-1, SPC-4, ...), round 6's plan (R6-nn), the operator's rounds 2 to 11 |
 | [perf/](perf/) | How to measure the performance budgets, and the one comparison so far (2026-09-02, Chromium 153; nothing current) |
 | [../tooling/README.md](../tooling/README.md) | The build, capture and release scripts |
 | [../branding/README.md](../branding/README.md) | The mark, the palette, and how the assets are generated |

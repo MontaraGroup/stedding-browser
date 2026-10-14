@@ -93,7 +93,7 @@ Stedding, so it has to be closed. Uninstall from **Settings → Apps**, as with 
 The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctrl and
 Alt, the name and icon, and a per-user installer. Still open: little windows for links
 from other apps (they open as tabs), signing, and automatic updates (`S-56`); the
-two-finger Space swipe (`PLAN.md` TAB-31); and importing from Arc, whose Windows files
+two-finger Space swipe (`docs/history/plan-2026-09-26.md` TAB-31); and importing from Arc, whose Windows files
 Stedding does not read yet (`S-81`).
 
 ## First start
