@@ -102,9 +102,12 @@ Session** row in the command bar (⇧⌘P). Off by default.
 - **Windows:** a tap of Alt on its own still focuses the app menu, as in Chromium; the
   digit goes with the key held.
 - **Windows:** Ctrl+Alt with an arrow is also the display-rotation hotkey some Intel
-  graphics drivers install; turn that off in the driver if the two collide. A keyboard
-  whose AltGr types a character with one of the Ctrl+Alt chords may see the character
-  instead inside a text field.
+  graphics drivers install; turn that off in the driver if the two collide.
+- **Windows:** on a keyboard with AltGr, Windows treats Ctrl+Alt as AltGr. Where AltGr
+  types a character with one of the Ctrl+Alt chords (Polish (Programmers) gives Ctrl+Alt+Shift+C
+  as Ć and Ctrl+Alt+Shift+N as Ń), press the chord with Ctrl and the **left** Alt: that runs
+  the command, and AltGr (the right Alt) still types the character. With a digit, the right
+  Alt on such a keyboard is AltGr too, so it types; Space 1–9 are the left Alt's.
 - Remapping shortcuts yourself is not available yet; it is planned for 1.0 (`BACKLOG.md`
   S-91).
 - Chromium's tab-group chords are removed, with the tab-group rows of the menus.

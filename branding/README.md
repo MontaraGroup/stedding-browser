@@ -14,6 +14,7 @@ Branding section of [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 | `product_logo/scaled_100/*`, `scaled_200/*` | `chrome/app/theme/default_{100,200}_percent/chromium/product_logo_{16,32,name_22,name_22_white}.png` (the scaled logos WebUI serves as `chrome://theme/current-channel-logo`: settings header, About page, profile picker) |
 | `vector_icons/chrome_product.icon` | `components/omnibox/browser/vector_icons/chrome_product.icon` (the chrome:// page chip, the app menu) |
 | `webui_images/chrome_logo_dark.svg` | `ui/webui/resources/images/chrome_logo_dark.svg` (the white product logo WebUI pages show: settings header, history, downloads) |
+| `favicon/scaled_100/*`, `scaled_200/*` | `ui/resources/default_{100,200}_percent/common/default_favicon*.png` (the icon of a page with none of its own: a tab's row, a bookmark, a history entry, the command bar; `_dark` on a dark ground) |
 | `win/app.ico`, `win/doc.ico`, `win/pdf.ico` | `chrome/app/theme/chromium/win/chromium.ico`, `chromium_doc.ico`, `chromium_pdf.ico` (the application, HTML document and PDF document icons Windows draws: taskbar, Explorer, Start menu, Alt-Tab) |
 | `win/Logo.png`, `win/SmallLogo.png` | `chrome/app/theme/chromium/win/tiles/` (the Start-screen tiles) |
 
@@ -59,6 +60,11 @@ edited derivatives drift apart from each other; generated ones cannot. The scrip
 not write `BRANDING`, `product_logo/scaled_100/` and `scaled_200/`,
 `vector_icons/chrome_product.icon` or `webui_images/chrome_logo_dark.svg`: those are
 kept by hand and follow the mark when it changes.
+
+`favicon/` is rendered by `python3 tooling/brand/favicon.py` from `favicon/world-www.svg`,
+Tabler's `world-www` icon (https://github.com/tabler/tabler-icons, MIT; its licence is
+`favicon/LICENSE-tabler-icons`), in the colours of Chromium's globe it replaces. The
+operator chose it on 2026-10-15 from ten candidates.
 
 `public/` is a drop-in web brand folder: favicons, the social card, and the icon and
 logo variants in SVG and PNG. The palette is at the top of `tooling/brand/mark.py`, and

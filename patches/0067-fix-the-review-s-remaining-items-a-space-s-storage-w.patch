@@ -1,0 +1,3788 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 15 Oct 2026 19:29:22 -0400
+Subject: fix: the review's remaining items: a Space's storage, workers and
+ keys
+
+The code review of 2026-10-15 (docs/history/review-2026-10-15.md) filed items
+S-179 to S-189 in BACKLOG.md; the operator asked for them fixed too. One patch
+at the tip, as patches 0065 and 0066: the fixes touch code of a dozen patches.
+
+Sessions. A page's sessionStorage in a Space with cookies of its own comes back
+after a restart and with a reopened tab: the session keeps the namespace of the
+partition the tab's pages live in, the restore recreates it in the partition
+the tab comes back to, and what is left over in each Space's jar a tab came
+back to is deleted after the restore, as Chromium does for the default jar
+(sessions S28). The crash bubble's Restore never puts a Blank Window into the
+window it sits in, whose Spaces it cannot take; the next window's tabs join,
+and that window shows the Space it showed (sessions S29). Two helpers in
+content/public/browser/stedding_session_storage.h reach the controller's
+namespace for a partition, which NavigationController does not offer, without
+touching a header half of the tree includes; the notification ids and the
+worker's window keep to .cc files and Stedding's own headers for the same
+reason.
+
+Workers. A site in a Space with cookies of its own may show notifications at
+all: Chromium blocks the permission in any partition that is not the origin's
+own, a rule for app and guest partitions, and the new test met it. The window
+a Space's service worker opens is made in the worker's jar and filed in that
+jar's Space; a persistent notification's id names a Space's jar, so a click on
+it and its close are dispatched into that jar, not the default one its origin
+maps to (sessions S30).
+
+The rest. A restored tab's saved Space is read once, by the first window that
+files it (spaces B2); a Space-pinned split is a row of the pinned run (pins
+H14); the Arc import makes one Space of a Space named twice and bounds its
+reads (import I3, I22, I23); the welcome flow keeps a behaviour clicked before
+the profile's values answer (W12), opens a bookmarks file from its own window
+(W3) and tints the first Space (W7); sleep and the archive keep a contenteditable
+draft, a PDF and a page DevTools inspects, and a new sleep delay re-times a
+running timer (tabs R6, archive A12); the archive page lists closed windows'
+and splits' tabs and filters by a Space's id (archive A9); Stedding's WebUI
+handlers drop a message of the wrong shape. On Windows, a Ctrl+Alt chord made
+with the left Alt runs its command on a layout whose AltGr types a character on
+that key (windows N14).
+
+Why: each item is behaviour its spec states, data a user would lose, or a
+message a page could crash the browser with.
+Removable when: never as a whole; the next rebase folds each fix into the patch
+that owns its code (patches/README.md, the round-patch exception).
+---
+ .../browser/chrome_content_browser_client.cc  |  12 ++
+ .../browser/resources/stedding_archive/app.ts |  72 +++++--
+ .../browser/resources/stedding_welcome/app.ts |  30 ++-
+ chrome/browser/sessions/session_restore.cc    |  65 ++++++-
+ .../browser/sessions/session_service_base.cc  |  23 ++-
+ chrome/browser/ui/BUILD.gn                    |   3 +
+ chrome/browser/ui/accelerator_table.cc        |   6 +-
+ chrome/browser/ui/archive/archived_tabs.cc    | 104 ++++++++--
+ chrome/browser/ui/archive/archived_tabs.h     |  10 +-
+ .../ui/archive/archived_tabs_unittest.cc      |  43 +++++
+ chrome/browser/ui/browser_tabrestore.cc       |  37 ++--
+ .../browser/ui/navigator/browser_navigator.cc |  17 +-
+ chrome/browser/ui/spaces/arc_data_importer.cc |  17 +-
+ chrome/browser/ui/spaces/arc_data_importer.h  |   9 +-
+ .../ui/spaces/arc_data_importer_unittest.cc   |   2 +
+ .../browser/ui/spaces/arc_sidebar_importer.cc |   5 +
+ .../spaces/arc_sidebar_importer_unittest.cc   |  19 ++
+ chrome/browser/ui/spaces/new_tab_space.cc     |  19 ++
+ chrome/browser/ui/spaces/new_tab_space.h      |  25 +++
+ chrome/browser/ui/spaces/space_model.cc       |  96 +++++++++-
+ chrome/browser/ui/spaces/space_model.h        |  24 +++
+ .../browser/ui/spaces/space_model_unittest.cc |  31 +++
+ .../ui/spaces/space_model_window_unittest.cc  |  31 +++
+ .../ui/spaces/space_storage_partition.cc      |  38 +++-
+ .../ui/spaces/space_storage_partition.h       |  10 +
+ chrome/browser/ui/stedding/BUILD.gn           |   1 +
+ chrome/browser/ui/stedding/sleep_tabs.cc      |  36 +++-
+ chrome/browser/ui/views/frame/browser_view.cc |   9 +
+ .../frame/vertical_tab_strip_region_view.cc   |  24 ++-
+ chrome/browser/ui/views/stedding/BUILD.gn     |  32 ++++
+ .../browser/ui/views/stedding/altgr_chords.cc |  93 +++++++++
+ .../browser/ui/views/stedding/altgr_chords.h  |  66 +++++++
+ .../views/stedding/altgr_chords_unittest.cc   | 154 +++++++++++++++
+ .../ui/webui/settings/import_data_handler.cc  |   8 +-
+ .../settings/stedding_shortcuts_handler.cc    |  18 +-
+ .../stedding_shortcuts_handler_unittest.cc    |  14 ++
+ .../webui/settings/stedding_spaces_handler.cc |  40 +++-
+ .../ui/webui/stedding_archive/BUILD.gn        |  13 ++
+ .../stedding_archive_handler.cc               |  27 ++-
+ .../stedding_archive_handler_unittest.cc      |  68 +++++++
+ .../stedding_welcome_handler.cc               |  64 +++++--
+ .../stedding_welcome_handler_unittest.cc      |  43 +++++
+ chrome/test/BUILD.gn                          |   1 +
+ chrome/test/data/stedding/space_worker.html   |  26 +++
+ chrome/test/data/stedding/space_worker.js     |  29 +++
+ chrome/test/stedding/BUILD.gn                 |   8 +
+ .../test/stedding/pinned_run_browsertest.cc   |  41 ++++
+ chrome/test/stedding/restore_browsertest.cc   | 177 ++++++++++++++++++
+ .../test/stedding/sleep_in_use_browsertest.cc |  74 +++++++-
+ .../test/stedding/space_worker_browsertest.cc | 148 +++++++++++++++
+ chrome/test/stedding/welcome_browsertest.cc   |  44 +++++
+ components/permissions/permission_util.cc     |  13 ++
+ .../content_platform_specific_tab_data.cc     |  14 +-
+ content/browser/BUILD.gn                      |   3 +
+ .../dom_storage/stedding_session_storage.cc   |  33 ++++
+ .../notification_event_dispatcher_impl.cc     |  12 +-
+ .../platform_notification_context_impl.cc     |  45 +++++
+ .../stedding_notification_partition.cc        |  81 ++++++++
+ .../stedding_notification_partition.h         |  40 ++++
+ content/public/browser/BUILD.gn               |   1 +
+ .../public/browser/stedding_session_storage.h |  37 ++++
+ 61 files changed, 2154 insertions(+), 131 deletions(-)
+ create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.cc
+ create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.h
+ create mode 100644 chrome/browser/ui/views/stedding/altgr_chords_unittest.cc
+ create mode 100644 chrome/browser/ui/webui/stedding_archive/stedding_archive_handler_unittest.cc
+ create mode 100644 chrome/test/data/stedding/space_worker.html
+ create mode 100644 chrome/test/data/stedding/space_worker.js
+ create mode 100644 chrome/test/stedding/space_worker_browsertest.cc
+ create mode 100644 content/browser/dom_storage/stedding_session_storage.cc
+ create mode 100644 content/browser/notifications/stedding_notification_partition.cc
+ create mode 100644 content/browser/notifications/stedding_notification_partition.h
+ create mode 100644 content/public/browser/stedding_session_storage.h
+
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 19045777b3d81..2ffdcb1de617e 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -202,6 +202,8 @@
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/prefs/pref_watcher.h"
+ #include "chrome/browser/ui/select_file_policy/chrome_select_file_policy.h"
++#include "chrome/browser/ui/spaces/new_tab_space.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/startup/google_chrome_scheme_util.h"
+ #include "chrome/browser/ui/startup/url_util.h"
+ #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
+@@ -5518,6 +5520,16 @@ void ChromeContentBrowserClient::OpenURL(
+   NavigateParams nav_params(Profile::FromBrowserContext(browser_context),
+                             params.url, params.transition);
+   nav_params.FillNavigateParamsFromOpenURLParams(params);
++  // Stedding: a service worker in a Space's own jar opens its window in that
++  // jar and Space, as content expects of the window a worker opens; it had
++  // opened in the Space on screen, and the shared jar's cookies went with
++  // its first request (BACKLOG S-180).
++  std::optional<spaces::ScopedServiceWorkerWindow> worker_window;
++  const content::StoragePartitionConfig& worker_partition =
++      site_instance->GetSecurityPrincipal().GetStoragePartitionConfig();
++  if (spaces::IsSpaceStoragePartition(worker_partition)) {
++    worker_window.emplace(worker_partition);
++  }
+ 
+   Navigate(&nav_params);
+   std::move(callback).Run(nav_params.navigated_or_inserted_contents);
+diff --git a/chrome/browser/resources/stedding_archive/app.ts b/chrome/browser/resources/stedding_archive/app.ts
+index 8dd776bb9e33f..8b88c2b98f84c 100644
+--- a/chrome/browser/resources/stedding_archive/app.ts
++++ b/chrome/browser/resources/stedding_archive/app.ts
+@@ -20,6 +20,10 @@ interface ArchivedTab {
+   spaceName: string;
+   folderPath: string;
+   reason: string;
++  // "window", "split" or "group" for a tab closed with others, and how many
++  // tabs that close holds; Forget drops the whole close (BACKLOG S-187).
++  closedWith: string;
++  closedCount: number;
+ }
+ 
+ interface SpaceEntry {
+@@ -83,9 +87,15 @@ function hostOf(url: string): string {
+   }
+ }
+ 
++// The filter goes by the Space's id: names repeat and change, so two Spaces
++// of one name were one choice, and a renamed Space lost its rows (BACKLOG
++// S-187). A row from before ids were recorded goes by the name it showed.
+ function matches(tab: ArchivedTab): boolean {
+-  if (state.space && tab.spaceName !== state.space) {
+-    return false;
++  if (state.space) {
++    if (tab.spaceId ? tab.spaceId !== state.space :
++                      tab.spaceName !== nameOfSpace(state.space)) {
++      return false;
++    }
+   }
+   const q = state.query.trim().toLowerCase();
+   if (!q) {
+@@ -94,6 +104,37 @@ function matches(tab: ArchivedTab): boolean {
+   return tab.title.toLowerCase().includes(q) || tab.url.toLowerCase().includes(q);
+ }
+ 
++// The Spaces to filter by: the window's, by id with their names now, then a
++// deleted Space an archived row still names.
++function spaceChoices(): SpaceEntry[] {
++  const choices: SpaceEntry[] = [...state.spaces];
++  const known = new Set(choices.map(space => space.id));
++  for (const tab of state.tabs) {
++    if (tab.spaceId && !known.has(tab.spaceId)) {
++      known.add(tab.spaceId);
++      choices.push({id: tab.spaceId, name: tab.spaceName || 'A deleted Space'});
++    }
++  }
++  return choices;
++}
++
++function nameOfSpace(id: string): string {
++  return spaceChoices().find(space => space.id === id)?.name ?? '';
++}
++
++function closedWithText(tab: ArchivedTab): string {
++  switch (tab.closedWith) {
++    case 'window':
++      return ` · in a closed window of ${tab.closedCount} tabs`;
++    case 'split':
++      return ' · in a closed split';
++    case 'group':
++      return ` · in a closed group of ${tab.closedCount} tabs`;
++    default:
++      return '';
++  }
++}
++
+ function render() {
+   const app = document.getElementById('app')!;
+   app.replaceChildren();
+@@ -110,24 +151,15 @@ function render() {
+     renderList(list);
+   });
+   header.append(search);
+-  const names = new Set<string>();
+-  for (const space of state.spaces) {
+-    names.add(space.name);
+-  }
+-  for (const tab of state.tabs) {
+-    if (tab.spaceName) {
+-      names.add(tab.spaceName);
+-    }
+-  }
+   const select = el('select');
+   select.setAttribute('aria-label', 'Filter by Space');
+   const all = el('option', undefined, 'All Spaces');
+   all.value = '';
+   select.append(all);
+-  for (const name of names) {
+-    const option = el('option', undefined, name);
+-    option.value = name;
+-    option.selected = name === state.space;
++  for (const space of spaceChoices()) {
++    const option = el('option', undefined, space.name);
++    option.value = space.id;
++    option.selected = space.id === state.space;
+     select.append(option);
+   }
+   select.addEventListener('change', () => {
+@@ -167,7 +199,8 @@ function renderList(list: HTMLElement) {
+     text.append(el('div', 'title', tab.title || tab.url));
+     const when = new Date(tab.time).toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'});
+     const path = tab.folderPath ? ` · ${tab.folderPath}` : '';
+-    text.append(el('div', 'meta', `${hostOf(tab.url)} · ${reasonOf(tab)} ${when}${path}`));
++    text.append(el('div', 'meta',
++        `${hostOf(tab.url)} · ${reasonOf(tab)} ${when}${path}${closedWithText(tab)}`));
+     row.append(text);
+     if (tab.spaceName) {
+       row.append(el('span', 'space', tab.spaceName));
+@@ -175,8 +208,11 @@ function renderList(list: HTMLElement) {
+     const restore = el('button', undefined, tab.spaceName ? `Restore to ${tab.spaceName}` : 'Restore');
+     restore.addEventListener('click', () => chrome.send('restoreArchivedTab', [tab.id]));
+     row.append(restore);
+-    const remove = el('button', undefined, 'Forget');
+-    remove.setAttribute('aria-label', 'Forget this tab');
++    // Chromium's list forgets a close made whole as one: the button says so.
++    const remove = el('button', undefined,
++        tab.closedWith ? `Forget ${tab.closedWith}` : 'Forget');
++    remove.setAttribute('aria-label', tab.closedWith ?
++        `Forget the closed ${tab.closedWith} this tab was in` : 'Forget this tab');
+     remove.addEventListener('click', () => chrome.send('removeArchivedTab', [tab.id]));
+     row.append(remove);
+     list.append(row);
+diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
+index e3185d7ee239e..56a429aa089ce 100644
+--- a/chrome/browser/resources/stedding_welcome/app.ts
++++ b/chrome/browser/resources/stedding_welcome/app.ts
+@@ -353,6 +353,14 @@ function renderStep(main: HTMLElement) {
+         if (state.chosenSource < 0) {
+           return;
+         }
++        // The list's last row is Chromium's "Bookmarks HTML File", which asks
++        // for the file first, as Settings does; sent as a browser's import it
++        // read no file and reported success (BACKLOG S-186).
++        const last = state.sources[state.sources.length - 1];
++        if (last && state.chosenSource === last.index) {
++          chrome.send('importFromBookmarksFile');
++          return;
++        }
+         chrome.send('importData', [state.chosenSource, {
+           'import_dialog_autofill_form_data': false,
+           'import_dialog_bookmarks': state.importFavorites,
+@@ -443,6 +451,7 @@ function renderStep(main: HTMLElement) {
+           pill.dataset['focus'] = `behaviour-${behaviour.name}-${value}`;
+           pill.addEventListener('click', () => {
+             state.behaviour[behaviour.name] = value;
++            chosenBehaviour.add(behaviour.name);
+             chrome.send('setBehaviour', [behaviour.name, value]);
+             render();
+             // render() rebuilt the step; the focus stays on this choice.
+@@ -694,10 +703,25 @@ sendWithPromise('getSpaceColors').then((colors: unknown) => {
+   render();
+ });
+ // W12: the behaviour step shows what the profile has set.
+-sendWithPromise('getBehaviour').then((behaviour: unknown) => {
+-  state.behaviour = behaviour as Behaviour;
++// A choice clicked before the profile's values arrive is kept: the answer
++// redrew the old value over it, though the preference had the click (BACKLOG
++// S-184).
++const chosenBehaviour = new Set<keyof Behaviour>();
++function applyBehaviour(answer: Behaviour) {
++  for (const name of Object.keys(answer) as Array<keyof Behaviour>) {
++    if (!chosenBehaviour.has(name)) {
++      state.behaviour[name] = answer[name];
++    }
++  }
+   render();
+-});
++}
++sendWithPromise('getBehaviour').then(
++    (behaviour: unknown) => applyBehaviour(behaviour as Behaviour));
++// WelcomeFlowTest replays a late answer through this.
++(window as unknown as {steddingWelcomeTest: object}).steddingWelcomeTest = {
++  applyBehaviour,
++  state,
++};
+ addWebUiListener('import-data-status-changed', (status: unknown) => {
+   state.importStatus = status as string;
+   render();
+diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
+index 0a5b4a3c6b090..a93a75a1f55a1 100644
+--- a/chrome/browser/sessions/session_restore.cc
++++ b/chrome/browser/sessions/session_restore.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/sessions/session_restore.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/spaces/space_registry_factory.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
+ 
+ #include <stddef.h>
+ 
+@@ -811,12 +813,33 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+     }
+ #endif  //  BUILDFLAG(IS_CHROMEOS)
+ 
++    // Stedding: the first set of tabs joins the existing browser, which
++    // follows the profile's Spaces; a Blank Window keeps Spaces of its own,
++    // which that window cannot take, so it comes back as a window of its own
++    // and the next window's tabs join instead (windows G4, BACKLOG S-179).
++    // Upstream joined the first window whatever it was.
++    const sessions::SessionWindow* joining_window = nullptr;
++    if (ShouldRestoreToExistingBrowser()) {
++      for (const std::unique_ptr<sessions::SessionWindow>& window : *windows) {
++        const bool is_normal_window =
++            window->type == sessions::SessionWindow::TYPE_NORMAL;
++        if (is_normal_window &&
++            spaces::SpaceModel::IsBlankWindowSession(window->extra_data)) {
++          continue;
++        }
++        if (is_normal_window) {
++          joining_window = window.get();
++        }
++        break;
++      }
++    }
++
+     for (const std::unique_ptr<sessions::SessionWindow>& window : *windows) {
+       ++(*window_count);
+       // 1. Choose between restoring tabs in an existing browser or in a newly
+       //    created browser.
+       BrowserWindowInterface* browser = nullptr;
+-      const bool is_first_window = window.get() == windows->begin()->get();
++      const bool joins_existing_browser = window.get() == joining_window;
+       const bool is_normal_window =
+           window->type == sessions::SessionWindow::TYPE_NORMAL;
+       const bool is_app_window =
+@@ -828,8 +851,7 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+         counts->app_windows++;
+       }
+ 
+-      if (is_first_window && is_normal_window &&
+-          ShouldRestoreToExistingBrowser()) {
++      if (joins_existing_browser) {
+         // The first set of tabs is added to the existing browser.
+         browser = browser_;
+       } else {
+@@ -883,7 +905,7 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+       WebContents* active_tab =
+           browser->GetTabStripModel()->GetActiveWebContents();
+       int initial_tab_count = browser->GetTabStripModel()->count();
+-      bool close_active_tab = clobber_existing_tab_ && is_first_window &&
++      bool close_active_tab = clobber_existing_tab_ && joins_existing_browser &&
+                               is_normal_window && active_tab &&
+                               browser == browser_ && !window->tabs.empty();
+       if (close_active_tab) {
+@@ -906,6 +928,15 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+       RestoreTabsToBrowser(*window, browser, initial_tab_count,
+                            browser == browser_to_activate, restored_tabs,
+                            &new_group_ids, did_show_browser);
++      // Stedding: the window joined shows the Space the saved window showed,
++      // as a window made for it does from the start; with an essential
++      // selected, nothing else brings it there (BACKLOG S-179).
++      if (joins_existing_browser) {
++        if (spaces::SpaceModel* const model =
++                spaces::SpaceModel::From(browser)) {
++          model->ShowSpaceFromSession(window->extra_data);
++        }
++      }
+       // Newly created browsers should be shown by RestoreTabsToBrowser. If they
+       // aren't shown, they are likely to be never shown.
+       if (browser != browser_) {
+@@ -982,6 +1013,15 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+     // Session cookies/storage needed for the session restore have now been
+     // recreated by RestoreTab so it's safe to start deleting leftover data.
+     profile_->GetDefaultStoragePartition()->DeleteStaleSessionData();
++    // Stedding: and the sessionStorage left over in each Space's own
++    // partition a tab came back to, a closed tab's included. A partition no
++    // tab came back to keeps what it has for a later restore (BACKLOG S-179).
++    for (const content::StoragePartitionConfig& partition :
++         space_session_storage_partitions_) {
++      profile_->GetStoragePartition(partition)
++          ->GetDOMStorageContext()
++          ->StartScavengingUnusedSessionStorage();
++    }
+ 
+     return last_normal_browser ? last_normal_browser : last_app_browser;
+   }
+@@ -1112,10 +1152,21 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+     scoped_refptr<content::SessionStorageNamespaceHandle>
+         session_storage_namespace;
+     if (!tab.session_storage_persistent_id.empty()) {
++      // Stedding: in the partition the tab is restored into, a Space's own
++      // or the default; the session saved the namespace of the one its pages
++      // lived in (sessions S28, BACKLOG S-179).
++      const content::StoragePartitionConfig partition =
++          spaces::StoragePartitionConfigForRestoredTab(
++              profile_, tab.navigations[selected_index].virtual_url(),
++              spaces::SpaceRegistryFactory::GetForProfile(profile_),
++              tab.extra_data, /*essential=*/tab.pinned);
+       session_storage_namespace =
+-          profile_->GetDefaultStoragePartition()
++          profile_->GetStoragePartition(partition)
+               ->GetDOMStorageContext()
+               ->RecreateSessionStorage(tab.session_storage_persistent_id);
++      if (!partition.is_default()) {
++        space_session_storage_partitions_.insert(partition);
++      }
+     }
+ 
+     // Relabel group IDs to prevent duplicating groups. See crbug.com/40055647.
+@@ -1464,6 +1515,10 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+   // The profile to create the sessions for.
+   raw_ptr<Profile> profile_;
+ 
++  // Stedding: the Spaces' own partitions RestoreTab recreated a tab's
++  // sessionStorage in.
++  std::set<content::StoragePartitionConfig> space_session_storage_partitions_;
++
+   // The first browser to restore to, may be null.
+   raw_ptr<BrowserWindowInterface, DanglingUntriaged> browser_;
+ 
+diff --git a/chrome/browser/sessions/session_service_base.cc b/chrome/browser/sessions/session_service_base.cc
+index c3ca7b4563670..297393ae3c2eb 100644
+--- a/chrome/browser/sessions/session_service_base.cc
++++ b/chrome/browser/sessions/session_service_base.cc
+@@ -60,6 +60,11 @@
+ #include "content/public/browser/navigation_details.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/session_storage_namespace_handle.h"
++#include "content/public/browser/security_principal.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/stedding_session_storage.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/web_contents.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+@@ -88,6 +93,18 @@ namespace {
+ // Every kWritesPerReset commands triggers recreating the file.
+ const int kWritesPerReset = 250;
+ 
++// Stedding: the namespace of the partition the tab's pages live in, a
++// Space's own or the default, so a page's sessionStorage in a Space with
++// cookies of its own comes back too (sessions S28, BACKLOG S-179). Upstream
++// kept only the default partition's: see its TODO in TabInserted.
++content::SessionStorageNamespaceHandle* SessionStorageOfTab(
++    WebContents* contents) {
++  return content::GetSessionStorageNamespaceForPartition(
++      contents->GetController(),
++      contents->GetSiteInstance()->GetSecurityPrincipal()
++          .GetStoragePartitionConfig());
++}
++
+ // User data key for WebContents to derive their types.
+ const void* const kSessionServiceBaseUserDataKey =
+     &kSessionServiceBaseUserDataKey;
+@@ -295,7 +312,7 @@ void SessionServiceBase::TabInserted(WebContents* contents) {
+   // just the default. This in particular will not work for tabs with only
+   // isolated apps which won't have a default partition.
+   content::SessionStorageNamespaceHandle* session_storage_namespace =
+-      contents->GetController().GetDefaultSessionStorageNamespace();
++      SessionStorageOfTab(contents);
+   ScheduleCommand(sessions::CreateSessionStorageAssociatedCommand(
+       session_tab_helper->session_id(), session_storage_namespace->id()));
+   session_storage_namespace->SetShouldPersist(true);
+@@ -311,7 +328,7 @@ void SessionServiceBase::TabClosing(WebContents* contents) {
+   // Allow the associated sessionStorage to get deleted; it won't be needed
+   // in the session restore.
+   content::SessionStorageNamespaceHandle* session_storage_namespace =
+-      contents->GetController().GetDefaultSessionStorageNamespace();
++      SessionStorageOfTab(contents);
+   session_storage_namespace->SetShouldPersist(false);
+   sessions::SessionTabHelper* session_tab_helper =
+       sessions::SessionTabHelper::FromWebContents(contents);
+@@ -676,7 +693,7 @@ void SessionServiceBase::BuildCommandsForTab(
+ 
+   // Record the association between the sessionStorage namespace and the tab.
+   content::SessionStorageNamespaceHandle* session_storage_namespace =
+-      tab->GetController().GetDefaultSessionStorageNamespace();
++      SessionStorageOfTab(tab);
+   ScheduleCommand(sessions::CreateSessionStorageAssociatedCommand(
+       session_tab_helper->session_id(), session_storage_namespace->id()));
+ }
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 319b1d9da7b1b..1de07f59c2fb9 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1564,6 +1564,9 @@ static_library("ui") {
+       "//chrome/browser/ui/views/peek",
+       "//chrome/browser/ui/views/stedding:sidebar_resize_handle",
+     ]
++    if (is_win) {
++      deps += [ "//chrome/browser/ui/views/stedding:altgr_chords" ]
++    }
+     deps += [
+       ":accelerator_table",
+       ":browser_actions",
+diff --git a/chrome/browser/ui/accelerator_table.cc b/chrome/browser/ui/accelerator_table.cc
+index fe42289d13858..6271aefd159a8 100644
+--- a/chrome/browser/ui/accelerator_table.cc
++++ b/chrome/browser/ui/accelerator_table.cc
+@@ -343,8 +343,10 @@ const AcceleratorMapping kDevToolsAcceleratorMap[] = {
+ // on Ctrl+Alt with the arrows, and the Mac's Option-Cmd chords read the
+ // same way. Chromium keeps Ctrl+Alt out of its table because AltGr sends
+ // it (the check in GetAcceleratorList); these are added past that check,
+-// as the debug map is, and none of them is a key AltGr types a character
+-// on a common layout (HANDOFF trap 42).
++// as the debug map is (HANDOFF trap 42). Where a layout's AltGr types a
++// character on one of these keys -- Polish (Programmers) on C and N with
++// Shift -- the chord made with the left Alt still runs its row
++// (stedding::AltGrChords, windows N14).
+ constexpr int kSteddingCtrlAlt = ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN;
+ const AcceleratorMapping kSteddingCtrlAltAcceleratorMap[] = {
+     // spaces B19, B22: the Spaces and the tab's move between them.
+diff --git a/chrome/browser/ui/archive/archived_tabs.cc b/chrome/browser/ui/archive/archived_tabs.cc
+index 1fefb35fdff9e..64ca896ef7f51 100644
+--- a/chrome/browser/ui/archive/archived_tabs.cc
++++ b/chrome/browser/ui/archive/archived_tabs.cc
+@@ -239,16 +239,13 @@ std::vector<ArchivedTab> ListArchivedTabs(
+     base::Time now,
+     base::TimeDelta keep) {
+   std::vector<ArchivedTab> out;
+-  for (const std::unique_ptr<sessions::tab_restore::Entry>& entry : entries) {
+-    if (entry->type != sessions::tab_restore::TAB) {
+-      continue;
+-    }
+-    const auto& tab = static_cast<const sessions::tab_restore::Tab&>(*entry);
++  const auto add = [&](const sessions::tab_restore::Tab& tab, base::Time when,
++                       const char* closed_with, size_t closed_count) {
+     if (tab.navigations.empty()) {
+-      continue;
++      return;
+     }
+-    if (!tab.timestamp.is_null() && now - tab.timestamp > keep) {
+-      continue;
++    if (!when.is_null() && now - when > keep) {
++      return;
+     }
+     const sessions::SerializedNavigationEntry& current =
+         tab.navigations[tab.normalized_navigation_index()];
+@@ -259,13 +256,60 @@ std::vector<ArchivedTab> ListArchivedTabs(
+     if (row.title.empty()) {
+       row.title = base::UTF8ToUTF16(row.url.spec());
+     }
+-    row.time = tab.timestamp;
++    row.time = when;
+     row.space_id = Lookup(tab.extra_data, spaces::kSessionTabSpaceKey);
+     row.space_name = Lookup(tab.extra_data, kArchiveSpaceNameKey);
+     row.folder_path =
+         FolderTitles(Lookup(tab.extra_data, kArchiveFolderPathKey));
+     row.reason = Lookup(tab.extra_data, kArchiveReasonKey);
++    row.closed_with = closed_with;
++    row.closed_count = static_cast<int>(closed_count);
+     out.push_back(std::move(row));
++  };
++  // A tab of a close made whole takes the close's time when it has none.
++  const auto time_of = [](const sessions::tab_restore::Tab& tab,
++                          base::Time close) {
++    return tab.timestamp.is_null() ? close : tab.timestamp;
++  };
++  for (const std::unique_ptr<sessions::tab_restore::Entry>& entry : entries) {
++    switch (entry->type) {
++      case sessions::tab_restore::TAB: {
++        const auto& tab =
++            static_cast<const sessions::tab_restore::Tab&>(*entry);
++        add(tab, tab.timestamp, "", 0);
++        break;
++      }
++      case sessions::tab_restore::WINDOW: {
++        const auto& window =
++            static_cast<const sessions::tab_restore::Window&>(*entry);
++        for (const std::unique_ptr<sessions::tab_restore::Tab>& tab :
++             window.tabs) {
++          add(*tab, time_of(*tab, window.timestamp), "window",
++              window.tabs.size());
++        }
++        break;
++      }
++      case sessions::tab_restore::GROUP: {
++        const auto& group =
++            static_cast<const sessions::tab_restore::Group&>(*entry);
++        for (const std::unique_ptr<sessions::tab_restore::Tab>& tab :
++             group.tabs) {
++          add(*tab, time_of(*tab, group.timestamp), "group",
++              group.tabs.size());
++        }
++        break;
++      }
++      case sessions::tab_restore::SPLIT: {
++        const auto& split =
++            static_cast<const sessions::tab_restore::Split&>(*entry);
++        for (const std::unique_ptr<sessions::tab_restore::Tab>& tab :
++             split.tabs) {
++          add(*tab, time_of(*tab, split.timestamp), "split",
++              split.tabs.size());
++        }
++        break;
++      }
++    }
+   }
+   return out;
+ }
+@@ -280,6 +324,8 @@ base::DictValue ArchivedTabToValue(const ArchivedTab& tab) {
+   value.Set("spaceName", tab.space_name);
+   value.Set("folderPath", tab.folder_path);
+   value.Set("reason", tab.reason);
++  value.Set("closedWith", tab.closed_with);
++  value.Set("closedCount", tab.closed_count);
+   return value;
+ }
+ 
+@@ -335,14 +381,42 @@ bool RestoreArchivedTab(BrowserWindowInterface* browser,
+   std::string shown_name;
+   std::string folders;
+   bool found = false;
++  // A tab of a window, split or group closed whole is restored on its own,
++  // as Chromium's list allows (A9).
++  const auto read = [&](const sessions::tab_restore::Entry& tab) {
++    space_id = Lookup(tab.extra_data, spaces::kSessionTabSpaceKey);
++    own_name = Lookup(tab.extra_data, kArchiveSpaceRawNameKey);
++    shown_name = Lookup(tab.extra_data, kArchiveSpaceNameKey);
++    folders = Lookup(tab.extra_data, kArchiveFolderPathKey);
++    found = true;
++  };
++  const auto read_in = [&](const auto& tabs) {
++    for (const std::unique_ptr<sessions::tab_restore::Tab>& tab : tabs) {
++      if (tab->id == id) {
++        read(*tab);
++        return;
++      }
++    }
++  };
+   for (const std::unique_ptr<sessions::tab_restore::Entry>& entry :
+        service->entries()) {
+-    if (entry->id == id && entry->type == sessions::tab_restore::TAB) {
+-      space_id = Lookup(entry->extra_data, spaces::kSessionTabSpaceKey);
+-      own_name = Lookup(entry->extra_data, kArchiveSpaceRawNameKey);
+-      shown_name = Lookup(entry->extra_data, kArchiveSpaceNameKey);
+-      folders = Lookup(entry->extra_data, kArchiveFolderPathKey);
+-      found = true;
++    switch (entry->type) {
++      case sessions::tab_restore::TAB:
++        if (entry->id == id) {
++          read(*entry);
++        }
++        break;
++      case sessions::tab_restore::WINDOW:
++        read_in(static_cast<const sessions::tab_restore::Window&>(*entry).tabs);
++        break;
++      case sessions::tab_restore::GROUP:
++        read_in(static_cast<const sessions::tab_restore::Group&>(*entry).tabs);
++        break;
++      case sessions::tab_restore::SPLIT:
++        read_in(static_cast<const sessions::tab_restore::Split&>(*entry).tabs);
++        break;
++    }
++    if (found) {
+       break;
+     }
+   }
+diff --git a/chrome/browser/ui/archive/archived_tabs.h b/chrome/browser/ui/archive/archived_tabs.h
+index fe329e293636f..f3f4407d83c2c 100644
+--- a/chrome/browser/ui/archive/archived_tabs.h
++++ b/chrome/browser/ui/archive/archived_tabs.h
+@@ -74,9 +74,17 @@ struct ArchivedTab {
+   std::string folder_path;
+   // "auto", "clear", or empty for a plain close.
+   std::string reason;
++  // A tab closed with others: "window", "split" or "group", and how many tabs
++  // that close holds; empty and 0 for a tab closed on its own. Restore brings
++  // back the one tab; Forget forgets the whole close, which is what Chromium's
++  // list can drop (A9).
++  std::string closed_with;
++  int closed_count = 0;
+ };
+ 
+-// The closed tabs of `entries` no older than `keep`, newest first (A11).
++// The closed tabs of `entries` no older than `keep`, newest first (A11): a tab
++// closed on its own, and each tab of a window, split or group closed whole,
++// which Clear archive deletes too (BACKLOG S-187).
+ std::vector<ArchivedTab> ListArchivedTabs(
+     const sessions::TabRestoreService::Entries& entries,
+     base::Time now,
+diff --git a/chrome/browser/ui/archive/archived_tabs_unittest.cc b/chrome/browser/ui/archive/archived_tabs_unittest.cc
+index 33139c3e77804..a80438705192f 100644
+--- a/chrome/browser/ui/archive/archived_tabs_unittest.cc
++++ b/chrome/browser/ui/archive/archived_tabs_unittest.cc
+@@ -94,6 +94,49 @@ TEST(ArchivePageTest, RowNamesTheFolders) {
+   EXPECT_EQ("Research / Papers", shown[0].folder_path);
+ }
+ 
++// A9: the tabs of a window and of a split closed whole are rows too, each
++// saying what it closed with, at the close's time. They were not listed, and
++// Clear archive deleted them unseen (BACKLOG S-187).
++TEST(ArchivePageTest, AClosedWindowsAndSplitsTabsAreRows) {
++  const base::Time now = base::Time::Now();
++  sessions::TabRestoreService::Entries entries;
++  auto window = std::make_unique<sessions::tab_restore::Window>();
++  window->id = SessionID::FromSerializedValue(10);
++  window->timestamp = now - base::Hours(1);
++  window->tabs.push_back(ClosedTab(11, "https://w1.example/", u"W1",
++                                   base::Time(), nullptr));
++  window->tabs.push_back(ClosedTab(12, "https://w2.example/", u"W2",
++                                   base::Time(), nullptr));
++  entries.push_back(std::move(window));
++  auto split = std::make_unique<sessions::tab_restore::Split>();
++  split->id = SessionID::FromSerializedValue(20);
++  split->timestamp = now - base::Hours(2);
++  split->tabs.push_back(ClosedTab(21, "https://s1.example/", u"S1",
++                                  base::Time(), nullptr));
++  split->tabs.push_back(ClosedTab(22, "https://s2.example/", u"S2",
++                                  base::Time(), nullptr));
++  entries.push_back(std::move(split));
++
++  const std::vector<ArchivedTab> shown =
++      ListArchivedTabs(entries, now, base::Days(30));
++  ASSERT_EQ(4u, shown.size());
++  EXPECT_EQ(u"W1", shown[0].title);
++  EXPECT_EQ(SessionID::FromSerializedValue(11), shown[0].id)
++      << "the tab's own id, which restores it alone";
++  EXPECT_EQ("window", shown[0].closed_with);
++  EXPECT_EQ(2, shown[0].closed_count);
++  EXPECT_EQ(now - base::Hours(1), shown[0].time) << "the window's time";
++  EXPECT_EQ(u"S2", shown[3].title);
++  EXPECT_EQ("split", shown[3].closed_with);
++  const base::DictValue value = ArchivedTabToValue(shown[3]);
++  const std::string* const closed_with = value.FindString("closedWith");
++  ASSERT_TRUE(closed_with);
++  EXPECT_EQ("split", *closed_with);
++  EXPECT_EQ(0u,
++            ListArchivedTabs(entries, now, base::Minutes(30)).size())
++      << "the retention reads the close's time";
++}
++
+ class ArchivePageWindowTest : public BrowserWithTestWindowTest {
+  protected:
+   spaces::SpaceModel& model() { return *spaces::SpaceModel::From(browser()); }
+diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
+index 4d34156da92ac..9520e74bf24a6 100644
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -39,6 +39,11 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/restore_type.h"
+ #include "content/public/browser/session_storage_namespace_handle.h"
++#include "content/public/browser/security_principal.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/stedding_session_storage.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "ui/gfx/geometry/size.h"
+@@ -68,23 +73,33 @@ std::unique_ptr<WebContents> CreateRestoredTab(
+     bool from_session_restore,
+     bool pin) {
+   GURL restore_url = navigations[selected_navigation].virtual_url();
+-  // TODO(ajwong): Remove the temporary session_storage_namespace_map when
+-  // we teach session restore to understand that one tab can have multiple
+-  // SessionStorageNamespaceHandle objects. Also remove the
+-  // session_storage_namespace_handle.h include since we only need that to
+-  // assign into the map.
+-  content::SessionStorageNamespaceHandleMap session_storage_namespace_map =
+-      content::CreateMapWithDefaultSessionStorageNamespace(
+-          browser->GetProfile(), session_storage_namespace);
+   // Stedding: a tab restored into an isolated Space opens in that Space's
+   // storage partition; any other restored tab gets no SiteInstance here, as
+   // upstream now does (spaces::SiteInstanceForRestoredTab returns null).
+-  WebContents::CreateParams create_params(
+-      browser->GetProfile(),
++  scoped_refptr<content::SiteInstance> site_instance =
+       spaces::SiteInstanceForRestoredTab(
+           browser->GetProfile(), restore_url,
+           spaces::SpaceRegistryFactory::GetForProfile(browser->GetProfile()),
+-          extra_data, /*essential=*/pin));
++          extra_data, /*essential=*/pin);
++  // Its sessionStorage goes back into the partition its pages live in, the
++  // only one that can serve it; a namespace kept in another partition, from a
++  // Space that has since stopped keeping cookies of its own, is left out and
++  // the tab starts a new one (sessions S28, BACKLOG S-179). Upstream put the
++  // namespace under the default partition whatever it was.
++  const content::StoragePartitionConfig storage_partition =
++      site_instance
++          ? site_instance->GetSecurityPrincipal().GetStoragePartitionConfig()
++          : content::StoragePartitionConfig::CreateDefault(
++                browser->GetProfile());
++  content::SessionStorageNamespaceHandleMap session_storage_namespace_map;
++  if (content::IsSessionStorageNamespaceOfPartition(
++          session_storage_namespace,
++          browser->GetProfile()->GetStoragePartition(storage_partition))) {
++    session_storage_namespace_map[storage_partition] =
++        session_storage_namespace;
++  }
++  WebContents::CreateParams create_params(browser->GetProfile(),
++                                          std::move(site_instance));
+   create_params.initially_hidden = initially_hidden;
+   create_params.desired_renderer_state =
+       WebContents::CreateParams::kNoRendererProcess;
+diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
+index 0e8c10d2ffd18..90ed450bd2073 100644
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -505,9 +505,24 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+   if (!params.opener) {
+     const bool essential =
+         (params.tabstrip_add_types & AddTabTypes::ADD_PINNED) != 0;
++    // A service worker in a Space's own jar opens its window in that Space,
++    // and so that jar, whatever Space is on screen and whatever a route says:
++    // content looks for the new window among the worker's own clients
++    // (BACKLOG S-180).
++    std::optional<spaces::SpaceId> worker_space;
++    const content::StoragePartitionConfig* const worker_partition =
++        spaces::ScopedServiceWorkerWindow::Current();
++    if (const spaces::SpaceModel* const model =
++            worker_partition ? spaces::SpaceModel::From(params.browser)
++                             : nullptr) {
++      worker_space = model->SpaceKeepingJar(*worker_partition);
++    }
+     space_choice = spaces::ChooseSpaceForNewTab(
+         params.browser, params.source_contents, url, essential,
+-        /*may_route=*/true, /*opened_by_page=*/false);
++        /*may_route=*/!worker_space, /*opened_by_page=*/false);
++    if (space_choice && worker_space && !space_choice->essential) {
++      space_choice->space = *worker_space;
++    }
+     if (space_choice) {
+       initial_site_instance_for_new_contents =
+           spaces::SiteInstanceForSpaceTab(
+diff --git a/chrome/browser/ui/spaces/arc_data_importer.cc b/chrome/browser/ui/spaces/arc_data_importer.cc
+index 77246d62b211c..757abb28414c7 100644
+--- a/chrome/browser/ui/spaces/arc_data_importer.cc
++++ b/chrome/browser/ui/spaces/arc_data_importer.cc
+@@ -267,9 +267,14 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+   if (!db.Open(history_copy)) {
+     return rows;
+   }
++  // The web pages alone, and no more of them than the cap, in the query:
++  // the rows the reader skipped did not count, so a file of other rows was
++  // read to its end (BACKLOG S-183).
+   sql::Statement statement(db.GetUniqueStatement(
+       "SELECT url, title, visit_count, typed_count, last_visit_time FROM urls "
+-      "WHERE hidden = 0 ORDER BY last_visit_time DESC"));
++      "WHERE hidden = 0 AND (url LIKE 'http://%' OR url LIKE 'https://%') "
++      "ORDER BY last_visit_time DESC LIMIT ?"));
++  statement.BindInt64(0, static_cast<int64_t>(cap));
+   while (rows.size() < cap && statement.Step()) {
+     const GURL url(statement.ColumnString(0));
+     if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
+@@ -293,7 +298,8 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+ 
+ std::vector<password_manager::PasswordForm> ReadArcLogins(
+     const base::FilePath& logins_copy,
+-    base::span<const uint8_t> key) {
++    base::span<const uint8_t> key,
++    size_t cap) {
+   std::vector<password_manager::PasswordForm> forms;
+   if (logins_copy.empty() || !base::PathExists(logins_copy)) {
+     return forms;
+@@ -307,8 +313,11 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
+       "SELECT origin_url, action_url, username_element, username_value, "
+       "password_element, password_value, signon_realm, date_created, "
+       "blacklisted_by_user, scheme, date_last_used, date_password_modified "
+-      "FROM logins"));
+-  while (statement.Step()) {
++      "FROM logins LIMIT ?"));
++  // At most `cap`: every row was kept, then added to the store one by one on
++  // the UI thread (BACKLOG S-183).
++  statement.BindInt64(0, static_cast<int64_t>(cap));
++  while (forms.size() < cap && statement.Step()) {
+     password_manager::PasswordForm form;
+     form.url = GURL(statement.ColumnString(0));
+     if (!form.url.is_valid()) {
+diff --git a/chrome/browser/ui/spaces/arc_data_importer.h b/chrome/browser/ui/spaces/arc_data_importer.h
+index b484a18a4d52f..4a66cb59f811c 100644
+--- a/chrome/browser/ui/spaces/arc_data_importer.h
++++ b/chrome/browser/ui/spaces/arc_data_importer.h
+@@ -66,12 +66,13 @@ std::optional<std::string> ReadArcKeychainPassword();
+ // recent first, at most `cap`.
+ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+                                 size_t cap = 100000);
+-// The logins table of a Login Data copy, passwords unsealed with `key`. A
+-// row whose value will not unseal is left out; a blocked site comes across
+-// as blocked.
++// The logins table of a Login Data copy, passwords unsealed with `key`, at
++// most `cap` rows. A row whose value will not unseal is left out; a blocked
++// site comes across as blocked.
+ std::vector<password_manager::PasswordForm> ReadArcLogins(
+     const base::FilePath& logins_copy,
+-    base::span<const uint8_t> key);
++    base::span<const uint8_t> key,
++    size_t cap = 10000);
+ 
+ struct ArcDataResult {
+   size_t history = 0;
+diff --git a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
+index 7be5877a7ed03..3beefa6730c33 100644
+--- a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
+@@ -180,6 +180,8 @@ TEST(ArcDataImporterTest, ReadsLoginsAndUnsealsPasswords) {
+   }
+   const std::vector<password_manager::PasswordForm> forms =
+       ReadArcLogins(path, key);
++  // At most the cap: every row was kept and stored (BACKLOG S-183).
++  EXPECT_EQ(1u, ReadArcLogins(path, key, /*cap=*/1).size());
+   ASSERT_EQ(2u, forms.size());
+   EXPECT_EQ(GURL("https://example.com/"), forms[0].url);
+   EXPECT_EQ(u"ann", forms[0].username_value);
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+index d9f219d753e7a..38a1f894540cb 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+@@ -283,6 +283,11 @@ class ImportedIds {
+     }
+   }
+   std::optional<SpaceId> SpaceFor(const std::string& arc_id) const {
++    // A Space this import made already: a file that names one Arc Space twice
++    // made two, since only the saved pref was read (BACKLOG S-183).
++    if (const auto made = spaces_.find(arc_id); made != spaces_.end()) {
++      return SpaceId::FromOptionalToken(base::Token::FromString(made->second));
++    }
+     if (!prefs_) {
+       return std::nullopt;
+     }
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+index 5b53d9543c11b..8f42929ae7c62 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+@@ -241,6 +241,25 @@ TEST_F(ArcSidebarImportWindowTest, AppliesSpacesPinsAndFolders) {
+   EXPECT_EQ(u"F", in_play[0]->GetContents()->GetTitle());
+ }
+ 
++// I3: a file that names one Arc Space twice makes one Space; its second
++// entry's tabs join the first. Both became Spaces, and a later import filled
++// only the one it remembered (BACKLOG S-183).
++TEST_F(ArcSidebarImportWindowTest, ASpaceNamedTwiceIsOneSpace) {
++  std::optional<ArcImportPlan> plan = ParseArcSidebar(kSidebar);
++  ASSERT_TRUE(plan.has_value());
++  ASSERT_EQ(2u, plan->spaces.size());
++  ArcImportPlan::Space again = plan->spaces[1];
++  again.title = "Play again";
++  plan->spaces.push_back(std::move(again));
++  const ArcImportResult result =
++      ApplyArcImport(browser(), *plan, ArcImportOptions());
++  EXPECT_EQ(2u, result.spaces);
++  EXPECT_EQ(2u, model().size());
++  EXPECT_FALSE(SpaceNamed("Play again"));
++  ApplyArcImport(browser(), *plan, ArcImportOptions());
++  EXPECT_EQ(2u, model().size()) << "a second import makes no Space either";
++}
++
+ // I12: a second import adds nothing.
+ TEST_F(ArcSidebarImportWindowTest, SecondImportAddsNothing) {
+   const std::optional<ArcImportPlan> plan = ParseArcSidebar(kSidebar);
+diff --git a/chrome/browser/ui/spaces/new_tab_space.cc b/chrome/browser/ui/spaces/new_tab_space.cc
+index 1574a4cb0b951..c359a497eefec 100644
+--- a/chrome/browser/ui/spaces/new_tab_space.cc
++++ b/chrome/browser/ui/spaces/new_tab_space.cc
+@@ -25,6 +25,9 @@ namespace spaces {
+ 
+ namespace {
+ 
++// The innermost ScopedServiceWorkerWindow.
++const ScopedServiceWorkerWindow* g_service_worker_window = nullptr;
++
+ // The Space of the tab `source` is, when it is a tab of a window with Spaces
+ // and `model` has that Space too: windows share their Spaces through the
+ // registry, a Blank Window has its own. An essential is in every Space and
+@@ -157,6 +160,22 @@ std::unique_ptr<content::WebContents> PlaceOpenedContents(
+   return contents;
+ }
+ 
++ScopedServiceWorkerWindow::ScopedServiceWorkerWindow(
++    const content::StoragePartitionConfig& worker_partition)
++    : worker_partition_(worker_partition), previous_(g_service_worker_window) {
++  g_service_worker_window = this;
++}
++
++ScopedServiceWorkerWindow::~ScopedServiceWorkerWindow() {
++  g_service_worker_window = previous_;
++}
++
++// static
++const content::StoragePartitionConfig* ScopedServiceWorkerWindow::Current() {
++  return g_service_worker_window ? &g_service_worker_window->worker_partition_
++                                 : nullptr;
++}
++
+ bool IsFreshTabUrl(const GURL& shown) {
+   if (shown.is_empty() || shown.IsAboutBlank()) {
+     return true;
+diff --git a/chrome/browser/ui/spaces/new_tab_space.h b/chrome/browser/ui/spaces/new_tab_space.h
+index ecb14ed06c5ec..46593bd33fe4c 100644
+--- a/chrome/browser/ui/spaces/new_tab_space.h
++++ b/chrome/browser/ui/spaces/new_tab_space.h
+@@ -8,7 +8,9 @@
+ #include <memory>
+ #include <optional>
+ 
++#include "base/memory/raw_ptr.h"
+ #include "chrome/browser/ui/spaces/space_id.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/web_contents_user_data.h"
+ #include "ui/base/window_open_disposition.h"
+ 
+@@ -88,6 +90,29 @@ std::unique_ptr<content::WebContents> PlaceOpenedContents(
+     const GURL& url,
+     WindowOpenDisposition disposition);
+ 
++// sessions S30: while one is alive, the tab Navigate() makes for a service
++// worker's window (clients.openWindow) is made in the worker's own jar,
++// `worker_partition`, and filed in the Space that keeps that jar, whichever
++// Space is on screen and whatever a route says (BACKLOG S-180).
++// ChromeContentBrowserClient::OpenURL holds one around its Navigate(), which
++// makes the tab before it returns. UI thread only.
++class ScopedServiceWorkerWindow {
++ public:
++  explicit ScopedServiceWorkerWindow(
++      const content::StoragePartitionConfig& worker_partition);
++  ScopedServiceWorkerWindow(const ScopedServiceWorkerWindow&) = delete;
++  ScopedServiceWorkerWindow& operator=(const ScopedServiceWorkerWindow&) =
++      delete;
++  ~ScopedServiceWorkerWindow();
++
++  // The worker's jar while a window is made for it, else null.
++  static const content::StoragePartitionConfig* Current();
++
++ private:
++  const content::StoragePartitionConfig worker_partition_;
++  const raw_ptr<const ScopedServiceWorkerWindow> previous_;
++};
++
+ // PLAN.md CMD-8: whether a tab showing `shown` has no page of its own -- a
+ // new-tab page, a blank page, or nothing committed yet. A typed address in
+ // such a tab may follow a route; a settings page, or any page the user is
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 288e4affdbb97..fbaca18551b28 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -66,6 +66,7 @@
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/reload_type.h"
+ #include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/referrer.h"
+@@ -184,7 +185,8 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+                         base::BindRepeating(&SpaceModel::OnSleepPrefChanged,
+                                             base::Unretained(this)));
+     SetSleepPolicy(
+-        base::Minutes(prefs->GetInteger(stedding::prefs::kSpaceSleepMinutes)),
++        base::Minutes(std::max(
++            0, prefs->GetInteger(stedding::prefs::kSpaceSleepMinutes))),
+         base::BindRepeating(
+             [](const SpaceId&, const std::vector<tabs::TabInterface*>& tabs) {
+               stedding::SleepTabList(tabs);
+@@ -785,6 +787,22 @@ void SpaceModel::SetSleepPolicy(base::TimeDelta delay, SleepCallback sleep) {
+   sleep_ = std::move(sleep);
+   if (sleep_delay_.is_zero() || sleep_.is_null()) {
+     sleep_timers_.clear();
++    return;
++  }
++  RetimeSleepTimers();
++}
++
++void SpaceModel::RetimeSleepTimers() {
++  const base::TimeTicks now = base::TimeTicks::Now();
++  for (auto& [id, timer] : sleep_timers_) {
++    const auto armed = sleep_armed_at_.find(id);
++    if (!timer->IsRunning() || armed == sleep_armed_at_.end()) {
++      continue;
++    }
++    timer->Start(
++        FROM_HERE,
++        std::max(base::TimeDelta(), sleep_delay_ - (now - armed->second)),
++        base::BindOnce(&SpaceModel::OnSleepTimer, base::Unretained(this), id));
+   }
+ }
+ 
+@@ -821,6 +839,7 @@ void SpaceModel::ArmSleepTimer(const SpaceId& left) {
+       FROM_HERE, sleep_delay_,
+       base::BindOnce(&SpaceModel::OnSleepTimer, base::Unretained(this), left));
+   sleep_timers_[left] = std::move(timer);
++  sleep_armed_at_[left] = base::TimeTicks::Now();
+ }
+ 
+ void SpaceModel::OnSleepTimer(const SpaceId& id) {
+@@ -833,11 +852,14 @@ void SpaceModel::OnSleepTimer(const SpaceId& id) {
+ 
+ void SpaceModel::OnSleepPrefChanged() {
+   PrefService* const prefs = pref_registrar_.prefs();
+-  sleep_delay_ =
+-      base::Minutes(prefs->GetInteger(stedding::prefs::kSpaceSleepMinutes));
++  // A value Settings never writes, below zero, is Never too.
++  sleep_delay_ = base::Minutes(
++      std::max(0, prefs->GetInteger(stedding::prefs::kSpaceSleepMinutes)));
+   if (sleep_delay_.is_zero()) {
+     sleep_timers_.clear();
++    return;
+   }
++  RetimeSleepTimers();
+ }
+ 
+ void SpaceModel::EnsureActiveSpaceHasAVisibleTab() {
+@@ -1522,6 +1544,24 @@ bool SpaceModel::SpaceIsIsolated(const SpaceId& id) const {
+   return entry && entry->isolated;
+ }
+ 
++std::optional<SpaceId> SpaceModel::SpaceKeepingJar(
++    const content::StoragePartitionConfig& config) const {
++  if (!registry_ || !IsSpaceStoragePartition(config)) {
++    return std::nullopt;
++  }
++  for (const RegistryEntry& entry : registry_->entries()) {
++    if (!entry.isolated || entry.profile_id != config.partition_name()) {
++      continue;
++    }
++    if (std::ranges::any_of(spaces_, [&](const std::unique_ptr<Space>& space) {
++          return space->id() == entry.id;
++        })) {
++      return entry.id;
++    }
++  }
++  return std::nullopt;
++}
++
+ bool SpaceModel::WipeIsolatedSession(const SpaceId& id) {
+   return WipeIsolatedSession(id, base::DoNothing());
+ }
+@@ -1774,19 +1814,26 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
+   // the first time anything asks, because at the point the tab was rebuilt
+   // there was no window yet and so no model to tell.
+   if (content::WebContents* const contents = tab->GetContents()) {
+-    if (const TabSpaceRestoreData* const restored =
++    if (const TabSpaceRestoreData* const tagged =
+             TabSpaceRestoreData::FromWebContents(contents)) {
++      // Taken with this first filing, as NewTabSpace's tag is: left on the
++      // contents, it put the restored Space, pin and home back on a tab
++      // dragged to another window after the user had changed them (BACKLOG
++      // S-181).
++      const std::string space_id = tagged->space_id();
++      const bool space_pinned = tagged->space_pinned();
+       // A stored home that is no web page (an old session, TAB-17) comes
+       // back as none.
+-      const GURL home(restored->home());
++      const GURL home(tagged->home());
++      contents->RemoveUserData(TabSpaceRestoreData::UserDataKey());
+       const GURL web = stedding::IsAllowedPinHome(home) ? home : GURL();
+-      if (restored->space_pinned()) {
++      if (space_pinned) {
+         space_pin_homes_[tab->GetHandle()] = web;
+       } else if (tab->IsPinned() && web.is_valid()) {
+         essential_homes_[tab->GetHandle()] = web;
+       }
+       if (const std::optional<base::Token> token =
+-              base::Token::FromString(restored->space_id());
++              base::Token::FromString(space_id);
+           token) {
+         const SpaceId id = SpaceId::FromRawToken(*token);
+         // Only if that Space came back too; otherwise the tab would belong to
+@@ -2511,6 +2558,41 @@ void SpaceModel::RestoreFrom(const std::string& data) {
+   }
+ }
+ 
++// static
++bool SpaceModel::IsBlankWindowSession(
++    const std::map<std::string, std::string>& extra_data) {
++  const auto it = extra_data.find(kSessionSpacesKey);
++  if (it == extra_data.end()) {
++    return false;
++  }
++  const std::optional<base::Value> parsed =
++      base::JSONReader::Read(it->second, base::JSON_PARSE_RFC);
++  return parsed && parsed->is_dict() &&
++         parsed->GetDict().FindBool("blank").value_or(false);
++}
++
++void SpaceModel::ShowSpaceFromSession(
++    const std::map<std::string, std::string>& extra_data) {
++  const auto it = extra_data.find(kSessionSpacesKey);
++  if (it == extra_data.end()) {
++    return;
++  }
++  const std::optional<base::Value> parsed =
++      base::JSONReader::Read(it->second, base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict()) {
++    return;
++  }
++  const std::string* const active = parsed->GetDict().FindString("active");
++  if (!active) {
++    return;
++  }
++  // A Space the registry no longer has is a stale id, which does nothing.
++  if (const std::optional<base::Token> token = base::Token::FromString(*active);
++      token) {
++    SetActiveSpace(SpaceId::FromRawToken(*token));
++  }
++}
++
+ void SpaceModel::SaveToSession() {
+   if (SessionService* const session_service = SessionServiceIfExisting();
+       session_service && session_id_.is_valid()) {
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index 495b9d9b83cfd..3e2a6a80c27e2 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -43,6 +43,7 @@ class TabStripModel;
+ 
+ namespace content {
+ class BrowserContext;
++class StoragePartitionConfig;
+ }  // namespace content
+ 
+ namespace stedding {
+@@ -134,6 +135,12 @@ class SpaceModel : public TabStripModelObserver,
+   static void SetNextWindowBlank();
+   bool follows_registry() const { return registry_ != nullptr; }
+ 
++  // Whether a window's session data (`kSessionSpacesKey` among `extra_data`)
++  // is a Blank Window's. Session restore never puts one into a window that
++  // is already open, which follows the registry (BACKLOG S-179).
++  static bool IsBlankWindowSession(
++      const std::map<std::string, std::string>& extra_data);
++
+   // A model with no window: nothing is observed and no tab is ever activated.
+   // For tests and for windows that have Spaces in name only.
+   SpaceModel();
+@@ -283,6 +290,11 @@ class SpaceModel : public TabStripModelObserver,
+   void SetSpaceIsolated(const SpaceId& id, bool isolated);
+   bool SpaceIsIsolated(const SpaceId& id) const;
+   const SpaceRegistry* registry() const { return registry_; }
++  // The Space of this window whose own jar `config` is, while that Space
++  // keeps one: a page or a service worker in that jar belongs there
++  // (BACKLOG S-180).
++  std::optional<SpaceId> SpaceKeepingJar(
++      const content::StoragePartitionConfig& config) const;
+   // PLAN.md SPC-9: the open pages of Space `id` that a change of its jar
+   // reloads -- awake web pages, not essentials nor new-tab pages -- in this
+   // window and every window that shares its Spaces. The question before an
+@@ -305,6 +317,13 @@ class SpaceModel : public TabStripModelObserver,
+   // none.
+   void RestoreFrom(const std::string& data);
+ 
++  // Shows the Space a saved window showed, if this window has it: a window
++  // that a session's tabs join after a crash, where RestoreFrom() came too
++  // early (BACKLOG S-179). Its selected tab brings an ordinary tab's Space
++  // on screen; an essential, in every Space, brings none.
++  void ShowSpaceFromSession(
++      const std::map<std::string, std::string>& extra_data);
++
+   // Which Space `tab` belongs to.
+   //
+   // Membership is normally decided when the tab is inserted into the strip.
+@@ -560,9 +579,14 @@ class SpaceModel : public TabStripModelObserver,
+   void ArmSleepTimer(const SpaceId& left);
+   void OnSleepTimer(const SpaceId& id);
+   void OnSleepPrefChanged();
++  // tabs R6: a new delay applies to the Spaces already left too, counted from
++  // when each was left; it applied only to the next leave (BACKLOG S-185).
++  void RetimeSleepTimers();
+   base::TimeDelta sleep_delay_;
+   SleepCallback sleep_;
+   std::map<SpaceId, std::unique_ptr<base::OneShotTimer>> sleep_timers_;
++  // When each running timer's Space was left.
++  std::map<SpaceId, base::TimeTicks> sleep_armed_at_;
+   PrefChangeRegistrar pref_registrar_;
+   raw_ptr<TabStripModel> tab_strip_model_ = nullptr;
+   bool wrote_window_state_ = false;
+diff --git a/chrome/browser/ui/spaces/space_model_unittest.cc b/chrome/browser/ui/spaces/space_model_unittest.cc
+index c1e022ef564e5..1d37a5ce7dd1b 100644
+--- a/chrome/browser/ui/spaces/space_model_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_unittest.cc
+@@ -117,6 +117,37 @@ TEST(SpaceModelTest, AChosenColourOnALoneSpaceIsRemembered) {
+ 
+ // tabs R6: leaving a Space arms its sleep; coming back cancels it; a
+ // removed Space never fires; zero disables.
++// tabs R6: a new sleep delay applies to a Space already left, counted from
++// when it was left. A longer one used to wait only for the old delay, the new
++// one applying from the next leave (BACKLOG S-185).
++TEST(SpaceModelTest, ANewSleepDelayRetimesASpaceAlreadyLeft) {
++  base::test::TaskEnvironment env(
++      base::test::TaskEnvironment::TimeSource::MOCK_TIME);
++  SpaceModel model;
++  std::vector<SpaceId> slept;
++  const auto record = base::BindRepeating(
++      [](std::vector<SpaceId>* slept, const SpaceId& id,
++         const std::vector<tabs::TabInterface*>&) { slept->push_back(id); },
++      &slept);
++  model.SetSleepPolicy(base::Minutes(5), record);
++  const SpaceId home = model.active_id();
++  model.SetActiveSpace(model.AddSpace("Work", kBlue)->id());
++  env.FastForwardBy(base::Minutes(2));
++  model.SetSleepPolicy(base::Minutes(60), record);
++  env.FastForwardBy(base::Minutes(10));
++  EXPECT_TRUE(slept.empty()) << "slept at the old 5 minutes";
++  env.FastForwardBy(base::Minutes(50));
++  ASSERT_EQ(1u, slept.size()) << "60 minutes after the leave";
++  EXPECT_EQ(home, slept[0]);
++
++  // Shorter: what has passed counts.
++  model.SetActiveSpace(home);
++  env.FastForwardBy(base::Minutes(3));
++  model.SetSleepPolicy(base::Minutes(4), record);
++  env.FastForwardBy(base::Minutes(1) + base::Seconds(1));
++  EXPECT_EQ(2u, slept.size()) << "4 minutes after the leave";
++}
++
+ TEST(SpaceModelTest, SleepTimerFiresForTheSpaceTheUserLeft) {
+   base::test::TaskEnvironment env(
+       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
+diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+index d20d2e9f658f9..3722ffe3d89bf 100644
+--- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+@@ -1928,5 +1928,36 @@ TEST_F(SpaceWindowTest, ARestoredPinKeepsWhatTheUserChangesAfterwards) {
+   EXPECT_FALSE(model().IsSpacePinned(tab)) << "an unpin holds";
+ }
+ 
++// sessions: the restore tag is taken with the tab's first filing. Left on the
++// contents, it put the restored pin and home back on a tab the user had
++// unpinned once it was dragged to another window (BACKLOG S-181).
++TEST_F(SpaceWindowTest, ARestoredTabsTagGoesWithItsFirstFiling) {
++  const SpaceId home = model().active_id();
++  tabs::TabInterface* const tab = RestoreTab(
++      home.ToString(), {{kSessionTabSpacePinKey, "1"},
++                        {kSessionTabHomeKey, "https://old.example/"}});
++  ASSERT_TRUE(model().IsSpacePinned(tab));
++  EXPECT_FALSE(TabSpaceRestoreData::FromWebContents(tab->GetContents()))
++      << "the tag stays on the contents";
++  model().SetSpacePinned(tab, false);
++  OpenTab();
++
++  std::unique_ptr<BrowserWindowInterface> second =
++      CreateBrowser(profile(), Browser::TYPE_NORMAL, /*hosted_app=*/false);
++  SpaceModel* const other = SpaceModel::From(second.get());
++  ASSERT_TRUE(other);
++  std::unique_ptr<tabs::TabModel> dragged =
++      tabs().DetachTabAtForInsertion(tabs().GetIndexOfTab(tab));
++  ASSERT_TRUE(dragged);
++  second->GetTabStripModel()->InsertDetachedTabAt(0, std::move(dragged),
++                                                  AddTabTypes::ADD_ACTIVE);
++  tabs::TabInterface* const moved =
++      second->GetTabStripModel()->GetTabAtIndex(0);
++  ASSERT_TRUE(moved);
++  EXPECT_FALSE(other->IsSpacePinned(moved))
++      << "the restored pin came back in the other window";
++  second->GetTabStripModel()->CloseAllTabs();
++}
++
+ }  // namespace
+ }  // namespace spaces
+diff --git a/chrome/browser/ui/spaces/space_storage_partition.cc b/chrome/browser/ui/spaces/space_storage_partition.cc
+index f5090cf76f0c1..10e73d4fb160a 100644
+--- a/chrome/browser/ui/spaces/space_storage_partition.cc
++++ b/chrome/browser/ui/spaces/space_storage_partition.cc
+@@ -142,6 +142,25 @@ scoped_refptr<content::SiteInstance> SiteInstanceForSpaceTab(
+   return tab_util::GetSiteInstanceForNewTab(profile, url);
+ }
+ 
++namespace {
++
++// The isolated Space's partition a restored tab goes back to, or nullopt for
++// the shared jar.
++std::optional<content::StoragePartitionConfig> SpacePartitionForRestoredTab(
++    content::BrowserContext* browser_context,
++    const GURL& url,
++    const SpaceRegistry* registry,
++    const std::map<std::string, std::string>& extra_data,
++    bool essential) {
++  const std::optional<SpaceId> id = SpaceIdFromExtraData(extra_data);
++  if (!id || essential || !browser_context || !PageBelongsInSpaceJar(url)) {
++    return std::nullopt;
++  }
++  return StoragePartitionConfigForSpace(browser_context, registry, *id);
++}
++
++}  // namespace
++
+ scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+     content::BrowserContext* browser_context,
+     const GURL& url,
+@@ -152,18 +171,27 @@ scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+   // the WebUI toolbar occlusion fix), so a tab on the shared jar gets none
+   // here. Only a tab restored into an isolated Space needs one now: its
+   // storage partition is fixed when its contents are created.
+-  const std::optional<SpaceId> id = SpaceIdFromExtraData(extra_data);
+-  if (!id || essential || !browser_context || !PageBelongsInSpaceJar(url)) {
+-    return nullptr;
+-  }
+   if (std::optional<content::StoragePartitionConfig> config =
+-          StoragePartitionConfigForSpace(browser_context, registry, *id)) {
++          SpacePartitionForRestoredTab(browser_context, url, registry,
++                                       extra_data, essential)) {
+     return content::SiteInstance::CreateForFixedStoragePartition(
+         browser_context, url, *config);
+   }
+   return nullptr;
+ }
+ 
++content::StoragePartitionConfig StoragePartitionConfigForRestoredTab(
++    content::BrowserContext* browser_context,
++    const GURL& url,
++    const SpaceRegistry* registry,
++    const std::map<std::string, std::string>& extra_data,
++    bool essential) {
++  return SpacePartitionForRestoredTab(browser_context, url, registry,
++                                      extra_data, essential)
++      .value_or(content::StoragePartitionConfig::CreateDefault(
++          browser_context));
++}
++
+ namespace {
+ 
+ // RebindTabToSpaceJar and RebindTabToSpaceJarForNavigation: `load` is the
+diff --git a/chrome/browser/ui/spaces/space_storage_partition.h b/chrome/browser/ui/spaces/space_storage_partition.h
+index 3e384a849ed5a..95b37cdc74613 100644
+--- a/chrome/browser/ui/spaces/space_storage_partition.h
++++ b/chrome/browser/ui/spaces/space_storage_partition.h
+@@ -83,6 +83,16 @@ scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+     const std::map<std::string, std::string>& extra_data,
+     bool essential);
+ 
++// The partition SiteInstanceForRestoredTab puts that tab in: its Space's own,
++// or the profile's default. The tab's sessionStorage is recreated there
++// (sessions S28).
++content::StoragePartitionConfig StoragePartitionConfigForRestoredTab(
++    content::BrowserContext* browser_context,
++    const GURL& url,
++    const SpaceRegistry* registry,
++    const std::map<std::string, std::string>& extra_data,
++    bool essential);
++
+ // If `tab`'s WebContents is not already in the jar `id` requires, replace it
+ // (sessions S8, S9). No-op when the jars already match, or without a strip.
+ void RebindTabToSpaceJar(TabStripModel* tabs,
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 96446a2be50ec..bbfd0af87a9b1 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -95,6 +95,7 @@ source_set("sleep_tabs") {
+     "//chrome/browser/ui:recently_audible_helper",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/tabs:tab_strip",
++    "//components/performance_manager",
+     "//components/tabs:public",
+     "//content/public/browser",
+   ]
+diff --git a/chrome/browser/ui/stedding/sleep_tabs.cc b/chrome/browser/ui/stedding/sleep_tabs.cc
+index 6073c8c08ea2a..eb6cf90cbda20 100644
+--- a/chrome/browser/ui/stedding/sleep_tabs.cc
++++ b/chrome/browser/ui/stedding/sleep_tabs.cc
+@@ -15,8 +15,11 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/recently_audible_helper.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/performance_manager.h"
+ #include "components/tabs/public/split_tab_data.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/devtools_agent_host.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_capability_type.h"
+@@ -96,6 +99,27 @@ bool IsUsingADevice(content::WebContents* contents) {
+   return false;
+ }
+ 
++// Work a page holds that a discard or a close loses (tabs R5, sessions S21):
++// a text field typed into; a contenteditable draft or a designMode page
++// edited, which Blink tells only the page node of; and a PDF, whose form
++// fields and notes are the plugin's, which Chromium's own discards spare too.
++// The text field alone was seen (BACKLOG S-185).
++bool HoldsUnsavedEdits(tabs::TabInterface* tab) {
++  content::WebContents* const contents = tab->GetContents();
++  if (contents->GetContentsMimeType() == "application/pdf") {
++    return true;
++  }
++  const FormInteractionTabHelper* const forms =
++      FormInteractionTabHelper::From(tab);
++  if (forms && forms->had_form_interaction()) {
++    return true;
++  }
++  const base::WeakPtr<performance_manager::PageNode> page =
++      performance_manager::PerformanceManager::GetPrimaryPageNodeForWebContents(
++          contents);
++  return page && page->HadUserEdits();
++}
++
+ // What a discard would end or lose on an awake page.
+ bool PageIsBusy(tabs::TabInterface* tab) {
+   content::WebContents* const contents = tab->GetContents();
+@@ -111,9 +135,11 @@ bool PageIsBusy(tabs::TabInterface* tab) {
+       CouldPromptBeforeUnload(contents)) {
+     return true;
+   }
+-  const FormInteractionTabHelper* const forms =
+-      FormInteractionTabHelper::From(tab);
+-  return forms && forms->had_form_interaction();
++  // DevTools inspecting the page: a discard ends the session, and Chromium
++  // does not bring its window back; the archive already spared it (BACKLOG
++  // S-185).
++  return HoldsUnsavedEdits(tab) ||
++         content::DevToolsAgentHost::IsDebuggerAttached(contents);
+ }
+ 
+ // A split sleeps whole or not at all, so a pane in use keeps its peer awake.
+@@ -199,9 +225,7 @@ bool PageHasUnsavedWork(tabs::TabInterface* tab) {
+   if (CouldPromptBeforeUnload(tab->GetContents())) {
+     return true;
+   }
+-  const FormInteractionTabHelper* const forms =
+-      FormInteractionTabHelper::From(tab);
+-  return forms && forms->had_form_interaction();
++  return HoldsUnsavedEdits(tab);
+ }
+ 
+ void SleepTabs(BrowserWindowInterface* browser,
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index d46d1cbb52585..553acd0021583 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -412,6 +412,7 @@
+ 
+ #if BUILDFLAG(IS_WIN)
+ #include "chrome/browser/taskbar/taskbar_decorator_win.h"
++#include "chrome/browser/ui/views/stedding/altgr_chords.h"
+ #include "chrome/browser/win/jumplist.h"
+ #include "chrome/browser/win/jumplist_factory.h"
+ #include "ui/gfx/color_palette.h"
+@@ -5024,6 +5025,14 @@ void BrowserView::AddedToWidget() {
+ 
+   widget_observation_.Observe(GetWidget());
+ 
++#if BUILDFLAG(IS_WIN)
++  // Stedding: on a layout with AltGr, which Windows reports as Ctrl+Alt, a
++  // Ctrl+Alt chord of the window's that the layout gives a character runs
++  // its command when made with the left Alt; AltGr still types the character
++  // (windows N14, BACKLOG S-189).
++  stedding::AltGrChords::AttachTo(GetWidget());
++#endif
++
+   auto* browser_elements =
+       BrowserElements::From(browser_)->AsA<BrowserElementsViewsImpl>();
+   browser_elements->Init(this);
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index c9b2e33608408..97f1a5f6ef977 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -1367,8 +1367,28 @@ void VerticalTabStripRegionView::OnTabStripViewSet() {
+     TabStripView* const strip = static_cast<TabStripView*>(tab_strip_view());
+     strip->SetUpSpaceBoundary(base::BindRepeating(
+         [](spaces::SpaceModel* model, const views::View* child) {
+-          const auto* const tab_view = views::AsViewClass<TabView>(child);
+-          return tab_view && model->IsSpacePinned(tab_view->GetTabInterface());
++          if (const auto* const tab_view = views::AsViewClass<TabView>(child)) {
++            return model->IsSpacePinned(tab_view->GetTabInterface());
++          }
++          // A split pins as a unit (splits J4): its row is above the line
++          // while its panes are pinned. Only a single tab's row was asked,
++          // so a pinned split counted as loose and sat under the line
++          // (BACKLOG S-182).
++          if (!views::IsViewClass<SplitTabView>(child)) {
++            return false;
++          }
++          bool pinned = false;
++          for (const views::View* const pane : child->children()) {
++            const auto* const pane_view = views::AsViewClass<TabView>(pane);
++            if (!pane_view) {
++              continue;
++            }
++            if (!model->IsSpacePinned(pane_view->GetTabInterface())) {
++              return false;
++            }
++            pinned = true;
++          }
++          return pinned;
+         },
+         base::Unretained(space_model)));
+     // The Space's title above its tabs; pressing it opens the Space menu.
+diff --git a/chrome/browser/ui/views/stedding/BUILD.gn b/chrome/browser/ui/views/stedding/BUILD.gn
+index 206d8ae894222..5df75849e0dcb 100644
+--- a/chrome/browser/ui/views/stedding/BUILD.gn
++++ b/chrome/browser/ui/views/stedding/BUILD.gn
+@@ -2,6 +2,8 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//build/config/ui.gni")
++
+ # Small views pieces shared by Stedding's sidebar: nothing here depends on the
+ # browser, so the tab rows, the folder header and the Space switcher can all
+ # use them without a dependency cycle.
+@@ -38,6 +40,28 @@ source_set("sidebar_resize_handle") {
+   ]
+ }
+ 
++# A Ctrl+Alt chord of the window's, made with the left Alt on a layout whose
++# AltGr gives that key a character, runs its command (windows N14). The
++# window's key events pass through aura, so this is for aura only; the
++# browser installs it on Windows, where AltGr is Ctrl+Alt.
++if (use_aura) {
++  source_set("altgr_chords") {
++    sources = [
++      "altgr_chords.cc",
++      "altgr_chords.h",
++    ]
++    public_deps = [
++      "//base",
++      "//ui/aura",
++      "//ui/events",
++    ]
++    deps = [
++      "//ui/base",
++      "//ui/views",
++    ]
++  }
++}
++
+ source_set("unit_tests") {
+   testonly = true
+   sources = [
+@@ -57,4 +81,12 @@ source_set("unit_tests") {
+     "//ui/views",
+     "//ui/views:test_support",
+   ]
++  if (use_aura) {
++    sources += [ "altgr_chords_unittest.cc" ]
++    deps += [
++      ":altgr_chords",
++      "//ui/aura",
++      "//ui/base",
++    ]
++  }
+ }
+diff --git a/chrome/browser/ui/views/stedding/altgr_chords.cc b/chrome/browser/ui/views/stedding/altgr_chords.cc
+new file mode 100644
+index 0000000000000..02c6813d72084
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/altgr_chords.cc
+@@ -0,0 +1,93 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/stedding/altgr_chords.h"
++
++#include <utility>
++
++#include "build/build_config.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/widget/widget.h"
++
++#if BUILDFLAG(IS_WIN)
++#include "ui/events/win/system_event_state_lookup.h"
++#endif
++
++namespace stedding {
++
++AltGrChords::AltGrChords(views::Widget* widget, LeftAltHeld left_alt_held)
++    : widget_(widget), left_alt_held_(std::move(left_alt_held)) {
++  window_ = widget_ ? widget_->GetNativeWindow() : nullptr;
++  if (window_) {
++    window_->AddPreTargetHandler(this);
++    observation_.Observe(window_.get());
++  }
++}
++
++AltGrChords::~AltGrChords() {
++  if (window_) {
++    window_->RemovePreTargetHandler(this);
++  }
++}
++
++// static
++void AltGrChords::AttachTo(views::Widget* widget) {
++  if (!widget || !widget->GetNativeWindow()) {
++    return;
++  }
++  // Owned by the window: OnWindowDestroying deletes it.
++  auto* const chords = new AltGrChords(
++      widget, base::BindRepeating(&AltGrChords::LeftAltHeldNow));
++  chords->owned_by_window_ = true;
++}
++
++// static
++bool AltGrChords::LeftAltHeldNow() {
++#if BUILDFLAG(IS_WIN)
++  return ui::win::IsCtrlPressed() && ui::win::IsAltPressed() &&
++         !ui::win::IsAltRightPressed();
++#else
++  return false;
++#endif
++}
++
++void AltGrChords::OnKeyEvent(ui::KeyEvent* event) {
++  // The key's own event, not the character after it: with the command run,
++  // the input method drops that character.
++  if (!widget_ || event->type() != ui::EventType::kKeyPressed ||
++      event->is_char() || !(event->flags() & ui::EF_ALTGR_DOWN) ||
++      !left_alt_held_.Run()) {
++    return;
++  }
++  views::FocusManager* const focus_manager = widget_->GetFocusManager();
++  if (!focus_manager || focus_manager->shortcut_handling_suspended()) {
++    return;
++  }
++  // The chord as it was pressed: the layout put AltGr where Ctrl and Alt were.
++  const ui::Accelerator chord(
++      event->key_code(),
++      (event->flags() & (ui::EF_SHIFT_DOWN | ui::EF_COMMAND_DOWN)) |
++          ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN);
++  if (!focus_manager->IsAcceleratorRegistered(chord)) {
++    return;
++  }
++  if (focus_manager->ProcessAccelerator(chord)) {
++    event->StopPropagation();
++  }
++}
++
++void AltGrChords::OnWindowDestroying(aura::Window* window) {
++  window_->RemovePreTargetHandler(this);
++  observation_.Reset();
++  window_ = nullptr;
++  widget_ = nullptr;
++  if (owned_by_window_) {
++    delete this;
++  }
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/stedding/altgr_chords.h b/chrome/browser/ui/views/stedding/altgr_chords.h
+new file mode 100644
+index 0000000000000..bacecbfc1567e
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/altgr_chords.h
+@@ -0,0 +1,66 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STEDDING_ALTGR_CHORDS_H_
++#define CHROME_BROWSER_UI_VIEWS_STEDDING_ALTGR_CHORDS_H_
++
++#include "base/functional/callback.h"
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "ui/aura/window.h"
++#include "ui/aura/window_observer.h"
++#include "ui/events/event_handler.h"
++
++namespace views {
++class Widget;
++}  // namespace views
++
++namespace stedding {
++
++// Windows (docs/features/windows.md N14, BACKLOG S-189): on a keyboard layout
++// with AltGr, Windows reports AltGr as Ctrl+Alt, and a key that the layout
++// gives a character with Ctrl+Alt arrives as that AltGr character -- on Polish
++// (Programmers) Ctrl+Alt+Shift+C is Ć -- so the window's chord on that key
++// never ran. Made with a Ctrl and the left Alt, such a chord now runs the
++// window's command; made with AltGr, the right Alt, it types its character as
++// before. Chords no command of the window's uses are left to the layout.
++class AltGrChords : public ui::EventHandler, public aura::WindowObserver {
++ public:
++  // Whether Ctrl and the left Alt are held, and the right one is not: the
++  // keyboard as it is while its key event is handled. A test answers for it.
++  using LeftAltHeld = base::RepeatingCallback<bool()>;
++
++  // Watches the key events of `widget`'s window, its views and its pages
++  // both, before they reach either.
++  AltGrChords(views::Widget* widget, LeftAltHeld left_alt_held);
++  AltGrChords(const AltGrChords&) = delete;
++  AltGrChords& operator=(const AltGrChords&) = delete;
++  ~AltGrChords() override;
++
++  // Gives `widget`'s window one that answers from the keyboard and goes
++  // with the window.
++  static void AttachTo(views::Widget* widget);
++
++  // The keyboard's own answer.
++  static bool LeftAltHeldNow();
++
++  // ui::EventHandler:
++  void OnKeyEvent(ui::KeyEvent* event) override;
++
++  // aura::WindowObserver:
++  void OnWindowDestroying(aura::Window* window) override;
++
++ private:
++  raw_ptr<views::Widget> widget_;
++  raw_ptr<aura::Window> window_;
++  const LeftAltHeld left_alt_held_;
++  // Made by AttachTo(): deletes itself as its window goes.
++  bool owned_by_window_ = false;
++  base::ScopedObservation<aura::Window, aura::WindowObserver> observation_{
++      this};
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STEDDING_ALTGR_CHORDS_H_
+diff --git a/chrome/browser/ui/views/stedding/altgr_chords_unittest.cc b/chrome/browser/ui/views/stedding/altgr_chords_unittest.cc
+new file mode 100644
+index 0000000000000..b501f79413e11
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/altgr_chords_unittest.cc
+@@ -0,0 +1,154 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/stedding/altgr_chords.h"
++
++#include <memory>
++
++#include "base/memory/raw_ptr.h"
++#include "base/test/bind.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/aura/window.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/base/accelerators/accelerator_manager.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/events/test/event_generator.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/test/views_test_base.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget.h"
++
++namespace stedding {
++namespace {
++
++constexpr int kCtrlAltShift =
++    ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN;
++// What Windows makes of Ctrl+Alt+Shift on a key the layout gives an AltGr
++// character, as Polish (Programmers) does C: Ć.
++constexpr int kAltGrShift = ui::EF_ALTGR_DOWN | ui::EF_SHIFT_DOWN;
++
++class CountingTarget : public ui::AcceleratorTarget {
++ public:
++  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
++    ++presses;
++    return true;
++  }
++  bool CanHandleAccelerators() const override { return true; }
++
++  int presses = 0;
++};
++
++// The focused view: what a page or a text field would get.
++class KeyRecorder : public views::View {
++ public:
++  KeyRecorder() { SetFocusBehavior(FocusBehavior::ALWAYS); }
++
++  bool OnKeyPressed(const ui::KeyEvent& event) override {
++    ++keys;
++    return true;
++  }
++
++  int keys = 0;
++};
++
++class AltGrChordsTest : public views::ViewsTestBase {
++ protected:
++  void SetUp() override {
++    views::ViewsTestBase::SetUp();
++    widget_ = CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++    recorder_ = widget_->SetContentsView(std::make_unique<KeyRecorder>());
++    widget_->Show();
++    widget_->Activate();
++    recorder_->RequestFocus();
++    widget_->GetFocusManager()->RegisterAccelerator(
++        ui::Accelerator(ui::VKEY_C, kCtrlAltShift),
++        ui::AcceleratorManager::kNormalPriority, &target_);
++    // Space 1 on Windows: Alt+1 (spaces B18, windows N7).
++    widget_->GetFocusManager()->RegisterAccelerator(
++        ui::Accelerator(ui::VKEY_1, ui::EF_ALT_DOWN),
++        ui::AcceleratorManager::kNormalPriority, &space_);
++    chords_ = std::make_unique<AltGrChords>(
++        widget_.get(), base::BindLambdaForTesting([&]() { return left_alt_; }));
++    generator_ = std::make_unique<ui::test::EventGenerator>(
++        widget_->GetNativeWindow()->GetRootWindow());
++  }
++
++  void TearDown() override {
++    generator_.reset();
++    chords_.reset();
++    widget_->GetFocusManager()->UnregisterAccelerators(&target_);
++    widget_->GetFocusManager()->UnregisterAccelerators(&space_);
++    recorder_ = nullptr;
++    widget_.reset();
++    views::ViewsTestBase::TearDown();
++  }
++
++  CountingTarget target_;
++  CountingTarget space_;
++  bool left_alt_ = false;
++  std::unique_ptr<views::Widget> widget_;
++  raw_ptr<KeyRecorder> recorder_ = nullptr;
++  std::unique_ptr<AltGrChords> chords_;
++  std::unique_ptr<ui::test::EventGenerator> generator_;
++};
++
++TEST_F(AltGrChordsTest, TheLeftAltRunsTheChordAndAltGrTypes) {
++  {
++    SCOPED_TRACE("Ctrl and the left Alt: the command");
++    left_alt_ = true;
++    generator_->PressKey(ui::VKEY_C, kAltGrShift);
++    EXPECT_EQ(1, target_.presses);
++    EXPECT_EQ(0, recorder_->keys) << "the key went on to be typed too";
++  }
++  {
++    SCOPED_TRACE("AltGr: the character");
++    left_alt_ = false;
++    generator_->PressKey(ui::VKEY_C, kAltGrShift);
++    EXPECT_EQ(1, target_.presses);
++    EXPECT_EQ(1, recorder_->keys);
++  }
++  {
++    SCOPED_TRACE("a chord no command uses: the character");
++    left_alt_ = true;
++    generator_->PressKey(ui::VKEY_X, kAltGrShift);
++    EXPECT_EQ(1, target_.presses);
++    EXPECT_EQ(2, recorder_->keys);
++  }
++  {
++    // Straight to the handler: the focus manager runs such a chord on its
++    // own, and the handler must not run it a second time.
++    SCOPED_TRACE("a layout that gives the key nothing: the focus manager's");
++    left_alt_ = true;
++    ui::KeyEvent chord(ui::EventType::kKeyPressed, ui::VKEY_C, kCtrlAltShift);
++    chord.SetFlags(kCtrlAltShift);
++    chords_->OnKeyEvent(&chord);
++    EXPECT_FALSE(chord.stopped_propagation());
++    EXPECT_EQ(1, target_.presses);
++  }
++}
++
++// windows N13: on a layout with AltGr the right Alt is AltGr, and with a digit
++// it types the layout's character -- a brace on German -- and switches no
++// Space; the handler leaves it to the layout, as it does Ctrl and the left Alt
++// with a digit, which is no chord of the window's.
++TEST_F(AltGrChordsTest, TheRightAltWithADigitTypes) {
++  generator_->PressKey(ui::VKEY_1, ui::EF_ALTGR_DOWN);
++  EXPECT_EQ(0, space_.presses);
++  EXPECT_EQ(1, recorder_->keys);
++  for (const bool left : {false, true}) {
++    SCOPED_TRACE(left ? "Ctrl and the left Alt" : "AltGr");
++    left_alt_ = left;
++    ui::KeyEvent digit(ui::EventType::kKeyPressed, ui::VKEY_1,
++                       ui::EF_ALTGR_DOWN);
++    digit.SetFlags(ui::EF_ALTGR_DOWN);
++    chords_->OnKeyEvent(&digit);
++    EXPECT_FALSE(digit.stopped_propagation());
++    EXPECT_EQ(0, space_.presses);
++  }
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/webui/settings/import_data_handler.cc b/chrome/browser/ui/webui/settings/import_data_handler.cc
+index 07ad45a8be20a..0bbf7916186a2 100644
+--- a/chrome/browser/ui/webui/settings/import_data_handler.cc
++++ b/chrome/browser/ui/webui/settings/import_data_handler.cc
+@@ -199,11 +199,17 @@ void ImportDataHandler::HandleImportFromBookmarksFile(
+   BrowserWindowInterface* browser =
+       GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+           web_ui()->GetWebContents());
++  // Stedding: the welcome flow's page is in a dialog, not a tab, and has no
++  // browser; the file dialog takes the welcome dialog's window. A null
++  // browser was dereferenced here (BACKLOG S-186).
++  const gfx::NativeWindow parent =
++      browser ? browser->GetWindow()->GetNativeWindow()
++              : web_ui()->GetWebContents()->GetTopLevelNativeWindow();
+ 
+   select_file_dialog_->SelectFile(
+       ui::SelectFileDialog::SELECT_OPEN_FILE, std::u16string(),
+       base::FilePath(), &file_type_info, 0, base::FilePath::StringType(),
+-      browser->GetWindow()->GetNativeWindow(), nullptr);
++      parent, nullptr);
+ }
+ 
+ void ImportDataHandler::SendBrowserProfileData(const std::string& callback_id) {
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+index 27cf133f755f6..ec86a818d6fa6 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+@@ -262,15 +262,17 @@ std::vector<ShortcutGroup> ShortcutReference() {
+            u"Little Arc window; quit Arc, or use New Split View with Current "
+            u"Tab on a tab's menu.");
+ #else
+-  // windows N7: Alt is also the menu key, and Ctrl+Alt is AltGr on some
+-  // keyboards.
++  // windows N7: Alt is also the menu key; N13, N14: Ctrl+Alt is AltGr on
++  // some keyboards.
+   AddChord(notes, SpaceRange(),
+            u"A tap of Alt on its own still focuses the app menu, as in "
+-           u"Chromium; the digit goes with the key held.");
++           u"Chromium; the digit goes with the key held. On a keyboard with "
++           u"AltGr, hold the left Alt: the right one types.");
+   AddChord(notes, ChordFor(IDC_STEDDING_SPACE_NEXT),
+-           u"Ctrl+Alt with an arrow is Arc’s own on Windows. A keyboard whose "
+-           u"AltGr types a character with one of the Ctrl+Alt chords may "
+-           u"see the character instead inside a text field.");
++           u"Ctrl+Alt with an arrow is Arc’s own on Windows. On a keyboard "
++           u"whose AltGr types a character with one of the Ctrl+Alt chords, "
++           u"press the chord with Ctrl and the left Alt; AltGr still types the "
++           u"character.");
+ #endif
+   return groups;
+ }
+@@ -308,7 +310,9 @@ void SteddingShortcutsHandler::RegisterMessages() {
+ }
+ 
+ void SteddingShortcutsHandler::HandleGetShortcuts(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   ResolveJavascriptCallback(args[0], stedding::ShortcutReferenceAsValue(
+                                          stedding::ShortcutReference()));
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
+index dde26bd1f3e21..650a01c3209d6 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
+@@ -186,6 +186,20 @@ TEST(ShortcutReferenceTest, SpaceKeysNoteIsPresent) {
+   EXPECT_GE(value.size(), 5u);
+ }
+ 
++#if BUILDFLAG(IS_WIN)
++// shortcuts Z3, windows N13, N14: the notes say which Alt to hold on a
++// keyboard with AltGr, on the Space keys' row and on Ctrl+Alt's.
++TEST(ShortcutReferenceTest, TheAltGrNotesNameTheLeftAlt) {
++  int found = 0;
++  for (const ShortcutGroup& group : ShortcutReference()) {
++    for (const ShortcutRow& row : group.rows) {
++      found += row.what.find(u"left Alt") != std::u16string::npos;
++    }
++  }
++  EXPECT_EQ(2, found);
++}
++#endif
++
+ #if BUILDFLAG(IS_MAC)
+ // shortcuts Z3, S-79: the notes say that Arc, while it runs, takes the split
+ // chord from every app for its Little Arc window (2026-10-02), on the row of
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+index f754e6b8a831a..037af51f1dfb2 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+@@ -182,13 +182,17 @@ void SteddingSpacesHandler::PushSpaces() {
+ }
+ 
+ void SteddingSpacesHandler::HandleGetSpaces(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   ResolveJavascriptCallback(args[0], ListSpaces());
+ }
+ 
+ void SteddingSpacesHandler::HandleRenameSpace(const base::ListValue& args) {
+-  CHECK_EQ(2U, args.size());
++  if (args.size() != 2U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<spaces::SpaceId> id = ParseId(args[0]);
+   spaces::SpaceModel* const model = GetModel();
+@@ -200,7 +204,9 @@ void SteddingSpacesHandler::HandleRenameSpace(const base::ListValue& args) {
+ 
+ void SteddingSpacesHandler::HandleCountSpacePages(
+     const base::ListValue& args) {
+-  CHECK_EQ(2U, args.size());
++  if (args.size() != 2U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<spaces::SpaceId> id = ParseId(args[1]);
+   spaces::SpaceModel* const model = GetModel();
+@@ -212,7 +218,9 @@ void SteddingSpacesHandler::HandleCountSpacePages(
+ 
+ void SteddingSpacesHandler::HandleSetSpaceIsolated(
+     const base::ListValue& args) {
+-  CHECK_EQ(2U, args.size());
++  if (args.size() != 2U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<spaces::SpaceId> id = ParseId(args[0]);
+   spaces::SpaceModel* const model = GetModel();
+@@ -225,7 +233,9 @@ void SteddingSpacesHandler::HandleSetSpaceIsolated(
+ // Exports the Space this window shows when the user asks, not the one the
+ // page last drew as active.
+ void SteddingSpacesHandler::HandleExportSpace(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   if (!args[0].is_string()) {
+     return;
+@@ -310,7 +320,9 @@ void SteddingSpacesHandler::OnSidebarFileImported(
+ }
+ 
+ void SteddingSpacesHandler::HandleAddRoute(const base::ListValue& args) {
+-  CHECK_EQ(2U, args.size());
++  if (args.size() != 2U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<spaces::SpaceId> id = ParseId(args[0]);
+   spaces::SpaceModel* const model = GetModel();
+@@ -334,7 +346,9 @@ void SteddingSpacesHandler::HandleAddRoute(const base::ListValue& args) {
+ }
+ 
+ void SteddingSpacesHandler::HandleRemoveRoute(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<int> index = args[0].GetIfInt();
+   if (!index || *index < 0) {
+@@ -346,7 +360,9 @@ void SteddingSpacesHandler::HandleRemoveRoute(const base::ListValue& args) {
+ }
+ 
+ void SteddingSpacesHandler::HandleGetArcImport(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   if (!args[0].is_string()) {
+     return;
+@@ -367,7 +383,9 @@ void SteddingSpacesHandler::OnArcSidebarInfo(const std::string& callback_id,
+ }
+ 
+ void SteddingSpacesHandler::HandleImportFromArc(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   if (!args[0].is_string()) {
+     return;
+@@ -395,7 +413,9 @@ void SteddingSpacesHandler::OnArcImportDone(
+ }
+ 
+ void SteddingSpacesHandler::HandleDeleteSpace(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<spaces::SpaceId> id = ParseId(args[0]);
+   spaces::SpaceModel* const model = GetModel();
+diff --git a/chrome/browser/ui/webui/stedding_archive/BUILD.gn b/chrome/browser/ui/webui/stedding_archive/BUILD.gn
+index 472005f8e490c..22c69701d27c0 100644
+--- a/chrome/browser/ui/webui/stedding_archive/BUILD.gn
++++ b/chrome/browser/ui/webui/stedding_archive/BUILD.gn
+@@ -31,3 +31,16 @@ source_set("stedding_archive") {
+     "//ui/webui",
+   ]
+ }
++
++source_set("unit_tests") {
++  testonly = true
++  sources = [ "stedding_archive_handler_unittest.cc" ]
++  deps = [
++    ":stedding_archive",
++    "//base",
++    "//chrome/test:test_support",
++    "//content/public/browser",
++    "//content/test:test_support",
++    "//testing/gtest",
++  ]
++}
+diff --git a/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler.cc b/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler.cc
+index 1d2ce6e359545..21e0940dfdd28 100644
+--- a/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler.cc
++++ b/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler.cc
+@@ -101,17 +101,29 @@ base::DictValue ArchiveHandler::Snapshot() {
+   return snapshot;
+ }
+ 
++// A message from the page of the wrong shape is dropped: the page is a
++// renderer, and a CHECK or a GetString() on its arguments let a compromised one
++// stop the browser (BACKLOG S-188).
+ void ArchiveHandler::HandleGetArchivedTabs(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
++  const std::string* const callback_id = args[0].GetIfString();
++  if (!callback_id) {
++    return;
++  }
+   AllowJavascript();
+-  ResolveJavascriptCallback(base::Value(args[0].GetString()), Snapshot());
++  ResolveJavascriptCallback(base::Value(*callback_id), Snapshot());
+ }
+ 
+ void ArchiveHandler::HandleRestoreArchivedTab(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   int32_t raw = 0;
+-  if (!base::StringToInt(args[0].GetString(), &raw)) {
++  const std::string* const id = args[0].GetIfString();
++  if (!id || !base::StringToInt(*id, &raw)) {
+     return;
+   }
+   BrowserWindowInterface* const browser = GetBrowser();
+@@ -124,10 +136,13 @@ void ArchiveHandler::HandleRestoreArchivedTab(const base::ListValue& args) {
+ }
+ 
+ void ArchiveHandler::HandleRemoveArchivedTab(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   int32_t raw = 0;
+-  if (!base::StringToInt(args[0].GetString(), &raw)) {
++  const std::string* const id = args[0].GetIfString();
++  if (!id || !base::StringToInt(*id, &raw)) {
+     return;
+   }
+   if (sessions::TabRestoreService* const service = GetService()) {
+diff --git a/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler_unittest.cc b/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler_unittest.cc
+new file mode 100644
+index 0000000000000..d93c0bba7aef2
+--- /dev/null
++++ b/chrome/browser/ui/webui/stedding_archive/stedding_archive_handler_unittest.cc
+@@ -0,0 +1,68 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/stedding_archive/stedding_archive_handler.h"
++
++#include <memory>
++#include <utility>
++
++#include "base/values.h"
++#include "chrome/test/base/browser_with_test_window_test.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/test_web_ui.h"
++#include "content/public/test/web_contents_tester.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace stedding {
++namespace {
++
++class TestArchiveHandler : public ArchiveHandler {
++ public:
++  using ArchiveHandler::set_web_ui;
++};
++
++class SteddingArchiveHandlerTest : public BrowserWithTestWindowTest {
++ protected:
++  void SetUp() override {
++    BrowserWithTestWindowTest::SetUp();
++    contents_ = content::WebContentsTester::CreateTestWebContents(
++        profile(), /*instance=*/nullptr);
++    web_ui_.set_web_contents(contents_.get());
++    handler_ = std::make_unique<TestArchiveHandler>();
++    handler_->set_web_ui(&web_ui_);
++    handler_->RegisterMessages();
++  }
++
++  void TearDown() override {
++    handler_.reset();
++    contents_.reset();
++    BrowserWithTestWindowTest::TearDown();
++  }
++
++  content::TestWebUI web_ui_;
++  std::unique_ptr<content::WebContents> contents_;
++  std::unique_ptr<TestArchiveHandler> handler_;
++};
++
++// A message of the wrong shape from chrome://stedding-archive is dropped: the
++// page is a renderer, and a CHECK on the count or a GetString() on a number
++// stopped the browser (BACKLOG S-188).
++TEST_F(SteddingArchiveHandlerTest, AMessageOfTheWrongShapeIsDropped) {
++  base::ListValue number;
++  number.Append(1);
++  web_ui_.HandleReceivedMessage("restoreArchivedTab", number);
++  web_ui_.HandleReceivedMessage("getArchivedTabs", number);
++  base::ListValue dict;
++  dict.Append(base::DictValue());
++  web_ui_.HandleReceivedMessage("removeArchivedTab", dict);
++  web_ui_.HandleReceivedMessage("getArchivedTabs", base::ListValue());
++  base::ListValue two;
++  two.Append("1");
++  two.Append("2");
++  web_ui_.HandleReceivedMessage("restoreArchivedTab", two);
++  EXPECT_TRUE(web_ui_.call_data().empty());
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc
+index ce2f37140e031..8ed3b56e6ddce 100644
+--- a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc
++++ b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc
+@@ -126,7 +126,9 @@ void WelcomeHandler::RegisterMessages() {
+ }
+ 
+ void WelcomeHandler::HandleGetSpaceColors(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   base::ListValue list;
+   for (const spaces::SpaceColorChoice& choice : spaces::kSpaceColors) {
+@@ -142,7 +144,9 @@ void WelcomeHandler::HandleGetSpaceColors(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleSetSpaceColor(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   const std::optional<int> index = args[0].GetIfInt();
+   if (!index || *index < 0 ||
+@@ -153,19 +157,27 @@ void WelcomeHandler::HandleSetSpaceColor(const base::ListValue& args) {
+       WelcomeHost::FromWebContents(web_ui()->GetWebContents());
+   spaces::SpaceModel* const model =
+       host ? spaces::SpaceModel::From(host->browser()) : nullptr;
+-  if (!model) {
++  if (!model || model->spaces().empty()) {
+     return;
+   }
+-  model->SetSpaceColor(model->active_id(),
++  // welcome W7: the first Space, whichever is on screen. The dialog does not
++  // block its window, so another Space can be active (BACKLOG S-187).
++  model->SetSpaceColor(model->spaces().front()->id(),
+                        spaces::kSpaceColors.at(*index).color);
+ }
+ 
+ void WelcomeHandler::HandleGetArcImport(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
++  const std::string* const callback_id = args[0].GetIfString();
++  if (!callback_id) {
++    return;
++  }
+   AllowJavascript();
+   spaces::LoadArcSidebarInfo(base::BindOnce(&WelcomeHandler::OnArcSidebarInfo,
+                                             weak_factory_.GetWeakPtr(),
+-                                            args[0].GetString()));
++                                            *callback_id));
+ }
+ 
+ void WelcomeHandler::OnArcSidebarInfo(const std::string& callback_id,
+@@ -181,7 +193,13 @@ void WelcomeHandler::OnArcSidebarInfo(const std::string& callback_id,
+ }
+ 
+ void WelcomeHandler::HandleImportFromArc(const base::ListValue& args) {
+-  CHECK_EQ(6U, args.size());
++  if (args.size() != 6U) {
++    return;
++  }
++  const std::string* const callback_id = args[0].GetIfString();
++  if (!callback_id) {
++    return;
++  }
+   AllowJavascript();
+   const WelcomeHost* const host =
+       WelcomeHost::FromWebContents(web_ui()->GetWebContents());
+@@ -196,7 +214,7 @@ void WelcomeHandler::HandleImportFromArc(const base::ListValue& args) {
+   spaces::ImportFromArcAsync(
+       browser, options,
+       base::BindOnce(&WelcomeHandler::OnArcImportDone,
+-                     weak_factory_.GetWeakPtr(), args[0].GetString()));
++                     weak_factory_.GetWeakPtr(), *callback_id));
+ }
+ 
+ void WelcomeHandler::OnArcImportDone(
+@@ -224,7 +242,9 @@ void WelcomeHandler::HandleOpenShortcuts(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleGetSearchEngines(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   base::ListValue engines;
+   Profile* const profile = Profile::FromWebUI(web_ui());
+@@ -257,7 +277,9 @@ void WelcomeHandler::HandleGetSearchEngines(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleSetSearchEngine(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   if (!args[0].is_int()) {
+     return;
+@@ -301,7 +323,9 @@ void WelcomeHandler::HandleSetSearchEngine(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleSetAppearance(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   const std::string scheme = args[0].is_string() ? args[0].GetString() : "";
+   ThemeService* const theme =
+@@ -319,7 +343,9 @@ void WelcomeHandler::HandleSetAppearance(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleGetBehaviour(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
+   AllowJavascript();
+   const PrefService* const pref_service =
+       Profile::FromWebUI(web_ui())->GetPrefs();
+@@ -334,7 +360,9 @@ void WelcomeHandler::HandleGetBehaviour(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleSetBehaviour(const base::ListValue& args) {
+-  CHECK_EQ(2U, args.size());
++  if (args.size() != 2U) {
++    return;
++  }
+   AllowJavascript();
+   const std::string* const name = args[0].GetIfString();
+   const std::optional<int> value = args[1].GetIfInt();
+@@ -365,9 +393,15 @@ void WelcomeHandler::HandleSetBehaviour(const base::ListValue& args) {
+ }
+ 
+ void WelcomeHandler::HandleGetDefaultBrowserState(const base::ListValue& args) {
+-  CHECK_EQ(1U, args.size());
++  if (args.size() != 1U) {
++    return;
++  }
++  const std::string* const id = args[0].GetIfString();
++  if (!id) {
++    return;
++  }
+   AllowJavascript();
+-  const std::string callback_id = args[0].GetString();
++  const std::string callback_id = *id;
+   default_browser_worker_ =
+       base::MakeRefCounted<shell_integration::DefaultBrowserWorker>();
+   default_browser_worker_->StartCheckIsDefault(
+diff --git a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
+index 0a14b514c51f7..f946739260551 100644
+--- a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
++++ b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
+@@ -22,6 +22,7 @@
+ #include "components/search_engines/template_url.h"
+ #include "components/search_engines/template_url_data.h"
+ #include "components/search_engines/template_url_data_util.h"
++#include "third_party/skia/include/core/SkColor.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/test_web_ui.h"
+ #include "content/public/test/web_contents_tester.h"
+@@ -91,6 +92,48 @@ TEST_F(SteddingWelcomeHandlerTest, SetSpaceColorTintsTheFirstSpace) {
+ }
+ 
+ // welcome W7: the page is offered exactly the switcher's five colours.
++// welcome W7: the swatch tints the window's first Space, also while another
++// Space is active; it tinted the active one (BACKLOG S-187).
++TEST_F(SteddingWelcomeHandlerTest, ASwatchTintsTheFirstSpaceNotTheActiveOne) {
++  const spaces::SpaceId first = model().spaces().front()->id();
++  spaces::Space* const second = model().AddSpace("Work", SK_ColorBLUE);
++  ASSERT_TRUE(model().SetActiveSpace(second->id()));
++  base::ListValue args;
++  args.Append(3);
++  web_ui_.HandleReceivedMessage("setSpaceColor", args);
++  EXPECT_EQ(spaces::kSpaceColors[3].color, model().GetSpace(first)->color());
++  EXPECT_EQ(SK_ColorBLUE, model().active_space()->color());
++}
++
++// A message of the wrong shape from the page is dropped: the page is a
++// renderer, and a CHECK on the count or a GetString() on a number stopped the
++// browser (BACKLOG S-188).
++TEST_F(SteddingWelcomeHandlerTest, AMessageOfTheWrongShapeIsDropped) {
++  const auto send = [&](const char* message, base::ListValue args) {
++    web_ui_.HandleReceivedMessage(message, args);
++  };
++  base::ListValue a;
++  a.Append(1);
++  send("getArcImport", a.Clone());
++  send("getDefaultBrowserState", a.Clone());
++  send("getBehaviour", base::ListValue());
++  send("setSpaceColor", base::ListValue());
++  base::ListValue six;
++  six.Append(base::DictValue());
++  for (int i = 0; i < 5; ++i) {
++    six.Append(true);
++  }
++  send("importFromArc", std::move(six));
++  base::ListValue three;
++  three.Append(1);
++  three.Append(2);
++  three.Append(3);
++  send("setBehaviour", std::move(three));
++  send("getSearchEngines", base::ListValue());
++  // Nothing answered a malformed request.
++  EXPECT_TRUE(web_ui_.call_data().empty());
++}
++
+ TEST_F(SteddingWelcomeHandlerTest, GetSpaceColorsListsTheTable) {
+   base::ListValue args;
+   args.Append("callback-id");
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 92d2c528b9d0a..d48207f0b8c1a 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -5127,6 +5127,7 @@ test("unit_tests") {
+     "//chrome/browser/ui/views/commandbar:unit_tests",
+     "//chrome/browser/ui/views/switcher:unit_tests",
+     "//chrome/browser/ui/stedding:unit_tests",
++    "//chrome/browser/ui/webui/stedding_archive:unit_tests",
+     "//chrome/browser/ui/webui/stedding_welcome:unit_tests",
+     "//chrome/browser/ui/views/peek:unit_tests",
+     "//chrome/browser/ui/tabs:stedding_unit_tests",
+diff --git a/chrome/test/data/stedding/space_worker.html b/chrome/test/data/stedding/space_worker.html
+new file mode 100644
+index 0000000000000..7efb49ae5e299
+--- /dev/null
++++ b/chrome/test/data/stedding/space_worker.html
+@@ -0,0 +1,26 @@
++<!doctype html>
++<!-- Copyright 2026 The Stedding Authors
++     Use of this source code is governed by a BSD-style license that can be
++     found in the LICENSE file. -->
++<!-- A page whose service worker shows a notification and, when it is
++     clicked, opens a window (chrome/test/stedding/space_worker_browsertest.cc).
++     What the worker reports arrives in `messages`. -->
++<title>Space worker</title>
++<script>
++  window.messages = [];
++  navigator.serviceWorker.addEventListener(
++      'message', (event) => window.messages.push(event.data));
++  navigator.serviceWorker.startMessages();
++
++  async function register() {
++    await navigator.serviceWorker.register('space_worker.js');
++    await navigator.serviceWorker.ready;
++    return 'registered';
++  }
++
++  async function show() {
++    const registration = await navigator.serviceWorker.ready;
++    await registration.showNotification('Space', {tag: 'space'});
++    return 'shown';
++  }
++</script>
+diff --git a/chrome/test/data/stedding/space_worker.js b/chrome/test/data/stedding/space_worker.js
+new file mode 100644
+index 0000000000000..3eba08d8106cc
+--- /dev/null
++++ b/chrome/test/data/stedding/space_worker.js
+@@ -0,0 +1,29 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Service worker for space_worker.html. A click on its notification opens a
++// window on the cookie echo and tells every page of the origin what happened.
++
++async function tell(message) {
++  const pages = await clients.matchAll(
++      {includeUncontrolled: true, type: 'window'});
++  for (const page of pages) {
++    page.postMessage(message);
++  }
++}
++
++self.addEventListener('install', () => self.skipWaiting());
++
++self.addEventListener('notificationclick', (event) => {
++  event.notification.close();
++  event.waitUntil((async () => {
++    await tell('clicked');
++    try {
++      const opened = await clients.openWindow('/echoheader?Cookie');
++      await tell(opened ? 'opened' : 'opened but not a client');
++    } catch (error) {
++      await tell('open failed: ' + error);
++    }
++  })());
++});
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 28b07e4337cba..b38dab09efd06 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -48,6 +48,7 @@ test("stedding_browser_tests") {
+     "space_jar_browsertest.cc",
+     "space_jar_restart_browsertest.cc",
+     "space_switch_browsertest.cc",
++    "space_worker_browsertest.cc",
+     "tab_drop_browsertest.cc",
+     "welcome_browsertest.cc",
+   ]
+@@ -57,7 +58,9 @@ test("stedding_browser_tests") {
+     "//base/test:test_support",
+     "//chrome/browser",
+     "//chrome/browser/extensions",
++    "//chrome/browser/content_settings:content_settings_factory",
+     "//chrome/browser/extensions:test_support",
++    "//chrome/browser/notifications:test_support",
+     "//chrome/browser/gcm",
+     "//chrome/browser/history",
+     "//chrome/browser/interstitials:test_support",
+@@ -111,6 +114,8 @@ test("stedding_browser_tests") {
+     "//chrome/test/base:browser_tests_runner",
+     "//chrome/test/base:ui_test_utils",
+     "//components/history/core/browser",
++    "//components/content_settings/core/browser",
++    "//components/content_settings/core/common",
+     "//components/gcm_driver",
+     "//components/gcm_driver/instance_id",
+     "//components/history/core/test",
+@@ -118,6 +123,7 @@ test("stedding_browser_tests") {
+     "//components/invalidation",
+     "//components/javascript_dialogs",
+     "//components/keyed_service/core",
++    "//components/performance_manager",
+     "//components/policy/core/common:common_constants",
+     "//components/prefs",
+     "//components/regional_capabilities",
+@@ -144,7 +150,9 @@ test("stedding_browser_tests") {
+     "//ui/compositor",
+     "//ui/display",
+     "//ui/events:test_support",
++    "//ui/message_center/public/cpp",
+     "//ui/shell_dialogs",
++    "//ui/shell_dialogs:test_support",
+     "//ui/views",
+     "//ui/views:test_support",
+   ]
+diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
+index 928d02db89996..d848db6e76ddb 100644
+--- a/chrome/test/stedding/pinned_run_browsertest.cc
++++ b/chrome/test/stedding/pinned_run_browsertest.cc
+@@ -18,14 +18,18 @@
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_id.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
++#include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
++#include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/test/browser_test.h"
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -165,6 +169,43 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest,
+   EXPECT_TRUE(ClearLineShown());
+ }
+ 
++// pins H14, splits J4: a Space-pinned split is a row of the pinned run, above
++// the Clear line. Only a single tab's row was asked whether it is pinned, so
++// the split's row counted as loose and was drawn under the line (BACKLOG
++// S-182).
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, APinnedSplitSitsAboveTheClearLine) {
++  tabs::TabInterface* const left = tabs().GetActiveTab();
++  tabs::TabInterface* const right = AddBlankTab();
++  tabs::TabInterface* const loose = AddBlankTab();
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(left));
++  tabs().AddToNewSplit({tabs().GetIndexOfTab(right)},
++                       split_tabs::SplitTabVisualData(),
++                       split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  ASSERT_TRUE(left->IsSplit());
++  model().SetSpacePinned(left, true);
++  ASSERT_TRUE(model().IsSpacePinned(right)) << "a split pins as a unit";
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(loose));
++  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  views::test::RunScheduledLayout(widget());
++
++  const ClearTabsSeparator* const line =
++      stedding::test::FindDrawnClearLine(widget()->GetRootView());
++  ASSERT_TRUE(line) << "a pinned split and a loose tab below it";
++  const TabView* const pane =
++      stedding::test::FindDrawnRow(widget()->GetRootView(), left);
++  ASSERT_TRUE(pane);
++  const views::View* const split_row = pane->parent();
++  ASSERT_TRUE(views::IsViewClass<SplitTabView>(split_row));
++  EXPECT_LE(split_row->GetBoundsInScreen().bottom(),
++            line->GetBoundsInScreen().y())
++      << "the pinned split is drawn under the Clear line";
++  const TabView* const loose_row =
++      stedding::test::FindDrawnRow(widget()->GetRootView(), loose);
++  ASSERT_TRUE(loose_row);
++  EXPECT_GE(loose_row->GetBoundsInScreen().y(),
++            line->GetBoundsInScreen().bottom());
++}
++
+ // pins H17: the collapse is the Space's, kept with its name and colour, so
+ // it is there after a restart; a Space that was not collapsed is not.
+ IN_PROC_BROWSER_TEST_F(PinnedRunTest, PRE_TheCollapseSurvivesARestart) {
+diff --git a/chrome/test/stedding/restore_browsertest.cc b/chrome/test/stedding/restore_browsertest.cc
+index 705aa57a99c20..28f9d609cd6c8 100644
+--- a/chrome/test/stedding/restore_browsertest.cc
++++ b/chrome/test/stedding/restore_browsertest.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
++#include "chrome/browser/sessions/session_restore.h"
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+ #include "chrome/browser/sessions/session_service_test_helper.h"
+@@ -66,6 +67,8 @@
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/test/base/chrome_test_path_utils.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
+@@ -524,6 +527,171 @@ IN_PROC_BROWSER_TEST_F(RestoreTest, ABlankWindowComesBackBlank) {
+       << "the Blank Window came back as an ordinary one";
+ }
+ 
++// sessions S28 (BACKLOG S-179): a page's sessionStorage in a Space with
++// cookies of its own comes back after a restart, in that Space's jar, as a
++// page's in the shared jar does. The session had kept only the shared jar's.
++IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_ASpacesSessionStorageComesBack) {
++  spaces::SpaceModel* const m = model();
++  ASSERT_TRUE(m);
++  const SpaceId work = m->AddSpace("Work", SK_ColorBLUE)->id();
++  m->SetSpaceIsolated(work, true);
++  ASSERT_TRUE(m->SetActiveSpace(work));
++  // A file page: its origin is the same in the next run, where the test
++  // server's port is not.
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(),
++      chrome_test_utils::GetTestUrl(
++          base::FilePath(), base::FilePath(FILE_PATH_LITERAL("title1.html"))),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  content::WebContents* const page = tabs()->GetActiveWebContents();
++  ASSERT_TRUE(page->GetLastCommittedURL().SchemeIsFile());
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(
++      spaces::StoragePartitionConfigForWebContents(page)));
++  ASSERT_TRUE(content::ExecJs(page, "sessionStorage.setItem('draft', 'kept')"));
++}
++
++IN_PROC_BROWSER_TEST_F(RestoreTest, ASpacesSessionStorageComesBack) {
++  content::WebContents* page = nullptr;
++  for (int i = 0; i < tabs()->count(); ++i) {
++    content::WebContents* const each = tabs()->GetWebContentsAt(i);
++    const content::NavigationEntry* const entry =
++        each->GetController().GetLastCommittedEntry();
++    if ((entry ? entry->GetURL() : each->GetVisibleURL()).SchemeIsFile()) {
++      page = each;
++    }
++  }
++  ASSERT_TRUE(page);
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(
++      spaces::StoragePartitionConfigForWebContents(page)))
++      << "back in its Space's jar";
++  tabs()->ActivateTabAt(tabs()->GetIndexOfWebContents(page));
++  ASSERT_TRUE(content::WaitForLoadStop(page));
++  EXPECT_EQ("kept", content::EvalJs(page, "sessionStorage.getItem('draft')"));
++}
++
++// windows G4, sessions S29 (BACKLOG S-179): the crash bubble's Restore puts
++// the saved session into the window it sits in. A Blank Window comes back as
++// a window of its own, with its own Spaces, and the next window's tabs join
++// instead; the window they join shows the Space that window showed, with an
++// essential selected. The Blank Window's tabs had joined the profile's first
++// Space, and the window had stayed on it.
++IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_ACrashRestoreKeepsEachWindowsSpaces) {
++  // The Blank Window first, so it is the session's first window once the
++  // window the test began with has gone.
++  ui_test_utils::BrowserCreatedObserver opened;
++  chrome::ExecuteCommand(browser(), IDC_STEDDING_NEW_BLANK_WINDOW);
++  BrowserWindowInterface* const blank = opened.Wait();
++  ASSERT_TRUE(blank);
++  spaces::SpaceModel* const blank_model = spaces::SpaceModel::From(blank);
++  ASSERT_TRUE(blank_model);
++  ASSERT_FALSE(blank_model->follows_registry());
++  const SpaceId scratch = blank_model->AddSpace("Scratch", SK_ColorRED)->id();
++  ASSERT_TRUE(blank_model->SetActiveSpace(scratch));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(blank, Url("scratch.test")));
++
++  // An ordinary window after it, on its second Space, an essential selected.
++  BrowserWindowInterface* const normal = CreateBrowser(browser()->GetProfile());
++  spaces::SpaceModel* const normal_model = spaces::SpaceModel::From(normal);
++  ASSERT_TRUE(normal_model);
++  ASSERT_TRUE(normal_model->follows_registry());
++  const SpaceId work = normal_model->AddSpace("Work", SK_ColorBLUE)->id();
++  ASSERT_TRUE(normal_model->SetActiveSpace(work));
++  // New tabs: the window's first tab was filed before Work existed.
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      normal, Url("work.test"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  ASSERT_EQ(work, normal_model->SpaceForTab(
++                      normal->GetTabStripModel()->GetActiveTab()));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      normal, Url("essential.test"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  TabStripModel* const strip = normal->GetTabStripModel();
++  tabs::TabInterface* const essential = strip->GetActiveTab();
++  strip->SetTabPinned(strip->active_index(), true);
++  ASSERT_TRUE(essential->IsPinned());
++  // Selected again, so the session has the selected tab at the pin's place:
++  // the pin moved it, and only a selection change is written.
++  strip->ActivateTabAt(strip->count() - 1);
++  strip->ActivateTabAt(strip->GetIndexOfTab(essential));
++  ASSERT_EQ(essential, strip->GetActiveTab());
++  ASSERT_EQ(work, normal_model->active_id());
++
++  CloseBrowserSynchronously(browser());
++  SetBrowser(normal);
++  // The next run starts on a new tab page, as the run after a crash does.
++  SessionStartupPref::SetStartupPref(
++      normal->GetProfile(), SessionStartupPref(SessionStartupPref::DEFAULT));
++}
++
++IN_PROC_BROWSER_TEST_F(RestoreTest, ACrashRestoreKeepsEachWindowsSpaces) {
++  ASSERT_EQ(1u, GetAllBrowserWindowInterfaces().size());
++  BrowserWindowInterface* const open = browser();
++  const auto holds = [](BrowserWindowInterface* window,
++                        const std::string& host) -> tabs::TabInterface* {
++    TabStripModel* const strip = window->GetTabStripModel();
++    for (int i = 0; i < strip->count(); ++i) {
++      tabs::TabInterface* const tab = strip->GetTabAtIndex(i);
++      const content::NavigationEntry* const entry =
++          tab->GetContents()->GetController().GetLastCommittedEntry();
++      if ((entry ? entry->GetURL() : tab->GetContents()->GetVisibleURL())
++              .host() == host) {
++        return tab;
++      }
++    }
++    return nullptr;
++  };
++
++  // The window a launch after a crash opens: one new tab page, which the
++  // restore replaces. The test's run began with more.
++  TabStripModel* const open_tabs = open->GetTabStripModel();
++  while (open_tabs->count() > 1) {
++    open_tabs->CloseWebContentsAt(open_tabs->count() - 1,
++                                  TabCloseTypes::CLOSE_NONE);
++  }
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(open, GURL(chrome::kChromeUINewTabURL)));
++  SessionRestore::RestoreSessionAfterCrash(open);
++  BrowserWindowInterface* other = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    for (BrowserWindowInterface* const window :
++         GetAllBrowserWindowInterfaces()) {
++      if (window != open && holds(window, "scratch.test")) {
++        other = window;
++      }
++    }
++    return other || holds(open, "scratch.test");
++  })) << "the session came back";
++
++  {
++    SCOPED_TRACE("the Blank Window is a window of its own");
++    ASSERT_TRUE(other) << "its tab joined the window that was open";
++    spaces::SpaceModel* const blank = spaces::SpaceModel::From(other);
++    ASSERT_TRUE(blank);
++    EXPECT_FALSE(blank->follows_registry());
++    ASSERT_TRUE(blank->GetSpace(blank->active_id()));
++    EXPECT_EQ("Scratch", blank->GetSpace(blank->active_id())->name());
++    EXPECT_EQ(blank->active_id(),
++              blank->SpaceForTab(holds(other, "scratch.test")));
++  }
++  {
++    SCOPED_TRACE("the open window shows the Space its session showed");
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return holds(open, "work.test") && holds(open, "essential.test");
++    })) << "the ordinary window's tabs joined it";
++    spaces::SpaceModel* const joined = spaces::SpaceModel::From(open);
++    ASSERT_TRUE(joined);
++    EXPECT_TRUE(joined->follows_registry());
++    tabs::TabInterface* const essential = holds(open, "essential.test");
++    EXPECT_TRUE(essential->IsPinned());
++    EXPECT_EQ(essential, open->GetTabStripModel()->GetActiveTab());
++    ASSERT_TRUE(joined->GetSpace(joined->active_id()));
++    EXPECT_EQ("Work", joined->GetSpace(joined->active_id())->name());
++    EXPECT_EQ(joined->active_id(),
++              joined->SpaceForTab(holds(open, "work.test")));
++  }
++}
++
+ // PLAN.md TAB-15, SPC-8 (sessions S23): a renamed tab put to sleep and woken
+ // keeps its name, and contents replaced under a tab -- a sleep through
+ // Chromium's own lifecycle unit, a jar rebind -- get the tab's Space, pin,
+@@ -692,6 +860,8 @@ IN_PROC_BROWSER_TEST_F(RestoreTest,
+     stedding::SetTabName(browser(), tab, u"Notes");
+     ASSERT_TRUE(spaces::IsSpaceStoragePartition(
+         spaces::StoragePartitionConfigForWebContents(tab->GetContents())));
++    ASSERT_TRUE(content::ExecJs(tab->GetContents(),
++                                "sessionStorage.setItem('draft', 'kept')"));
+     ASSERT_TRUE(m->SetActiveSpace(home));
+     tabs()->CloseWebContentsAt(Index(tab),
+                                TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+@@ -708,6 +878,13 @@ IN_PROC_BROWSER_TEST_F(RestoreTest,
+         spaces::StoragePartitionConfigForWebContents(back->GetContents())))
+         << "back in its Space's jar, not the shared one";
+     EXPECT_EQ(u"Notes", stedding::TabName(back->GetContents()));
++    // sessions S28 (BACKLOG S-179): with its sessionStorage, which only the
++    // shared jar's tabs had kept.
++    tabs()->ActivateTabAt(Index(back));
++    ASSERT_TRUE(content::WaitForLoadStop(back->GetContents()));
++    EXPECT_EQ("kept", content::EvalJs(back->GetContents(),
++                                      "sessionStorage.getItem('draft')"));
++    ASSERT_TRUE(m->SetActiveSpace(home));
+   }
+ 
+   {
+diff --git a/chrome/test/stedding/sleep_in_use_browsertest.cc b/chrome/test/stedding/sleep_in_use_browsertest.cc
+index 7b92735d45e3d..db5b6164181ca 100644
+--- a/chrome/test/stedding/sleep_in_use_browsertest.cc
++++ b/chrome/test/stedding/sleep_in_use_browsertest.cc
+@@ -5,14 +5,18 @@
+ // A Space left while its tabs are in use (PLAN.md TAB-14, tabs R5-R6). The
+ // Space's timer puts its idle tabs to sleep through the real tab lifecycle
+ // unit and leaves alone a tab playing sound, one in a call, one showing
+-// picture-in-picture and one with a form someone typed into. Sleep Other
++// picture-in-picture, one with a form someone typed into, one with an edited
++// draft that is no form, a PDF and a page DevTools inspects. Sleep Other
+ // Tabs with a split on screen keeps both of its panes.
+ 
+ #include <memory>
+ #include <string>
+ #include <vector>
+ 
++#include "base/containers/span.h"
+ #include "base/functional/bind.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "base/test/run_until.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+@@ -26,8 +30,12 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/performance_manager.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/devtools_agent_host.h"
++#include "content/public/browser/devtools_agent_host_client.h"
+ #include "content/public/browser/media_stream_request.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -61,6 +69,38 @@ void TypeAaaIntoTheField(content::WebContents* contents) {
+       std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(), 0);
+ }
+ 
++// The same into a contenteditable block, as a mail draft or a document
++// editor is: an edit Blink tells only the page node of, where a text field
++// also counts as a form interaction.
++void TypeAaaIntoADraft(content::WebContents* contents) {
++  ASSERT_TRUE(content::ExecJs(
++      contents,
++      "document.body.innerHTML = '<div id=draft contenteditable></div>';"
++      "document.getElementById('draft').focus();"));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return content::DoesFrameHaveFocusedEditableElement(
++        contents->GetPrimaryMainFrame());
++  })) << "the draft never took focus";
++  content::SendImeCommitTextToWidget(
++      contents->GetPrimaryMainFrame()->GetRenderWidgetHost(), u"aaa",
++      std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(), 0);
++}
++
++bool PageHadUserEdits(content::WebContents* contents) {
++  const base::WeakPtr<performance_manager::PageNode> page =
++      performance_manager::PerformanceManager::GetPrimaryPageNodeForWebContents(
++          contents);
++  return page && page->HadUserEdits();
++}
++
++// Stands for a DevTools window: attached, it makes the page debugged.
++class QuietDevToolsClient : public content::DevToolsAgentHostClient {
++ public:
++  void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
++                               base::span<const uint8_t> message) override {}
++  void AgentHostClosed(content::DevToolsAgentHost* agent_host) override {}
++};
++
+ class SleepInUseTest : public InProcessBrowserTest {
+  protected:
+   void SetUpOnMainThread() override {
+@@ -145,6 +185,25 @@ IN_PROC_BROWSER_TEST_F(SleepInUseTest,
+   })) << "the typing is seen";
+   ASSERT_FALSE(stedding::TabIsInUse(idle));
+ 
++  // Each precondition below is the page's own state, not the sleep gate's
++  // reading of it, so a gate that misses all three fails all three.
++  tabs::TabInterface* const draft = Open("/title1.html");
++  ASSERT_NO_FATAL_FAILURE(TypeAaaIntoADraft(draft->GetContents()));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return PageHadUserEdits(draft->GetContents());
++  })) << "the edit reached the page node";
++
++  tabs::TabInterface* const pdf = Open("/pdf/test.pdf");
++  ASSERT_EQ("application/pdf", pdf->GetContents()->GetContentsMimeType());
++
++  tabs::TabInterface* const inspected = Open("/title2.html");
++  QuietDevToolsClient devtools;
++  const scoped_refptr<content::DevToolsAgentHost> devtools_host =
++      content::DevToolsAgentHost::GetOrCreateFor(inspected->GetContents());
++  ASSERT_TRUE(devtools_host->AttachClient(&devtools));
++  ASSERT_TRUE(
++      content::DevToolsAgentHost::IsDebuggerAttached(inspected->GetContents()));
++
+   // The product's own timer and sleep, on a delay a test can wait for.
+   model->SetSleepPolicy(
+       base::Milliseconds(200),
+@@ -174,9 +233,22 @@ IN_PROC_BROWSER_TEST_F(SleepInUseTest,
+     SCOPED_TRACE("typed form stays");
+     EXPECT_FALSE(Asleep(form)) << "holding typed input";
+   }
++  {
++    SCOPED_TRACE("edited draft stays");
++    EXPECT_FALSE(Asleep(draft)) << "holding an edit that is no form";
++  }
++  {
++    SCOPED_TRACE("PDF stays");
++    EXPECT_FALSE(Asleep(pdf)) << "a PDF's fields and notes are lost too";
++  }
++  {
++    SCOPED_TRACE("inspected page stays");
++    EXPECT_FALSE(Asleep(inspected)) << "a discard ends the DevTools session";
++  }
+ 
+   // Nothing to answer when the window closes, and nothing still marked in
+   // use for the split below.
++  EXPECT_TRUE(devtools_host->DetachClient(&devtools));
+   EXPECT_TRUE(content::ExecJs(pip->GetContents(), "exitPictureInPicture()"));
+   call_stream.reset();
+   EXPECT_TRUE(content::ExecJs(sound->GetContents(), "window.context.close()"));
+diff --git a/chrome/test/stedding/space_worker_browsertest.cc b/chrome/test/stedding/space_worker_browsertest.cc
+new file mode 100644
+index 0000000000000..a4d1fafd00f16
+--- /dev/null
++++ b/chrome/test/stedding/space_worker_browsertest.cc
+@@ -0,0 +1,148 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// A Space's service worker acts in its Space's own jar (docs/features/
++// sessions.md S30, BACKLOG S-180). A click on the notification a worker in
++// Work's jar shows reaches that worker, though its origin maps to the
++// profile's jar, and the window the worker opens from the click is made in
++// Work's jar and filed in Work while Home is on screen: its first request
++// carries Work's cookie, and the worker gets it back as its client. The
++// click had been dispatched into the profile's jar, which has no such
++// notification, and the window had opened in the Space on screen.
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/test/run_until.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/notifications/notification_display_service_tester.h"
++#include "chrome/browser/notifications/notification_handler.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/message_center/public/cpp/notification.h"
++#include "url/gurl.h"
++
++namespace {
++
++using spaces::SpaceId;
++
++class SpaceWorkerTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  TabStripModel* tabs() { return browser()->GetTabStripModel(); }
++
++  // localhost: a secure context, where a page may have a service worker.
++  GURL Url(const std::string& path) {
++    return embedded_test_server()->GetURL("localhost", path);
++  }
++
++  bool PageGot(content::WebContents* page, const std::string& message) {
++    return content::EvalJs(page, "window.messages.includes('" + message + "')")
++        .ExtractBool();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(SpaceWorkerTest, AWorkerActsInItsSpacesJar) {
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  const SpaceId home = model->active_id();
++  const SpaceId work = model->AddSpace("Work", SK_ColorBLUE)->id();
++  model->SetSpaceIsolated(work, true);
++  NotificationDisplayServiceTester display(browser()->GetProfile());
++  const GURL page_url = Url("/stedding/space_worker.html");
++  HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile())
++      ->SetContentSettingDefaultScope(page_url, page_url,
++                                      ContentSettingsType::NOTIFICATIONS,
++                                      CONTENT_SETTING_ALLOW);
++
++  // Each jar has its own cookie for the site.
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), Url("/set-cookie?jar=shared")));
++  ASSERT_TRUE(model->SetActiveSpace(work));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), Url("/set-cookie?jar=work"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page_url));
++  content::WebContents* const page = tabs()->GetActiveWebContents();
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(
++      spaces::StoragePartitionConfigForWebContents(page)));
++  ASSERT_EQ("registered", content::EvalJs(page, "register()"));
++  ASSERT_EQ("shown", content::EvalJs(page, "show()"));
++  const std::vector<message_center::Notification> shown =
++      display.GetDisplayedNotificationsForType(
++          NotificationHandler::Type::WEB_PERSISTENT);
++  ASSERT_EQ(1u, shown.size());
++
++  // Home on screen: where the worker's window goes is the worker's choice.
++  ASSERT_TRUE(model->SetActiveSpace(home));
++  const int count = tabs()->count();
++  display.SimulateClick(NotificationHandler::Type::WEB_PERSISTENT,
++                        shown[0].id(), /*action_index=*/std::nullopt,
++                        /*reply=*/std::nullopt);
++  {
++    SCOPED_TRACE("the click reaches the worker in Work's jar");
++    ASSERT_TRUE(
++        base::test::RunUntil([&]() { return PageGot(page, "clicked"); }))
++        << "the click went to the profile's jar, which has no such "
++           "notification";
++  }
++  {
++    SCOPED_TRACE("the worker's window opens in Work and its jar");
++    ASSERT_TRUE(
++        base::test::RunUntil([&]() { return tabs()->count() == count + 1; }));
++    tabs::TabInterface* opened = nullptr;
++    for (int i = 0; i < tabs()->count(); ++i) {
++      tabs::TabInterface* const tab = tabs()->GetTabAtIndex(i);
++      const content::NavigationEntry* const entry =
++          tab->GetContents()->GetController().GetVisibleEntry();
++      if (entry && entry->GetURL().path() == "/echoheader") {
++        opened = tab;
++      }
++    }
++    ASSERT_TRUE(opened);
++    EXPECT_EQ(work, model->FindSpaceForTab(opened));
++    EXPECT_TRUE(spaces::IsSpaceStoragePartition(
++        spaces::StoragePartitionConfigForWebContents(opened->GetContents())));
++    ASSERT_TRUE(content::WaitForLoadStop(opened->GetContents()));
++    EXPECT_EQ("jar=work", content::EvalJs(opened->GetContents(),
++                                          "document.body.innerText"))
++        << "its first request carried Work's cookie";
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return PageGot(page, "opened") ||
++             PageGot(page, "opened but not a client") ||
++             content::EvalJs(page,
++                             "window.messages.some((m) => "
++                             "m.startsWith('open failed'))")
++                 .ExtractBool();
++    }));
++    EXPECT_TRUE(PageGot(page, "opened"))
++        << "the worker got its window back as a client of its own";
++  }
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
+index 61d726c9eb197..f5d339abd62c0 100644
+--- a/chrome/test/stedding/welcome_browsertest.cc
++++ b/chrome/test/stedding/welcome_browsertest.cc
+@@ -10,6 +10,7 @@
+ #include <vector>
+ 
+ #include "base/command_line.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/strings/string_split.h"
+ #include "base/test/run_until.h"
+ #include "build/build_config.h"
+@@ -24,6 +25,7 @@
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "ui/shell_dialogs/fake_select_file_dialog.h"
+ #include "url/gurl.h"
+ 
+ namespace {
+@@ -215,6 +217,21 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+                                              "document.querySelector('footer "
+                                              ".status').textContent"));
+   }
++  {
++    // BACKLOG S-184: the answer redrew the old value over the click.
++    SCOPED_TRACE("a late answer keeps a choice already made");
++    EXPECT_EQ("archiveHours=24,closedForm=1,sleepMinutes=15",
++              content::EvalJs(page, R"(
++        (() => {
++          steddingWelcomeTest.applyBehaviour(
++              {archiveHours: 0, closedForm: 0, sleepMinutes: 0});
++          return [...document.querySelectorAll(
++                      'main .pill[aria-checked="true"]')]
++              .map(pill => pill.dataset.name + '=' + pill.dataset.value)
++              .join(',');
++        })())"))
++        << "the three choices clicked above stay";
++  }
+   {
+     SCOPED_TRACE("welcome stays unfinished");
+     EXPECT_FALSE(pref_service->GetBoolean(stedding::prefs::kWelcomeShown));
+@@ -246,6 +263,33 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+   }
+ }
+ 
++// welcome, import: the "Bookmarks HTML File" row asks for the file, in a file
++// dialog of the welcome window. Sent as a browser's import it read no file
++// and said it had imported; sent as Settings sends it, the page's handler
++// dereferenced a browser the dialog does not have (BACKLOG S-186).
++IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, TheBookmarksFileRowAsksForAFile) {
++  ui::FakeSelectFileDialog::Factory* const dialogs =
++      ui::FakeSelectFileDialog::RegisterFactory();
++  dialogs->SetOpenCallback(base::DoNothing());
++  content::WebContents* const page = OpenWelcome(*browser());
++  ASSERT_TRUE(page);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return content::EvalJs(page, "steddingWelcomeTest.state.sources.length")
++               .ExtractInt() > 0;
++  })) << "the importer's list never came";
++  ASSERT_EQ("", GoTo(page, "[data-focus^='source-']"));
++  ASSERT_TRUE(content::ExecJs(page, R"(
++      const tiles = document.querySelectorAll('main [data-focus^="source-"]');
++      tiles[tiles.length - 1].click();
++      document.querySelector('[data-focus="import"]').click();)"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return dialogs->GetLastDialog() != nullptr; }))
++      << "no file dialog opened";
++  EXPECT_EQ("Import", content::EvalJs(page, R"(
++      document.querySelector('[data-focus="import"]').textContent)"))
++      << "nothing is imported before a file is chosen";
++}
++
+ // welcome W2 (S-77) in two regions: France's list of eight engines and the
+ // United States' list of five.
+ class WelcomeEnginesTest : public InProcessBrowserTest,
+diff --git a/components/permissions/permission_util.cc b/components/permissions/permission_util.cc
+index d20920174d7e7..782b01a289954 100644
+--- a/components/permissions/permission_util.cc
++++ b/components/permissions/permission_util.cc
+@@ -28,6 +28,8 @@
+ #include "content/public/browser/permission_result.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_features.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
+@@ -681,6 +683,17 @@ bool PermissionUtil::IsPermissionBlockedInPartition(
+     case PermissionDelegationMode::kDoubleKeyed:
+       return false;
+     case PermissionDelegationMode::kUndelegated:
++      // Stedding (BACKLOG S-180): a Space's own jar, the partition domain
++      // "spaces" (chrome/browser/ui/spaces/space_storage_partition.h, ADR
++      // 0019), is the profile's browsing with cookies of its own, and its
++      // pages keep the profile's notification setting as they keep every
++      // other. Chromium's rule, meant for guest and app partitions, blocked
++      // notifications in every Space with an independent session.
++      if (render_process_host->GetStoragePartition()
++              ->GetConfig()
++              .partition_domain() == "spaces") {
++        return false;
++      }
+       // TODO(crbug.com/40220503): This will create |requesting_origin|'s home
+       // StoragePartition if it doesn't already exist. Given how
+       // StoragePartitions are used today, this shouldn't actually be a
+diff --git a/components/sessions/content/content_platform_specific_tab_data.cc b/components/sessions/content/content_platform_specific_tab_data.cc
+index 517796c54eb85..36b50cfe7fe68 100644
+--- a/components/sessions/content/content_platform_specific_tab_data.cc
++++ b/components/sessions/content/content_platform_specific_tab_data.cc
+@@ -5,16 +5,24 @@
+ #include "components/sessions/content/content_platform_specific_tab_data.h"
+ 
+ #include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/security_principal.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/stedding_session_storage.h"
+ #include "content/public/browser/web_contents.h"
+ 
+ namespace sessions {
+ 
+ ContentPlatformSpecificTabData::ContentPlatformSpecificTabData(
+     content::WebContents* web_contents)
+-    :  // TODO(ajwong): This does not correctly handle storage for isolated
+-       // apps.
++    :  // Stedding: the namespace of the partition the tab's pages live in, so
++       // a tab of a Space with cookies of its own reopens with its
++       // sessionStorage (BACKLOG S-179). Upstream took the default one.
+       session_storage_namespace_(
+-          web_contents->GetController().GetDefaultSessionStorageNamespace()) {}
++          content::GetSessionStorageNamespaceForPartition(
++              web_contents->GetController(),
++              web_contents->GetSiteInstance()
++                  ->GetSecurityPrincipal()
++                  .GetStoragePartitionConfig())) {}
+ 
+ ContentPlatformSpecificTabData::ContentPlatformSpecificTabData() = default;
+ ContentPlatformSpecificTabData::~ContentPlatformSpecificTabData() = default;
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 53dd562d46bae..94cb8a3c890ff 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -934,6 +934,7 @@ source_set("browser") {
+     "dom_storage/dom_storage_context_wrapper.h",
+     "dom_storage/session_storage_namespace_handle_impl.cc",
+     "dom_storage/session_storage_namespace_handle_impl.h",
++    "dom_storage/stedding_session_storage.cc",
+     "download/data_url_blob_reader.cc",
+     "download/data_url_blob_reader.h",
+     "download/download_item_utils.cc",
+@@ -1383,6 +1384,8 @@ source_set("browser") {
+     "notifications/platform_notification_context_impl.h",
+     "notifications/platform_notification_service_proxy.cc",
+     "notifications/platform_notification_service_proxy.h",
++    "notifications/stedding_notification_partition.cc",
++    "notifications/stedding_notification_partition.h",
+     "origin_agent_cluster_isolation_state.cc",
+     "origin_agent_cluster_isolation_state.h",
+     "origin_agent_cluster_isolation_state_bridge.cc",
+diff --git a/content/browser/dom_storage/stedding_session_storage.cc b/content/browser/dom_storage/stedding_session_storage.cc
+new file mode 100644
+index 0000000000000..2623bf0131ea3
+--- /dev/null
++++ b/content/browser/dom_storage/stedding_session_storage.cc
+@@ -0,0 +1,33 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "content/public/browser/stedding_session_storage.h"
++
++#include "content/browser/dom_storage/dom_storage_context_wrapper.h"
++#include "content/browser/dom_storage/session_storage_namespace_handle_impl.h"
++#include "content/browser/renderer_host/navigation_controller_impl.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
++
++namespace content {
++
++SessionStorageNamespaceHandle* GetSessionStorageNamespaceForPartition(
++    NavigationController& controller,
++    const StoragePartitionConfig& partition_config) {
++  return static_cast<NavigationControllerImpl&>(controller)
++      .GetSessionStorageNamespace(partition_config);
++}
++
++bool IsSessionStorageNamespaceOfPartition(
++    SessionStorageNamespaceHandle* session_storage_namespace,
++    StoragePartition* partition) {
++  // SessionStorageNamespaceHandleImpl is the one implementation.
++  return session_storage_namespace && partition &&
++         static_cast<SessionStorageNamespaceHandleImpl*>(
++             session_storage_namespace)
++             ->IsFromContext(static_cast<DOMStorageContextWrapper*>(
++                 partition->GetDOMStorageContext()));
++}
++
++}  // namespace content
+diff --git a/content/browser/notifications/notification_event_dispatcher_impl.cc b/content/browser/notifications/notification_event_dispatcher_impl.cc
+index a17db79ca9cc3..c881508027cde 100644
+--- a/content/browser/notifications/notification_event_dispatcher_impl.cc
++++ b/content/browser/notifications/notification_event_dispatcher_impl.cc
+@@ -12,6 +12,7 @@
+ #include "base/notreached.h"
+ #include "build/build_config.h"
+ #include "content/browser/notifications/devtools_event_logging.h"
++#include "content/browser/notifications/stedding_notification_partition.h"
+ #include "content/browser/notifications/platform_notification_context_impl.h"
+ #include "content/browser/service_worker/service_worker_context_wrapper.h"
+ #include "content/browser/service_worker/service_worker_registration.h"
+@@ -21,6 +22,7 @@
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/weak_document_ptr.h"
+ #include "content/public/common/persistent_notification_status.h"
+ #include "third_party/blink/public/common/notifications/platform_notification_data.h"
+@@ -362,8 +364,16 @@ void DispatchNotificationEvent(
+   CHECK(!notification_id.empty(), base::NotFatalUntil::M159);
+   CHECK(origin.is_valid(), base::NotFatalUntil::M159);
+ 
++  // Stedding: into the partition that showed it, which its id names when
++  // that is not the default one. A Space's own jar holds notifications and
++  // workers of origins that map to the default partition, which had been
++  // asked for a notification it did not have, or another one with the same
++  // id (BACKLOG S-180).
++  const std::optional<StoragePartitionConfig> shown_in =
++      NotificationPartitionFromId(browser_context, notification_id);
+   StoragePartition* partition =
+-      browser_context->GetStoragePartitionForUrl(origin);
++      shown_in ? browser_context->GetStoragePartition(*shown_in)
++               : browser_context->GetStoragePartitionForUrl(origin);
+ 
+   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
+       static_cast<ServiceWorkerContextWrapper*>(
+diff --git a/content/browser/notifications/platform_notification_context_impl.cc b/content/browser/notifications/platform_notification_context_impl.cc
+index eee0c716fb4bf..2745d3245965a 100644
+--- a/content/browser/notifications/platform_notification_context_impl.cc
++++ b/content/browser/notifications/platform_notification_context_impl.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "content/browser/notifications/platform_notification_context_impl.h"
+ 
++#include <map>
+ #include <set>
+ #include <utility>
+ 
+@@ -13,13 +14,17 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/no_destructor.h"
++#include "base/synchronization/lock.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/task/thread_pool.h"
+ #include "content/browser/notifications/blink_notification_service_impl.h"
+ #include "content/browser/notifications/notification_database.h"
+ #include "content/browser/notifications/notification_trigger_constants.h"
+ #include "content/browser/notifications/platform_notification_service_proxy.h"
++#include "content/browser/notifications/stedding_notification_partition.h"
+ #include "content/browser/service_worker/service_worker_context_wrapper.h"
++#include "content/browser/storage_partition_impl.h"
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -36,6 +41,23 @@
+ namespace content {
+ namespace {
+ 
++// Stedding (BACKLOG S-180): the partition whose database each context is,
++// kept here rather than in the class so that a header half of content
++// includes stays as it is. Written on the UI thread before any id is made,
++// read on the database's sequence.
++base::Lock& ContextPartitionsLock() {
++  static base::NoDestructor<base::Lock> lock;
++  return *lock;
++}
++
++std::map<const PlatformNotificationContextImpl*, StoragePartitionConfig>&
++ContextPartitions() {
++  static base::NoDestructor<
++      std::map<const PlatformNotificationContextImpl*, StoragePartitionConfig>>
++      partitions;
++  return *partitions;
++}
++
+ // Name of the directory in the user's profile directory where the notification
+ // database files should be stored.
+ const base::FilePath::CharType kPlatformNotificationsDirectory[] =
+@@ -113,6 +135,10 @@ PlatformNotificationContextImpl::PlatformNotificationContextImpl(
+ 
+ PlatformNotificationContextImpl::~PlatformNotificationContextImpl() {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
++  {
++    base::AutoLock lock(ContextPartitionsLock());
++    ContextPartitions().erase(this);
++  }
+ 
+   // If the database has been initialized, it must be deleted on the task runner
+   // thread as closing it may cause file I/O.
+@@ -124,6 +150,15 @@ PlatformNotificationContextImpl::~PlatformNotificationContextImpl() {
+ 
+ void PlatformNotificationContextImpl::Initialize() {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
++  // Stedding: the ids of this partition's notifications name it when it is
++  // not the default one (BACKLOG S-180).
++  if (const StoragePartitionImpl* const partition =
++          service_worker_context_ ? service_worker_context_->storage_partition()
++                                  : nullptr;
++      partition && !partition->GetConfig().is_default()) {
++    base::AutoLock lock(ContextPartitionsLock());
++    ContextPartitions().insert_or_assign(this, partition->GetConfig());
++  }
+   service_proxy_ = std::make_unique<PlatformNotificationServiceProxy>(
+       service_worker_context_, browser_context_);
+ 
+@@ -1017,6 +1052,16 @@ void PlatformNotificationContextImpl::DoWriteNotificationData(
+       notification_id_generator_.GenerateForPersistentNotification(
+           origin, database_data.notification_data.tag,
+           database_data.is_shown_by_browser, persistent_notification_id);
++  // Stedding: named with this context's partition, before anything compares
++  // it with the ids the database holds (BACKLOG S-180).
++  {
++    base::AutoLock lock(ContextPartitionsLock());
++    if (const auto it = ContextPartitions().find(this);
++        it != ContextPartitions().end()) {
++      notification_id =
++          NameNotificationPartition(std::move(notification_id), it->second);
++    }
++  }
+ 
+   // Eagerly delete data for replaced notifications from the database.
+   if (!database_data.notification_data.tag.empty()) {
+diff --git a/content/browser/notifications/stedding_notification_partition.cc b/content/browser/notifications/stedding_notification_partition.cc
+new file mode 100644
+index 0000000000000..47bd602fa0a16
+--- /dev/null
++++ b/content/browser/notifications/stedding_notification_partition.cc
+@@ -0,0 +1,81 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "content/browser/notifications/stedding_notification_partition.h"
++
++#include <algorithm>
++#include <vector>
++
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "content/browser/notifications/notification_id_generator.h"
++
++namespace content {
++namespace {
++
++// As in notification_id_generator.cc.
++constexpr char kNotificationTagSeparator = '#';
++constexpr char kPartitionMarker[] = "@";
++constexpr char kPartitionFieldSeparator[] = ".";
++constexpr char kPartitionInMemory[] = "m";
++
++}  // namespace
++
++std::string NameNotificationPartition(
++    std::string notification_id,
++    const StoragePartitionConfig& partition) {
++  if (partition.is_default() ||
++      !NotificationIdGenerator::IsPersistentNotification(notification_id)) {
++    return notification_id;
++  }
++  const size_t separator = notification_id.find(kNotificationTagSeparator);
++  if (separator == std::string::npos) {
++    return notification_id;
++  }
++  std::string name = base::StrCat(
++      {kPartitionMarker, partition.partition_domain(), kPartitionFieldSeparator,
++       base::HexEncode(partition.partition_name())});
++  if (partition.in_memory()) {
++    base::StrAppend(&name, {kPartitionFieldSeparator, kPartitionInMemory});
++  }
++  notification_id.insert(separator, name);
++  return notification_id;
++}
++
++std::optional<StoragePartitionConfig> NotificationPartitionFromId(
++    BrowserContext* browser_context,
++    std::string_view notification_id) {
++  if (!browser_context ||
++      !NotificationIdGenerator::IsPersistentNotification(notification_id)) {
++    return std::nullopt;
++  }
++  const size_t separator = notification_id.find(kNotificationTagSeparator);
++  const size_t marker = notification_id.find(kPartitionMarker);
++  if (separator == std::string_view::npos ||
++      marker == std::string_view::npos || marker > separator) {
++    return std::nullopt;
++  }
++  const std::vector<std::string_view> fields = base::SplitStringPiece(
++      notification_id.substr(marker + 1, separator - marker - 1),
++      kPartitionFieldSeparator, base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
++  // A partition's domain is [a-z]+ (StoragePartitionConfig::Create).
++  if (fields.size() < 2 || fields.size() > 3 || fields[0].empty() ||
++      !std::ranges::all_of(fields[0],
++                           [](char c) { return c >= 'a' && c <= 'z'; })) {
++    return std::nullopt;
++  }
++  const bool in_memory = fields.size() == 3;
++  if (in_memory && fields[2] != kPartitionInMemory) {
++    return std::nullopt;
++  }
++  std::string name;
++  if (!fields[1].empty() && !base::HexStringToString(fields[1], &name)) {
++    return std::nullopt;
++  }
++  return StoragePartitionConfig::Create(browser_context, fields[0], name,
++                                        in_memory);
++}
++
++}  // namespace content
+diff --git a/content/browser/notifications/stedding_notification_partition.h b/content/browser/notifications/stedding_notification_partition.h
+new file mode 100644
+index 0000000000000..434d0d8411b70
+--- /dev/null
++++ b/content/browser/notifications/stedding_notification_partition.h
+@@ -0,0 +1,40 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CONTENT_BROWSER_NOTIFICATIONS_STEDDING_NOTIFICATION_PARTITION_H_
++#define CONTENT_BROWSER_NOTIFICATIONS_STEDDING_NOTIFICATION_PARTITION_H_
++
++#include <optional>
++#include <string>
++#include <string_view>
++
++#include "content/common/content_export.h"
++#include "content/public/browser/storage_partition_config.h"
++
++namespace content {
++
++class BrowserContext;
++
++// Stedding (BACKLOG S-180): a persistent notification shown from a partition
++// other than the default -- a Space's own jar -- names that partition in its
++// id, so a click on it and its close are dispatched into the partition that
++// holds it and its worker. Its origin maps to the default partition, which
++// holds no such notification, or another one under the same id: each
++// partition's database numbers its own.
++
++// `notification_id`, a persistent notification's, with `partition` named in
++// it between the flags and the first separator: "p@<domain>.<the name in
++// hex>[.m]#<origin>#...". The default partition's ids are left as they are.
++CONTENT_EXPORT std::string NameNotificationPartition(
++    std::string notification_id,
++    const StoragePartitionConfig& partition);
++
++// The partition `notification_id` names, if it names one.
++CONTENT_EXPORT std::optional<StoragePartitionConfig>
++NotificationPartitionFromId(BrowserContext* browser_context,
++                            std::string_view notification_id);
++
++}  // namespace content
++
++#endif  // CONTENT_BROWSER_NOTIFICATIONS_STEDDING_NOTIFICATION_PARTITION_H_
+diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
+index 790d6657077ab..509dae5e0d9bc 100644
+--- a/content/public/browser/BUILD.gn
++++ b/content/public/browser/BUILD.gn
+@@ -418,6 +418,7 @@ source_set("browser_sources") {
+     "service_worker_version_base_info.h",
+     "session_storage_namespace_handle.cc",
+     "session_storage_namespace_handle.h",
++    "stedding_session_storage.h",
+     "session_storage_usage_info.h",
+     "shape_detection_service.h",
+     "shared_cors_origin_access_list.h",
+diff --git a/content/public/browser/stedding_session_storage.h b/content/public/browser/stedding_session_storage.h
+new file mode 100644
+index 0000000000000..6f861db784f1a
+--- /dev/null
++++ b/content/public/browser/stedding_session_storage.h
+@@ -0,0 +1,37 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CONTENT_PUBLIC_BROWSER_STEDDING_SESSION_STORAGE_H_
++#define CONTENT_PUBLIC_BROWSER_STEDDING_SESSION_STORAGE_H_
++
++#include "content/common/content_export.h"
++
++namespace content {
++
++class NavigationController;
++class SessionStorageNamespaceHandle;
++class StoragePartition;
++class StoragePartitionConfig;
++
++// Stedding: session storage in a partition other than the default -- a
++// Space's own jar -- which session restore saves and recreates (BACKLOG
++// S-179). Kept out of NavigationController and SessionStorageNamespaceHandle,
++// which half of the tree includes.
++
++// The namespace the pages of `controller`'s tab use in `partition_config`,
++// made if none has been yet.
++CONTENT_EXPORT SessionStorageNamespaceHandle*
++GetSessionStorageNamespaceForPartition(
++    NavigationController& controller,
++    const StoragePartitionConfig& partition_config);
++
++// Whether `session_storage_namespace` is `partition`'s: only that partition's
++// pages can use it.
++CONTENT_EXPORT bool IsSessionStorageNamespaceOfPartition(
++    SessionStorageNamespaceHandle* session_storage_namespace,
++    StoragePartition* partition);
++
++}  // namespace content
++
++#endif  // CONTENT_PUBLIC_BROWSER_STEDDING_SESSION_STORAGE_H_

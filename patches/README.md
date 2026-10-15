@@ -48,7 +48,15 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   another app's mark and a shortcut file's target, host routes with IPv6 and default ports,
   the welcome flow's focus, Clear for the keyboard, a deleted Space's wipe finished after a
   quit, Undo kept out of a group, the keychain key after a failed move, and weak tests;
-  with it, a tab group's header in the sidebar drawn as a row, not a blank coloured bar.
+  with it, a tab group's header in the sidebar drawn as a row, not a blank coloured bar;
+- 0067, the same review's remaining items: a Space's sessionStorage kept across a restart
+  and a reopened tab, a crash restore that keeps a Blank Window's Spaces, a Space's service
+  workers and notifications in their jar (notifications in such a Space at all), a restored
+  tab's saved Space read once, a pinned split above the Clear line, the Arc import's edge
+  cases, the welcome flow's late answer, bookmarks file and swatch, sleep and the archive
+  sparing drafts, PDFs and DevTools, the archive page's closed windows and splits, WebUI
+  handlers that drop a malformed message, and on Windows the Ctrl+Alt chords on an AltGr
+  layout.
 
 Patch messages cite the docs as they were when each was written: `PLAN.md`'s item ids
 (TAB-1, SPC-4, ...), `docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` now live under

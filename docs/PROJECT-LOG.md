@@ -7,6 +7,42 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-15, night -- the review's remaining items, and a new default favicon (patch 0067)
+
+The operator asked for `S-179` to `S-189` to be fixed too, and for Chromium's grey default
+favicon to be replaced, from Tabler's icons. Patch 0067 holds the fixes, each with a test;
+the favicon is branding.
+
+- Sessions: a Space's sessionStorage comes back after a restart and with a reopened tab
+  (`S-179`, sessions S28); the crash bubble's Restore keeps a Blank Window's own Spaces and
+  puts the window it joins on the Space its session showed (S29).
+- Workers and notifications: a site in a Space with cookies of its own can show
+  notifications at all. Chromium's permission rule for app and guest partitions had blocked
+  them in every such Space; the new test found it. The window a Space's worker opens is
+  made in its jar and Space, and a notification's click reaches the worker that showed it
+  (`S-180`, S30).
+- The rest: a restored tab's saved Space is read once (`S-181`); a pinned split sits above
+  the Clear line (`S-182`); the Arc import's repeated Space and bounded reads (`S-183`); the
+  welcome flow's late answer, bookmarks file and swatch (`S-184`, `S-186`, `S-187`); sleep and
+  the archive spare drafts, PDFs and DevTools, and a new sleep delay re-times running timers
+  (`S-185`); the archive page lists closed windows' and splits' tabs and filters by a Space's
+  id (`S-187`); the WebUI handlers drop a malformed message (`S-188`); on Windows a Ctrl+Alt
+  chord made with the left Alt runs on an AltGr layout (`S-189`).
+- The favicon: Tabler's `world-www`, which the operator chose from ten candidates, in
+  Chromium's two greys (`S-211`); seen in the dark sidebar of the Mac's build.
+- Filed: `S-212`, a tab pinned while selected that the session does not keep as selected.
+- The first draft added to headers much of the tree includes and cost about 11,800 build
+  steps on each machine; the fixes moved into narrow headers and `.cc` files (trap 90).
+
+Tests: on the Mac's release build, 852 unit tests, 20 component tests and 158 browser tests
+(125 in the main leg, 33 one at a time); on the PC's, from the same sources and in the
+operator's desktop session, 839 unit tests and 152 browser tests (118 four at a time, 34 one
+at a time); all passing. Every new test failed with its fix taken out: two passes on the Mac,
+since the crash restore's two halves and the worker's can only fail one at a time, and the
+Windows chord and note tests on the PC; the AltGr digit test is a guard, which passes either
+way. Not done: use by hand with the real pointer and keyboard, a real AltGr keyboard layout,
+a DCHECK build, ASan. No push, no release.
+
 ## 2026-10-15, evening -- beta 15 released, both platforms from the Mac
 
 The operator asked for a Windows build and a release of everything. `v0.2.0-beta.15` went out

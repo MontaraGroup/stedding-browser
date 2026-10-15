@@ -37,11 +37,11 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Eighty-odd traps follow. Read the one for the topic in front of you, not the list.
+Ninety traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88 |
@@ -521,8 +521,12 @@ private window has.
     Ctrl+Alt on many keyboards. Arc for Windows puts its Space and tab traversal
     on Ctrl+Alt with the arrows all the same, so Stedding's Ctrl+Alt rows (patch
     0043, windows N7) are inserted after the check, the way Chromium's own debug
-    map is, and keep to keys AltGr does not type a character on. A Ctrl+Alt row
-    in the main table kills a DCHECK build at startup.
+    map is. A Ctrl+Alt row in the main table kills a DCHECK build at startup.
+    Where a layout's AltGr does type a character on the key (Polish (Programmers):
+    C and N with Shift), Windows hands the key over as that AltGr character and no
+    row matches; `stedding::AltGrChords` runs the row when it was made with the
+    left Alt (windows N14). Its unit test plays the keyboard's state: the real one
+    needs a Polish layout on the PC, which is the operator's setting to add.
 43. **A container whose size is its children's gets it from its layout, not from
     a number set by hand -- and a BoxLayout with a flexible child reports the
     space it is offered as its preferred size.** The sidebar's bottom row had a
@@ -1153,6 +1157,21 @@ private window has.
     differs and leaves the branded files as they are, then move `stedding-work` and
     `refs/stedding/applied` to the new tip. `tooling/update-patches` writing no change
     afterwards proves the tree is the series.
+90. **A hook in a header much of the tree includes costs a rebuild of most of it.** Patch
+    0067's first draft added a method to `NavigationController` and to
+    `SessionStorageNamespaceHandle`, a field to `NavigateParams` and a member to
+    `BrowserView`: about 11,800 build steps on the PC and as many on the Mac, hours each,
+    because `browser.h` includes `browser_navigator_params.h`, and
+    `render_frame_host_impl.h` includes `storage_partition_impl.h`, which includes
+    `platform_notification_context_impl.h`. The same fixes then went into a header of
+    Stedding's own (`content/public/browser/stedding_session_storage.h`), `.cc` files, a
+    scoped marker in `new_tab_space.h`, and a key handler its window owns; the Mac's next
+    build ran about 1,100 steps, most of them redoing objects the first draft had built.
+    Count a header's includers (`git grep -l` on its path) before adding to it. Taking such
+    an edit back is not free either: the restored header has a new time, so give it an old
+    one (`touch -r` from an untouched neighbour), and delete the objects built while it was
+    changed (`find out/<dir> -name '*.o' -newer <marker> -delete`, `*.obj` on Windows), or
+    the next build mixes two layouts of one class.
 
 ## The Windows build
 
