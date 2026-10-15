@@ -64,7 +64,7 @@ its code (patches/README.md, the round-patch exception).
  .../common/stedding_tab_row_rules_unittest.cc |  49 ++++++
  .../tabs/common/tab_group_header_view.cc      |  88 +++++++++--
  .../views/tabs/common/tab_group_header_view.h |  10 ++
- .../common/tab_group_header_view_unittest.cc  |  38 +++++
+ .../common/tab_group_header_view_unittest.cc  |  47 ++++++
  chrome/common/chrome_paths_internal.h         |  12 ++
  chrome/common/chrome_paths_mac.mm             |  22 ++-
  chrome/common/chrome_paths_unittest.cc        |  37 +++++
@@ -74,7 +74,7 @@ its code (patches/README.md, the round-patch exception).
  .../test/stedding/media_keys_browsertest.cc   |  39 ++---
  .../stedding/shortcut_file_mac_browsertest.mm | 143 ++++++++++++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  14 ++
- 32 files changed, 1042 insertions(+), 92 deletions(-)
+ 32 files changed, 1051 insertions(+), 92 deletions(-)
  create mode 100644 chrome/test/stedding/shortcut_file_mac_browsertest.mm
 
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
@@ -1538,10 +1538,22 @@ index 29caf0cd7f2aa..16971a3d75fdc 100644
    void OnBubbleOpened();
    void OnBubbleClosed();
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
-index a4d4b6cbed1f5..bf7ca39beb710 100644
+index a4d4b6cbed1f5..9545e68482f3a 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
-@@ -197,6 +197,44 @@ TEST_P(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
+@@ -24,8 +24,11 @@
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "ui/base/l10n/l10n_util.h"
++#include "ui/display/screen.h"
+ #include "ui/events/test/event_generator.h"
+ #include "ui/events/types/event_type.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/vector2d.h"
+ #include "ui/gfx/text_elider.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/test/views_test_base.h"
+@@ -197,6 +200,50 @@ TEST_P(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
              constrained_height);
  }
  
@@ -1567,9 +1579,15 @@ index a4d4b6cbed1f5..bf7ca39beb710 100644
 +
 +  std::unique_ptr<views::Widget> widget =
 +      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++  // Away from the pointer: a hovered header has the hover tint, a fill of its
++  // own. On the Windows PC the real pointer sat over the test window.
++  widget->SetBounds(gfx::Rect(
++      display::Screen::Get()->GetCursorScreenPoint() + gfx::Vector2d(600, 600),
++      gfx::Size(300, 40)));
 +  auto* header = widget->SetContentsView(std::make_unique<TabGroupHeaderView>(
 +      delegate, TabStripOrientation::kVertical, nullptr, &visual_data));
 +  header->OnDataChanged(data);
++  ASSERT_FALSE(header->IsMouseHovered());
 +
 +  EXPECT_EQ(l10n_util::GetPluralStringFUTF16(
 +                IDS_TAB_GROUPS_UNNAMED_GROUP_HOVER_CARD_HEADER, 3),
