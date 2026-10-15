@@ -1,0 +1,2126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 15 Oct 2026 15:13:30 -0400
+Subject: fix: the code review's filed items, and a tab group's header in the
+ sidebar
+
+The code review of 2026-10-15 (docs/history/review-2026-10-15.md) filed nine items it
+could not fix the same hour, BACKLOG S-201 to S-209; the operator asked for them fixed too,
+and for an unnamed tab group's blank header, seen in a test window, S-210.
+One patch at the tip, as patch 0065: the fixes touch code of a dozen patches.
+
+Routing. Only the tab a link from another app makes spends its mark: an address typed into
+a fresh tab within the mark's ten seconds had taken it (routing D3). A Chrome shortcut file
+opened from Finder is read first, and its target opens as any link from another app, small
+or in the Space chosen for such links; the file's own address had been checked and marked
+(routing D3, little E1). A host route takes an IPv6 literal and a port that is the scheme's
+default; the pattern was cut at its first colon (routing D1).
+
+Keyboard and screen readers. The welcome flow finds the focused control again by a key it
+carries, so a label that changes or a block drawn above it no longer drops the focus, and a
+control the redraw disables hands it to the next one; its three choice groups are named
+(welcome W12). Clear is a focusable button named Clear, run by Enter, Space or a screen
+reader's press; it was text painted on the line (spaces B17).
+
+Data. A deleted Space's jar stays on the profile's pending list until its wipe has
+finished, and the profile's next window finishes a wipe a quit cut short (sessions S17).
+Undo brings a tab that was in no tab group back in none, so its folder comes back (tabs
+R27). A new profile started after a profile move that could not happen makes a keychain key
+of its own instead of copying Chromium's (windows N8).
+
+Look. A Chromium tab group's header in the sidebar is a row like a folder's: a dot in the
+group's colour, the title in the rows' text colour, an unnamed group's tab count muted for a
+title, no fill but the hover tint. It was a bar filled with the group's colour, blank for
+an unnamed group (folders F36; the operator's screenshot of a test window).
+
+Tests. The Arc sidebar test checks that a copy was read; a wrong key unseals nothing; each
+step of two browser scenarios stops only itself; the three upstream HTTPS-First tests the
+series' default broke expect it, and the local startup histogram counts it as on.
+
+Why: each item is behaviour its spec states, a privacy promise (a deleted Space's data), or
+a test that could not fail.
+Removable when: never as a whole; the next rebase folds each fix into the patch that owns
+its code (patches/README.md, the round-patch exception).
+---
+ chrome/browser/app_controller_mac.mm          |  64 ++++++--
+ .../browser/resources/stedding_welcome/app.ts |  89 +++++++++--
+ .../ssl/https_first_mode_settings_tracker.cc  |   4 +
+ ...ps_first_mode_settings_tracker_unittest.cc |  37 ++++-
+ chrome/browser/ui/archive/closed_tabs_undo.cc |   9 ++
+ chrome/browser/ui/archive/closed_tabs_undo.h  |   2 +
+ .../ui/spaces/arc_data_importer_unittest.cc   |   9 +-
+ .../browser/ui/spaces/arc_sidebar_importer.cc |  10 +-
+ .../browser/ui/spaces/arc_sidebar_importer.h  |   5 +-
+ .../spaces/arc_sidebar_importer_unittest.cc   |   8 +-
+ chrome/browser/ui/spaces/space_model.cc       | 117 +++++++++++++-
+ chrome/browser/ui/spaces/space_model.h        |   3 +
+ .../ui/spaces/space_model_window_unittest.cc  |  79 ++++++++++
+ chrome/browser/ui/spaces/space_router.cc      |  66 +++++++-
+ .../ui/spaces/space_router_unittest.cc        |  21 +++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   3 +
+ .../views/tabs/common/clear_tabs_separator.cc |  80 +++++++++-
+ .../views/tabs/common/clear_tabs_separator.h  |   9 ++
+ .../common/stedding_tab_row_rules_unittest.cc |  49 ++++++
+ .../tabs/common/tab_group_header_view.cc      |  88 +++++++++--
+ .../views/tabs/common/tab_group_header_view.h |  10 ++
+ .../common/tab_group_header_view_unittest.cc  |  38 +++++
+ chrome/common/chrome_paths_internal.h         |  12 ++
+ chrome/common/chrome_paths_mac.mm             |  22 ++-
+ chrome/common/chrome_paths_unittest.cc        |  37 +++++
+ chrome/test/stedding/BUILD.gn                 |   4 +
+ .../test/stedding/command_bar_browsertest.cc  |  15 +-
+ .../test/stedding/folder_tabs_browsertest.cc  |  47 ++++++
+ .../test/stedding/media_keys_browsertest.cc   |  39 ++---
+ .../stedding/shortcut_file_mac_browsertest.mm | 143 ++++++++++++++++++
+ chrome/test/stedding/welcome_browsertest.cc   |  14 ++
+ 32 files changed, 1042 insertions(+), 92 deletions(-)
+ create mode 100644 chrome/test/stedding/shortcut_file_mac_browsertest.mm
+
+diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
+index 2e7908a901554..b3cb6a8a8252b 100644
+--- a/chrome/browser/app_controller_mac.mm
++++ b/chrome/browser/app_controller_mac.mm
+@@ -439,14 +439,52 @@ base::FilePath GetStartupProfilePathMac() {
+ void OpenStartupTabsInBrowserWithProfile(const StartupTabs& tabs,
+                                          Profile* profile);
+ 
++// A Chrome shortcut file: its target is read on the thread pool before it
++// opens.
++bool IsShortcutFileUrl(const GURL& url) {
++  base::FilePath path;
++  return net::FileURLToFilePath(url, &path) &&
++         path.Extension() == shortcuts::ChromeWeblocFile::kFileExtension;
++}
++
++// Stedding routing D3 and little E1 for an address another app handed over:
++// with the setting on and no route, it opens in a little window; otherwise
++// it is marked, so the tab it opens can land in the default Space. Returns
++// the tabs still to open. `profile` is the one the tabs open in; a private
++// one has no little windows.
++StartupTabs TakeLittleWindowsAndMark(Profile* profile, StartupTabs tabs) {
++  StartupTabs as_tabs;
++  for (StartupTab& tab : tabs) {
++    if (profile && !profile->IsOffTheRecord() &&
++        stedding::ShouldOpenLittle(profile->GetPrefs(), tab.url) &&
++        stedding::OpenLittleWindow(profile, tab.url, nullptr,
++                                   tab.is_untrusted_launch)) {
++      continue;
++    }
++    spaces::MarkExternalOpen(tab.url);
++    as_tabs.push_back(std::move(tab));
++  }
++  return as_tabs;
++}
++
++// A shortcut file's targets get what any address from another app gets, once
++// they are known: the file's own address was checked and marked, and its
++// target became a tab in the active Space (BACKLOG S-202).
++void OpenShortcutTargetsWithProfile(const StartupTabs& tabs,
++                                    Profile* profile) {
++  const StartupTabs as_tabs = TakeLittleWindowsAndMark(profile, tabs);
++  if (!as_tabs.empty()) {
++    OpenStartupTabsInBrowserWithProfile(as_tabs, profile);
++  }
++}
++
+ void OpenStartupTabsInBrowser(StartupTabs tabs) {
+   StartupTabs regular_tabs;
+   std::vector<base::FilePath> shortcuts;
+ 
+   for (auto& tab : tabs) {
+     base::FilePath path;
+-    if (net::FileURLToFilePath(tab.url, &path) &&
+-        path.Extension() == shortcuts::ChromeWeblocFile::kFileExtension) {
++    if (IsShortcutFileUrl(tab.url) && net::FileURLToFilePath(tab.url, &path)) {
+       shortcuts.push_back(path);
+     } else {
+       regular_tabs.push_back(std::move(tab));
+@@ -501,14 +539,14 @@ void OpenStartupTabsInBrowser(StartupTabs tabs) {
+                     profile_path)) {
+               app_controller_mac::RunInProfileSafely(
+                   profile_path,
+-                  base::BindOnce(&OpenStartupTabsInBrowserWithProfile,
++                  base::BindOnce(&OpenShortcutTargetsWithProfile,
+                                  tabs_for_profile),
+                   app_controller_mac::kShowProfilePickerOnFailure);
+             } else {
+               // If the target profile doesn't exist, fall back to the
+               // last profile.
+               app_controller_mac::RunInLastProfileSafely(
+-                  base::BindOnce(&OpenStartupTabsInBrowserWithProfile,
++                  base::BindOnce(&OpenShortcutTargetsWithProfile,
+                                  tabs_for_profile),
+                   app_controller_mac::kShowProfilePickerOnFailure);
+             }
+@@ -1273,17 +1311,19 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+   // one upstream's tab path uses (PLAN.md CMD-7): a policy that forces
+   // private windows makes it a private one, which has no little windows, and
+   // a window that cannot open falls back to that path.
++  // A shortcut file goes as it is: its target gets the same once it is read
++  // (OpenShortcutTargetsWithProfile).
+   Profile* const little_profile =
+       [self safeProfileForNewWindows:[self lastProfileIfLoaded]];
+-  StartupTabs as_tabs;
++  StartupTabs shortcut_files;
++  StartupTabs addresses;
+   for (StartupTab& tab : tabs) {
+-    if (little_profile && !little_profile->IsOffTheRecord() &&
+-        stedding::ShouldOpenLittle(little_profile->GetPrefs(), tab.url) &&
+-        stedding::OpenLittleWindow(little_profile, tab.url, nullptr,
+-                                   tab.is_untrusted_launch)) {
+-      continue;
+-    }
+-    spaces::MarkExternalOpen(tab.url);
++    (IsShortcutFileUrl(tab.url) ? shortcut_files : addresses)
++        .push_back(std::move(tab));
++  }
++  StartupTabs as_tabs =
++      TakeLittleWindowsAndMark(little_profile, std::move(addresses));
++  for (StartupTab& tab : shortcut_files) {
+     as_tabs.push_back(std::move(tab));
+   }
+   if (as_tabs.empty()) {
+diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
+index 38037196d9167..e3185d7ee239e 100644
+--- a/chrome/browser/resources/stedding_welcome/app.ts
++++ b/chrome/browser/resources/stedding_welcome/app.ts
+@@ -211,9 +211,10 @@ function engineMark(engine: SearchEngine): HTMLSpanElement {
+ 
+ function tile(opts: {
+   mark?: HTMLElement, glyph?: string, name: string, hint?: string,
+-  pressed: boolean, onClick: () => void,
++  pressed: boolean, focusKey: string, onClick: () => void,
+ }): HTMLButtonElement {
+   const button = el('button', 'tile');
++  button.dataset['focus'] = opts.focusKey;
+   button.setAttribute('role', 'radio');
+   button.setAttribute('aria-pressed', String(opts.pressed));
+   button.append(opts.mark || el('span', 'glyph', opts.glyph || ''));
+@@ -227,11 +228,12 @@ function tile(opts: {
+   return button;
+ }
+ 
+-function checkbox(label: string, checked: boolean, onChange: (v: boolean) => void):
+-    HTMLLabelElement {
++function checkbox(label: string, checked: boolean, focusKey: string,
++                  onChange: (v: boolean) => void): HTMLLabelElement {
+   const wrap = el('label');
+   const input = el('input');
+   input.type = 'checkbox';
++  input.dataset['focus'] = focusKey;
+   input.checked = checked;
+   input.addEventListener('change', () => onChange(input.checked));
+   wrap.append(input, document.createTextNode(' ' + label));
+@@ -250,10 +252,12 @@ function renderStep(main: HTMLElement) {
+                   ' goes here. Change it any time in Settings.');
+       const list = el('div', 'list');
+       list.setAttribute('role', 'radiogroup');
++      list.setAttribute('aria-label', 'Search engine');
+       for (const e of state.engines) {
+         list.append(tile({
+           mark: engineMark(e), name: e.name,
+           pressed: state.chosenEngine === e.prepopulateId,
++          focusKey: `engine-${e.prepopulateId}`,
+           onClick: () => {
+             state.chosenEngine = e.prepopulateId;
+             chrome.send('setSearchEngine', [e.prepopulateId]);
+@@ -282,14 +286,18 @@ function renderStep(main: HTMLElement) {
+             'Everything stays on this Mac. For the passwords, macOS asks once whether Stedding may read Arc\u2019s keychain item.'));
+         const choices = el('div', 'import-row');
+         choices.append(
+-            checkbox('Spaces', state.arcSpaces, v => state.arcSpaces = v),
+-            checkbox('Pinned tabs and essentials', state.arcPinned, v => state.arcPinned = v),
+-            checkbox('Other tabs', state.arcUnpinned, v => state.arcUnpinned = v),
+-            checkbox('History', state.arcHistory, v => state.arcHistory = v),
+-            checkbox('Passwords', state.arcPasswords, v => state.arcPasswords = v));
++            checkbox('Spaces', state.arcSpaces, 'arc-spaces', v => state.arcSpaces = v),
++            checkbox('Pinned tabs and essentials', state.arcPinned, 'arc-pinned',
++                     v => state.arcPinned = v),
++            checkbox('Other tabs', state.arcUnpinned, 'arc-unpinned',
++                     v => state.arcUnpinned = v),
++            checkbox('History', state.arcHistory, 'arc-history', v => state.arcHistory = v),
++            checkbox('Passwords', state.arcPasswords, 'arc-passwords',
++                     v => state.arcPasswords = v));
+         const button = el('button', 'primary',
+             state.arcStatus === 'inProgress' ? 'Moving\u2026' :
+             state.arcStatus ? state.arcStatus : 'Move everything from Arc');
++        button.dataset['focus'] = 'arc-move';
+         button.disabled = state.arcStatus !== '';
+         button.addEventListener('click', () => {
+           state.arcStatus = 'inProgress';
+@@ -316,10 +324,12 @@ function renderStep(main: HTMLElement) {
+               ' and choose Turn Bookmarks into Pinned Tabs.'));
+       const list = el('div', 'list');
+       list.setAttribute('role', 'radiogroup');
++      list.setAttribute('aria-label', 'Import from');
+       for (const s of state.sources) {
+         list.append(tile({
+           glyph: '🗂️', name: s.name, hint: s.profileName || '',
+           pressed: state.chosenSource === s.index,
++          focusKey: `source-${s.index}`,
+           onClick: () => {
+             state.chosenSource = s.index;
+             render();
+@@ -328,12 +338,16 @@ function renderStep(main: HTMLElement) {
+       }
+       const row = el('div', 'import-row');
+       row.append(
+-          checkbox('Bookmarks', state.importFavorites, v => state.importFavorites = v),
+-          checkbox('History', state.importHistory, v => state.importHistory = v),
+-          checkbox('Passwords', state.importPasswords, v => state.importPasswords = v));
++          checkbox('Bookmarks', state.importFavorites, 'import-bookmarks',
++                   v => state.importFavorites = v),
++          checkbox('History', state.importHistory, 'import-history',
++                   v => state.importHistory = v),
++          checkbox('Passwords', state.importPasswords, 'import-passwords',
++                   v => state.importPasswords = v));
+       const button = el('button', 'secondary',
+           state.importStatus === 'succeeded' ? 'Imported' :
+           state.importStatus === 'inProgress' ? 'Importing…' : 'Import');
++      button.dataset['focus'] = 'import';
+       button.disabled = state.importStatus === 'inProgress';
+       button.addEventListener('click', () => {
+         if (state.chosenSource < 0) {
+@@ -356,6 +370,7 @@ function renderStep(main: HTMLElement) {
+               'Sand by day, a blue-to-plum gradient by night. Follow the system, or pick one.');
+       const list = el('div', 'list');
+       list.setAttribute('role', 'radiogroup');
++      list.setAttribute('aria-label', 'Appearance');
+       const schemes: Array<[string, string, string]> = [
+         ['system', 'Follow the system', '🌗'],
+         ['light', 'Light', '☀️'],
+@@ -364,6 +379,7 @@ function renderStep(main: HTMLElement) {
+       for (const [scheme, name, glyph] of schemes) {
+         list.append(tile({
+           glyph, name, pressed: state.scheme === scheme,
++          focusKey: `scheme-${scheme}`,
+           onClick: () => {
+             state.scheme = scheme;
+             chrome.send('setAppearance', [scheme]);
+@@ -380,6 +396,7 @@ function renderStep(main: HTMLElement) {
+         state.spaceColors.forEach((choice, index) => {
+           const swatch = el('button', 'swatch');
+           swatch.type = 'button';
++          swatch.dataset['focus'] = `swatch-${index}`;
+           swatch.style.background = choice.color;
+           swatch.title = choice.name;
+           swatch.setAttribute('role', 'radio');
+@@ -423,6 +440,7 @@ function renderStep(main: HTMLElement) {
+               String(state.behaviour[behaviour.name] === value));
+           pill.dataset['name'] = behaviour.name;
+           pill.dataset['value'] = String(value);
++          pill.dataset['focus'] = `behaviour-${behaviour.name}-${value}`;
+           pill.addEventListener('click', () => {
+             state.behaviour[behaviour.name] = value;
+             chrome.send('setBehaviour', [behaviour.name, value]);
+@@ -448,6 +466,7 @@ function renderStep(main: HTMLElement) {
+       const row = el('div', 'import-row');
+       const button = el('button', 'secondary',
+           state.defaultState === 'default' ? 'Stedding is the default' : 'Set as default');
++      button.dataset['focus'] = 'default';
+       button.disabled = state.defaultState === 'default';
+       button.addEventListener('click', () => chrome.send('setDefaultBrowser'));
+       row.append(button);
+@@ -510,14 +529,40 @@ function updateMore(main: HTMLElement) {
+ // welcome W12: render() rebuilds the whole flow, and it runs again whenever an
+ // answer comes in late (the Arc check, the importer's list, the default
+ // browser check, an import's progress). The control that had the focus is
+-// found again by its place in the flow, its tag and its text, and keeps it;
+-// otherwise each late answer dropped a keyboard user's focus onto the page.
++// found again and keeps it; otherwise each late answer dropped a keyboard
++// user's focus onto the page. Each control carries a key (data-focus) that
++// stays when its label changes ("Import" to "Importing…") or a block is drawn
++// above it (the Arc check); one the redraw left disabled hands the focus to
++// the next control. Found by its place and its text alone, the control was
++// lost in both cases (BACKLOG S-204).
+ interface FocusPlace {
++  key: string|null;
+   path: number[];
+   tag: string;
+   text: string;
+ }
+ 
++const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]';
++
++function canFocus(node: HTMLElement): boolean {
++  return !(node as HTMLButtonElement).disabled && node.tabIndex >= 0 &&
++      node.getClientRects().length > 0;
++}
++
++// Focuses `node`, or, when it cannot take the focus, the next control after
++// it, else the one before it.
++function focusOrNext(app: HTMLElement, node: HTMLElement) {
++  if (canFocus(node)) {
++    node.focus();
++    return;
++  }
++  const all = Array.from(app.querySelectorAll<HTMLElement>(FOCUSABLE));
++  const at = all.indexOf(node);
++  const near = all.slice(at + 1).find(canFocus) ??
++      all.slice(0, Math.max(at, 0)).reverse().find(canFocus);
++  near?.focus();
++}
++
+ function focusPlace(app: HTMLElement): FocusPlace|null {
+   const focused = document.activeElement;
+   if (!(focused instanceof HTMLElement) || !app.contains(focused)) {
+@@ -527,13 +572,26 @@ function focusPlace(app: HTMLElement): FocusPlace|null {
+   for (let node = focused; node !== app; node = node.parentElement!) {
+     path.unshift(Array.from(node.parentElement!.children).indexOf(node));
+   }
+-  return {path, tag: focused.tagName, text: focused.textContent ?? ''};
++  return {
++    key: focused.dataset['focus'] ?? null,
++    path,
++    tag: focused.tagName,
++    text: focused.textContent ?? '',
++  };
+ }
+ 
+ function refocus(app: HTMLElement, place: FocusPlace|null) {
+   if (!place) {
+     return;
+   }
++  if (place.key) {
++    const keyed = app.querySelector<HTMLElement>(
++        `[data-focus="${CSS.escape(place.key)}"]`);
++    if (keyed) {
++      focusOrNext(app, keyed);
++      return;
++    }
++  }
+   let node: Element|undefined = app;
+   for (const index of place.path) {
+     node = node?.children[index];
+@@ -568,14 +626,17 @@ function render() {
+   const footer = el('footer');
+   footer.append(el('span', 'status', `Step ${index + 1} of ${STEPS.length}`));
+   const skip = el('button', 'quiet', 'Skip');
++  skip.dataset['focus'] = 'skip';
+   skip.addEventListener('click', () => chrome.send('finish'));
+   const back = el('button', 'secondary', 'Back');
++  back.dataset['focus'] = 'back';
+   back.disabled = index === 0;
+   back.addEventListener('click', () => {
+     state.step = STEPS[Math.max(0, index - 1)]!;
+     render();
+   });
+   const next = el('button', 'primary', index === STEPS.length - 1 ? 'Finish' : 'Next');
++  next.dataset['focus'] = 'next';
+   next.addEventListener('click', () => {
+     if (index === STEPS.length - 1) {
+       chrome.send('finish');
+diff --git a/chrome/browser/ssl/https_first_mode_settings_tracker.cc b/chrome/browser/ssl/https_first_mode_settings_tracker.cc
+index 83e90858d13c0..6a05132bb4e3e 100644
+--- a/chrome/browser/ssl/https_first_mode_settings_tracker.cc
++++ b/chrome/browser/ssl/https_first_mode_settings_tracker.cc
+@@ -236,6 +236,10 @@ HttpsFirstModeStartupState GetStartupDetailedState(Profile* profile) {
+               features::kHttpsFirstBalancedModeAutoEnable)) {
+         return HttpsFirstModeStartupState::kEnabledBalancedAutoEnable;
+       }
++      // Stedding (privacy Q2): balanced mode is on by its registered default,
++      // which does the auto-enable feature's part; it was counted as off
++      // (BACKLOG S-209).
++      return HttpsFirstModeStartupState::kEnabledBalancedAutoEnable;
+     } else {
+       if (prefs->GetBoolean(prefs::kHttpsOnlyModeAutoEnabled)) {
+         return HttpsFirstModeStartupState::kEnabledBalancedTypicallySecure;
+diff --git a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
+index 73948c8d039bf..8ec749512c797 100644
+--- a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
++++ b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
+@@ -1204,10 +1204,10 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupBalancedModeAvailable) {
+   ASSERT_TRUE(service);
+ 
+   // Creating the HttpsFirstModeService should emit the "setting at startup"
+-  // histogram.
++  // histogram. Stedding (privacy Q2): balanced mode is on by default.
+   histograms.ExpectUniqueSample(
+       "Security.HttpsFirstMode.SettingEnabledAtStartup2",
+-      HttpsFirstModeSetting::kDisabled, 1);
++      HttpsFirstModeSetting::kEnabledBalanced, 1);
+ }
+ 
+ // Tests that the correct setting at startup is logged, when Balanced Mode
+@@ -1247,9 +1247,11 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, AdvancedProtectionStatusChange) {
+           profile());
+   ASSERT_TRUE(aps_manager);
+ 
+-  // Initially, the Strict HFM pref is disabled.
++  // Initially, the Strict HFM pref is disabled. Stedding (privacy Q2):
++  // balanced mode is on by default.
+   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
+-  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
++  EXPECT_EQ(service->GetCurrentSetting(),
++            HttpsFirstModeSetting::kEnabledBalanced);
+ 
+   // Enable Advanced Protection. This should not change the pref, but
+   // GetCurrentSetting should now return kEnabledFull.
+@@ -1257,10 +1259,12 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, AdvancedProtectionStatusChange) {
+   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
+   EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kEnabledFull);
+ 
+-  // Disable Advanced Protection. GetCurrentSetting should return to kDisabled.
++  // Disable Advanced Protection. GetCurrentSetting should return to what it
++  // was: balanced, Stedding's default.
+   aps_manager->SetAdvancedProtectionStatusForTesting(false);
+   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
+-  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
++  EXPECT_EQ(service->GetCurrentSetting(),
++            HttpsFirstModeSetting::kEnabledBalanced);
+ }
+ 
+ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+@@ -1292,7 +1296,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+   EXPECT_FALSE(
+       safe_browsing::IsEnhancedProtectionEnabled(*profile()->GetPrefs()));
+   EXPECT_TRUE(IsBalancedModeEnabled(profile()->GetPrefs()));
+-  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
++  EXPECT_EQ(service->GetCurrentSetting(),
++            HttpsFirstModeSetting::kEnabledBalanced);
+ 
+   // 3. Enable ESB. Balanced Mode should now be enabled by default.
+   safe_browsing::SetEnhancedProtectionPref(profile()->GetPrefs(), true);
+@@ -1321,6 +1326,9 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+ }
+ 
+ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
++  // Stedding (privacy Q2): balanced mode is on by default; off is the
++  // user's choice.
++  profile()->GetPrefs()->SetBoolean(prefs::kHttpsFirstBalancedMode, false);
+   base::HistogramTester histograms;
+   HttpsFirstModeService* service =
+       HttpsFirstModeServiceFactory::GetForProfile(profile());
+@@ -1331,6 +1339,21 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
+       HttpsFirstModeStartupState::kDisabled, 1);
+ }
+ 
++// Stedding (privacy Q2): a fresh profile has balanced mode on by its
++// registered default, counted as enabled by default; it was counted as off
++// (BACKLOG S-209).
++TEST_F(HttpsFirstModeSettingsTrackerTest,
++       StartupDetailedState_SteddingDefaultIsBalanced) {
++  base::HistogramTester histograms;
++  HttpsFirstModeService* service =
++      HttpsFirstModeServiceFactory::GetForProfile(profile());
++  ASSERT_TRUE(service);
++
++  histograms.ExpectUniqueSample(
++      "Security.HttpsFirstMode.SettingEnabledAtStartupDetailed",
++      HttpsFirstModeStartupState::kEnabledBalancedAutoEnable, 1);
++}
++
+ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_EnabledFull) {
+   profile()->GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled, true);
+ 
+diff --git a/chrome/browser/ui/archive/closed_tabs_undo.cc b/chrome/browser/ui/archive/closed_tabs_undo.cc
+index eeb4c6da60a17..663c4c26ab66c 100644
+--- a/chrome/browser/ui/archive/closed_tabs_undo.cc
++++ b/chrome/browser/ui/archive/closed_tabs_undo.cc
+@@ -99,6 +99,7 @@ std::optional<ClosedEntry> DescribeClosedEntry(
+       described.title = TitleOf(tab);
+       described.reason = Lookup(tab.extra_data, kArchiveReasonKey);
+       described.index = tab.tabstrip_index;
++      described.grouped = tab.group.has_value();
+       return described;
+     }
+     if (entry->type == sessions::tab_restore::SPLIT) {
+@@ -404,6 +405,14 @@ size_t ClosedTabsUndo::Undo() {
+       if (from != TabStripModel::kNoTab && from != to) {
+         strip->MoveWebContentsAt(from, to, /*select_after_move=*/false);
+       }
++      // A tab that was in no group comes back in none. Its old index can be
++      // inside a group made since, and a tab moved between two of a group's
++      // tabs joins it: a tab of a folder then stayed there, as the folder
++      // rebuild skips a grouped tab, and its folder never came back
++      // (folders F26, BACKLOG S-207).
++      if (!step.entry.grouped && tab->GetGroup()) {
++        strip->RemoveFromGroup({strip->GetIndexOfTab(tab)});
++      }
+     }
+     if (step.on_screen && !shown) {
+       shown = tab->GetHandle();
+diff --git a/chrome/browser/ui/archive/closed_tabs_undo.h b/chrome/browser/ui/archive/closed_tabs_undo.h
+index 43a33b09427e3..39542f855a2dd 100644
+--- a/chrome/browser/ui/archive/closed_tabs_undo.h
++++ b/chrome/browser/ui/archive/closed_tabs_undo.h
+@@ -76,6 +76,8 @@ struct ClosedEntry {
+   // The index in the strip the tab (or the split's first tab) was closed
+   // at; -1 when unknown.
+   int index = -1;
++  // The tab was in a Chromium tab group when it closed.
++  bool grouped = false;
+ };
+ 
+ // The TAB or SPLIT entry `id` of `entries`; nothing for another kind of
+diff --git a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
+index 11244e9960053..7be5877a7ed03 100644
+--- a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
+@@ -53,9 +53,12 @@ TEST(ArcDataImporterTest, UnsealsAV10Value) {
+   const std::vector<uint8_t> key = DeriveArcKey("peanuts");
+   const std::string sealed = Seal("hunter2", key);
+   EXPECT_EQ(u"hunter2", DecryptArcValue(base::as_byte_span(sealed), key));
+-  const std::optional<std::u16string> wrong_key =
+-      DecryptArcValue(base::as_byte_span(sealed), DeriveArcKey("walnuts"));
+-  EXPECT_TRUE(!wrong_key || *wrong_key != u"hunter2");
++  // Another key gives nothing back for this value: it fails the padding
++  // check. The check let any value but the right one through, nothing
++  // included (BACKLOG S-209).
++  EXPECT_FALSE(
++      DecryptArcValue(base::as_byte_span(sealed), DeriveArcKey("walnuts"))
++          .has_value());
+   EXPECT_FALSE(DecryptArcValue(base::span<const uint8_t>(), key).has_value());
+   EXPECT_FALSE(
+       DecryptArcValue(base::as_byte_span(std::string_view("plain")), key)
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+index ac48ac8ca64bf..d9f219d753e7a 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+@@ -637,7 +637,8 @@ base::FilePath ArcSidebarPath() {
+       .Append(FILE_PATH_LITERAL("StorableSidebar.json"));
+ }
+ 
+-std::optional<std::string> ReadArcSidebar(const base::FilePath& path) {
++std::optional<std::string> ReadArcSidebar(const base::FilePath& path,
++                                          base::FilePath* read_from) {
+   if (path.empty() || !base::PathExists(path)) {
+     return std::nullopt;
+   }
+@@ -651,6 +652,9 @@ std::optional<std::string> ReadArcSidebar(const base::FilePath& path) {
+       copy.clear();
+     }
+   }
++  if (read_from) {
++    *read_from = copy.empty() ? path : copy;
++  }
+   std::string json;
+   if (!base::ReadFileToString(copy.empty() ? path : copy, &json)) {
+     return std::nullopt;
+@@ -897,7 +901,9 @@ void ImportFromArcAsync(BrowserWindowInterface* browser,
+   }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+-      base::BindOnce(&ReadArcSidebar, ArcSidebarPath()),
++      base::BindOnce(
++          [](const base::FilePath& path) { return ReadArcSidebar(path); },
++          ArcSidebarPath()),
+       base::BindOnce(&ApplyRead, browser->GetWeakPtr(), options,
+                      std::move(done)));
+ }
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.h b/chrome/browser/ui/spaces/arc_sidebar_importer.h
+index 81cc7bdb3c779..82d3996fbea2b 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.h
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.h
+@@ -92,7 +92,10 @@ base::FilePath ArcSidebarPath();
+ 
+ // I9: reads a copy of the file, because Arc rewrites it while it runs.
+ // Blocking: call from the thread pool. Nullopt when there is no file.
+-std::optional<std::string> ReadArcSidebar(const base::FilePath& path);
++// `read_from`, when given, is set to the file that was read: the copy, or
++// `path` itself when no copy could be made.
++std::optional<std::string> ReadArcSidebar(const base::FilePath& path,
++                                          base::FilePath* read_from = nullptr);
+ 
+ // I9: whether Arc is running now, so the flow can say the file may be
+ // mid-write. Blocking: call from the thread pool.
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+index 66356e05fa2d6..5b53d9543c11b 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+@@ -153,9 +153,15 @@ TEST(ArcSidebarImporterTest, ReadsACopy) {
+   ASSERT_TRUE(dir.CreateUniqueTempDir());
+   const base::FilePath path = dir.GetPath().AppendASCII("StorableSidebar.json");
+   ASSERT_TRUE(base::WriteFile(path, kSidebar));
+-  const std::optional<std::string> json = ReadArcSidebar(path);
++  base::FilePath read_from;
++  const std::optional<std::string> json = ReadArcSidebar(path, &read_from);
+   ASSERT_TRUE(json.has_value());
+   EXPECT_EQ(std::string(kSidebar), *json);
++  // The copy is what was read, and it is gone once read: the bytes alone
++  // came back the same from the file itself (BACKLOG S-209).
++  EXPECT_NE(path, read_from) << "the file was read in place";
++  EXPECT_NE(path.DirName(), read_from.DirName());
++  EXPECT_FALSE(base::PathExists(read_from)) << "the copy was left behind";
+   EXPECT_FALSE(
+       ReadArcSidebar(dir.GetPath().AppendASCII("missing.json")).has_value());
+ }
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 1d3fa48a34d9d..288e4affdbb97 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -56,6 +56,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
+ #include "components/sessions/content/session_tab_helper.h"
+ #include "components/sessions/core/session_service_commands.h"
+ #include "components/split_tabs/split_tab_id.h"
+@@ -81,6 +82,49 @@ bool& NextWindowIsBlank() {
+   return blank;
+ }
+ 
++// sessions S17: the jar of a deleted Space stays on the profile's pending
++// list until its wipe has finished. A quit during the wait, or a window
++// without Spaces still showing the jar when the last window with Spaces
++// closed, had left the deleted Space's data on disk for good (BACKLOG S-206).
++void RememberPendingWipe(Profile* profile, const std::string& jar) {
++  if (!profile || jar.empty()) {
++    return;
++  }
++  ScopedListPrefUpdate update(profile->GetPrefs(),
++                              stedding::prefs::kPendingJarWipes);
++  if (!update->contains(jar)) {
++    update->Append(jar);
++  }
++}
++
++void ForgetPendingWipe(Profile* profile, const std::string& jar) {
++  if (!profile) {
++    return;
++  }
++  ScopedListPrefUpdate update(profile->GetPrefs(),
++                              stedding::prefs::kPendingJarWipes);
++  update->EraseValue(base::Value(jar));
++}
++
++// What a wipe runs when it has finished: the jar leaves the pending list,
++// then `done`.
++base::OnceClosure ForgetPendingWipeThen(content::BrowserContext* context,
++                                        std::string jar,
++                                        base::OnceClosure done) {
++  Profile* const profile =
++      context ? Profile::FromBrowserContext(context) : nullptr;
++  return base::BindOnce(
++      [](base::WeakPtr<Profile> profile, const std::string& jar,
++         base::OnceClosure done) {
++        ForgetPendingWipe(profile.get(), jar);
++        if (done) {
++          std::move(done).Run();
++        }
++      },
++      profile ? profile->GetWeakPtr() : base::WeakPtr<Profile>(),
++      std::move(jar), std::move(done));
++}
++
+ }  // namespace
+ 
+ DEFINE_USER_DATA(SpaceModel);
+@@ -170,6 +214,7 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+     if (registry_) {
+       SyncWithRegistry(/*seed=*/true);
+       registry_observation_.Observe(registry_);
++      ResumePendingWipes();
+     }
+   }
+ 
+@@ -233,12 +278,17 @@ SpaceModel::~SpaceModel() {
+       if (heir) {
+         heir->waiting_wipes_.push_back(std::move(wipe));
+       } else if (wipe.context && !IsJarInUse(wipe.context, wipe.jar)) {
+-        WipeIsolatedSpacePartition(wipe.context, wipe.jar,
+-                                   std::move(wipe.done));
++        WipeIsolatedSpacePartition(
++            wipe.context, wipe.jar,
++            ForgetPendingWipeThen(wipe.context, wipe.jar,
++                                  std::move(wipe.done)));
+       } else {
+         // Still shown by a window that has no Spaces, with none left to
+-        // wait: the page keeps its session, and the jar stays on disk.
+-        std::move(wipe.done).Run();
++        // wait: the page keeps its session, and the jar stays on the
++        // pending list for the profile's next window.
++        if (wipe.done) {
++          std::move(wipe.done).Run();
++        }
+       }
+     }
+     waiting_wipes_.clear();
+@@ -1545,6 +1595,7 @@ void SpaceModel::WipeIsolatedJarOnceLeft(std::string jar,
+     std::move(done).Run();
+     return;
+   }
++  RememberPendingWipe(profile_, jar);
+   waiting_wipes_.push_back(
+       {std::move(jar), std::move(done), BrowserContextForWipe()});
+   RetryWaitingWipes();
+@@ -1574,13 +1625,59 @@ void SpaceModel::RetryWaitingWipes() {
+   }
+   for (WaitingWipe& wipe : ready) {
+     if (wipe.context) {
+-      WipeIsolatedSpacePartition(wipe.context, wipe.jar, std::move(wipe.done));
+-    } else {
++      WipeIsolatedSpacePartition(
++          wipe.context, wipe.jar,
++          ForgetPendingWipeThen(wipe.context, wipe.jar, std::move(wipe.done)));
++    } else if (wipe.done) {
+       std::move(wipe.done).Run();
+     }
+   }
+ }
+ 
++void SpaceModel::ResumePendingWipes() {
++  if (!profile_ || !registry_) {
++    return;
++  }
++  std::vector<std::string> named;
++  for (const base::Value& value :
++       profile_->GetPrefs()->GetList(stedding::prefs::kPendingJarWipes)) {
++    const std::string* const jar = value.GetIfString();
++    if (!jar || jar->empty()) {
++      continue;
++    }
++    // A jar a Space names is that Space's, whatever the list says.
++    if (std::ranges::any_of(registry_->entries(),
++                            [&](const RegistryEntry& entry) {
++                              return entry.profile_id == *jar;
++                            })) {
++      named.push_back(*jar);
++      continue;
++    }
++    bool waiting = false;
++    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++        [&](BrowserWindowInterface* window) {
++          const SpaceModel* const other = SpaceModel::From(window);
++          if (other && std::ranges::any_of(other->waiting_wipes_,
++                                           [&](const WaitingWipe& wipe) {
++                                             return wipe.jar == *jar;
++                                           })) {
++            waiting = true;
++            return false;
++          }
++          return true;
++        });
++    if (!waiting) {
++      waiting_wipes_.push_back({*jar, base::OnceClosure(), profile_});
++    }
++  }
++  for (const std::string& jar : named) {
++    ForgetPendingWipe(profile_, jar);
++  }
++  if (!waiting_wipes_.empty()) {
++    PostRetryWaitingWipes();
++  }
++}
++
+ void SpaceModel::PostRetryWaitingWipes() {
+   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE, base::BindOnce(
+@@ -1927,8 +2024,14 @@ void SpaceModel::RouteFreshTab(tabs::TabInterface* tab,
+   if (!tab || routing_paused_ || tab->IsPinned() || !tab_strip_model_) {
+     return;
+   }
++  // An address typed by the user is never another app's: the external-open
++  // mark (D3) is spent by the insert of the tab that app opens (a startup
++  // tab is always a new tab, ChooseSpaceForNewTab). Taken here, a fresh tab
++  // that typed the same address within the mark's ten seconds went to the
++  // external default, and the app's tab stayed in the active Space
++  // (BACKLOG S-201).
+   const std::optional<SpaceId> target =
+-      RouteTargetFor(url, TakeExternalOpen(url), search);
++      RouteTargetFor(url, /*external=*/false, search);
+   if (!target || *target == SpaceForTab(tab)) {
+     // No route: the address still loads in the tab's own Space's jar, which
+     // a new tab page is not in (PLAN.md CMD-8).
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index b40a273d1b490..495b9d9b83cfd 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -447,6 +447,9 @@ class SpaceModel : public TabStripModelObserver,
+   void RebindTabsInSpace(const SpaceId& id);
+   void ReloadTabsInSpace(const SpaceId& id);
+   content::BrowserContext* BrowserContextForWipe() const;
++  // sessions S17: queues the wipes a previous run left unfinished
++  // (kPendingJarWipes) that no Space names and no window waits on.
++  void ResumePendingWipes();
+   void WipeIsolatedJar(std::string_view profile_id, base::OnceClosure done);
+   // sessions S17, S21: RemoveSpace's wipe of `jar`, run once no tab of the
+   // profile's windows shows a page in it. A page holding unsaved changes
+diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+index b1412456ae8c6..d20d2e9f658f9 100644
+--- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+@@ -17,7 +17,9 @@
+ 
+ #include "base/run_loop.h"
+ #include "base/test/bind.h"
++#include "base/test/run_until.h"
+ #include "base/time/time.h"
++#include "base/values.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/ui/archive/archive_mark.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -1248,6 +1250,26 @@ TEST_F(SpaceWindowTest, ExternalOpenLandsInTheDefaultSpace) {
+   EXPECT_EQ(home, model().SpaceForTab(tabs().GetActiveTab()));
+ }
+ 
++// routing D3: an address typed into a fresh tab does not spend another app's
++// mark on the same address, so the app's tab, inserted later (its profile
++// still loading), still lands in the external default (BACKLOG S-201).
++TEST_F(SpaceWindowTest, ATypedAddressLeavesAnotherAppsMark) {
++  const SpaceId home = model().active_id();
++  Space* const mail = model().AddSpace("Mail", SK_ColorGREEN);
++  profile()->GetPrefs()->SetString(stedding::prefs::kExternalDefaultSpace,
++                                   mail->id().ToString());
++  const GURL url("https://example.com/inbox");
++  MarkExternalOpen(url);
++  tabs::TabInterface* const fresh = OpenTab();
++  model().RouteFreshTab(fresh, url, /*search=*/false);
++  task_environment()->RunUntilIdle();
++  EXPECT_EQ(home, model().SpaceForTab(fresh)) << "typed, not from the app";
++  model().SetActiveSpace(home);
++  AddTab(browser(), url);
++  EXPECT_EQ(mail->id(), model().SpaceForTab(tabs().GetActiveTab()))
++      << "the app's tab still finds its mark";
++}
++
+ content::StoragePartitionConfig PartitionOf(tabs::TabInterface* tab) {
+   return StoragePartitionConfigForWebContents(tab->GetContents());
+ }
+@@ -1525,6 +1547,63 @@ TEST_F(SpaceWindowTest, DeletingAnIsolatedSpaceWipesItsPartition) {
+ }
+ 
+ 
++// sessions S17: a deleted Space's jar stays on the profile's pending list
++// until its wipe has finished, and the profile's next window finishes a wipe
++// a quit left waiting; a jar a Space names is never wiped from the list. A
++// quit during the wait had left the deleted Space's data on disk for good
++// (BACKLOG S-206).
++TEST_F(SpaceWindowTest, ANewWindowFinishesAWipeLeftWaiting) {
++  PrefService* const prefs = profile()->GetPrefs();
++  const SpaceId home = model().active_id();
++  const GURL url("https://example.com/");
++  {
++    SCOPED_TRACE("a finished wipe leaves nothing pending");
++    Space* const work = model().AddSpace("Work", kBlue);
++    model().SetSpaceIsolated(work->id(), true);
++    model().SetActiveSpace(work->id());
++    OpenTab();
++    model().SetActiveSpace(home);
++    const SpaceId work_id = work->id();
++    base::RunLoop loop;
++    ASSERT_TRUE(model().RemoveSpace(work_id, loop.QuitClosure()));
++    loop.Run();
++    EXPECT_TRUE(prefs->GetList(stedding::prefs::kPendingJarWipes).empty());
++  }
++  {
++    SCOPED_TRACE("the next window finishes a wipe a quit left waiting");
++    const std::optional<content::StoragePartitionConfig> left =
++        StoragePartitionConfigForProfileId(profile(), "left-by-a-quit");
++    ASSERT_TRUE(left);
++    PutCookie(profile(), *left, url);
++    ASSERT_EQ(1u, CookieCount(profile(), *left, url));
++    Space* const mail = model().AddSpace("Mail", kBlue);
++    model().SetSpaceIsolated(mail->id(), true);
++    const std::string mail_jar =
++        model().registry()->Find(mail->id())->profile_id;
++    ASSERT_FALSE(mail_jar.empty());
++    const std::optional<content::StoragePartitionConfig> named =
++        StoragePartitionConfigForProfileId(profile(), mail_jar);
++    ASSERT_TRUE(named);
++    PutCookie(profile(), *named, url);
++    base::ListValue pending;
++    pending.Append("left-by-a-quit");
++    pending.Append(mail_jar);
++    prefs->SetList(stedding::prefs::kPendingJarWipes, std::move(pending));
++
++    std::unique_ptr<BrowserWindowInterface> second =
++        CreateBrowser(profile(), Browser::TYPE_NORMAL, /*hosted_app=*/false);
++    ASSERT_TRUE(SpaceModel::From(second.get()));
++    // The list empties when the wipe has finished.
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return prefs->GetList(stedding::prefs::kPendingJarWipes).empty();
++    })) << "the waiting wipe was not finished";
++    EXPECT_EQ(0u, CookieCount(profile(), *left, url));
++    EXPECT_EQ(1u, CookieCount(profile(), *named, url))
++        << "a jar a Space names was wiped";
++    second->GetTabStripModel()->CloseAllTabs();
++  }
++}
++
+ // sessions S7
+ TEST_F(SpaceWindowTest, TurningIsolationOffKeepsTheJarForNextTime) {
+   Space* const work = model().AddSpace("Work", kBlue);
+diff --git a/chrome/browser/ui/spaces/space_router.cc b/chrome/browser/ui/spaces/space_router.cc
+index 19eec3b11e6ea..1abd898aa1e44 100644
+--- a/chrome/browser/ui/spaces/space_router.cc
++++ b/chrome/browser/ui/spaces/space_router.cc
+@@ -9,6 +9,7 @@
+ #include <utility>
+ 
+ #include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+@@ -57,6 +58,61 @@ bool HostSuffixMatches(std::string_view host, std::string_view pattern) {
+          host.ends_with(pattern);
+ }
+ 
++namespace {
++
++// A `host` rule's host as the address bar writes it: lower case, an IPv6
++// literal in brackets, an IDN in punycode.
++std::string CanonicalRuleHost(std::string_view host) {
++  std::string bracketed(host);
++  if (!host.starts_with('[') && host.find(':') != std::string_view::npos) {
++    bracketed = "[" + bracketed + "]";
++  }
++  const GURL parsed("http://" + bracketed + "/");
++  return parsed.is_valid() && parsed.has_host()
++             ? base::ToLowerASCII(parsed.host())
++             : base::ToLowerASCII(host);
++}
++
++// D1: a host, or a host and a port. An IPv6 literal has colons of its own: in
++// brackets it can take a port after them ("[::1]:8080"), and without them it
++// is all host ("::1"). A port matches the address's port, the scheme's
++// default included ("example.com:443" is "https://example.com/"). The rule
++// was cut at its first colon, so no IPv6 host matched, and a default port,
++// which the address does not spell, never did (BACKLOG S-203).
++bool HostRuleMatches(std::string_view pattern, const GURL& url) {
++  std::string_view host = pattern;
++  std::string_view port;
++  if (pattern.starts_with('[')) {
++    const size_t close = pattern.find(']');
++    if (close == std::string_view::npos) {
++      return false;
++    }
++    host = pattern.substr(0, close + 1);
++    const std::string_view rest = pattern.substr(close + 1);
++    if (!rest.empty()) {
++      if (rest.front() != ':') {
++        return false;
++      }
++      port = rest.substr(1);
++    }
++  } else if (const size_t colon = pattern.find(':');
++             colon != std::string_view::npos &&
++             pattern.find(':', colon + 1) == std::string_view::npos) {
++    host = pattern.substr(0, colon);
++    port = pattern.substr(colon + 1);
++  }
++  if (host.empty() || HostOf(url) != CanonicalRuleHost(host)) {
++    return false;
++  }
++  if (port.empty()) {
++    return true;
++  }
++  int wanted = 0;
++  return base::StringToInt(port, &wanted) && url.EffectiveIntPort() == wanted;
++}
++
++}  // namespace
++
+ bool RouteMatches(const Route& route, const GURL& url) {
+   if (route.pattern.empty() || !url.is_valid()) {
+     return false;
+@@ -71,14 +127,8 @@ bool RouteMatches(const Route& route, const GURL& url) {
+       const GURL wanted(route.pattern);
+       return wanted.is_valid() ? wanted == url : url.spec() == route.pattern;
+     }
+-    case Route::Match::kHost: {
+-      const size_t colon = pattern.find(':');
+-      if (colon != std::string::npos) {
+-        return HostOf(url) == pattern.substr(0, colon) &&
+-               url.port() == pattern.substr(colon + 1);
+-      }
+-      return HostOf(url) == pattern;
+-    }
++    case Route::Match::kHost:
++      return HostRuleMatches(pattern, url);
+     case Route::Match::kHostSuffix:
+       return HostSuffixMatches(HostOf(url), pattern);
+   }
+diff --git a/chrome/browser/ui/spaces/space_router_unittest.cc b/chrome/browser/ui/spaces/space_router_unittest.cc
+index e721aa5311c3c..8ac292de42d38 100644
+--- a/chrome/browser/ui/spaces/space_router_unittest.cc
++++ b/chrome/browser/ui/spaces/space_router_unittest.cc
+@@ -69,6 +69,27 @@ TEST(SpaceRouterTest, HostAndHostSuffix) {
+                             GURL("http://localhost:5173/x")));
+ }
+ 
++// D1: a host rule takes an IPv6 literal, with or without brackets and with a
++// port after them, and a port that is the scheme's default, which the address
++// does not spell (BACKLOG S-203).
++TEST(SpaceRouterTest, AHostRuleTakesIPv6AndADefaultPort) {
++  const auto matches = [](const char* pattern, const char* url) {
++    return RouteMatches(Make(Route::Match::kHost, pattern, "x"), GURL(url));
++  };
++  EXPECT_TRUE(matches("[::1]", "http://[::1]/"));
++  EXPECT_TRUE(matches("[::1]", "http://[::1]:8080/x"));
++  EXPECT_TRUE(matches("::1", "http://[::1]/"));
++  EXPECT_TRUE(matches("[::1]:8080", "http://[::1]:8080/x"));
++  EXPECT_FALSE(matches("[::1]:8080", "http://[::1]:8081/x"));
++  EXPECT_TRUE(matches("[2001:DB8::1]", "https://[2001:db8::1]/"));
++  EXPECT_FALSE(matches("[::1", "http://[::1]/"));
++  EXPECT_TRUE(matches("example.com:443", "https://example.com/"));
++  EXPECT_FALSE(matches("example.com:443", "http://example.com/"));
++  EXPECT_TRUE(matches("example.com:80", "http://example.com/"));
++  EXPECT_TRUE(matches("Example.COM", "https://example.com:8443/"));
++  EXPECT_FALSE(matches("example.com:x", "https://example.com/"));
++}
++
+ // D5: the rule the tab menu writes is the address's site, nothing more.
+ TEST(SpaceRouterTest, RuleFromTabIsSiteScoped) {
+   const Route route =
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 5473781af22af..aee5b43252de3 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -47,6 +47,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterDictionaryPref(kArcImportedSpaces);
+   registry->RegisterListPref(kSpaceRoutes);
+   registry->RegisterStringPref(kExternalDefaultSpace, std::string());
++  registry->RegisterListPref(kPendingJarWipes);
+ }
+ 
+ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index f569d36b1a8c1..7829181711db0 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -117,6 +117,9 @@ inline constexpr char kArcImportedSpaces[] = "stedding.import.arc_spaces";
+ inline constexpr char kSpaceRoutes[] = "stedding.spaces.routes";
+ inline constexpr char kExternalDefaultSpace[] =
+     "stedding.spaces.external_default";
++// sessions S17: the jars of deleted Spaces whose wipe has not finished; the
++// next window of the profile finishes them (BACKLOG S-206).
++inline constexpr char kPendingJarWipes[] = "stedding.spaces.pending_jar_wipes";
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+ // The browser-wide ones (privacy Q4).
+diff --git a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
+index 85ed06edacbd2..4993ed95a3a84 100644
+--- a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
++++ b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
+@@ -4,16 +4,27 @@
+ 
+ #include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
+ 
++#include <memory>
+ #include <utility>
+ 
+ #include "base/no_destructor.h"
+ #include "cc/paint/paint_flags.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "third_party/skia/include/core/SkPath.h"
++#include "third_party/skia/include/core/SkRRect.h"
++#include "ui/accessibility/ax_action_data.h"
++#include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/color/color_provider.h"
++#include "ui/events/event.h"
++#include "ui/events/keycodes/keyboard_codes.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/skia_conversions.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/focus_ring.h"
++#include "ui/views/controls/highlight_path_generator.h"
+ #include "ui/views/controls/separator.h"
+ 
+ namespace {
+@@ -22,6 +33,7 @@ constexpr int kRowHeight = 22;
+ constexpr int kSideInset = 12;
+ constexpr int kLabelGap = 8;
+ constexpr char16_t kLabel[] = u"Clear";
++constexpr char16_t kTooltip[] = u"Close this Space's tabs";
+ 
+ gfx::FontList LabelFont() {
+   // sidebar Y2: one point under the title's size.
+@@ -30,17 +42,81 @@ gfx::FontList LabelFont() {
+                        text > 0 ? text - 1 : 11, gfx::Font::Weight::MEDIUM);
+ }
+ 
++// The focus ring goes round the word, not the whole line.
++class ClearHighlightPathGenerator : public views::HighlightPathGenerator {
++ public:
++  SkPath GetHighlightPath(const views::View* view) override {
++    const gfx::Rect rect =
++        static_cast<const ClearTabsSeparator*>(view)->GetClearRect();
++    return SkPath::RRect(SkRRect::MakeRectXY(gfx::RectToSkRect(rect), 4, 4));
++  }
++};
++
+ }  // namespace
+ 
+-ClearTabsSeparator::ClearTabsSeparator() = default;
++ClearTabsSeparator::ClearTabsSeparator() {
++  views::FocusRing::Install(this);
++  views::HighlightPathGenerator::Install(
++      this, std::make_unique<ClearHighlightPathGenerator>());
++  UpdateClearControl();
++}
++
+ ClearTabsSeparator::~ClearTabsSeparator() = default;
+ 
+ void ClearTabsSeparator::SetClearCallback(base::RepeatingClosure callback) {
+   clear_callback_ = std::move(callback);
++  UpdateClearControl();
+   PreferredSizeChanged();
+   SchedulePaint();
+ }
+ 
++void ClearTabsSeparator::UpdateClearControl() {
++  const bool clear = clear_callback_ && !GetClearRect().IsEmpty();
++  views::ViewAccessibility& accessibility = GetViewAccessibility();
++  // Ignored first: an ignored view is never focusable, and the focus
++  // behaviour below reads it.
++  accessibility.SetIsIgnored(!clear);
++  if (clear) {
++    accessibility.SetRole(ax::mojom::Role::kButton);
++    accessibility.SetName(std::u16string(kLabel));
++    accessibility.SetDescription(std::u16string(kTooltip));
++  }
++  // The rows' own behaviour: on the Mac, Tab reaches them with Full Keyboard
++  // Access on, as it reaches any button.
++  SetFocusBehavior(clear ? FocusBehavior::ACCESSIBLE_ONLY
++                         : FocusBehavior::NEVER);
++  accessibility.UpdateFocusableState();
++  if (views::FocusRing* const ring = views::FocusRing::Get(this)) {
++    ring->InvalidateLayout();
++    ring->SchedulePaint();
++  }
++}
++
++void ClearTabsSeparator::OnBoundsChanged(const gfx::Rect& previous_bounds) {
++  views::Separator::OnBoundsChanged(previous_bounds);
++  UpdateClearControl();
++}
++
++bool ClearTabsSeparator::OnKeyPressed(const ui::KeyEvent& event) {
++  if (!clear_callback_ || GetClearRect().IsEmpty() ||
++      (event.key_code() != ui::VKEY_RETURN &&
++       event.key_code() != ui::VKEY_SPACE)) {
++    return views::Separator::OnKeyPressed(event);
++  }
++  clear_callback_.Run();
++  return true;
++}
++
++bool ClearTabsSeparator::HandleAccessibleAction(
++    const ui::AXActionData& action_data) {
++  if (action_data.action == ax::mojom::Action::kDoDefault && clear_callback_ &&
++      !GetClearRect().IsEmpty()) {
++    clear_callback_.Run();
++    return true;
++  }
++  return views::Separator::HandleAccessibleAction(action_data);
++}
++
+ gfx::Size ClearTabsSeparator::CalculatePreferredSize(
+     const views::SizeBounds& available_size) const {
+   if (!clear_callback_) {
+@@ -115,7 +191,7 @@ void ClearTabsSeparator::OnMouseReleased(const ui::MouseEvent& event) {
+ std::u16string ClearTabsSeparator::GetRenderedTooltipText(
+     const gfx::Point& p) const {
+   if (clear_callback_ && GetClearRect().Contains(p)) {
+-    return u"Close this Space's tabs";
++    return kTooltip;
+   }
+   return std::u16string();
+ }
+diff --git a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
+index 258aa4af6736f..1ad18f3f8d95f 100644
+--- a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
++++ b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
+@@ -37,9 +37,18 @@ class ClearTabsSeparator : public views::Separator {
+   void OnPaint(gfx::Canvas* canvas) override;
+   bool OnMousePressed(const ui::MouseEvent& event) override;
+   void OnMouseReleased(const ui::MouseEvent& event) override;
++  bool OnKeyPressed(const ui::KeyEvent& event) override;
++  bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
++  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+   std::u16string GetRenderedTooltipText(const gfx::Point& p) const override;
+ 
+  private:
++  // pins H14: while the label is drawn, Clear is a button the keyboard and
++  // assistive technology reach -- focusable, named, run by Enter or Space or
++  // a screen reader's press, with a focus ring around the word. It was text
++  // painted on the line, which only a pointer could press (BACKLOG S-205).
++  void UpdateClearControl();
++
+   bool pressed_in_clear_ = false;
+   base::RepeatingClosure clear_callback_;
+ };
+diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
+index 3227a45ec8739..41509b61d4017 100644
+--- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
++++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
+@@ -8,16 +8,23 @@
+ #include <memory>
+ 
+ #include "base/functional/callback_helpers.h"
++#include "base/test/bind.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
+ #include "chrome/test/views/chrome_views_test_base.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkBitmap.h"
++#include "ui/accessibility/ax_action_data.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/accessibility/ax_node_data.h"
+ #include "ui/color/color_provider.h"
++#include "ui/events/event.h"
++#include "ui/events/keycodes/keyboard_codes.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/size.h"
++#include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/widget/widget.h"
+ 
+ namespace stedding {
+@@ -211,5 +218,47 @@ TEST_F(ClearLineTest, TheRailDrawsTheLine) {
+   }
+ }
+ 
++// pins H14: while its label is drawn, Clear is a button the keyboard and a
++// screen reader reach: focusable, named Clear, run by Enter, Space and the
++// screen reader's press. In the rail, with no label, there is nothing to
++// reach. It was text painted on the line, which only a pointer could press
++// (BACKLOG S-205).
++TEST_F(ClearLineTest, ClearIsAButtonTheKeyboardReaches) {
++  int cleared = 0;
++  // In a widget, as in the sidebar: the platform's accessibility has a view
++  // outside one report nothing.
++  std::unique_ptr<views::Widget> widget =
++      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++  ClearTabsSeparator* const line =
++      widget->SetContentsView(std::make_unique<ClearTabsSeparator>());
++  line->SetClearCallback(base::BindLambdaForTesting([&]() { ++cleared; }));
++  line->SetBounds(0, 0, 240, 22);
++
++  EXPECT_TRUE(line->GetViewAccessibility().IsAccessibilityFocusable());
++  ui::AXNodeData data;
++  line->GetViewAccessibility().GetAccessibleNodeData(&data);
++  EXPECT_EQ(ax::mojom::Role::kButton, data.role);
++  EXPECT_EQ(u"Clear",
++            data.GetString16Attribute(ax::mojom::StringAttribute::kName));
++  EXPECT_FALSE(data.IsIgnored());
++
++  EXPECT_TRUE(line->OnKeyPressed(
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE)));
++  EXPECT_TRUE(line->OnKeyPressed(
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, ui::EF_NONE)));
++  EXPECT_FALSE(line->OnKeyPressed(
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_A, ui::EF_NONE)));
++  ui::AXActionData press;
++  press.action = ax::mojom::Action::kDoDefault;
++  EXPECT_TRUE(line->HandleAccessibleAction(press));
++  EXPECT_EQ(3, cleared);
++
++  line->SetBounds(0, 0, 44, 22);  // the rail's column (sidebar Y8)
++  EXPECT_FALSE(line->GetViewAccessibility().IsAccessibilityFocusable());
++  EXPECT_FALSE(line->OnKeyPressed(
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE)));
++  EXPECT_EQ(3, cleared);
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
+index c7c218422c023..af1ac51fc0415 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
+@@ -7,13 +7,17 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "build/build_config.h"
+ #include "build/buildflag.h"
++#include "cc/paint/paint_flags.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_group_data.h"
+ #include "chrome/browser/ui/tabs/tab_group_theme.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/event_utils.h"
++#include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_style.h"
+ #include "chrome/browser/ui/views/tabs/groups/tab_group_accessibility.h"
+ #include "chrome/browser/ui/views/tabs/groups/tab_group_editor_bubble_tracker.h"
+@@ -32,6 +36,7 @@
+ #include "ui/base/mojom/menu_source_type.mojom-shared.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/color/color_provider.h"
++#include "ui/gfx/canvas.h"
+ #include "ui/gfx/color_utils.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/animation/ink_drop.h"
+@@ -49,6 +54,14 @@
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/widget/widget.h"
+ 
++namespace {
++
++// Stedding: the group's dot before the title, and the room it takes.
++constexpr float kSteddingDotSize = 8;
++constexpr int kSteddingDotRoom = 14;
++
++}  // namespace
++
+ namespace {
+ constexpr int kIconSize = 16;
+ constexpr int kFocusRingInset = 2;
+@@ -171,7 +184,12 @@ TabGroupHeaderView::TabGroupHeaderView(
+           &TabGroupHeaderView::OnBubbleClosed, base::Unretained(this)));
+ 
+   SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+-  SetInteriorMargin(gfx::Insets::VH(0, GetHorizontalInset()));
++  // Stedding: room for the group's dot before the title.
++  SetInteriorMargin(
++      IsSteddingRow()
++          ? gfx::Insets::TLBR(0, GetHorizontalInset() + kSteddingDotRoom, 0,
++                              GetHorizontalInset())
++          : gfx::Insets::VH(0, GetHorizontalInset()));
+   SetDefault(views::kFlexBehaviorKey,
+              views::FlexSpecification(
+                  views::MinimumFlexSizeRule::kScaleToMinimumSnapToZero,
+@@ -391,6 +409,7 @@ void TabGroupHeaderView::OnMouseEntered(const ui::MouseEvent& event) {
+     delegate_->HideHoverCard(TabSlotController::HoverCardUpdateType::kHover);
+   }
+   UpdateEditorBubbleButtonVisibility();
++  UpdateSteddingBackground();
+ }
+ 
+ void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
+@@ -401,6 +420,22 @@ void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
+ #else
+   UpdateEditorBubbleButtonVisibility();
+ #endif
++  UpdateSteddingBackground();
++}
++
++void TabGroupHeaderView::OnPaint(gfx::Canvas* canvas) {
++  views::FlexLayoutView::OnPaint(canvas);
++  if (!IsSteddingRow() || !GetColorProvider() || !GetWidget()) {
++    return;
++  }
++  cc::PaintFlags flags;
++  flags.setAntiAlias(true);
++  flags.setColor(GetColorProvider()->GetColor(GetTabGroupTabStripColorId(
++      tab_group_visual_data_.color(), GetWidget()->ShouldPaintAsActive())));
++  canvas->DrawCircle(
++      gfx::PointF(GetHorizontalInset() + kSteddingDotSize / 2,
++                  height() / 2.0f),
++      kSteddingDotSize / 2, flags);
+ }
+ 
+ void TabGroupHeaderView::OnFocus() {
+@@ -524,15 +559,24 @@ void TabGroupHeaderView::OnDataChanged(
+   tab_group_visual_data_ = tab_group_data.visual_data;
+   is_shared_ = tab_group_data.is_sharing_group;
+ 
+-  group_header_label_->SetText(tab_group_visual_data_.title());
++  const bool unnamed = tab_group_visual_data_.title().empty();
++  group_header_label_->SetText(
++      IsSteddingRow() && unnamed
++          ? l10n_util::GetPluralStringFUTF16(
++                IDS_TAB_GROUPS_UNNAMED_GROUP_HOVER_CARD_HEADER,
++                tab_group_data.num_tabs_in_group)
++          : tab_group_visual_data_.title());
+   if (GetColorProvider()) {
+     SkColor background_color = GetColorProvider()->GetColor(
+         GetTabGroupTabStripColorId(tab_group_visual_data_.color(),
+                                    GetWidget()->ShouldPaintAsActive()));
+     SkColor foreground_color = GetForegroundColor();
+ 
+-    // Update label.
+-    group_header_label_->SetEnabledColor(foreground_color);
++    // Update label. Stedding: an unnamed group's tab count is muted, as a
++    // folder's count is.
++    group_header_label_->SetEnabledColor(
++        IsSteddingRow() && unnamed ? stedding::SleptTitleColor(foreground_color)
++                                   : foreground_color);
+ 
+     // Update save tab group related items, the sync icon and attention
+     // indicator.
+@@ -573,8 +617,12 @@ void TabGroupHeaderView::OnDataChanged(
+     }
+ 
+     // Update background.
+-    SetBackground(views::CreateRoundedRectBackground(background_color,
+-                                                     GetCornerRadius()));
++    if (IsSteddingRow()) {
++      UpdateSteddingBackground();
++    } else {
++      SetBackground(views::CreateRoundedRectBackground(background_color,
++                                                       GetCornerRadius()));
++    }
+     UpdateAttentionState(
+         data_sharing::features::IsDataSharingFunctionalityEnabled() &&
+         tab_group_data.needs_attention);
+@@ -591,14 +639,15 @@ void TabGroupHeaderView::OnDataChanged(
+ }
+ 
+ void TabGroupHeaderView::UpdateTooltipText() {
+-  if (group_header_label_->GetText().empty()) {
++  // By the group's title: the label shows a placeholder for an unnamed group
++  // in the sidebar (IsSteddingRow).
++  if (tab_group_visual_data_.title().empty()) {
+     SetTooltipText(
+         l10n_util::GetStringFUTF16(IDS_TAB_GROUPS_UNNAMED_GROUP_TOOLTIP,
+                                    delegate_->GetGroupContentString()));
+   } else {
+     SetTooltipText(l10n_util::GetStringFUTF16(
+-        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
+-        std::u16string(group_header_label_->GetText()),
++        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP, tab_group_visual_data_.title(),
+         delegate_->GetGroupContentString()));
+   }
+ }
+@@ -675,6 +724,10 @@ void TabGroupHeaderView::UpdateAccessibleName() {
+ }
+ 
+ SkColor TabGroupHeaderView::GetForegroundColor() const {
++  if (GetColorProvider() && IsSteddingRow()) {
++    // The rows' own text colour, as a folder's title (folders F12).
++    return GetColorProvider()->GetColor(kColorTabForegroundInactiveFrameActive);
++  }
+   if (GetColorProvider()) {
+     SkColor background_color = GetColorProvider()->GetColor(
+         GetTabGroupTabStripColorId(tab_group_visual_data_.color(),
+@@ -747,5 +800,22 @@ int TabGroupHeaderView::GetHorizontalInset() const {
+   return TabGroupStyle::GetInsetsForHeaderChip(orientation_).left();
+ }
+ 
++bool TabGroupHeaderView::IsSteddingRow() const {
++  return orientation_ == TabStripOrientation::kVertical &&
++         base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
++}
++
++void TabGroupHeaderView::UpdateSteddingBackground() {
++  if (!IsSteddingRow()) {
++    return;
++  }
++  // The tab rows' hover tint, and no fill at rest (folders F12).
++  SetBackground(IsMouseHovered()
++                    ? views::CreateRoundedRectBackground(
++                          kColorTabBackgroundInactiveHoverFrameActive,
++                          GetCornerRadius())
++                    : nullptr);
++}
++
+ BEGIN_METADATA(TabGroupHeaderView)
+ END_METADATA
+diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.h b/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
+index 29caf0cd7f2aa..16971a3d75fdc 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
+@@ -90,6 +90,7 @@ class TabGroupHeaderView : public views::FlexLayoutView,
+   void OnMouseMoved(const ui::MouseEvent& event) override;
+   void OnMouseEntered(const ui::MouseEvent& event) override;
+   void OnMouseExited(const ui::MouseEvent& event) override;
++  void OnPaint(gfx::Canvas* canvas) override;
+   void OnFocus() override;
+   void OnBlur() override;
+   void AddedToWidget() override;
+@@ -125,6 +126,15 @@ class TabGroupHeaderView : public views::FlexLayoutView,
+   views::Label* title_label_for_testing() { return group_header_label_; }
+ 
+  private:
++  // Stedding (sidebar): in the sidebar a group's header is a row as a
++  // folder's is (docs/features/folders.md F12): no fill but the rows' hover
++  // tint, the group's colour on a dot before the title and on the line beside
++  // its tabs, the title in the rows' text colour, and an unnamed group's tab
++  // count, muted, for a title. Chromium drew the header as a bar filled with
++  // the group's colour, and an unnamed group's bar was blank (2026-10-15).
++  bool IsSteddingRow() const;
++  void UpdateSteddingBackground();
++
+   void UpdateEditorBubbleButtonVisibility();
+   void OnBubbleOpened();
+   void OnBubbleClosed();
+diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
+index a4d4b6cbed1f5..bf7ca39beb710 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
+@@ -197,6 +197,44 @@ TEST_P(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
+             constrained_height);
+ }
+ 
++// Stedding (sidebar): in the sidebar an unnamed group's header shows its tab
++// count where Chromium's bar in the group's colour was blank, a named group
++// its title, and neither has a fill at rest: the header is a row, as a
++// folder's is (2026-10-15).
++TEST_P(TabGroupHeaderViewTest, SteddingAnUnnamedGroupShowsItsTabCount) {
++  MockDelegate delegate;
++  tab_groups::TabGroupVisualData visual_data(
++      u"", tab_groups::TabGroupColorId::kBlue, false);
++  tab_groups::TabGroupId group_id = tab_groups::TabGroupId::GenerateNew();
++  tabs::MockTabGroup mock_tab_group(nullptr, group_id, visual_data);
++  EXPECT_CALL(delegate, GetTabGroup())
++      .WillRepeatedly(testing::ReturnRef(mock_tab_group));
++  tabs::TabGroupData data;
++  data.visual_data = visual_data;
++  data.num_tabs_in_group = 3;
++  EXPECT_CALL(delegate, GetTabGroupData())
++      .WillRepeatedly(testing::ReturnRef(data));
++  EXPECT_CALL(delegate, GetGroupContentString())
++      .WillRepeatedly(testing::Return(u"a.test and 2 other tabs"));
++
++  std::unique_ptr<views::Widget> widget =
++      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++  auto* header = widget->SetContentsView(std::make_unique<TabGroupHeaderView>(
++      delegate, TabStripOrientation::kVertical, nullptr, &visual_data));
++  header->OnDataChanged(data);
++
++  EXPECT_EQ(l10n_util::GetPluralStringFUTF16(
++                IDS_TAB_GROUPS_UNNAMED_GROUP_HOVER_CARD_HEADER, 3),
++            header->title_label_for_testing()->GetText());
++  EXPECT_FALSE(header->GetBackground()) << "a bar in the group's colour";
++
++  data.visual_data = tab_groups::TabGroupVisualData(
++      u"Work", tab_groups::TabGroupColorId::kBlue, false);
++  header->OnDataChanged(data);
++  EXPECT_EQ(u"Work", header->title_label_for_testing()->GetText());
++  EXPECT_FALSE(header->GetBackground());
++}
++
+ TEST_P(TabGroupHeaderViewTest, ShowHoverCardOnMouseEnter) {
+   MockDelegate delegate;
+   tab_groups::TabGroupVisualData visual_data(
+diff --git a/chrome/common/chrome_paths_internal.h b/chrome/common/chrome_paths_internal.h
+index 312925bde533f..0fab0f9c3ff6f 100644
+--- a/chrome/common/chrome_paths_internal.h
++++ b/chrome/common/chrome_paths_internal.h
+@@ -129,6 +129,18 @@ LegacyProfileMigration MoveLegacyProfileForLaunch(const base::FilePath& legacy,
+                                                   LegacyProfileQuestion ask,
+                                                   bool* go_on);
+ 
++// The keychain answer once the move has run, from the one taken before it
++// (`before_move`). A launch that goes on after a move that could not happen
++// (kLegacyInUse, kFailed) starts an empty profile in `target`, with nothing
++// sealed with Chromium's key, so it makes a key of its own, as a fresh
++// install does; it had copied Chromium's (BACKLOG S-208). A profile another
++// launch moved into `target` meanwhile keeps the answer.
++bool SteddingDataMayUseLegacyKeychainKeyAfterMove(
++    bool before_move,
++    LegacyProfileMigration outcome,
++    bool go_on,
++    const base::FilePath& target);
++
+ // Runs once in the browser process, before anything creates the default
+ // user-data directory. Notes whether Stedding data existed before this launch
+ // (for the keychain), then, for a launch that uses the default folder, moves a
+diff --git a/chrome/common/chrome_paths_mac.mm b/chrome/common/chrome_paths_mac.mm
+index 782a3287bef7a..cea5e18e05245 100644
+--- a/chrome/common/chrome_paths_mac.mm
++++ b/chrome/common/chrome_paths_mac.mm
+@@ -316,6 +316,20 @@ LegacyProfileMigration MoveLegacyProfileForLaunch(const base::FilePath& legacy,
+   return outcome;
+ }
+ 
++bool SteddingDataMayUseLegacyKeychainKeyAfterMove(
++    bool before_move,
++    LegacyProfileMigration outcome,
++    bool go_on,
++    const base::FilePath& target) {
++  if (go_on &&
++      (outcome == LegacyProfileMigration::kLegacyInUse ||
++       outcome == LegacyProfileMigration::kFailed) &&
++      !HoldsProfile(target)) {
++    return false;
++  }
++  return before_move;
++}
++
+ namespace {
+ 
+ // What a person launching Stedding sees when their old profile cannot come
+@@ -391,8 +405,12 @@ bool PrepareUserDataDirectoryAtStartup(
+   }
+   DeleteAbandonedStaging(target);
+   bool go_on = true;
+-  switch (MoveLegacyProfileForLaunch(legacy, target, &AskAboutLegacyProfile,
+-                                     &go_on)) {
++  const LegacyProfileMigration outcome = MoveLegacyProfileForLaunch(
++      legacy, target, &AskAboutLegacyProfile, &go_on);
++  g_stedding_data_may_use_legacy_key =
++      SteddingDataMayUseLegacyKeychainKeyAfterMove(
++          g_stedding_data_may_use_legacy_key, outcome, go_on, target);
++  switch (outcome) {
+     case LegacyProfileMigration::kMigrated:
+       LOG(WARNING) << "Moved the Stedding profile from " << legacy << " to "
+                    << target;
+diff --git a/chrome/common/chrome_paths_unittest.cc b/chrome/common/chrome_paths_unittest.cc
+index 2b211e4a6d7ba..42069619032dc 100644
+--- a/chrome/common/chrome_paths_unittest.cc
++++ b/chrome/common/chrome_paths_unittest.cc
+@@ -509,6 +509,43 @@ TEST(ChromePaths, KnowsWhenSteddingDataMayUseTheChromiumKey) {
+       launched.legacy(), launched.legacy().Append("unused"), launched.target()))
+       << "a profile in the folder this launch was told to use";
+ }
++
++// A launch that starts a new profile because the old one could not come across
++// (another browser has it, or the copy failed) makes a key of its own: its
++// profile is empty, with nothing sealed with Chromium's key. It had copied
++// Chromium's (BACKLOG S-208). Quitting, a move that happened, and a profile
++// another launch moved in meanwhile keep the answer taken before the move.
++TEST(ChromePaths, ANewProfileAfterAFailedMoveMakesItsOwnKey) {
++  LegacyProfileFixture fixture;
++  LegacyProfileFixture::WriteProfile(fixture.legacy(), "Default",
++                                     LegacyProfileFixture::kSteddingPrefs);
++  const base::FilePath none;
++  const bool before = SteddingDataMayUseLegacyKeychainKey(
++      fixture.legacy(), fixture.target(), none);
++  ASSERT_TRUE(before) << "an unmoved Stedding profile in Chromium's folder";
++
++  EXPECT_FALSE(SteddingDataMayUseLegacyKeychainKeyAfterMove(
++      before, LegacyProfileMigration::kLegacyInUse, /*go_on=*/true,
++      fixture.target()));
++  EXPECT_FALSE(SteddingDataMayUseLegacyKeychainKeyAfterMove(
++      before, LegacyProfileMigration::kFailed, /*go_on=*/true,
++      fixture.target()));
++  EXPECT_TRUE(SteddingDataMayUseLegacyKeychainKeyAfterMove(
++      before, LegacyProfileMigration::kFailed, /*go_on=*/false,
++      fixture.target()))
++      << "a launch that quits starts nothing";
++  EXPECT_TRUE(SteddingDataMayUseLegacyKeychainKeyAfterMove(
++      before, LegacyProfileMigration::kMigrated, /*go_on=*/true,
++      fixture.target()))
++      << "a moved profile keeps Chromium's key";
++
++  LegacyProfileFixture::WriteProfile(fixture.target(), "Default",
++                                     LegacyProfileFixture::kSteddingPrefs);
++  EXPECT_TRUE(SteddingDataMayUseLegacyKeychainKeyAfterMove(
++      before, LegacyProfileMigration::kFailed, /*go_on=*/true,
++      fixture.target()))
++      << "another launch moved the profile in first";
++}
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+ TEST(ChromePaths, DefaultUserDataDirectory) {
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index a8cdc9edf3096..28b07e4337cba 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -75,6 +75,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/archive",
+     "//chrome/browser/ui/archive:closed_folder",
+     "//chrome/browser/ui/archive:mark",
++    "//chrome/browser/ui/archive:undo",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:mixers",
+     "//chrome/browser/ui/stedding/theme",
+@@ -151,11 +152,14 @@ test("stedding_browser_tests") {
+   data_deps = [ "//chrome:browser_tests_pak" ]
+   if (is_mac) {
+     sources += [
++      "shortcut_file_mac_browsertest.mm",
+       "space_keys_browsertest.mm",
+       "window_buttons_browsertest.mm",
+     ]
+     deps += [
++      "//chrome/browser:app_controller_mac",
+       "//chrome/browser:global_keyboard_shortcuts_mac",
++      "//chrome/browser/shortcuts",
+       "//ui/base:test_support",
+       "//ui/gfx:test_support",
+     ]
+diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
+index 829df20fc0bbe..e51395533c903 100644
+--- a/chrome/test/stedding/command_bar_browsertest.cc
++++ b/chrome/test/stedding/command_bar_browsertest.cc
+@@ -384,7 +384,10 @@ class CommandBarActionsTest : public CommandBarTest {
+ // The sidebar's three forms, Clear Site Cookies, and an extension reloaded
+ // under the open bar. The bar is closed between them, so each opens its own.
+ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, EveryListedRowRuns) {
+-  {
++  // Each step is a lambda of its own: a fatal failure ends that step, not the
++  // steps after it, which are the only checks of what they prove (BACKLOG
++  // S-209).
++  [&] {
+     // Hide Sidebar closes it to nothing, Collapse Sidebar to Icons to the
+     // rail, Show Sidebar opens it; each row is offered only where it changes
+     // something.
+@@ -421,9 +424,9 @@ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, EveryListedRowRuns) {
+ 
+     Run(browser(), u"Show Sidebar");
+     ASSERT_TRUE(base::test::RunUntil([&]() { return !state->IsCollapsed(); }));
+-  }
++  }();
+ 
+-  {
++  [&] {
+     // Clear Site Cookies and Reload signs the page out. A private window
+     // clears only its own jar. A browser page is not offered the row.
+     SCOPED_TRACE("TheSiteCookiesRowSignsThePageOut");
+@@ -490,12 +493,12 @@ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, EveryListedRowRuns) {
+     base::RunLoop().RunUntilIdle();
+     chrome::CloseWindow(incognito);
+     ui_test_utils::WaitForBrowserToClose(incognito);
+-  }
++  }();
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("AnExtensionReloadedUnderTheOpenBarLeavesItWhole");
+     ASSERT_NO_FATAL_FAILURE(ReloadAnExtensionUnderTheOpenBar());
+-  }
++  }();
+ }
+ 
+ // Every other listed row, in a private window and then a normal one. Close
+diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
+index 35445c5c20130..3447468e05665 100644
+--- a/chrome/test/stedding/folder_tabs_browsertest.cc
++++ b/chrome/test/stedding/folder_tabs_browsertest.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/extensions/api/tabs/tabs_api.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/ui/archive/closed_folder.h"
++#include "chrome/browser/ui/archive/closed_tabs_undo.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_live_tab_context.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -1527,4 +1528,50 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
+   ui_test_utils::WaitForBrowserToClose(opened);
+ }
+ 
++// folders F26: the toast's Undo of a folder's last tab brings the folder
++// back, also when a tab group took the tab's old place meanwhile. The tab
++// went back to its index between two of the group's tabs and joined the
++// group, and the folder rebuild skips a grouped tab, so the folder never
++// came back (BACKLOG S-207).
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, UndoOfAFoldersLastTabStaysOutOfAGroup) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  OpenLoaded("a.test");
++  tabs::TabInterface* const b = OpenLoaded("b.test");
++  OpenLoaded("c.test");
++  OpenLoaded("d.test");
++  tabs::FolderTabCollection* const folder =
++      tab_strip_model()->AddToNewFolder({tab_strip_model()->GetIndexOfTab(b)});
++  ASSERT_TRUE(folder);
++  folder->SetTitle("Reading");
++  ClearClosedTabs();
++  stedding::ClosedTabsUndo* const undo =
++      stedding::ClosedTabsUndo::From(browser());
++  ASSERT_TRUE(undo);
++
++  // The folder's last tab, closed by the user: the folder goes with it.
++  tab_strip_model()->CloseWebContentsAt(
++      tab_strip_model()->GetIndexOfTab(b),
++      TabCloseTypes::CLOSE_USER_GESTURE |
++          TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
++  ASSERT_EQ(4, tab_strip_model()->count());
++  // a, c and d make a group, which covers b's old index, 2.
++  tab_strip_model()->AddToNewGroup({1, 2, 3});
++
++  size_t back = 0;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    back = undo->Undo();
++    return back > 0;
++  })) << "the toast offered no undo";
++  EXPECT_EQ(1u, back);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return HostsInFolder("Reading", false) == "b.test "; }))
++      << "the folder did not come back";
++  for (int i = 0; i < tab_strip_model()->count(); ++i) {
++    tabs::TabInterface* const tab = tab_strip_model()->GetTabAtIndex(i);
++    if (tab->GetContents()->GetLastCommittedURL().host() == "b.test") {
++      EXPECT_FALSE(tab->GetGroup()) << "the tab joined the group";
++    }
++  }
++}
++
+ }  // namespace
+diff --git a/chrome/test/stedding/media_keys_browsertest.cc b/chrome/test/stedding/media_keys_browsertest.cc
+index 38cd314fd0ee6..e2fd4475c6557 100644
+--- a/chrome/test/stedding/media_keys_browsertest.cc
++++ b/chrome/test/stedding/media_keys_browsertest.cc
+@@ -200,8 +200,11 @@ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest, TheMuteKeyWorksFromInsideASplit) {
+ // commandbar K25).
+ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest,
+                        PictureInPictureFollowsTheKeyAndTheBar) {
++  // Each step is a lambda of its own: a fatal failure ends that step, not the
++  // steps after it, which are the only checks of what they prove (BACKLOG
++  // S-209).
+   tabs::TabInterface* const video = Open(kVideoPage);
+-  {
++  [&] {
+     SCOPED_TRACE("bar has Mute and no picture-in-picture row");
+     stedding::CommandBarView* const bar = Palette();
+     ASSERT_TRUE(bar);
+@@ -209,14 +212,14 @@ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest,
+     EXPECT_FALSE(HasRow(bar, u"Enter Picture in Picture"));
+     EXPECT_FALSE(HasRow(bar, u"Exit Picture in Picture"));
+     CloseBar(bar);
+-  }
++  }();
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("play");
+     ASSERT_NO_FATAL_FAILURE(Play(video));
+-  }
++  }();
+ 
+-  {
++  [&] {
+     // Before the key has been used. A bar that stays empty until then
+     // would still pass the Enter check after the key steps.
+     SCOPED_TRACE("bar offers Enter before any picture in picture");
+@@ -234,36 +237,36 @@ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest,
+         << base::UTF16ToUTF8(bar->row_detail_for_testing(0));
+ #endif
+     CloseBar(bar);
+-  }
++  }();
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("key enters");
+     EXPECT_TRUE(PressPictureInPictureKey());
+     ASSERT_TRUE(
+         base::test::RunUntil([&]() { return InPictureInPicture(video); }))
+         << "the key entered picture in picture";
+     EXPECT_EQ(PictureInPictureKey::kExit, PictureInPictureKeyFor(browser()));
+-  }
++  }();
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("key leaves and the video plays on");
+     EXPECT_TRUE(PressPictureInPictureKey());
+     ASSERT_TRUE(
+         base::test::RunUntil([&]() { return !InPictureInPicture(video); }))
+         << "the key closed picture in picture";
+     EXPECT_FALSE(Paused(video)) << "the video plays on in the page";
+-  }
++  }();
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("key enters again");
+     EXPECT_TRUE(PressPictureInPictureKey());
+     ASSERT_TRUE(
+         base::test::RunUntil([&]() { return InPictureInPicture(video); }));
+     EXPECT_EQ(PictureInPictureKey::kExit, PictureInPictureKeyFor(browser()));
+-  }
++  }();
+ 
+   tabs::TabInterface* const blank = Open("/title1.html");
+-  {
++  [&] {
+     SCOPED_TRACE("another tab's key closes it");
+     ASSERT_NE(video, blank);
+     ASSERT_EQ(blank, tabs()->GetActiveTab());
+@@ -273,7 +276,7 @@ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest,
+         base::test::RunUntil([&]() { return !InPictureInPicture(video); }))
+         << "the key closed the video's picture in picture";
+     EXPECT_EQ(blank, tabs()->GetActiveTab());
+-  }
++  }();
+ 
+   // Enter is offered for the active row. The blank tab is on screen, so the
+   // video's tab has to be the one showing before the bar can enter.
+@@ -282,7 +285,7 @@ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest,
+     return PictureInPictureKeyFor(browser()) == PictureInPictureKey::kEnter;
+   })) << "the video's tab offers picture in picture again";
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("bar row says Enter and enters");
+     stedding::CommandBarView* const bar = Palette();
+     ASSERT_TRUE(bar);
+@@ -304,16 +307,16 @@ IN_PROC_BROWSER_TEST_F(MediaKeysWindowTest,
+     ASSERT_TRUE(
+         base::test::RunUntil([&]() { return InPictureInPicture(video); }))
+         << "the row entered picture in picture";
+-  }
++  }();
+ 
+-  {
++  [&] {
+     SCOPED_TRACE("bar says Exit");
+     stedding::CommandBarView* const bar = Palette();
+     ASSERT_TRUE(bar);
+     EXPECT_TRUE(HasRow(bar, u"Exit Picture in Picture"));
+     EXPECT_FALSE(HasRow(bar, u"Enter Picture in Picture"));
+     CloseBar(bar);
+-  }
++  }();
+ 
+   // Nothing left open for the window's close to answer.
+   EXPECT_TRUE(PressPictureInPictureKey());
+diff --git a/chrome/test/stedding/shortcut_file_mac_browsertest.mm b/chrome/test/stedding/shortcut_file_mac_browsertest.mm
+new file mode 100644
+index 0000000000000..c0708f512e5cd
+--- /dev/null
++++ b/chrome/test/stedding/shortcut_file_mac_browsertest.mm
+@@ -0,0 +1,143 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// A Chrome shortcut file (.crwebloc) opened from Finder opens its target the
++// way any address another app hands over opens: in a little window while the
++// setting is on and no route takes it (little E1), and otherwise as a tab in
++// the Space chosen for links from other apps (routing D3). The file's own
++// address was the one checked and marked, and the target became a tab in the
++// active Space (BACKLOG S-202).
++
++#import <Cocoa/Cocoa.h>
++
++#include <tuple>
++
++#include "base/files/file_path.h"
++#include "base/files/safe_base_name.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/test/run_until.h"
++#include "base/threading/thread_restrictions.h"
++#import "chrome/browser/app_controller_mac.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/shortcuts/chrome_webloc_file.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "net/base/apple/url_conversions.h"
++#include "net/base/filename_util.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "url/gurl.h"
++
++namespace {
++
++class ShortcutFileTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    ASSERT_TRUE(embedded_test_server()->Start());
++    // The AppController is the application's delegate.
++    std::ignore = AppController.sharedController;
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(dir_.CreateUniqueTempDir());
++  }
++
++  // Writes a shortcut file to `target` for this profile and opens it the way
++  // Finder does.
++  void OpenShortcutFile(const GURL& target, const char* name) {
++    base::FilePath file;
++    {
++      base::ScopedAllowBlockingForTesting allow_blocking;
++      file = dir_.GetPath().AppendASCII(name);
++      ASSERT_TRUE(shortcuts::ChromeWeblocFile(
++                      target, *base::SafeBaseName::Create(
++                                  browser()->GetProfile()->GetPath()))
++                      .SaveToFile(file));
++    }
++    [NSApp.delegate application:NSApp
++                       openURLs:@[ net::NSURLWithGURL(
++                                    net::FilePathToFileURL(file)) ]];
++  }
++
++  // The little window showing `url`, if one is open.
++  static BrowserWindowInterface* LittleWindowShowing(const GURL& url) {
++    BrowserWindowInterface* found = nullptr;
++    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++        [&](BrowserWindowInterface* window) {
++          content::WebContents* const contents =
++              window->GetTabStripModel()
++                  ? window->GetTabStripModel()->GetActiveWebContents()
++                  : nullptr;
++          if (stedding::IsLittleWindow(window) && contents &&
++              contents->GetVisibleURL() == url) {
++            found = window;
++            return false;
++          }
++          return true;
++        });
++    return found;
++  }
++
++  base::ScopedTempDir dir_;
++};
++
++IN_PROC_BROWSER_TEST_F(ShortcutFileTest, ItsTargetOpensAsALinkFromAnotherApp) {
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  TabStripModel* const tabs = browser()->tab_strip_model();
++  const int count = tabs->count();
++  {
++    SCOPED_TRACE("little windows on: the target opens small");
++    prefs->SetBoolean(stedding::prefs::kLittleEnabled, true);
++    const GURL target = embedded_test_server()->GetURL("/title1.html");
++    OpenShortcutFile(target, "little.crwebloc");
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return LittleWindowShowing(target) != nullptr; }))
++        << "the shortcut's target opened as a tab, not a little window";
++    EXPECT_EQ(count, tabs->count());
++  }
++  {
++    SCOPED_TRACE("little windows off: the default Space for other apps");
++    prefs->SetBoolean(stedding::prefs::kLittleEnabled, false);
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    ASSERT_TRUE(model);
++    const spaces::SpaceId home = model->active_id();
++    spaces::Space* const mail = model->AddSpace("Mail", SK_ColorGREEN);
++    ASSERT_TRUE(mail);
++    const spaces::SpaceId mail_id = mail->id();
++    prefs->SetString(stedding::prefs::kExternalDefaultSpace,
++                     mail_id.ToString());
++    ASSERT_TRUE(model->SetActiveSpace(home));
++    const GURL target = embedded_test_server()->GetURL("/title2.html");
++    OpenShortcutFile(target, "tab.crwebloc");
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      for (int i = 0; i < tabs->count(); ++i) {
++        if (tabs->GetWebContentsAt(i)->GetVisibleURL() == target) {
++          return true;
++        }
++      }
++      return false;
++    }));
++    tabs::TabInterface* opened = nullptr;
++    for (int i = 0; i < tabs->count(); ++i) {
++      if (tabs->GetWebContentsAt(i)->GetVisibleURL() == target) {
++        opened = tabs->GetTabAtIndex(i);
++      }
++    }
++    ASSERT_TRUE(opened);
++    EXPECT_EQ(mail_id, model->SpaceForTab(opened))
++        << "the target stayed in the active Space";
++  }
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
+index 311f79c495028..61d726c9eb197 100644
+--- a/chrome/test/stedding/welcome_browsertest.cc
++++ b/chrome/test/stedding/welcome_browsertest.cc
+@@ -230,6 +230,20 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+           return focused.dataset.name + '=' + focused.dataset.value;
+         })())"));
+   }
++  {
++    // BACKLOG S-204: the button's label changed and it was disabled, and the
++    // focus fell to the page.
++    SCOPED_TRACE("a redraw that disables the focused button hands it on");
++    ASSERT_EQ("", GoTo(page, "[data-focus='default']"));
++    EXPECT_EQ("skip", content::EvalJs(page, R"(
++        (() => {
++          document.querySelector('[data-focus="default"]').focus();
++          cr.webUIListenerCallback('default-browser-changed', 'default');
++          const focused = document.activeElement;
++          return focused === document.body ? 'the page'
++                                           : focused.dataset.focus;
++        })())"));
++  }
+ }
+ 
+ // welcome W2 (S-77) in two regions: France's list of eight engines and the

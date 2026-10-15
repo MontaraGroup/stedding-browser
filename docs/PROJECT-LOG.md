@@ -7,6 +7,31 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-15, afternoon -- the review's filed items fixed, and a tab group's header (patch 0066)
+
+The operator asked for the review's filed items, `S-201` to `S-209`, to be fixed too. Patch
+0066 holds them, each with a test:
+
+- Routing: a typed address no longer spends another app's external-open mark (`S-201`); a
+  Chrome shortcut file opened from Finder opens its target as any link from another app
+  (`S-202`); host routes take IPv6 literals and a scheme's default port (`S-203`).
+- Keyboard and screen readers: the welcome flow keeps the focus through a redraw that changes
+  the focused button's label or disables it (`S-204`); Clear is a focusable button (`S-205`).
+- Data: a deleted Space's jar stays on a pending list until its wipe has finished, and the
+  next window finishes a wipe a quit cut short (`S-206`); Undo keeps a tab that was in no
+  tab group out of one, so its folder comes back (`S-207`); a new profile after a failed
+  profile move makes its own keychain key (`S-208`).
+- Tests that could not fail now can (`S-209`), three upstream HTTPS-First tests the series'
+  default broke expect it, and both they and Chromium's tab group header tests run with the
+  suite.
+- The operator's screenshot of a test window showed an unnamed tab group as a blank bar in
+  the group's colour; the header is a row now, as a folder's is: a dot in the group's colour,
+  the title, or the tab count when unnamed (`S-210`, folders F36).
+
+Tests, the Mac's release build: 845 unit tests (Chromium's tab group header tests among them),
+20 component tests, 118 browser tests four at a time and 33 one at a time, all passing. Every
+new test failed with its fix taken out. No release.
+
 ## 2026-10-15 -- a code review of the whole series (patch 0065)
 
 The operator asked for the series to be searched for bugs and the finds tested. It was read

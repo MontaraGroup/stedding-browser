@@ -44,7 +44,11 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   Arc import's crash, a deleted Space's wipe that waits for its pages, Autofill's server
   queries off, three command-bar faults, a stacked split's corners, the export's file name,
   Shift on the Mac History menu's Restore Folder, a folder close's place kept through a
-  sleep, and the tests that read a freed bar.
+  sleep, and the tests that read a freed bar; 0066, the same review's filed items fixed:
+  another app's mark and a shortcut file's target, host routes with IPv6 and default ports,
+  the welcome flow's focus, Clear for the keyboard, a deleted Space's wipe finished after a
+  quit, Undo kept out of a group, the keychain key after a failed move, and weak tests;
+  with it, a tab group's header in the sidebar drawn as a row, not a blank coloured bar.
 
 Patch messages cite the docs as they were when each was written: `PLAN.md`'s item ids
 (TAB-1, SPC-4, ...), `docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` now live under
