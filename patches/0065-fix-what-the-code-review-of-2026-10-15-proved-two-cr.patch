@@ -1,0 +1,1401 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 15 Oct 2026 14:13:42 -0400
+Subject: fix: what the code review of 2026-10-15 proved: two crashes, a wipe
+ that waits
+
+The series was read area by area on 2026-10-15, each finding traced in the code and read
+again before it was fixed or filed (docs/history/review-2026-10-15.md). This patch holds
+the fixes, each with a test. One patch at the tip: the fixes touch code of a dozen patches,
+and fixups into each would conflict with the patches after them.
+
+Crashes. Closing one pane of a split, or a window holding a split, crashed in Layer::Add:
+the strip's move animation made the row's layer while the row was out of the tree, and its
+layered children went to a layer with no tree; the layer is made once the row is in its
+new parent (splits J9). Grouping a tab inside a folder, which any extension can do with
+chrome.tabs.group, made the group inside the folder and failed a CHECK; the group goes right
+after the outermost folder that held the tab (folders F35). The Arc import saved a blocked
+login with its username, which the password store CHECKs, and passed the history service a
+row with no visit time, which it DCHECKs (import I22, I23).
+
+Data. Deleting a Space wiped its jar while a page with unsaved changes kept it, or a popup
+its opener's; the wipe now waits while any tab of the profile's windows shows a page in the
+jar, asked again when a tab leaves a strip or a page is replaced, and every few seconds for
+windows without Spaces (sessions S17). Export Space writes one file in its folder, whatever
+the Space is called (import I20). A tab back from a folder close keeps its place in that
+close when a sleep or a jar rebind replaces its contents (folders F19).
+
+Privacy. Autofill's server communication is off: every page with a form asked
+content-autofill.googleapis.com about it (privacy Q14).
+
+Behaviour. The command bar opens a typed keyword's engine only when it is one the bar
+offers, never a model's scope or, in a private window, history (commandbar K18); a row that
+keeps the bar open stays chosen after it runs (K17); a late autocomplete answer keeps the
+chosen suggestion, or goes back to the typed row (K7). The Mac History menu's Restore Folder
+honours Shift (folders F19). A split switched to stacked redraws its corners (splits J7).
+Two browser tests look the command bar up again after waits that can close it.
+
+Why: each is a crash, a loss of the user's data, a broken privacy promise, or a behaviour
+its spec states.
+Removable when: never as a whole; the next rebase folds each fix into the patch that owns
+its code (patches/README.md, the round-patch exception).
+---
+ chrome/browser/ui/archive/closed_folder.cc    |   7 +
+ chrome/browser/ui/archive/closed_folder.h     |   8 +
+ .../ui/archive/closed_folder_unittest.cc      |  17 ++
+ .../ui/cocoa/history_menu_cocoa_controller.mm |   7 +-
+ chrome/browser/ui/spaces/arc_data_importer.cc |  16 +-
+ .../ui/spaces/arc_data_importer_unittest.cc   |  42 ++++-
+ chrome/browser/ui/spaces/sidebar_backup.cc    |  21 ++-
+ .../ui/spaces/sidebar_backup_unittest.cc      |  18 +++
+ chrome/browser/ui/spaces/space_model.cc       | 152 +++++++++++++++++-
+ chrome/browser/ui/spaces/space_model.h        |  23 +++
+ .../ui/spaces/space_model_window_unittest.cc  |  20 +++
+ .../ui/spaces/tab_space_restore_data.cc       |  10 ++
+ .../ui/spaces/tab_space_restore_data.h        |   6 +
+ chrome/browser/ui/stedding/BUILD.gn           |   1 +
+ .../ui/stedding/privacy_defaults_unittest.cc  |  10 ++
+ .../ui/tabs/tab_strip_model_unittest.cc       |  38 +++++
+ .../ui/views/commandbar/command_bar_view.cc   | 117 +++++++++++---
+ .../ui/views/commandbar/command_bar_view.h    |   4 +
+ .../commandbar/command_bar_view_unittest.cc   | 134 +++++++++++++++
+ .../ui/views/frame/multi_contents_view.cc     |   9 ++
+ ...tab_collection_animating_layout_manager.cc |  20 ++-
+ .../test/stedding/command_bar_browsertest.cc  |   9 ++
+ .../stedding/sidebar_click_browsertest.cc     |  36 +++++
+ .../stedding/sidebar_forms_browsertest.cc     |  15 ++
+ chrome/test/stedding/space_jar_browsertest.cc |  80 +++++++++
+ .../core/common/autofill_debug_features.cc    |   7 +-
+ components/tabs/impl/tab_strip_collection.cc  |  20 +++
+ 27 files changed, 804 insertions(+), 43 deletions(-)
+
+diff --git a/chrome/browser/ui/archive/closed_folder.cc b/chrome/browser/ui/archive/closed_folder.cc
+index 80fd97d1b4725..3693f788e0787 100644
+--- a/chrome/browser/ui/archive/closed_folder.cc
++++ b/chrome/browser/ui/archive/closed_folder.cc
+@@ -280,4 +280,11 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
+   return restored;
+ }
+ 
++WindowOpenDisposition FolderRestoreDispositionForClick(
++    WindowOpenDisposition clicked) {
++  return clicked == WindowOpenDisposition::NEW_WINDOW
++             ? WindowOpenDisposition::NEW_WINDOW
++             : WindowOpenDisposition::UNKNOWN;
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/archive/closed_folder.h b/chrome/browser/ui/archive/closed_folder.h
+index 7d5df847f3a5e..8d61b9c667fd0 100644
+--- a/chrome/browser/ui/archive/closed_folder.h
++++ b/chrome/browser/ui/archive/closed_folder.h
+@@ -69,6 +69,14 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
+     std::string_view batch,
+     WindowOpenDisposition disposition);
+ 
++// What a click on a folder close's Restore Folder item, made with
++// `clicked`, asks of RestoreClosedFolder: with ⇧ held (NEW_WINDOW) the whole
++// folder in one new window, else the folder's own place, as ⇧⌘T (UNKNOWN).
++// A plain click on the Mac's History menu reads as CURRENT_TAB, which would
++// put the first tab in place of the active one.
++WindowOpenDisposition FolderRestoreDispositionForClick(
++    WindowOpenDisposition clicked);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_ARCHIVE_CLOSED_FOLDER_H_
+diff --git a/chrome/browser/ui/archive/closed_folder_unittest.cc b/chrome/browser/ui/archive/closed_folder_unittest.cc
+index 3fa4933802041..5110129069325 100644
+--- a/chrome/browser/ui/archive/closed_folder_unittest.cc
++++ b/chrome/browser/ui/archive/closed_folder_unittest.cc
+@@ -135,5 +135,22 @@ TEST(ClosedFolderTest, TheClosesPlacesKeepTheFoldersOrder) {
+   EXPECT_EQ("a.test b.test c.test d.test ", Urls(*folder));
+ }
+ 
++// folders F19: a Restore Folder item clicked with ⇧ held brings the whole
++// folder into one new window; any other click, the Mac History menu's plain
++// one (CURRENT_TAB) included, brings it back to its own place, as ⇧⌘T. The
++// Mac's menu passed UNKNOWN whatever was held (2026-10-15).
++TEST(ClosedFolderTest, AShiftClickRestoresIntoANewWindow) {
++  EXPECT_EQ(WindowOpenDisposition::NEW_WINDOW,
++            FolderRestoreDispositionForClick(WindowOpenDisposition::NEW_WINDOW));
++  for (const WindowOpenDisposition plain :
++       {WindowOpenDisposition::CURRENT_TAB,
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        WindowOpenDisposition::NEW_BACKGROUND_TAB,
++        WindowOpenDisposition::UNKNOWN}) {
++    EXPECT_EQ(WindowOpenDisposition::UNKNOWN,
++              FolderRestoreDispositionForClick(plain));
++  }
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm b/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
+index 2e8f5a1da77a7..f6db66a692deb 100644
+--- a/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
++++ b/chrome/browser/ui/cocoa/history_menu_cocoa_controller.mm
+@@ -43,7 +43,9 @@ void OpenURLForItem(HistoryMenuBridge::HistoryItem node,
+     return;  // Failed to load profile, ignore.
+   }
+   // Stedding (folders F19): a folder close's own item brings every tab back
+-  // to the window it was closed in, or to a new window when that one is gone.
++  // to the window it was closed in, or to a new window when that one is gone;
++  // with ⇧ held, all of it into one new window, as the app menu's item does
++  // (it went to the folder's own window, 2026-10-15).
+   if (!node.closed_folder_batch.empty()) {
+     sessions::TabRestoreService* const service =
+         TabRestoreServiceFactory::GetForProfile(profile);
+@@ -54,7 +56,8 @@ void OpenURLForItem(HistoryMenuBridge::HistoryItem node,
+         ProfileBrowserCollection::GetForProfile(profile)->FindTabbedBrowser();
+     stedding::RestoreClosedFolder(
+         *service, browser ? BrowserLiveTabContext::From(browser) : nullptr,
+-        node.closed_folder_batch, WindowOpenDisposition::UNKNOWN);
++        node.closed_folder_batch,
++        stedding::FolderRestoreDispositionForClick(disposition));
+     return;
+   }
+   // If this item can be restored using TabRestoreService, do so. Otherwise,
+diff --git a/chrome/browser/ui/spaces/arc_data_importer.cc b/chrome/browser/ui/spaces/arc_data_importer.cc
+index 28b6413ff2639..77246d62b211c 100644
+--- a/chrome/browser/ui/spaces/arc_data_importer.cc
++++ b/chrome/browser/ui/spaces/arc_data_importer.cc
+@@ -280,6 +280,12 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+     row.set_visit_count(std::max(1, statement.ColumnInt(2)));
+     row.set_typed_count(std::max(0, statement.ColumnInt(3)));
+     row.set_last_visit(FromChromiumMicroseconds(statement.ColumnInt64(4)));
++    // A row with no visit time (0, or NULL, which reads as 0) is no visit:
++    // HistoryBackend::AddPagesWithDetails DCHECKs a time, and a release build
++    // would only have dropped it as expired.
++    if (row.last_visit().is_null()) {
++      continue;
++    }
+     rows.push_back(std::move(row));
+   }
+   return rows;
+@@ -324,7 +330,15 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
+     form.date_password_modified =
+         FromChromiumMicroseconds(statement.ColumnInt64(11));
+     form.in_store = password_manager::PasswordForm::Store::kProfileStore;
+-    if (!form.blocked_by_user) {
++    if (form.blocked_by_user) {
++      // A site the user blocked holds no credential: the password store
++      // CHECKs that a blocked form has no username and no password, and a
++      // blocked row that kept its username (an older Login Data's) killed the
++      // browser halfway through the import, and again at every retry.
++      form.username_value.clear();
++      form.username_element.clear();
++      form.password_element.clear();
++    } else {
+       std::optional<std::u16string> password =
+           DecryptArcValue(statement.ColumnBlob(5), key);
+       if (!password || password->empty()) {
+diff --git a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
+index a258f2963ff6c..11244e9960053 100644
+--- a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
+@@ -103,9 +103,39 @@ TEST(ArcDataImporterTest, ReadsHistoryRowsFromACopy) {
+   EXPECT_TRUE(ReadArcHistory(dir.GetPath().AppendASCII("missing")).empty());
+ }
+ 
++// import I22: a row with no visit time is no visit and stays out; the
++// history service DCHECKs a time on every row it is given.
++TEST(ArcDataImporterTest, ARowWithNoVisitTimeStaysOut) {
++  base::ScopedTempDir dir;
++  ASSERT_TRUE(dir.CreateUniqueTempDir());
++  const base::FilePath path = dir.GetPath().AppendASCII("History");
++  {
++    sql::Database db(sql::Database::Tag("Test"));
++    ASSERT_TRUE(db.Open(path));
++    ASSERT_TRUE(db.Execute(
++        "CREATE TABLE urls(id INTEGER PRIMARY KEY, url LONGVARCHAR, "
++        "title LONGVARCHAR, visit_count INTEGER DEFAULT 0 NOT NULL, "
++        "typed_count INTEGER DEFAULT 0 NOT NULL, last_visit_time INTEGER, "
++        "hidden INTEGER DEFAULT 0 NOT NULL)"));
++    ASSERT_TRUE(db.Execute(
++        "INSERT INTO urls VALUES (1, 'https://example.com/', 'Example', 3, 1, "
++        "13300000000000000, 0)"));
++    ASSERT_TRUE(db.Execute(
++        "INSERT INTO urls VALUES (2, 'https://zero.example/', 'Zero', 1, 0, "
++        "0, 0)"));
++    ASSERT_TRUE(db.Execute(
++        "INSERT INTO urls VALUES (3, 'https://null.example/', 'Null', 1, 0, "
++        "NULL, 0)"));
++  }
++  const history::URLRows rows = ReadArcHistory(path);
++  ASSERT_EQ(1u, rows.size());
++  EXPECT_EQ(GURL("https://example.com/"), rows[0].url());
++  EXPECT_FALSE(rows[0].last_visit().is_null());
++}
++
+ // import I23: the logins table of a Login Data copy, passwords unsealed with
+-// Arc's key; a blocked site comes across blocked, a value that will not
+-// unseal is left out.
++// Arc's key; a blocked site comes across blocked, with no username and no
++// password, and a value that will not unseal is left out.
+ TEST(ArcDataImporterTest, ReadsLoginsAndUnsealsPasswords) {
+   base::ScopedTempDir dir;
+   ASSERT_TRUE(dir.CreateUniqueTempDir());
+@@ -140,7 +170,9 @@ TEST(ArcDataImporterTest, ReadsLoginsAndUnsealsPasswords) {
+       ASSERT_TRUE(s.Run());
+     };
+     insert("https://example.com/", "ann", Seal("hunter2", key), 0);
+-    insert("https://blocked.example/", "", std::string(), 1);
++    // A blocked row that kept its username and a sealed value, as an older
++    // Login Data can: it comes across blocked, with neither.
++    insert("https://blocked.example/", "carol", Seal("secret", key), 1);
+     insert("https://broken.example/", "bob", "v10junk", 0);
+   }
+   const std::vector<password_manager::PasswordForm> forms =
+@@ -158,6 +190,10 @@ TEST(ArcDataImporterTest, ReadsLoginsAndUnsealsPasswords) {
+   EXPECT_FALSE(forms[0].blocked_by_user);
+   EXPECT_TRUE(forms[1].blocked_by_user);
+   EXPECT_EQ(GURL("https://blocked.example/"), forms[1].url);
++  // The password store CHECKs both for a blocked form: the browser died at
++  // the import of such a row (2026-10-15).
++  EXPECT_TRUE(forms[1].username_value.empty());
++  EXPECT_TRUE(forms[1].password_value.empty());
+ }
+ 
+ // import I21: the result line counts what came across, and says when the
+diff --git a/chrome/browser/ui/spaces/sidebar_backup.cc b/chrome/browser/ui/spaces/sidebar_backup.cc
+index 31eb30b618512..f8721d062038d 100644
+--- a/chrome/browser/ui/spaces/sidebar_backup.cc
++++ b/chrome/browser/ui/spaces/sidebar_backup.cc
+@@ -9,6 +9,7 @@
+ 
+ #include "base/files/file_util.h"
+ #include "base/functional/bind.h"
++#include "base/i18n/file_util_icu.h"
+ #include "base/json/json_writer.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/stringprintf.h"
+@@ -345,11 +346,21 @@ base::FilePath WriteExportOnPool(const base::FilePath& directory,
+   base::Time::Now().LocalExplode(&exploded);
+   // The stem carries the Space's name, which is the user's text: UTF-8, not
+   // ASCII (AppendASCII DCHECKs on anything else, and mangles it on Windows).
+-  const base::FilePath path =
+-      directory.Append(base::FilePath::FromUTF8Unsafe(base::StringPrintf(
+-          "%s %04d-%02d-%02d %02d.%02d.json", stem.c_str(), exploded.year,
+-          exploded.month, exploded.day_of_month, exploded.hour,
+-          exploded.minute)));
++  // It is one file name in `directory`: a "/" in the name made it a path, so
++  // the export failed, or with ".." and a folder of that name went elsewhere
++  // (2026-10-15).
++  base::FilePath::StringType name =
++      base::FilePath::FromUTF8Unsafe(
++          base::StringPrintf("%s %04d-%02d-%02d %02d.%02d.json", stem.c_str(),
++                             exploded.year, exploded.month,
++                             exploded.day_of_month, exploded.hour,
++                             exploded.minute))
++          .value();
++  base::i18n::ReplaceIllegalCharactersInPath(&name, '_');
++  const base::FilePath path = directory.Append(name);
++  if (path.DirName() != directory.StripTrailingSeparators()) {
++    return base::FilePath();
++  }
+   return base::CreateDirectory(directory) && base::WriteFile(path, json)
+              ? path
+              : base::FilePath();
+diff --git a/chrome/browser/ui/spaces/sidebar_backup_unittest.cc b/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
+index 5a5a6d44e58d6..90ef4fb16da94 100644
+--- a/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
++++ b/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
+@@ -7,6 +7,9 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/test/test_future.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_colors.h"
+@@ -130,6 +133,21 @@ TEST_F(SidebarBackupTest, RestoreClosesNothing) {
+ }
+ 
+ // I20: one Space exported reads back as one Space.
++// import I20: the export is one file in its folder, whatever the Space's
++// name holds: a "/" made the name a path, and the export failed, or with
++// ".." went elsewhere (2026-10-15).
++TEST_F(SidebarBackupTest, AnExportStaysInItsFolder) {
++  base::ScopedTempDir dir;
++  ASSERT_TRUE(dir.CreateUniqueTempDir());
++  base::test::TestFuture<base::FilePath> written;
++  ExportPlanAsync(ArcImportPlan(), dir.GetPath(),
++                  "Stedding Space a/../../owned", written.GetCallback());
++  const base::FilePath path = written.Get();
++  ASSERT_FALSE(path.empty()) << "the export failed";
++  EXPECT_EQ(dir.GetPath(), path.DirName());
++  EXPECT_TRUE(base::PathExists(path));
++}
++
+ TEST_F(SidebarBackupTest, ExportOneSpaceImportsBack) {
+   Space* const work = model().AddSpace("Work", kSpaceColors[3].color);
+   model().SetActiveSpace(work->id());
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index ad34ae3f58d6f..1d3fa48a34d9d 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -212,6 +212,40 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+ 
+ SpaceModel::~SpaceModel() {
+   observers_.Notify(&Observer::OnSpaceModelDestroying);
++  // sessions S17, S21: a wipe still waiting for its jar to be left goes to
++  // another window of the profile, where a page in the jar may still be, or
++  // runs now when this was the last window: this window's tabs go with it.
++  if (!waiting_wipes_.empty()) {
++    SpaceModel* heir = nullptr;
++    const content::BrowserContext* const profile =
++        waiting_wipes_.front().context.get();
++    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++        [&](BrowserWindowInterface* window) {
++          SpaceModel* const other = SpaceModel::From(window);
++          if (other && other != this && other->tab_strip_model_ && profile &&
++              window->GetProfile() == profile) {
++            heir = other;
++            return false;
++          }
++          return true;
++        });
++    for (WaitingWipe& wipe : waiting_wipes_) {
++      if (heir) {
++        heir->waiting_wipes_.push_back(std::move(wipe));
++      } else if (wipe.context && !IsJarInUse(wipe.context, wipe.jar)) {
++        WipeIsolatedSpacePartition(wipe.context, wipe.jar,
++                                   std::move(wipe.done));
++      } else {
++        // Still shown by a window that has no Spaces, with none left to
++        // wait: the page keeps its session, and the jar stays on disk.
++        std::move(wipe.done).Run();
++      }
++    }
++    waiting_wipes_.clear();
++    if (heir) {
++      heir->PostRetryWaitingWipes();
++    }
++  }
+   if (tab_strip_model_) {
+     tab_strip_model_->SetHiddenTabPredicate(
+         TabStripModel::HiddenTabPredicate());
+@@ -565,7 +599,7 @@ bool SpaceModel::RemoveSpace(const SpaceId& space_id,
+               std::move(done).Run();
+               return;
+             }
+-            model->WipeIsolatedJar(jar, std::move(done));
++            model->WipeIsolatedJarOnceLeft(std::move(jar), std::move(done));
+           },
+           weak_factory_.GetWeakPtr(), jar, std::move(wipe_done)));
+   return true;
+@@ -865,6 +899,25 @@ void SpaceModel::OnTabStripModelChanged(
+       SpaceForTab(inserted.tab);
+     }
+   }
++  // sessions S17, S21: a tab that left the strip, or a page replaced in it (a
++  // rebind into its new jar), may have been the last page in a jar a delete
++  // is waiting to wipe.
++  if (change.type() == TabStripModelChange::Type::kRemoved ||
++      change.type() == TabStripModelChange::Type::kReplaced) {
++    bool any_waiting = !waiting_wipes_.empty();
++    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++        [&](BrowserWindowInterface* window) {
++          const SpaceModel* const other = SpaceModel::From(window);
++          if (other && !other->waiting_wipes_.empty()) {
++            any_waiting = true;
++            return false;
++          }
++          return true;
++        });
++    if (any_waiting) {
++      PostRetryWaitingWipes();
++    }
++  }
+ 
+   // Remember where the user is in the active Space, but only a tab that is
+   // really in it: an essentials tab is in every Space and remembering it would
+@@ -926,12 +979,15 @@ void SpaceModel::OnTabStripModelChanged(
+     // PLAN.md SPC-8, TAB-15: a sleep (on the desktop the discard swaps in new
+     // contents) and a jar rebind replace a tab's WebContents. The tab stays,
+     // and its Space and pin are keyed by its handle, but what rides on the
+-    // contents must follow: the user's name now, while the old contents are
++    // contents must follow: the user's name and the tab's place in a folder
++    // close it came back from (folders F19; without it the close's next row
++    // landed before the tab, 2026-10-15) now, while the old contents are
+     // alive; the session keys, which the new contents' session id has none
+     // of, and the jar -- a discard makes its contents in the profile's own --
+     // a turn later, outside this notification.
+     const TabStripModelChange::Replace* const replace = change.GetReplace();
+     stedding::CarryTabName(replace->old_contents, replace->new_contents);
++    CarryClosedFolderPlace(replace->old_contents, replace->new_contents);
+     // A rebind of this model's own already puts the contents in the Space's
+     // jar; asking for another would loop.
+     const bool rebind_jar = rebinding_ != replace->tab->GetHandle();
+@@ -1483,6 +1539,98 @@ void SpaceModel::ReloadTabsInSpace(const SpaceId& id) {
+   }
+ }
+ 
++void SpaceModel::WipeIsolatedJarOnceLeft(std::string jar,
++                                         base::OnceClosure done) {
++  if (jar.empty()) {
++    std::move(done).Run();
++    return;
++  }
++  waiting_wipes_.push_back(
++      {std::move(jar), std::move(done), BrowserContextForWipe()});
++  RetryWaitingWipes();
++}
++
++void SpaceModel::RetryWaitingWipes() {
++  if (waiting_wipes_.empty()) {
++    return;
++  }
++  std::vector<WaitingWipe> waiting;
++  std::vector<WaitingWipe> ready;
++  for (WaitingWipe& wipe : waiting_wipes_) {
++    if (!wipe.context) {
++      wipe.context = BrowserContextForWipe();
++    }
++    (wipe.context && IsJarInUse(wipe.context, wipe.jar) ? waiting : ready)
++        .push_back(std::move(wipe));
++  }
++  waiting_wipes_ = std::move(waiting);
++  // A window without Spaces -- a popup -- tells no model when its page goes,
++  // so a wait also asks again every few seconds.
++  if (waiting_wipes_.empty()) {
++    wipe_retry_timer_.Stop();
++  } else if (!wipe_retry_timer_.IsRunning()) {
++    wipe_retry_timer_.Start(FROM_HERE, base::Seconds(3), this,
++                            &SpaceModel::RetryWaitingWipes);
++  }
++  for (WaitingWipe& wipe : ready) {
++    if (wipe.context) {
++      WipeIsolatedSpacePartition(wipe.context, wipe.jar, std::move(wipe.done));
++    } else {
++      std::move(wipe.done).Run();
++    }
++  }
++}
++
++void SpaceModel::PostRetryWaitingWipes() {
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++                     [](base::WeakPtr<SpaceModel> model) {
++                       if (!model) {
++                         return;
++                       }
++                       model->RetryWaitingWipes();
++                       ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++                           [&](BrowserWindowInterface* window) {
++                             SpaceModel* const other = SpaceModel::From(window);
++                             if (other && other != model.get()) {
++                               other->RetryWaitingWipes();
++                             }
++                             return true;
++                           });
++                     },
++                     weak_factory_.GetWeakPtr()));
++}
++
++bool SpaceModel::IsJarInUse(content::BrowserContext* context,
++                            std::string_view jar) const {
++  const std::optional<content::StoragePartitionConfig> config =
++      StoragePartitionConfigForProfileId(context, jar);
++  if (!config) {
++    return false;
++  }
++  // Every window of the profile, not only those with Spaces: a popup a page
++  // opened keeps its opener's jar (sessions S11), and a Blank Window has no
++  // registry (2026-10-15).
++  bool in_use = false;
++  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++      [&](BrowserWindowInterface* window) {
++        TabStripModel* const strip = window->GetTabStripModel();
++        if (!strip || window->GetProfile() != context) {
++          return true;
++        }
++        for (int i = 0; i < strip->count(); ++i) {
++          content::WebContents* const contents = strip->GetWebContentsAt(i);
++          if (contents &&
++              StoragePartitionConfigForWebContents(contents) == *config) {
++            in_use = true;
++            return false;
++          }
++        }
++        return true;
++      });
++  return in_use;
++}
++
+ void SpaceModel::WipeIsolatedJar(std::string_view profile_id,
+                                  base::OnceClosure done) {
+   if (profile_id.empty()) {
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index c1c4ba1f914b3..b40a273d1b490 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -448,6 +448,18 @@ class SpaceModel : public TabStripModelObserver,
+   void ReloadTabsInSpace(const SpaceId& id);
+   content::BrowserContext* BrowserContextForWipe() const;
+   void WipeIsolatedJar(std::string_view profile_id, base::OnceClosure done);
++  // sessions S17, S21: RemoveSpace's wipe of `jar`, run once no tab of the
++  // profile's windows shows a page in it. A page holding unsaved changes
++  // keeps its jar until it is left, and the wipe cleared the jar under it;
++  // until then the wipe waits here, and a tab leaving a strip or a jar asks
++  // again (RetryWaitingWipes).
++  void WipeIsolatedJarOnceLeft(std::string jar, base::OnceClosure done);
++  void RetryWaitingWipes();
++  // Asks this window's and the profile's other windows' waiting wipes again,
++  // posted: a strip notification is under way.
++  void PostRetryWaitingWipes();
++  // Whether a tab of a window of this profile shows a page in `jar`.
++  bool IsJarInUse(content::BrowserContext* context, std::string_view jar) const;
+   // The session keys, the name's session entry and the jar of a tab whose
+   // contents were replaced (a sleep, a rebind); posted from the replace
+   // notification.
+@@ -469,6 +481,17 @@ class SpaceModel : public TabStripModelObserver,
+   // Last known isolated jar name per Space, so a delete can wipe after the
+   // registry entry is gone.
+   std::map<SpaceId, std::string> isolated_jars_;
++  // Wipes waiting for their jar to be left (WipeIsolatedJarOnceLeft).
++  struct WaitingWipe {
++    std::string jar;
++    base::OnceClosure done;
++    // The profile's context, kept for a wipe that runs after this window's
++    // tabs are gone.
++    raw_ptr<content::BrowserContext> context = nullptr;
++  };
++  std::vector<WaitingWipe> waiting_wipes_;
++  // Asks the waiting wipes again while any wait (RetryWaitingWipes).
++  base::RepeatingTimer wipe_retry_timer_;
+   // PLAN.md SPC-13: the jar each Space's tabs use now -- its profile_id while
+   // isolated, else empty for the profile's own. A registry change that moves
+   // a Space's jar rebinds its tabs in every window, not only the one that
+diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+index 054d87e7b52c3..b1412456ae8c6 100644
+--- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+@@ -1781,6 +1781,26 @@ TEST_F(SpaceWindowTest, ReplacedContentsKeepTheNameAndTheJar) {
+       << "back in the Space's jar";
+ }
+ 
++// folders F19: a tab brought back from a folder close keeps its place in that
++// close when a sleep or a jar rebind replaces its contents, so the close's
++// next row still lands after it. The place rode on the old contents and was
++// gone (2026-10-15).
++TEST_F(SpaceWindowTest, ReplacedContentsKeepTheirPlaceInAFolderClose) {
++  tabs::TabInterface* const tab = OpenTab();
++  ClosedFolderPlace::CreateForWebContents(tab->GetContents(), "close-1", 2);
++  OpenTab();
++
++  std::unique_ptr<content::WebContents> fresh = content::WebContents::Create(
++      content::WebContents::CreateParams(profile()));
++  tabs().DiscardWebContents(tab->GetContents(), std::move(fresh)).reset();
++
++  const ClosedFolderPlace* const place =
++      ClosedFolderPlace::FromWebContents(tab->GetContents());
++  ASSERT_TRUE(place);
++  EXPECT_EQ("close-1", place->batch());
++  EXPECT_EQ(2, place->order());
++}
++
+ // PLAN.md SPC-13: isolation turned on in one window moves the Space's tabs in
+ // every window into its jar; turning it off moves them back.
+ TEST_F(SpaceWindowTest, IsolationReachesEveryWindow) {
+diff --git a/chrome/browser/ui/spaces/tab_space_restore_data.cc b/chrome/browser/ui/spaces/tab_space_restore_data.cc
+index 4e087b97ee573..b6fa4724c5aa8 100644
+--- a/chrome/browser/ui/spaces/tab_space_restore_data.cc
++++ b/chrome/browser/ui/spaces/tab_space_restore_data.cc
+@@ -101,6 +101,16 @@ ClosedFolderPlace::ClosedFolderPlace(content::WebContents* contents,
+ 
+ ClosedFolderPlace::~ClosedFolderPlace() = default;
+ 
++void CarryClosedFolderPlace(content::WebContents* from,
++                            content::WebContents* to) {
++  const ClosedFolderPlace* const place =
++      from ? ClosedFolderPlace::FromWebContents(from) : nullptr;
++  if (!place || !to || ClosedFolderPlace::FromWebContents(to)) {
++    return;
++  }
++  ClosedFolderPlace::CreateForWebContents(to, place->batch(), place->order());
++}
++
+ WEB_CONTENTS_USER_DATA_KEY_IMPL(TabSpaceRestoreData);
+ WEB_CONTENTS_USER_DATA_KEY_IMPL(FolderRestorePath);
+ WEB_CONTENTS_USER_DATA_KEY_IMPL(ClosedFolderPlace);
+diff --git a/chrome/browser/ui/spaces/tab_space_restore_data.h b/chrome/browser/ui/spaces/tab_space_restore_data.h
+index c41fa9a15ef16..81a27efeb89be 100644
+--- a/chrome/browser/ui/spaces/tab_space_restore_data.h
++++ b/chrome/browser/ui/spaces/tab_space_restore_data.h
+@@ -117,6 +117,12 @@ void RestoreSpaceFromExtraData(
+     content::WebContents* web_contents,
+     const std::map<std::string, std::string>& extra_data);
+ 
++// Gives `to` the ClosedFolderPlace of `from`, if it has one: a sleep or a jar
++// rebind replaces a tab's contents, and the tab keeps its place in the close
++// it came back from.
++void CarryClosedFolderPlace(content::WebContents* from,
++                            content::WebContents* to);
++
+ }  // namespace spaces
+ 
+ #endif  // CHROME_BROWSER_UI_SPACES_TAB_SPACE_RESTORE_DATA_H_
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 2314b51147f11..96446a2be50ec 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -409,6 +409,7 @@ source_set("unit_tests") {
+     "//chrome/browser/ui/tabs:tab_strip",
+     "//chrome/browser/ui/tabs:test_support",
+     "//chrome/browser/ui/tabs:utils",
++    "//components/autofill/core/common:features",
+     "//components/split_tabs",
+     "//components/tabs:public",
+     "//base/test:test_support",
+diff --git a/chrome/browser/ui/stedding/privacy_defaults_unittest.cc b/chrome/browser/ui/stedding/privacy_defaults_unittest.cc
+index 54c3e5fe4e03a..7c2a7a4071567 100644
+--- a/chrome/browser/ui/stedding/privacy_defaults_unittest.cc
++++ b/chrome/browser/ui/stedding/privacy_defaults_unittest.cc
+@@ -8,10 +8,12 @@
+ 
+ #include "base/base_switches.h"
+ #include "base/command_line.h"
++#include "base/feature_list.h"
+ #include "chrome/browser/ssl/https_upgrades_util.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/base/testing_profile.h"
++#include "components/autofill/core/common/autofill_debug_features.h"
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/content_settings/core/common/pref_names.h"
+ #include "components/embedder_support/pref_names.h"
+@@ -69,6 +71,14 @@ TEST_F(PrivacyDefaultsWindowTest, EveryDefaultIsTheProtectiveOne) {
+ 
+ // Q4: the local-state preference becomes the feature, beside whatever
+ // --enable-features already holds.
++// privacy Q14: Autofill asks Google's server about no form and sends no
++// votes: the feature that sends them is off, so a page with a form makes no
++// request to content-autofill.googleapis.com (2026-10-15).
++TEST(PrivacyDefaultsTest, AutofillAsksNoServer) {
++  EXPECT_FALSE(base::FeatureList::IsEnabled(
++      autofill::features::debug::kAutofillServerCommunication));
++}
++
+ TEST(PrivacyDefaultsTest, GpcSwitchFollowsTheLocalState) {
+   EXPECT_EQ("GlobalPrivacyControlForce",
+             EnableFeaturesWithGlobalPrivacyControl("", true));
+diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+index 4868d415c4ba3..255ae6d1e01e2 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+@@ -6634,6 +6634,44 @@ TEST_F(TabStripModelTest, AddToNewFolderKeepsTabsAndNests) {
+       << "the nested tab still counts inside the outer folder";
+ }
+ 
++// folders (ADR 0013): a folder holds no group. Grouping the middle tab of a
++// folder -- the tab menu, chrome.tabs.group -- put the new group in the tab's
++// own slot inside the folder and failed AddCollection's CHECK (2026-10-15).
++// The group goes right after the folder, nested folders included, and the
++// folder keeps its other tabs.
++TEST_F(TabStripModelTest, GroupingATabInsideAFolderPutsTheGroupAfterIt) {
++  ASSERT_NO_FATAL_FAILURE(
++      PrepareTabstripForSelectionTest(tabstrip(), 5, 0, {0}));
++  tabs::TabInterface* const a = tabstrip()->GetTabAtIndex(1);
++  tabs::TabInterface* const b = tabstrip()->GetTabAtIndex(2);
++  tabs::TabInterface* const c = tabstrip()->GetTabAtIndex(3);
++  tabs::FolderTabCollection* const folder =
++      tabstrip()->AddToNewFolder({1, 2, 3});
++  ASSERT_NE(nullptr, folder);
++  tabs::FolderTabCollection* const nested =
++      tabstrip()->AddToNewFolder({tabstrip()->GetIndexOfTab(b),
++                                  tabstrip()->GetIndexOfTab(c)},
++                                 folder);
++  ASSERT_NE(nullptr, nested);
++
++  // b sits strictly inside the nested folder (and the outer one).
++  const tab_groups::TabGroupId group =
++      tabstrip()->AddToNewGroup({tabstrip()->GetIndexOfTab(b)});
++  EXPECT_EQ(5, tabstrip()->count());
++  ASSERT_TRUE(b->GetGroup().has_value());
++  EXPECT_EQ(group, *b->GetGroup());
++  const tabs::TabCollection* const group_collection =
++      b->GetParentCollection();
++  ASSERT_NE(nullptr, group_collection);
++  EXPECT_NE(tabs::TabCollection::Type::FOLDER,
++            group_collection->GetParentCollection()->type())
++      << "the group was put inside a folder";
++  EXPECT_EQ(folder, a->GetParentCollection());
++  EXPECT_EQ(nested, c->GetParentCollection());
++  EXPECT_GT(tabstrip()->GetIndexOfTab(b), tabstrip()->GetIndexOfTab(c))
++      << "the group comes after the folder";
++}
++
+ // Stedding switcher X4: Option-Shift-Cmd-Down / Up move the row among the
+ // rows the user sees -- a folder beside it is one row to jump, and a row
+ // inside a folder stays inside it.
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index b9bc0ea6b210b..f42c6074f6c97 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -201,23 +201,28 @@ bool CompletesToSite(const AutocompleteMatch& match,
+ // so Tab after one letter still filters the actions (K13).
+ constexpr size_t kMinSiteSearchPrefix = 2;
+ 
+-// commandbar K27 (BACKLOG S-109): whether `site`, one of Chromium's search
+-// engines, may be offered as a site search: one the omnibox's keyword mode
+-// would use and Settings lists, searching by an address with the query in it.
+-bool OffersSiteSearch(const TemplateURL& site,
+-                      const TemplateURLService& service) {
++// commandbar K18, K27: scopes the bar never opens, whether offered (K27) or
++// typed whole as `keyword query` (K18).
++bool IsRefusedScope(const TemplateURL& site) {
+   using template_url_starter_pack_data::StarterPackId;
+   const StarterPackId pack = site.starter_pack_id();
+   // ADR 0020, no bundled model: Gemini, AI Mode and an enterprise search
+-  // aggregator's agent, the entries Chromium calls "ask" entries, are never
+-  // offered.
++  // aggregator's agent, the entries Chromium calls "ask" entries.
+   if (site.is_ask_type() || pack == StarterPackId::kGemini ||
+       pack == StarterPackId::kAiMode) {
+-    return false;
++    return true;
+   }
+   // The tabs and page scopes have no page: their addresses are placeholders
+   // the omnibox answers by itself and never opens.
+-  if (pack == StarterPackId::kTabs || pack == StarterPackId::kPage) {
++  return pack == StarterPackId::kTabs || pack == StarterPackId::kPage;
++}
++
++// commandbar K27 (BACKLOG S-109): whether `site`, one of Chromium's search
++// engines, may be offered as a site search: one the omnibox's keyword mode
++// would use and Settings lists, searching by an address with the query in it.
++bool OffersSiteSearch(const TemplateURL& site,
++                      const TemplateURLService& service) {
++  if (IsRefusedScope(site)) {
+     return false;
+   }
+   // An extension's keyword is answered by the extension, not by a page.
+@@ -692,7 +697,7 @@ void CommandBarView::BuildActions() {
+                model->SetFocus(!model->in_focus());
+              },
+              base::Unretained(spaces)),
+-         /*keeps_bar_open=*/true});
++         /*keeps_bar_open=*/true, /*key=*/u"focus-space"});
+     actions_.push_back(
+         {spaces->share_coat() ? u"Show Other Spaces" : u"Hide Other Spaces",
+          std::u16string(),
+@@ -701,7 +706,7 @@ void CommandBarView::BuildActions() {
+                model->SetShareCoat(!model->share_coat());
+              },
+              base::Unretained(spaces)),
+-         /*keeps_bar_open=*/true});
++         /*keeps_bar_open=*/true, /*key=*/u"other-spaces"});
+   }
+   // tabs R29, player Mp5, commandbar K25 (BACKLOG S-122): the tab's sound and
+   // the page's video, each row named for what its key would do, wherever
+@@ -797,6 +802,7 @@ void CommandBarView::BuildActions() {
+         Action action;
+         action.title = std::u16string(pref.label) + (on ? u": On" : u": Off");
+         action.keeps_bar_open = true;
++        action.key = std::u16string(pref.label);
+         action.run = base::BindRepeating(
+             [](PrefService* prefs, const char* key) {
+               prefs->SetBoolean(key, !prefs->GetBoolean(key));
+@@ -839,6 +845,7 @@ void CommandBarView::BuildActions() {
+         Action action;
+         action.title = std::u16string(pref.label) + u": " + name + u" \u25B8";
+         action.keeps_bar_open = true;
++        action.key = std::u16string(pref.label);
+         action.run =
+             base::BindRepeating([](PrefService* prefs, const char* key,
+                                    int next) { prefs->SetInteger(key, next); },
+@@ -867,12 +874,44 @@ void CommandBarView::Run(const Action& action) {
+     return;
+   }
+   if (action.keeps_bar_open) {
+-    // The rows re-read; the chosen one stays where it was.
+-    BuildActions();
++    // The rows re-read and the chosen row stays chosen, found again by its
++    // key: its title can change with what it toggles, and rows above it can
++    // come or go -- Hide Other Spaces takes the Move Tab rows away -- so its
++    // old index named another row, which the next Enter ran (2026-10-15). A
++    // new title the typed text no longer matches stays listed where the row
++    // was, so Enter toggles it back.
++    const auto key_of = [](const Action& each) {
++      return each.key.empty() ? each.title : each.key;
++    };
++    const std::u16string key = key_of(action);
++    BuildActions();  // `action` is one of the old actions: gone from here.
+     rows_.clear();
+     AddActionRows();
+-    selected_ =
+-        std::min(selected_, rows_.empty() ? size_t{0} : rows_.size() - 1);
++    size_t chosen = rows_.size();
++    for (size_t i = 0; i < rows_.size(); ++i) {
++      if (rows_[i].kind == RowKind::kAction &&
++          key_of(actions_[rows_[i].action]) == key) {
++        chosen = i;
++        break;
++      }
++    }
++    if (chosen == rows_.size()) {
++      for (size_t i = 0; i < actions_.size(); ++i) {
++        if (key_of(actions_[i]) == key) {
++          chosen = std::min(selected_, rows_.size());
++          rows_.insert(rows_.begin() + chosen,
++                       {.kind = RowKind::kAction,
++                        .title = actions_[i].title,
++                        .detail = actions_[i].chord,
++                        .action = i});
++          break;
++        }
++      }
++    }
++    selected_ = chosen < rows_.size()
++                    ? chosen
++                    : std::min(selected_,
++                               rows_.empty() ? size_t{0} : rows_.size() - 1);
+     RebuildRows();
+     return;
+   }
+@@ -1261,6 +1300,15 @@ void CommandBarView::ShowSuggestions(const AutocompleteResult& result) {
+   if (mode_ != Mode::kTabs) {
+     return;
+   }
++  // The chosen suggestion, by its address. The suggestions are the last rows,
++  // and a later pass of the providers rebuilds them: the same index then named
++  // another page, sometimes one carried over from the text before, and Enter
++  // opened it (2026-10-15).
++  std::optional<GURL> chosen_suggestion;
++  if (selected_ < rows_.size() &&
++      rows_[selected_].kind == RowKind::kSuggestion) {
++    chosen_suggestion = rows_[selected_].url;
++  }
+   std::erase_if(
+       rows_, [](const Row& row) { return row.kind == RowKind::kSuggestion; });
+   // The typed row as classified, not as drawn: a completion sends the drawn
+@@ -1308,6 +1356,18 @@ void CommandBarView::ShowSuggestions(const AutocompleteResult& result) {
+                      .url = match.destination_url});
+     ++suggestion_rows;
+   }
++  // Where the chosen page is now, or the typed row when it is gone: never
++  // another page under the same highlight.
++  if (chosen_suggestion) {
++    selected_ = 0;
++    for (size_t i = 0; i < rows_.size(); ++i) {
++      if (rows_[i].kind == RowKind::kSuggestion &&
++          rows_[i].url == *chosen_suggestion) {
++        selected_ = i;
++        break;
++      }
++    }
++  }
+   // K23: the default match completes the field when it is a site and the
+   // typed row is the chosen one; any other answer takes a completion away.
+   const AutocompleteMatch* const best = result.default_match();
+@@ -1772,15 +1832,24 @@ CommandBarView::Classification CommandBarView::Classify(
+       const std::u16string keyword = text.substr(0, space);
+       const std::u16string query = text.substr(space + 1);
+       if (!query.empty()) {
+-        if (const TemplateURL* const turl =
+-                service->GetTemplateURLForKeyword(keyword)) {
+-          if (turl->url_ref().SupportsReplacement(
+-                  service->search_terms_data())) {
+-            return {GURL(turl->url_ref().ReplaceSearchTerms(
+-                        TemplateURLRef::SearchTermsArgs(query),
+-                        service->search_terms_data())),
+-                    true};
+-          }
++        // Not a scope the bar never opens -- a model's (ADR 0020), or the
++        // tabs and page scopes, whose addresses have no page -- and, as in
++        // the omnibox, not the history scope in a private window, whose
++        // history page is the normal profile's. Typed whole, they opened
++        // (2026-10-15); now the text is a search like any other.
++        const TemplateURL* const turl =
++            service->GetTemplateURLForKeyword(keyword);
++        const bool private_history =
++            turl && browser_->GetProfile()->IsOffTheRecord() &&
++            turl->starter_pack_id() ==
++                template_url_starter_pack_data::StarterPackId::kHistory;
++        if (turl && !private_history && !IsRefusedScope(*turl) &&
++            turl->url_ref().SupportsReplacement(
++                service->search_terms_data())) {
++          return {GURL(turl->url_ref().ReplaceSearchTerms(
++                      TemplateURLRef::SearchTermsArgs(query),
++                      service->search_terms_data())),
++                  true};
+         }
+       }
+     }
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.h b/chrome/browser/ui/views/commandbar/command_bar_view.h
+index 888a0a10dec01..ef44959650a1b 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.h
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.h
+@@ -236,6 +236,10 @@ class CommandBarView : public views::View,
+     base::RepeatingClosure run;
+     // A preference row: the bar stays open and the row re-reads (K17).
+     bool keeps_bar_open = false;
++    // The row's identity across a rebuild of the actions, its title when
++    // empty: set where the title says the row's state (a toggle, a
++    // preference), so the row is found again once the state has changed.
++    std::u16string key;
+   };
+   void SetMode(Mode mode);
+   void Prefill(std::u16string text);
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+index f9bbb25bb4154..a412d320424fc 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -362,6 +362,85 @@ TEST_F(CommandBarViewTest, ArrowKeysKeepTheChosenRowInView) {
+   EXPECT_GE(visible.bottom(), chosen.bottom());
+ }
+ 
++// commandbar K17: a row that keeps the bar open stays chosen once it has
++// run, under its new title. Hide Other Spaces takes the Move Tab rows above
++// it away, and the old index named another row, which the next Enter ran
++// (2026-10-15). Enter again toggles it back.
++TEST_F(CommandBarViewTest, AToggleStaysChosenOnceItHasRun) {
++  AddTab(browser(), GURL("https://example.com/"));
++  model().AddSpace("Work", SK_ColorBLUE);
++  model().AddSpace("Home", SK_ColorGREEN);
++  auto bar = std::make_unique<CommandBarView>(browser());
++  bar->SetModeForTesting(CommandBarView::Mode::kActions);
++  ASSERT_TRUE(HasTitle(*bar, u"Move Tab to Work"));
++  const size_t row = RowIndex(*bar, u"Hide Other Spaces");
++  ASSERT_LT(row, bar->row_count_for_testing());
++  ASSERT_LT(RowIndex(*bar, u"Move Tab to Work"), row)
++      << "the Move rows sit above the toggle";
++  Down(*bar, static_cast<int>(row));
++  ASSERT_EQ(row, bar->selected_row_for_testing());
++  EXPECT_TRUE(Enter(*bar));
++  ASSERT_TRUE(model().share_coat());
++  EXPECT_FALSE(HasTitle(*bar, u"Move Tab to Work"));
++  EXPECT_EQ(u"Show Other Spaces",
++            bar->row_title_for_testing(bar->selected_row_for_testing()));
++  EXPECT_TRUE(Enter(*bar));
++  EXPECT_FALSE(model().share_coat()) << "Enter again toggles it back";
++  EXPECT_EQ(u"Hide Other Spaces",
++            bar->row_title_for_testing(bar->selected_row_for_testing()));
++
++  // Typed "hide": the toggle's new title no longer matches, and it stays
++  // listed where it was, still chosen.
++  bar = std::make_unique<CommandBarView>(browser());
++  bar->SetModeForTesting(CommandBarView::Mode::kActions);
++  TypeInto(*bar, u"hide other");
++  ASSERT_EQ(u"Hide Other Spaces",
++            bar->row_title_for_testing(bar->selected_row_for_testing()));
++  EXPECT_TRUE(Enter(*bar));
++  ASSERT_TRUE(model().share_coat());
++  EXPECT_EQ(u"Show Other Spaces",
++            bar->row_title_for_testing(bar->selected_row_for_testing()));
++  EXPECT_TRUE(Enter(*bar));
++  EXPECT_FALSE(model().share_coat());
++}
++
++// commandbar K7, K23: a later answer from the providers keeps the chosen
++// suggestion chosen where it lands, or goes back to the typed row when it is
++// gone. The rows were rebuilt under the same index, which then named another
++// page, and Enter opened that one (2026-10-15).
++TEST_F(CommandBarViewTest, ALateAnswerKeepsTheChosenSuggestion) {
++  UseSearchEngines();
++  AddTab(browser(), GURL("https://example.com/"));
++  const GURL github("https://github.com/");
++  const GURL gitlab("https://gitlab.com/");
++  const GURL gitea("https://gitea.com/");
++  auto bar = std::make_unique<CommandBarView>(browser());
++  TypeInto(*bar, u"gi");
++  bar->SetAutocompleteResultForTesting(
++      ResultOf({SiteMatch(u"gi", u"github.com", github),
++                SiteMatch(u"gi", u"gitlab.com", gitlab)}));
++  const size_t lab = RowIndex(*bar, u"gitlab.com");
++  ASSERT_LT(lab, bar->row_count_for_testing());
++  Down(*bar, static_cast<int>(lab));
++  ASSERT_EQ(lab, bar->selected_row_for_testing());
++
++  // One more page ahead of them: the chosen row's index now names
++  // github.com.
++  bar->SetAutocompleteResultForTesting(
++      ResultOf({SiteMatch(u"gi", u"gitea.com", gitea),
++                SiteMatch(u"gi", u"github.com", github),
++                SiteMatch(u"gi", u"gitlab.com", gitlab)}));
++  EXPECT_EQ(u"gitlab.com",
++            bar->row_title_for_testing(bar->selected_row_for_testing()))
++      << "the highlight moved to another page";
++
++  // Gone from the answer: back to the typed row, not a neighbour.
++  bar->SetAutocompleteResultForTesting(
++      ResultOf({SiteMatch(u"gi", u"gitea.com", gitea),
++                SiteMatch(u"gi", u"github.com", github)}));
++  EXPECT_EQ(0u, bar->selected_row_for_testing());
++}
++
+ // commandbar K9: the rows list Stedding's verbs and the window's commands --
+ // a row per other Space, the captures, the sidebar, one per preference.
+ TEST_F(CommandBarViewTest, ActionRowsListSpacesAndCaptures) {
+@@ -1792,6 +1871,61 @@ TEST_F(CommandBarViewTest, BackspaceOrEscapeTakesTheChipAway) {
+   EXPECT_TRUE(bar->closing_for_testing());
+ }
+ 
++// commandbar K18, K27: "keyword query" opens only an engine the bar may
++// offer. Typed whole, Gemini's and AI Mode's keywords with a query opened
++// those models, and the tabs and page scopes opened placeholder addresses
++// with no page; in a private window the history scope opened the normal
++// profile's history, which the omnibox refuses off the record (2026-10-15).
++// They are searches for the whole text now; a scope with a page still opens.
++TEST_F(CommandBarViewTest, AKeywordQueryOpensOnlyAnOfferedEngine) {
++  using template_url_starter_pack_data::StarterPackId;
++  TemplateURLService& engines = UseSearchEngines();
++  AddSiteSearch(engines, u"Gemini", u"@askgemini",
++                "https://gemini.google.com/app?q={searchTerms}",
++                StarterPackId::kGemini);
++  AddSiteSearch(engines, u"AI Mode", u"@askmode",
++                "https://www.google.com/search?udm=50&q={searchTerms}",
++                StarterPackId::kAiMode);
++  AddSiteSearch(engines, u"Open tabs", u"@opentabs",
++                "chrome://tabs/?q={searchTerms}", StarterPackId::kTabs);
++  AddSiteSearch(engines, u"This page", u"@thispage",
++                "chrome://page/?q={searchTerms}", StarterPackId::kPage);
++  AddSiteSearch(engines, u"Past", u"@past",
++                "chrome://history/?q={searchTerms}", StarterPackId::kHistory);
++  AddSiteSearch(engines, u"Marks", u"@marks",
++                "chrome://bookmarks/?q={searchTerms}",
++                StarterPackId::kBookmarks);
++  ASSERT_FALSE(HasFatalFailure());
++  const auto bar = std::make_unique<CommandBarView>(browser());
++  for (const char16_t* typed : {u"@askgemini hello", u"@askmode hello",
++                                u"@opentabs news", u"@thispage news"}) {
++    SCOPED_TRACE(base::UTF16ToUTF8(typed));
++    const auto result = bar->ClassifyForTesting(typed);
++    EXPECT_NE("gemini.google.com", result.destination.host());
++    EXPECT_EQ(std::string::npos, result.destination.spec().find("udm=50"));
++    EXPECT_FALSE(result.destination.SchemeIs("chrome"))
++        << result.destination.spec();
++  }
++  EXPECT_EQ("bookmarks", bar->ClassifyForTesting(u"@marks rust")
++                             .destination.host());
++  EXPECT_EQ("history",
++            bar->ClassifyForTesting(u"@past secret").destination.host());
++
++  Profile* const otr =
++      profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
++  std::unique_ptr<BrowserWindowInterface> private_window =
++      CreateBrowser(otr, Browser::TYPE_NORMAL, /*hosted_app=*/false);
++  {
++    const auto private_bar =
++        std::make_unique<CommandBarView>(private_window.get());
++    EXPECT_NE("history",
++              private_bar->ClassifyForTesting(u"@past secret")
++                  .destination.host())
++        << "a private window's bar opened the normal profile's history";
++  }
++  private_window->GetTabStripModel()->CloseAllTabs();
++}
++
+ // commandbar K27, ADR 0020 (no bundled model): Chromium's Gemini and AI Mode
+ // scopes are never offered, by keyword, name or domain, and Tab with their
+ // text filters the actions. Nor are the tabs and page scopes, whose
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
+index e130b868d2724..e33c91e7695fb 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -370,6 +370,15 @@ void MultiContentsView::UpdateSplitVisualData(
+ 
+   visual_data_ = visual_data;
+   resize_area_->SetLayout(visual_data.split_layout());
++  // Stedding (splits J7): a pane's corners follow the layout -- stacked, the
++  // lower pane's top meets the gap -- and nothing else redraws them when only
++  // the layout changes (2026-10-15).
++  if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
++      IsInSplitView()) {
++    for (size_t i = 0; i < contents_container_views_.size(); ++i) {
++      contents_container_views_[i]->SetRoundedCorners(SteddingPaneRadii(i));
++    }
++  }
+   InvalidateLayout();
+ }
+ 
+diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+index 5c308a3b7e099..e6ca0c7f574fb 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+@@ -512,14 +512,24 @@ void TabCollectionAnimatingLayoutManager::AnimateAndReparentView(
+   // Ensure `kPreviousCollectionBounds` metadata is set before adding
+   // `view_to_reparent` to ensure view-added lifecycle hooks have the necessary
+   // information to determine whether the view was reparented or newly-added.
+-  if (!delegate_->IsViewDragging(*view_to_reparent) &&
+-      !previous_bounds_in_screen.IsEmpty()) {
+-    view_to_reparent->SetPaintToLayer();
+-    view_to_reparent->layer()->SetFillsBoundsOpaquely(false);
++  const bool animate = !delegate_->IsViewDragging(*view_to_reparent) &&
++                       !previous_bounds_in_screen.IsEmpty();
++  if (animate) {
+     view_to_reparent->SetProperty(kPreviousCollectionBounds,
+                                   previous_bounds_in_screen);
+   }
+-  host_view()->AddChildView(std::move(view_to_reparent));
++  // Stedding: the layer the move animates is made once the view is in its
++  // new parent. Made while the view was detached -- a row whose split was
++  // dissolved by closing its other pane, or the window closing -- the row's
++  // own layered children (its number and reset badges) were adopted by a
++  // layer with no tree, and adding it to the new parent's layer crashed in
++  // Layer::Add (2026-10-15).
++  views::View* const added =
++      host_view()->AddChildView(std::move(view_to_reparent));
++  if (animate) {
++    added->SetPaintToLayer();
++    added->layer()->SetFillsBoundsOpaquely(false);
++  }
+ }
+ 
+ views::ProposedLayout TabCollectionAnimatingLayoutManager::InterpolateLayout(
+diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
+index 89e541da8bf32..829df20fc0bbe 100644
+--- a/chrome/test/stedding/command_bar_browsertest.cc
++++ b/chrome/test/stedding/command_bar_browsertest.cc
+@@ -350,6 +350,11 @@ class CommandBarActionsTest : public CommandBarTest {
+           id, {extensions::disable_reason::DISABLE_USER_ACTION});
+       ASSERT_TRUE(unloaded.WaitForExtensionUnloaded());
+     }
++    // As after the reload: a pointer kept across the wait would dangle if the
++    // window lost focus during it, which closes the bar.
++    ASSERT_EQ(bar, stedding::CommandBarView::GetOpenBar(
++                       BrowserView::GetBrowserViewForBrowser(browser())))
++        << "the disable closed the bar";
+     lists_no_extension();
+ 
+     // A row run from the same bar: Duplicate Tab adds a tab.
+@@ -708,6 +713,10 @@ IN_PROC_BROWSER_TEST_F(CommandBarKeysTest, TheKeysRunTheRowTheyHighlight) {
+     tabs->CloseWebContentsAt(tabs->GetIndexOfTab(extra),
+                              TabCloseTypes::CLOSE_NONE);
+     base::RunLoop().RunUntilIdle();
++    // Looked up again, as after the first close.
++    bar = stedding::CommandBarView::GetOpenBar(
++        BrowserView::GetBrowserViewForBrowser(browser()));
++    ASSERT_TRUE(bar) << "a tab closing under the bar leaves it open";
+     Press(bar, ui::VKEY_RETURN);
+     base::RunLoop().RunUntilIdle();
+     EXPECT_EQ(two, tabs->GetActiveTab());
+diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
+index a0b2699e226e0..8d2f7269dfa59 100644
+--- a/chrome/test/stedding/sidebar_click_browsertest.cc
++++ b/chrome/test/stedding/sidebar_click_browsertest.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_menu_model.h"
+ #include "chrome/browser/ui/tabs/tab_menu_model_delegate.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -867,6 +868,41 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
+   }
+ }
+ 
++// splits J1: closing one pane of a split moves the other pane's row out of
++// the split, with the move animated; so does the window closing with a split
++// in it, in the rail too. The row's layer for that move was made while the row
++// was detached, and adding it to its new parent crashed in Layer::Add, every
++// time (2026-10-15).
++IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPaneOfASplitKeepsTheOther) {
++  AppendTab();
++  AppendTab();
++  AppendTab();
++  ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++  tabs::TabInterface* const left = tab_strip_model()->GetTabAtIndex(1);
++  tab_strip_model()->ActivateTabAt(1);
++  tab_strip_model()->AddToNewSplit(
++      {2}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  ASSERT_TRUE(left->IsSplit());
++  ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++  tab_strip_model()->CloseWebContentsAt(2, TabCloseTypes::CLOSE_NONE);
++  ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++  EXPECT_FALSE(left->IsSplit());
++  EXPECT_TRUE(RowFor(tab_strip_model()->GetIndexOfTab(left)))
++      << "the other pane's row is drawn";
++
++  // A split again, the sidebar in the rail: the window closes with it at the
++  // end of the test.
++  tab_strip_model()->ActivateTabAt(tab_strip_model()->GetIndexOfTab(left));
++  tab_strip_model()->AddToNewSplit(
++      {tab_strip_model()->GetIndexOfTab(left) + 1},
++      split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  ASSERT_TRUE(left->IsSplit());
++  ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++  ASSERT_NO_FATAL_FAILURE(CollapseSidebar());
++}
++
+ // TAB-10: a Shift-click selects the rows between two rows as the sidebar
+ // draws them: a tab of another Space that sits between them in the strip,
+ // and a tab under a collapsed folder, are not in the range. The menu counts
+diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
+index 9e48fd63879df..300cb8a9de063 100644
+--- a/chrome/test/stedding/sidebar_forms_browsertest.cc
++++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
+@@ -288,6 +288,21 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheClosedFormsLeaveThePageEdgeToEdge) {
+            multi->contents_container_views()) {
+         EXPECT_EQ(multi->GetBackgroundRadii(), pane->GetRoundedCorners());
+       }
++      // Stacked, the lower pane's top meets the gap and takes the card's
++      // radius, and switching the layout redraws the corners: they kept the
++      // side-by-side cut until something else redrew them (2026-10-15).
++      const gfx::RoundedCornersF card = multi->GetBackgroundRadii();
++      if (!hidden) {
++        ASSERT_NE(gfx::RoundedCornersF(), card) << "open, the card is rounded";
++      }
++      tabs->UpdateSplitLayout(split, split_tabs::SplitTabLayout::kStacked);
++      views::test::RunScheduledLayout(browser_view()->GetWidget());
++      EXPECT_EQ(card,
++                multi->contents_container_views()[0]->GetRoundedCorners());
++      EXPECT_EQ(gfx::RoundedCornersF(card.lower_left(), card.lower_right(),
++                                     card.lower_right(), card.lower_left()),
++                multi->contents_container_views()[1]->GetRoundedCorners())
++          << "stacked, the lower pane's top takes the card's radius";
+       tabs->RemoveSplit(split);
+       ASSERT_TRUE(base::test::RunUntil([&] {
+         views::test::RunScheduledLayout(browser_view()->GetWidget());
+diff --git a/chrome/test/stedding/space_jar_browsertest.cc b/chrome/test/stedding/space_jar_browsertest.cc
+index b821758d2f236..fdf5d8d2e2a9c 100644
+--- a/chrome/test/stedding/space_jar_browsertest.cc
++++ b/chrome/test/stedding/space_jar_browsertest.cc
+@@ -21,6 +21,7 @@
+ #include "base/functional/bind.h"
+ #include "base/run_loop.h"
+ #include "base/synchronization/lock.h"
++#include "base/test/bind.h"
+ #include "base/test/run_until.h"
+ #include "base/test/test_future.h"
+ #include "base/thread_annotations.h"
+@@ -986,4 +987,83 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest,
+             content::EvalJs(contents, "localStorage.getItem('k')"));
+ }
+ 
++// sessions S17, S21: deleting an independent Space waits to wipe its jar
++// while a page holding unsaved changes still shows in it. The page keeps its
++// session -- the form it sends carries the jar's cookie -- and once the user
++// leaves it, the tab moves to its new jar and the wipe follows. The wipe ran
++// right behind the tabs' rebinds and cleared the jar under the page, whose
++// form then went out signed out (2026-10-15).
++IN_PROC_BROWSER_TEST_F(SpaceJarTest, DeletingASpaceWaitsForAPageWithChanges) {
++  tabs::TabInterface* tab = nullptr;
++  ASSERT_NO_FATAL_FAILURE(OpenWebPage(work_, &tab));
++  content::WebContents* const page = tab->GetContents();
++  const content::StoragePartitionConfig work_jar = JarOf(tab);
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(work_jar));
++  ASSERT_TRUE(content::ExecJs(
++      page,
++      "window.stay = e => { e.preventDefault(); e.returnValue = ''; };"
++      "window.addEventListener('beforeunload', window.stay);"));
++
++  bool wiped = false;
++  ASSERT_TRUE(model_->RemoveSpace(
++      work_, base::BindLambdaForTesting([&wiped] { wiped = true; })));
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(page, tab->GetContents()) << "the page must not be replaced";
++  EXPECT_EQ(work_jar, JarOf(tab));
++  EXPECT_FALSE(wiped) << "the jar was wiped under a page that is in it";
++
++  // The form the page sends goes in its own session, which is still there.
++  content::TestNavigationObserver posted(page);
++  ASSERT_TRUE(content::ExecJs(
++      page,
++      content::JsReplace(
++          "window.removeEventListener('beforeunload', window.stay);"
++          "document.body.innerHTML = '<form method=post action=' + $1 +"
++          "    '><input name=note value=typed></form>';"
++          "document.forms[0].submit();",
++          Url("b.test", "/echo?after-the-delete"))));
++  posted.Wait();
++  EXPECT_EQ("jar=work", FirstCookieFor("/echo?after-the-delete"))
++      << "the form went out without its session";
++
++  // Leaving the page moves it to its new jar, and the wipe follows.
++  content::ExecuteScriptAsync(
++      tab->GetContents(),
++      content::JsReplace("location.href = $1;", Url("b.test", "/left")));
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return tab->GetContents() != page && JarOf(tab) != work_jar;
++  }));
++  EXPECT_TRUE(base::test::RunUntil([&]() { return wiped; }))
++      << "the jar was never wiped";
++}
++
++// sessions S11, S17: a popup a page of an independent Space opened keeps
++// that jar, and has no Spaces of its own; deleting the Space waits for it too,
++// and the wipe follows once it closes. The wait looked only at windows with
++// Spaces (2026-10-15).
++IN_PROC_BROWSER_TEST_F(SpaceJarTest, DeletingASpaceWaitsForAPopupInItsJar) {
++  ASSERT_TRUE(model_->SetActiveSpace(work_));
++  content::WebContents* const page = work_tab_.Get()->GetContents();
++  ui_test_utils::BrowserCreatedObserver created;
++  ASSERT_TRUE(content::ExecJs(
++      page, content::JsReplace(
++                "window.open($1, '_blank', 'noopener,popup,width=300');",
++                Url("b.test", "/popup-before-the-delete"))));
++  EXPECT_EQ("jar=work", FirstCookieFor("/popup-before-the-delete"));
++  BrowserWindowInterface* const popup = created.Wait();
++  ASSERT_TRUE(popup);
++  ASSERT_TRUE(model_->SetActiveSpace(home_));
++
++  bool wiped = false;
++  ASSERT_TRUE(model_->RemoveSpace(
++      work_, base::BindLambdaForTesting([&wiped] { wiped = true; })));
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(wiped) << "the jar was wiped under the popup's page";
++
++  chrome::CloseWindow(popup);
++  ui_test_utils::WaitForBrowserToClose(popup);
++  EXPECT_TRUE(base::test::RunUntil([&]() { return wiped; }))
++      << "the jar was never wiped";
++}
++
+ }  // namespace
+diff --git a/components/autofill/core/common/autofill_debug_features.cc b/components/autofill/core/common/autofill_debug_features.cc
+index d1e35c2bb1c3a..4183681e37189 100644
+--- a/components/autofill/core/common/autofill_debug_features.cc
++++ b/components/autofill/core/common/autofill_debug_features.cc
+@@ -135,7 +135,12 @@ BASE_FEATURE_PARAM(std::string,
+ // autofill server API url up to the parent "directory" of the "query" and
+ // "upload" resources.
+ // i.e., https://other.autofill.server:port/tbproxy/af/
+-BASE_FEATURE(kAutofillServerCommunication, base::FEATURE_ENABLED_BY_DEFAULT);
++// Stedding (docs/features/privacy.md Q14): off. On, every page with a form
++// asked content-autofill.googleapis.com for field types and sent votes after
++// a submit -- the form's signature and the page's host -- with no key and no
++// user choice, a connection docs/PRIVACY.md did not list (2026-10-15).
++// Autofill fills from its own heuristics without it.
++BASE_FEATURE(kAutofillServerCommunication, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ // When set to a non-zero value, the value is attached as an experiment ID to
+ // all predictions requests to the Autofill server, as if it were an active GWS
+diff --git a/components/tabs/impl/tab_strip_collection.cc b/components/tabs/impl/tab_strip_collection.cc
+index 02886e048f014..f1f2b582127a3 100644
+--- a/components/tabs/impl/tab_strip_collection.cc
++++ b/components/tabs/impl/tab_strip_collection.cc
+@@ -456,6 +456,26 @@ void TabStripCollection::MoveTabsRecursiveImpl(
+   if (new_group_id.has_value() &&
+       !GetTabGroupCollection(new_group_id.value())) {
+     TabCollection::Position group_insertion_details = move_position;
++    // Stedding (folders, ADR 0013): a folder holds tabs, splits and folders,
++    // never a group. A tab grouped from the middle of a folder -- the tab
++    // menu, chrome.tabs.group -- found its own slot inside the folder, and
++    // inserting the group there failed AddCollection's CHECK (2026-10-15).
++    // The group goes right after the outermost folder that holds the slot.
++    TabCollection* holder = group_insertion_details.parent_handle.Get();
++    TabCollection* outermost_folder = nullptr;
++    for (TabCollection* each = holder; each;
++         each = each->GetParentCollection()) {
++      if (each->type() == TabCollection::Type::FOLDER) {
++        outermost_folder = each;
++      }
++    }
++    if (outermost_folder) {
++      TabCollection* const above = outermost_folder->GetParentCollection();
++      const std::optional<size_t> at =
++          above ? above->GetIndexOfCollection(outermost_folder) : std::nullopt;
++      CHECK(at.has_value());
++      group_insertion_details = {above->GetHandle(), *at + 1};
++    }
+ 
+     AddTabCollectionImpl(PopDetachedGroupCollection(new_group_id.value()),
+                          group_insertion_details);

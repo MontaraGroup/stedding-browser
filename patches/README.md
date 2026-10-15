@@ -38,7 +38,13 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
 - 0064, the tests of 2026-10-14: Stedding's browser tests merged into scenarios that share a
   browser, with a `SCOPED_TRACE` per step; near-copy unit tests made table-driven; the drag
   fixtures kept above other windows. Test files only, touched by most patches since 0057,
-  so one patch at the tip rather than a fixup into each.
+  so one patch at the tip rather than a fixup into each;
+- 0065, the code review of 2026-10-15 (`docs/history/review-2026-10-15.md`): two crashes in
+  the tab model and its views (closing a split's pane, grouping a tab inside a folder), the
+  Arc import's crash, a deleted Space's wipe that waits for its pages, Autofill's server
+  queries off, three command-bar faults, a stacked split's corners, the export's file name,
+  Shift on the Mac History menu's Restore Folder, a folder close's place kept through a
+  sleep, and the tests that read a freed bar.
 
 Patch messages cite the docs as they were when each was written: `PLAN.md`'s item ids
 (TAB-1, SPC-4, ...), `docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` now live under

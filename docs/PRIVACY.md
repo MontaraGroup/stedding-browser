@@ -50,6 +50,9 @@ bug. Report it through SECURITY.md.
   tiles, no news feed, no background promotions — not opt-out, but absent.
 - No search or address-bar keystrokes sent anywhere until the user submits (search
   suggestions are off by default; see below).
+- No Autofill server queries or votes: Chromium asks `content-autofill.googleapis.com`
+  about every form a page shows and reports what was submitted; Stedding turns that off
+  (since 2026-10-15, `features/privacy.md` Q14). Autofill fills from its own heuristics.
 
 ### What a fresh profile contacted: a recorded run
 

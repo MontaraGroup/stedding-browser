@@ -41,8 +41,8 @@ Eighty-odd traps follow. Read the one for the topic in front of you, not the lis
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83 |
-| The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89 |
+| The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
@@ -1141,6 +1141,18 @@ private window has.
     Drag fixtures call `stedding::test::KeepAboveOtherWindows` on their widget (z-order needs
     no foreground right). A new fixture that drags, hovers, types or needs its window in
     front goes on the serial list.
+
+89. **`tooling/apply-patches` rewrites every file the series touches, and the build then
+    recompiles for hours.** On 2026-10-15 the Mac's checkout held an older 0062 and neither
+    0063 nor 0064; applying the series again would have rewritten about 400 files, and
+    `apply-patches` refuses while the branding is applied anyway. What moved it, rewriting
+    the 84 files that differed: build the series' commits in a temporary index on the pin
+    (for each patch `git mailinfo -b`, `git apply --cached`, with `--3way` when that fails,
+    `git write-tree`, and `git commit-tree` with the patch's author and date), then
+    `git read-tree -m -u <old tip> <new tip>`, which rewrites only the files whose content
+    differs and leaves the branded files as they are, then move `stedding-work` and
+    `refs/stedding/applied` to the new tip. `tooling/update-patches` writing no change
+    afterwards proves the tree is the series.
 
 ## The Windows build
 

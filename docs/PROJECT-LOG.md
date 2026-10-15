@@ -7,6 +7,32 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-15 -- a code review of the whole series (patch 0065)
+
+The operator asked for the series to be searched for bugs and the finds tested. It was read
+area by area, read-only: eighteen areas, then the fixes themselves
+(`docs/history/review-2026-10-15.md`). A finding counted only when it was traced in the code,
+and each was read again before it was fixed or filed.
+
+- Fixed in patch 0065, each with a test: two crashes in the tab views and the tab model
+  (closing one pane of a split, or a window holding a split, `S-190`; grouping a tab inside a
+  folder, which any extension can do, `S-191`), the Arc import's crash on a blocked login
+  (`S-192`), a deleted Space's wipe under pages still open in its jar (`S-193`), Autofill's
+  server queries (`S-194`), three command-bar faults (`S-195`), Shift on the Mac's Restore
+  Folder (`S-196`), a stacked split's corners (`S-197`), the export's file name (`S-198`), a
+  folder close's place lost in a sleep (`S-199`), and two tests that read a freed bar (`S-200`).
+- Filed: `S-179` to `S-189` and `S-201` to `S-209`. Root causes traced for `S-71`, `S-140`,
+  `S-142`, `S-144`, `S-145` and `S-146`, each with the fix and the test it needs.
+- The checkout held an older 0062 and lacked 0063 and 0064; it was moved to the series with
+  84 files rewritten instead of hundreds (trap 89).
+
+Tests, the Mac's release build: 788 unit tests, 20 component tests, 116 browser tests four at
+a time and 33 one at a time, all passing. Every new test failed with its fix taken out; the
+split close and the grouping crashed. An earlier run of the suite, under a load average near
+100 from another job on the machine, had three browser failures (the undo toast in
+`AddressBandTest`, two shutdowns over 30 seconds, trap 66); each passed alone, and the last
+run passed whole. No release.
+
 ## 2026-10-14, evening -- the day reviewed: a folder closed in part, a Shift-click, the tooling
 
 The operator asked for every doc brought up to date, the day's work reviewed, its bugs fixed and
