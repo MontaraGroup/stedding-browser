@@ -7,6 +7,29 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-15, evening -- beta 15 released, both platforms from the Mac
+
+The operator asked for a Windows build and a release of everything. `v0.2.0-beta.15` went out
+from tag commit `fe36b0a`, the series of 66 patches: the Mac's signed and notarized DMG first,
+then the Windows installer from the PC into the same release.
+
+- **The PC, driven from the Mac over SSH** (the operator's yes for `win11` as `esali`): its
+  checkout held 0001 to 0064 exactly (its export matched the repo's), so 0065 and 0066 went on
+  with `git am`, and the export matched again; the build supervisor ran detached through WMI
+  with the paths it needs set by a launcher (5 minutes, incremental). The suites ran in the
+  operator's desktop session through a temporary scheduled task at normal priority (trap 67),
+  deleted after: 829 unit and 145 browser tests, the row drags passing too. The new tab group
+  header test failed there on its no-fill check, because the PC's pointer sat over the test
+  window; the test now keeps its window away from the pointer (patch 0066), and the rerun
+  passed. The installer was tested over the beta 14 install after a backup: the installed
+  `chrome.dll` is the build's, the profile kept; one launch of the installed build captured.
+- **The Mac:** the release build with the version set, signed and notarized, `verify-build`
+  (offline) and `syspolicy_check distribution` passed; 845 unit, 20 component and 151 browser
+  tests on the exact build. After publishing, both images were downloaded from the release and
+  matched their checksums, and Gatekeeper accepted the app in the downloaded DMG as notarized.
+- Not done for this release: use by hand with the real pointer and keyboard on either platform,
+  a DCHECK build, ASan (`S-106`); `components_unittests` is not built on Windows.
+
 ## 2026-10-15, afternoon -- the review's filed items fixed, and a tab group's header (patch 0066)
 
 The operator asked for the review's filed items, `S-201` to `S-209`, to be fixed too. Patch
