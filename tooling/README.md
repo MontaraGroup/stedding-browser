@@ -30,6 +30,7 @@ PowerShell.
 | `bootstrap-depot-tools` | Verifies the host toolchain, then installs or updates `depot_tools`. |
 | `sync-chromium` | Materialises the Chromium tree at the pin, outside this repository. Refuses under 150 GB free; `STEDDING_SYNC_MIN_FREE_GB` lowers the floor for a run that has done the arithmetic, never under 100 (HANDOFF trap 44). |
 | `build-chromium` | `gn gen` + `autoninja` for a named configuration. |
+| `fetch-sparkle` | **(macOS)** Puts Sparkle 2.10.0's framework at `third_party/stedding_sparkle/` in the checkout, from its release archive checked against GitHub's digest, without the XPC services; keeps the archive and Sparkle's tools (`sign_update`, `generate_keys`) in `~/Library/Caches/Stedding`. `build-chromium` runs it. `--tools` prints the tools' directory. |
 | `apply-branding` | Copies `../branding/` assets over the checkout. Not a patch. |
 | `apply-patches` | Replays the patch series onto the pin as commits on `stedding-work`. `--check` answers whether it would apply without touching anything, needs only git (no depot_tools, no Mac, no build), and reports which patches would need a three-way merge. The `series` workflow runs it. |
 | `update-patches` | Turns those commits back into `../patches/`. |
@@ -39,6 +40,8 @@ PowerShell.
 | `check-pin` | Is the pin current? Reports `current`, `behind` or `ahead` against stable on every desktop platform; `--self-test` runs the verdict on offline fixtures. The `upstream` workflow calls it. |
 | `sign-release` | **(macOS)** Sign and notarise a built app with Chromium's signing pipeline; `--check` lists what is missing (identity, notary profile, packaging dir) |
 | `publish-release` | GitHub pre-release from `dist/`: tag `v<VERSION>`, notes from `docs/release-notes/<tag>.md`; the platform that publishes second adds its image to the same release; `--check` first. Only with the operator's word in chat (`AGENTS.md`, red lines) |
+| `publish-appcast` | **(macOS)** Offers the release to installed copies (ADR 0022): checks that `dist/`'s image is the release's and its app carries the updater, signs it with Sparkle's `sign_update`, writes `updates/appcast.xml` through `appcast.py`, signs and verifies the feed, commits it; `--push` publishes it. `--check` changes nothing. |
+| `appcast.py` | Writes and reads the update feed: newest release first, five kept. `selftest` checks it. |
 | `package-dmg` | **(macOS)** Packages a built app into an installable `.dmg`. |
 | `brand/` | `generate.py` regenerates the brand system from `mark.py`, the mark's one geometry file; `win_icons.py` makes the Windows icons from the same mark; `product_name.py` rewrites the product name in Chromium's string tables (`apply-branding` runs it). |
 | `verify/` | The probe page and the media clips `verify-build` serves to the built app. |

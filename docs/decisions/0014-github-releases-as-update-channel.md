@@ -1,6 +1,6 @@
 # 0014 — GitHub Releases is the update channel; stedding.dev is a website
 
-Status: Accepted
+Status: Accepted; partly superseded by 0022 (Sparkle and a signed feed on the Mac, on by default)
 Date: 2026-08-31
 
 ## Context

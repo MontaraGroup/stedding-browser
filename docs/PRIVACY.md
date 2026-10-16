@@ -34,7 +34,8 @@ bug. Report it through SECURITY.md.
 
 | Connection | To | Contains | Why |
 |---|---|---|---|
-| Browser update check | None yet: no build checks for updates (`BACKLOG.md` S-74). When it lands it goes to the GitHub Releases API, described under "The update check" below. | — | Security updates are non-negotiable for a Chromium fork. |
+| Browser update check (Mac) | GitHub: the update feed on `raw.githubusercontent.com`, once a day, and a new version's image from `github.com` when there is one. Described under "The update check" below; off in Settings › Stedding › Updates. Windows has no updater yet (`BACKLOG.md` S-74). | A plain GET with Sparkle's user agent (the browser's name and version). Nothing about the machine. | Security updates are non-negotiable for a Chromium fork. |
+| Thank-you pages | stedding.dev, twice in an installation's life and then once per update: `/thanks/` when the welcome flow ends, `/thanks/updated/` on the first launch of a later version. The second is off in Settings › Stedding › Updates. | A plain page request. The version is in the URL's fragment, which the browser never sends. The pages load nothing from another host and set no cookie. | The owner's thanks, and the project's sponsorship (ADR 0022). |
 | Security component updates | Google's component update service, as in stock Chromium; no patch in the series changes it yet. | Component name and version. | Chromium ships security-critical data as components (for example certificate revocation sets). Which ones to mirror, proxy or remove is decided before 1.0. |
 | Safe Browsing list updates | Google (`safebrowsing.googleapis.com`); refused in these builds, see the Safe Browsing section | Hashed URL prefixes, not URLs. | Phishing and malware protection. |
 | Network time | Google (`clients2.google.com`) | A request for the current time. | Chromium judges certificate dates with it. Turning it off is not done yet (below). |
@@ -257,33 +258,47 @@ from a copied one (S-89).
 
 ## The update check
 
-Stedding will check for updates against the GitHub Releases API
-(`decisions/0014-github-releases-as-update-channel.md`); no build does yet
-(`BACKLOG.md` S-74). It is the one endpoint this project deliberately adds to
-Chromium, so it is described exactly.
+On the Mac, Stedding updates itself with Sparkle 2 from a signed feed in this
+repository (`decisions/0022-sparkle-updates-the-mac.md`, which partly supersedes
+`decisions/0014-github-releases-as-update-channel.md`; `docs/features/updates.md`). It is
+the one endpoint this project deliberately adds to Chromium, so it is described exactly.
+Windows has no updater yet (`BACKLOG.md` S-74).
 
 | | |
 |---|---|
-| Endpoint | the releases of `ysalitrynskyi/stedding-browser` on `api.github.com`. The exact request is fixed when the check is built: `/releases/latest` returns only full releases, and every Stedding release so far is a pre-release. |
-| Sends | a plain HTTPS GET. No account, no install id, no machine id, no usage data, nothing in the query that identifies anyone. |
-| Receives | the newest release tag, compared against the running version. |
-| Frequency | at most once a day, and only while enabled. |
-| Default | **off** until it has a settings entry, which `QUALITY.md` requires before any feature ships. |
+| Feed | `https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast.xml`, the file `tooling/publish-appcast` writes after a release. |
+| Download | the release's own image, `https://github.com/ysalitrynskyi/stedding-browser/releases/download/v<version>/Stedding-<version>-arm64.dmg`, only when the feed lists a later version. |
+| Sends | a plain HTTPS GET with Sparkle's user agent, which names the browser and its version. No account, no install id, no machine id, no system profile (`SUEnableSystemProfiling` is off and the browser adds no parameters), nothing in the query. |
+| Receives | the feed: each release's version, minimum macOS, size, and EdDSA signature. |
+| Frequency | ten seconds after launch when a day has passed since the last check, then once a day. A check the user asks for (Stedding › Check for Updates…, the command bar, the About page) runs when asked. |
+| Default | **on** (the owner, 2026-10-16), with "Update Stedding automatically" in Settings › Stedding › Updates. |
+| Verified | the image against the project's EdDSA public key in the app, before it is unpacked, and the feed's own signature; then Sparkle checks the new app's code signature. A build made locally (signed ad hoc) never runs the updater. |
 
-**What GitHub can see.** An IP address and a timing pattern. Over time that is
-enough to infer roughly where an installation is and that it is still running.
-That is a real cost and it is written here rather than hidden behind the phrase
-"no telemetry", which would be technically true and misleading.
+**What GitHub can see.** An IP address, a user agent naming the version, and a
+timing pattern. Over time that is enough to infer roughly where an installation is,
+which version it runs, and that it is still running. That is a real cost and it is
+written here rather than hidden behind the phrase "no telemetry", which would be
+technically true and misleading.
 
 **What it is not.** It is not a check-in, a licence check, or an analytics event.
 Nothing identifies the installation, and the response is the same for everybody.
 
 **Why GitHub rather than our own server.** Running an update service means
 running infrastructure that knows who is asking. The release artifacts already
-live on GitHub, so the update metadata and the download are the same objects, and
-there is no additional party — including us — learning anything. If GitHub ever
-becomes unacceptable, the check is one URL to move.
+live on GitHub, so the download is the release's own image, and there is no
+additional party — including us — learning anything. If GitHub ever becomes
+unacceptable, the feed is one URL to move.
 
-**Turning it off.** The settings entry disables it completely; there is no
-"reduced" mode that still calls home. A build with the check off makes no request
-to GitHub at all.
+**Turning it off.** With "Update Stedding automatically" off the browser does not
+start Sparkle at all: there is no "reduced" mode that still calls home, and no
+request to GitHub until the user chooses Check for Updates. A version already
+downloaded before the switch went off still installs when the browser quits.
+
+**The thank-you pages.** After the install, when the welcome flow ends, and on the
+first launch of each later version, the browser opens one page on stedding.dev
+(Cloudflare Pages): `/thanks/` and `/thanks/updated/#v<version>`. The fragment is
+not sent, so the server learns only that someone opened the page. The pages run no
+analytics, ask for no consent, set no cookie and load nothing from another host;
+their `Cache-Control: no-transform` keeps Cloudflare's edge from adding its
+page-view beacon. "Show a thank-you page after an update" turns the second off;
+the first opens once per installation.

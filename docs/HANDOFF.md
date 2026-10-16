@@ -37,15 +37,15 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Ninety traps follow. Read the one for the topic in front of you, not the list.
+Ninety-one traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91 |
 | Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
 
@@ -1173,6 +1173,20 @@ private window has.
     changed (`find out/<dir> -name '*.o' -newer <marker> -delete`, `*.obj` on Windows), or
     the next build mixes two layouts of one class.
 
+91. **The Windows checks build is the only one that sees a pointer left dangling at a
+    window's close.** Patch 0067's `AltGrChords` kept a raw pointer to its window's widget,
+    which a browser window frees before its native window. Every browser test passed on
+    `win-release`, where the stale pointer was only ever cleared; on `win-checks` the
+    dangling-pointer detector stopped every test at its window's close, and the release
+    build crashed at shutdown in one test two runs in four, with a stack that named
+    nothing of Stedding's (identical code folding gives a release stack the wrong
+    function names). The suite on `win-checks` (`STEDDING_TEST_OUT=win-checks tooling/dev
+    test browser --no-build`) belongs to every round that adds a raw pointer on Windows,
+    and a shutdown crash in a release run is read on the checks build, where the stack is
+    true. Two failures it showed on 2026-10-16 are older than that round (`S-213`, `S-214`).
+    And a `tar` made on the Mac for the PC carries `._*` files unless
+    `COPYFILE_DISABLE=1` is set; they turn up as untracked files in the checkout there.
+
 ## The Windows build
 
 Git for Windows for the bash tooling, PowerShell for the rest, Visual Studio's own
@@ -1237,6 +1251,52 @@ decisions and the definition of done. This file keeps no list of its own. What e
 was seen to do, and which release carries it, is `docs/PROJECT-LOG.md` and
 `docs/release-notes/`.
 
+## The updater (Mac)
+
+Sparkle 2 (ADR 0022, `docs/features/updates.md`). What lives where:
+
+- `tooling/fetch-sparkle` puts the framework in the checkout at
+  `third_party/stedding_sparkle/` (ignored by its `.gitignore`), with a `README.chromium` so
+  the credits page names it; `tooling/build-chromium` runs it on every Mac build and sets
+  `stedding_sparkle = true`. A build without it simply has no updater.
+- The feed URL and the EdDSA public key are in `chrome/app/app-Info.plist`;
+  `build/apple/tweak_info_plist.py` writes `CFBundleVersion` from VERSION (Up11).
+- Only a bundle signed by a team starts the updater, so `out/release/Stedding.app`
+  (ad hoc) never replaces itself. Tests never start it (`--test-type`); they use
+  `stedding::FakeAppUpdater`.
+- **The private key** is in the release Mac's login keychain under the account
+  `stedding` (Sparkle's `generate_keys --account stedding`, made 2026-10-16), and nowhere
+  else unless the operator has exported it (`generate_keys --account stedding -x <file>`,
+  into the password manager, then the file deleted). Without it no installed copy can be
+  offered an update: a new key ships only in a release people install by hand.
+- Offering a release: `tooling/publish-appcast` after `tooling/publish-release` (below).
+
+The local n-1 check, before a release that changes the updater or its feed: two copies of
+one `out/release` build, both signed with the Developer ID in development mode (no
+notarization; `sign_chrome.py --development --notarize none`), the older with
+`CFBundleVersion` lowered. Before signing, each copy's `Info.plist` gets `SUFeedURL` pointing
+at a local server (`http://127.0.0.1:<port>/appcast.xml`, which `NSAllowsArbitraryLoads`
+lets through), `CrProductDirName` set to a test folder (so the copy Sparkle relaunches
+without arguments still opens the test profile, never the operator's), and
+`SUDefaultsDomain` set to a test domain (Sparkle's own keys away from the real app's). The
+test folder is made empty before the first launch, with a `First Run` file in it: without
+the folder, patch 0050's legacy migration seeds it from `~/Library/Application
+Support/Chromium`, and without the file the relaunch is a first run, which restores no tabs.
+The newer copy goes into a DMG signed with `sign_update`, the feed is written with
+`tooling/appcast.py write --url ...` and signed, a `python3 -m http.server` serves both, and
+the older copy runs from a folder of its own. Ten seconds after launch it fetches the feed
+and the image, the sidebar shows the pill (about twenty seconds in, on 2026-10-16), and a
+press of it through the accessibility API (`AXPress`, which moves no pointer) or a quit
+installs the newer copy in place; the relaunched copy reads the newer `CFBundleVersion` and
+has the test profile's tabs. Signing with the Developer ID rather than an Apple Development
+identity keeps macOS from asking for the "Stedding Safe Storage" key, which the relaunched
+copy, started without `--use-mock-keychain`, would otherwise wait on
+(`docs/ARCHITECTURE.md`). The copies share the real app's defaults domain
+(`dev.stedding.Stedding`), where Chromium writes `LastRunAppBundlePath` and the migration
+its decision: export it before, and afterwards delete the domain and import the export
+(`defaults import` alone keeps keys the test added). Afterwards: stop both, delete the test
+profile and its cache folder, and `defaults delete` the test domain.
+
 ## Release channel
 
 Pre-releases on GitHub Releases: the Mac's DMG signed with the Developer ID and
@@ -1249,7 +1309,11 @@ dist/signed/stable/Stedding.app`, `tooling/package-dmg release --app
 dist/signed/stable/Stedding.app` (`dist/Stedding-<VERSION>-arm64.dmg` and its `.sha256`),
 `syspolicy_check distribution` on that app (trap 47), paste the checksum into
 `docs/release-notes/v<ver>.md`, commit, **push**, `tooling/publish-release --check`,
-then `tooling/publish-release`. Betas 1 to 8 went out unsigned, with `docs/INSTALL.md`'s
+then `tooling/publish-release`. Then, once the release has been tried the way a user gets
+it, offer it to installed copies: `tooling/publish-appcast --check`, then
+`tooling/publish-appcast --push` (ADR 0022; it signs the image, writes and signs
+`updates/appcast.xml`, commits and pushes it; the push is the release's own step and needs
+the operator's yes like the publish). Betas 1 to 8 went out unsigned, with `docs/INSTALL.md`'s
 `xattr` command in their notes. The Windows
 image joins the same release from the Windows PC: `tooling\win\build-until-done.ps1`
 (then both suites on that exact build), `tooling\win\package-installer.ps1`,

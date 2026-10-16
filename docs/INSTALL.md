@@ -7,8 +7,10 @@ each. Not every release has both: take the newest one with a file for your platf
 
 The macOS image is signed with the project's Developer ID and notarized by Apple from
 beta 10 on, so it opens like any other app. The Windows installer is **not code-signed
-yet**, which means one SmartScreen prompt (`S-56` in [BACKLOG.md](../BACKLOG.md)). There are
-no automatic updates yet on either platform (`S-74`).
+yet**, which means one SmartScreen prompt (`S-56` in [BACKLOG.md](../BACKLOG.md)). The Mac
+version updates itself from the first release after 0.2.0 beta 15, the first built with
+its updater;
+Windows has no automatic updates yet (`S-74`).
 
 ## macOS (Apple silicon)
 
@@ -49,9 +51,17 @@ across.
 
 ### Updating
 
-Download the new DMG and drag Stedding over the old one in Applications; it opens with
-no extra step. Your profile is untouched. In-app updates come next, the Mac first
-(`S-74`).
+From the release after 0.2.0 beta 15 on, the Mac version updates itself: once a day it looks for a new
+version on GitHub, downloads it in the background, and shows **New Stedding Version
+Available** at the bottom of the sidebar; click it to restart into the new version, or just
+quit, and it installs then. **Stedding › Check for Updates…** looks at once. To stop it, turn
+off **Update Stedding automatically** in Settings › Stedding › Updates; it then makes no
+update request at all. After each update Stedding opens one thank-you page on stedding.dev,
+which the switch beside it turns off ([features/updates.md](features/updates.md),
+[PRIVACY.md](PRIVACY.md)).
+
+Before then, or by hand: download the new DMG and drag Stedding over the old one in
+Applications; it opens with no extra step. Your profile is untouched.
 
 ### Uninstalling
 

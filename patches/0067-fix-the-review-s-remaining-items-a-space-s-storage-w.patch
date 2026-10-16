@@ -78,8 +78,8 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/browser/ui/views/frame/browser_view.cc |   9 +
  .../frame/vertical_tab_strip_region_view.cc   |  24 ++-
  chrome/browser/ui/views/stedding/BUILD.gn     |  32 ++++
- .../browser/ui/views/stedding/altgr_chords.cc |  93 +++++++++
- .../browser/ui/views/stedding/altgr_chords.h  |  66 +++++++
+ .../browser/ui/views/stedding/altgr_chords.cc |  94 ++++++++++
+ .../browser/ui/views/stedding/altgr_chords.h  |  70 +++++++
  .../views/stedding/altgr_chords_unittest.cc   | 154 +++++++++++++++
  .../ui/webui/settings/import_data_handler.cc  |   8 +-
  .../settings/stedding_shortcuts_handler.cc    |  18 +-
@@ -109,7 +109,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../stedding_notification_partition.h         |  40 ++++
  content/public/browser/BUILD.gn               |   1 +
  .../public/browser/stedding_session_storage.h |  37 ++++
- 61 files changed, 2154 insertions(+), 131 deletions(-)
+ 61 files changed, 2159 insertions(+), 131 deletions(-)
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.cc
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.h
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords_unittest.cc
@@ -1680,10 +1680,10 @@ index 206d8ae894222..5df75849e0dcb 100644
  }
 diff --git a/chrome/browser/ui/views/stedding/altgr_chords.cc b/chrome/browser/ui/views/stedding/altgr_chords.cc
 new file mode 100644
-index 0000000000000..02c6813d72084
+index 0000000000000..7a72ec4f7300a
 --- /dev/null
 +++ b/chrome/browser/ui/views/stedding/altgr_chords.cc
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,94 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1706,8 +1706,9 @@ index 0000000000000..02c6813d72084
 +namespace stedding {
 +
 +AltGrChords::AltGrChords(views::Widget* widget, LeftAltHeld left_alt_held)
-+    : widget_(widget), left_alt_held_(std::move(left_alt_held)) {
-+  window_ = widget_ ? widget_->GetNativeWindow() : nullptr;
++    : widget_(widget ? widget->GetWeakPtr() : nullptr),
++      left_alt_held_(std::move(left_alt_held)) {
++  window_ = widget ? widget->GetNativeWindow() : nullptr;
 +  if (window_) {
 +    window_->AddPreTargetHandler(this);
 +    observation_.Observe(window_.get());
@@ -1770,7 +1771,7 @@ index 0000000000000..02c6813d72084
 +  window_->RemovePreTargetHandler(this);
 +  observation_.Reset();
 +  window_ = nullptr;
-+  widget_ = nullptr;
++  widget_.reset();
 +  if (owned_by_window_) {
 +    delete this;
 +  }
@@ -1779,10 +1780,10 @@ index 0000000000000..02c6813d72084
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/stedding/altgr_chords.h b/chrome/browser/ui/views/stedding/altgr_chords.h
 new file mode 100644
-index 0000000000000..bacecbfc1567e
+index 0000000000000..7c04840743e52
 --- /dev/null
 +++ b/chrome/browser/ui/views/stedding/altgr_chords.h
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,70 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1792,6 +1793,7 @@ index 0000000000000..bacecbfc1567e
 +
 +#include "base/functional/callback.h"
 +#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
 +#include "base/scoped_observation.h"
 +#include "ui/aura/window.h"
 +#include "ui/aura/window_observer.h"
@@ -1837,7 +1839,10 @@ index 0000000000000..bacecbfc1567e
 +  void OnWindowDestroying(aura::Window* window) override;
 +
 + private:
-+  raw_ptr<views::Widget> widget_;
++  // Weak: a browser window's widget goes before its native window does, and
++  // a raw pointer to it dangled until OnWindowDestroying (the dangling-pointer
++  // detector's find in the Windows checks build, 2026-10-16).
++  base::WeakPtr<views::Widget> widget_;
 +  raw_ptr<aura::Window> window_;
 +  const LeftAltHeld left_alt_held_;
 +  // Made by AttachTo(): deletes itself as its window goes.

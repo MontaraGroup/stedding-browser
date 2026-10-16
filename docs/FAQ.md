@@ -45,9 +45,12 @@ repository's patch series, and its SHA-256 checksum is published beside the file
 can check what you downloaded.
 
 **Will it update itself?**
-Not yet. New versions appear on the Releases page. The in-app updater is designed
-(it checks GitHub Releases, sends no identifier) and comes next, now that the Mac image is
-signed (`S-74`).
+On the Mac, from the release after 0.2.0 beta 15 on: it checks once a day, downloads a new version in the
+background and shows "New Stedding Version Available" at the bottom of the sidebar; a click
+restarts into it. Every update is signed with the project's key and checked before it
+installs, and the check sends nothing that identifies you
+([PRIVACY.md](PRIVACY.md)). Settings › Stedding › Updates turns it off. Windows has no
+updater yet; new versions there appear on the Releases page (`S-74`).
 
 **What is planned after that?**
 The rest of the Windows port (little windows, signing, updates), then Linux. Alongside

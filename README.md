@@ -292,8 +292,9 @@ Privacy here is a set of defaults, not a mode. Out of the box:
 [docs/PRIVACY.md](docs/PRIVACY.md) lists the network connections the browser makes and
 records what a fresh profile actually contacted; two Google calls on the earlier
 record are gone from the series since 2026-10-12 and leave with the next release
-(`S-54`, `S-67`), and anything else not on the list is a bug we want to hear about. Updates are not automatic yet: new versions appear on the Releases
-page.
+(`S-54`, `S-67`), and anything else not on the list is a bug we want to hear about. On the
+Mac, from the release after 0.2.0 beta 15 on, Stedding updates itself from GitHub once a day (off in Settings);
+on Windows new versions appear on the Releases page.
 
 ## Status and roadmap
 
@@ -307,14 +308,14 @@ and what comes next:
 | macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 14's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
 | Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and the dangling-pointer detector (beta 14's series) and under AddressSanitizer (the series of 2026-09-30) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
-| Automatic updates | Next, the Mac first (`S-74`); checks go to GitHub Releases, with no identifier (ADR 0014) |
+| Automatic updates | The Mac from the release after 0.2.0 beta 15 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022); Windows next (`S-74`) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
 | Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (the Features section of [BACKLOG.md](BACKLOG.md)). Undo after closing tabs and several smaller items are in since beta 14 |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
-Known limits in the current builds: no automatic updates yet, and the Windows installer is
-unsigned; ⌃1–⌃9 collide with macOS Mission Control once you have a second desktop (the Spaces
+Known limits in the current builds: no automatic updates on the Mac before the release after 0.2.0
+beta 15, and none yet on Windows, and the Windows installer is unsigned; ⌃1–⌃9 collide with macOS Mission Control once you have a second desktop (the Spaces
 menu keeps the commands reachable); a clipboard manager that owns ⇧⌘C system-wide
 takes it before the browser does; while Arc runs it takes ⌥⌘N from every app (`S-79`);
 on Windows, close Stedding before installing a release on the same Chromium number
@@ -350,8 +351,9 @@ contacted only when you install or update an extension. The connections are list
 `~/Library/Application Support/Stedding`, on Windows under `%LOCALAPPDATA%\Stedding`.
 You can also export a Space as a file.
 
-**Will it update itself?** Not yet. New versions appear on the Releases page; the
-in-app updater is next, the Mac first (`S-74`).
+**Will it update itself?** On the Mac, from the release after 0.2.0 beta 15 on: once a day, in the background,
+with "New Stedding Version Available" at the bottom of the sidebar when it is ready, and a
+switch in Settings to turn it off. Windows has no updater yet (`S-74`).
 
 **Intel Mac? Linux?** Neither yet. Apple silicon and Windows x64 today; Linux is the
 next platform after the Windows port is complete.

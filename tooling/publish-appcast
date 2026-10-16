@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Offer this release's Mac image to installed copies of Stedding: sign it for
+# Sparkle and put it first in the update feed, updates/appcast.xml (ADR 0022,
+# docs/features/updates.md).
+#
+# Usage:
+#   tooling/publish-appcast --check    # what would be offered; changes nothing
+#   tooling/publish-appcast            # sign, write the feed, sign it, commit it
+#   tooling/publish-appcast --push     # the same, then push the commit to main
+#
+# Run it on the Mac after tooling/publish-release, once the release has been
+# tried the way a user gets it (docs/HANDOFF.md, trap 47): a pushed feed is
+# the moment every installed Stedding with automatic updates on starts
+# downloading the image, within a day. Pushing is the release's own step and
+# needs the operator's yes for that release, like publishing it.
+#
+# What it refuses:
+#   * an image that is not the release's: dist/Stedding-<VERSION>-arm64.dmg
+#     must match the .sha256 the GitHub release carries;
+#   * an image whose app could not take a later update itself: no
+#     Sparkle.framework, another public key than the one signing here, or a
+#     CFBundleVersion that is not VERSION's (build/apple/tweak_info_plist.py);
+#   * a feed whose signature does not verify.
+# The EdDSA private key is Sparkle's, in the login keychain under the account
+# "stedding" (generate_keys --account stedding). It is never in this
+# repository; its backup is the operator's.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=./lib.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+ACCOUNT="stedding"
+FEED_PATH="updates/appcast.xml"
+
+sha256_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+
+main() {
+    CHECK=0
+    PUSH=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --check) CHECK=1; shift ;;
+        --push)  PUSH=1; shift ;;
+        -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+        *) die "unknown argument: $1" ;;
+      esac
+    done
+    [ "$(uname -s)" = Darwin ] || die "the feed is the Mac's; run this on the Mac"
+
+    report() { printf '  %-16s %s\n' "$1" "$2" >&2; }
+    missing=0
+
+    version="$(tr -d '[:space:]' < "$STEDDING_ROOT/VERSION")"
+    tag="v$version"
+    printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' \
+      || die "tag '$tag' does not match v<major>.<minor>.<patch>[-beta.<n>] (ADR 0014)"
+    repo="$(git -C "$STEDDING_ROOT" remote get-url origin 2>/dev/null \
+            | sed -E 's#^git@github\.com:#https://github.com/#; s#\.git$##' \
+            | sed -E 's#^https://github\.com/##')"
+    printf '%s' "$repo" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' \
+      || die "cannot read owner/name from origin"
+    report "release" "$tag on $repo"
+
+    tools="$("$STEDDING_ROOT/tooling/fetch-sparkle" --tools)" \
+      || die "Sparkle's tools are not in place (tooling/fetch-sparkle)"
+    public_key="$("$tools/generate_keys" --account "$ACCOUNT" -p 2>/dev/null | tail -1 || true)"
+    if [ -n "$public_key" ]; then
+      report "signing key" "account $ACCOUNT, public $public_key"
+    else
+      report "signing key" "MISSING: no EdDSA key for account $ACCOUNT in the keychain"
+      missing=1
+    fi
+
+    dmg="$STEDDING_ROOT/dist/Stedding-$version-arm64.dmg"
+    if [ ! -f "$dmg" ] || [ ! -f "$dmg.sha256" ]; then
+      report "image" "MISSING: $dmg and its .sha256 (tooling/package-dmg)"
+      missing=1
+    else
+      local_sum="$(sha256_of "$dmg")"
+      released_sum="$(gh release download "$tag" --repo "$repo" \
+                       --pattern "$(basename "$dmg").sha256" --output - 2>/dev/null \
+                       | cut -d' ' -f1 || true)"
+      if [ "$local_sum" = "$released_sum" ]; then
+        report "image" "$(basename "$dmg"), the release's (sha256 $local_sum)"
+      else
+        report "image" "MISSING: $(basename "$dmg") is $local_sum; the release says '${released_sum:-nothing}'"
+        missing=1
+      fi
+    fi
+
+    bundle_version=""
+    minimum_system=""
+    if [ -f "$dmg" ]; then
+      mount="$(mktemp -d "${TMPDIR:-/tmp}/stedding-appcast.XXXXXX")"
+      # shellcheck disable=SC2064  # expand $mount now
+      trap "hdiutil detach -quiet '$mount' 2>/dev/null; rmdir '$mount' 2>/dev/null" EXIT
+      hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mount" "$dmg" \
+        || die "could not mount $dmg"
+      app="$mount/Stedding.app"
+      plist="$app/Contents/Info.plist"
+      read_key() { /usr/libexec/PlistBuddy -c "Print :$1" "$plist" 2>/dev/null || true; }
+      bundle_version="$(read_key CFBundleVersion)"
+      minimum_system="$(read_key LSMinimumSystemVersion)"
+      app_key="$(read_key SUPublicEDKey)"
+      expected="$(python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("t", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+print(m._SteddingBundleVersion(sys.argv[2]) or "")' \
+        "$CHROMIUM_SRC/build/apple/tweak_info_plist.py" "$version" 2>/dev/null || true)"
+      if [ ! -d "$app/Contents/Frameworks/Sparkle.framework" ]; then
+        report "app" "MISSING: the image's app has no Sparkle.framework"; missing=1
+      elif [ -z "$app_key" ] || [ "$app_key" != "$public_key" ]; then
+        report "app" "MISSING: the app's SUPublicEDKey '${app_key:-none}' is not the signing key's"; missing=1
+      elif [ -z "$expected" ] || [ "$bundle_version" != "$expected" ]; then
+        report "app" "MISSING: CFBundleVersion $bundle_version, VERSION wants '${expected:-?}'"; missing=1
+      else
+        report "app" "CFBundleVersion $bundle_version, macOS $minimum_system or later, updater in"
+      fi
+      hdiutil detach -quiet "$mount" || true
+    fi
+
+    if [ -n "$(git -C "$STEDDING_ROOT" status --short -- "$FEED_PATH")" ]; then
+      report "feed" "DIRTY: $FEED_PATH has uncommitted changes"; missing=1
+    else
+      report "feed" "$FEED_PATH"
+    fi
+    branch="$(git -C "$STEDDING_ROOT" rev-parse --abbrev-ref HEAD)"
+    if [ "$PUSH" -eq 1 ] && [ "$branch" != main ]; then
+      report "branch" "MISSING: on $branch; the feed is read from main"; missing=1
+    fi
+
+    if [ "$CHECK" -eq 1 ]; then
+      if [ "$missing" -eq 0 ]; then log "ready to offer $version"; else warn "not ready"; fi
+      exit "$missing"
+    fi
+    [ "$missing" -eq 0 ] || die "not ready; run with --check for the list"
+
+    signature="$("$tools/sign_update" --account "$ACCOUNT" -p "$dmg")" \
+      || die "sign_update could not sign $dmg"
+    length="$(stat -f%z "$dmg")"
+    when="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+    feed="$STEDDING_ROOT/$FEED_PATH"
+    mkdir -p "$(dirname "$feed")"
+    python3 -I "$STEDDING_ROOT/tooling/appcast.py" write --feed "$feed" --repo "$repo" \
+      --version "$version" --bundle-version "$bundle_version" \
+      --minimum-system "$minimum_system" --length "$length" \
+      --signature "$signature" --date "$when" || die "could not write the feed"
+    "$tools/sign_update" --account "$ACCOUNT" "$feed" >/dev/null \
+      || die "sign_update could not sign the feed"
+    "$tools/sign_update" --account "$ACCOUNT" --verify "$feed" >/dev/null \
+      || die "the signed feed does not verify"
+    python3 -I "$STEDDING_ROOT/tooling/appcast.py" check --feed "$feed" >&2
+
+    git -C "$STEDDING_ROOT" add "$FEED_PATH"
+    git -C "$STEDDING_ROOT" commit --quiet -m "release: offer $version to installed copies" \
+      -m "The update feed lists the image the release carries, signed for Sparkle." \
+      || die "could not commit the feed"
+    log "committed $FEED_PATH"
+    if [ "$PUSH" -eq 1 ]; then
+      git -C "$STEDDING_ROOT" push --quiet origin main || die "push failed"
+      log "pushed: installed copies see $version at their next check"
+    else
+      log "next: tooling/publish-appcast --push (the operator's yes for this release)"
+    fi
+}
+
+main "$@"

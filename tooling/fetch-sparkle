@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Put Sparkle 2's framework where the Mac build bundles it, from the pinned
+# release, checked against the checksum GitHub publishes for it (ADR 0022,
+# docs/features/updates.md).
+#
+# Usage:
+#   tooling/fetch-sparkle            # fetch if missing or another version; quiet otherwise
+#   tooling/fetch-sparkle --check    # say what is there; change nothing
+#   tooling/fetch-sparkle --tools    # print the directory holding sign_update and generate_keys
+#
+# The framework goes to third_party/stedding_sparkle/ in the checkout, which the
+# checkout's .gitignore leaves out (patch 0068), with a README.chromium so
+# chrome://credits names it. The archive and the release's command-line tools
+# stay in $STEDDING_CACHE_DIR (default ~/Library/Caches/Stedding). The XPC
+# services are left out: only a sandboxed app uses them, and every piece of
+# nested code shipped is one more the release has to sign.
+#
+# tooling/build-chromium runs this before every Mac build and then sets
+# stedding_sparkle = true; a build without it has no updater.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=./lib.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+
+SPARKLE_VERSION="2.10.0"
+# GitHub's own digest of the release asset (gh api .../releases/tags/2.10.0).
+SPARKLE_SHA256="c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
+SPARKLE_URL="https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+
+sha256_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+
+main() {
+    MODE=fetch
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --check) MODE=check; shift ;;
+        --tools) MODE=tools; shift ;;
+        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        *) die "unknown argument: $1" ;;
+      esac
+    done
+    [ "$(uname -s)" = Darwin ] || die "Sparkle is the Mac's updater; run this on the Mac"
+
+    cache="${STEDDING_CACHE_DIR:-$HOME/Library/Caches/Stedding}/sparkle/$SPARKLE_VERSION"
+    dest="$CHROMIUM_SRC/third_party/stedding_sparkle"
+    stamp="$dest/.stedding-sparkle"
+    want="$SPARKLE_VERSION $SPARKLE_SHA256"
+
+    current=no
+    if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ] \
+       && [ -d "$dest/Sparkle.framework" ] && [ -x "$cache/bin/sign_update" ]; then
+      current=yes
+    fi
+
+    case "$MODE" in
+      check)
+        if [ "$current" = yes ]; then
+          log "Sparkle $SPARKLE_VERSION in $dest; tools in $cache/bin"
+          exit 0
+        fi
+        warn "Sparkle $SPARKLE_VERSION is not in place: run tooling/fetch-sparkle"
+        exit 1 ;;
+      tools)
+        if [ "$current" = no ]; then
+          main >&2 || exit 1
+        fi
+        printf '%s\n' "$cache/bin"
+        exit 0 ;;
+    esac
+    [ "$current" = yes ] && exit 0
+
+    [ -d "$CHROMIUM_SRC" ] || die "no checkout at $CHROMIUM_SRC"
+    mkdir -p "$cache"
+    archive="$cache/Sparkle-$SPARKLE_VERSION.tar.xz"
+    if [ ! -f "$archive" ] || [ "$(sha256_of "$archive")" != "$SPARKLE_SHA256" ]; then
+      log "downloading Sparkle $SPARKLE_VERSION"
+      rm -f "$archive.part"
+      curl -fsSL --retry 3 -o "$archive.part" "$SPARKLE_URL" \
+        || die "could not download $SPARKLE_URL"
+      got="$(sha256_of "$archive.part")"
+      [ "$got" = "$SPARKLE_SHA256" ] \
+        || { rm -f "$archive.part"; die "Sparkle-$SPARKLE_VERSION.tar.xz is $got, not $SPARKLE_SHA256"; }
+      mv "$archive.part" "$archive"
+    fi
+
+    # An archive is data until checked: it unpacks into a fresh directory of
+    # its own, and nothing in it runs here.
+    work="$(mktemp -d "$cache/unpack.XXXXXX")"
+    # shellcheck disable=SC2064  # expand $work now
+    trap "rm -rf '$work'" EXIT
+    tar -xJf "$archive" -C "$work" || die "could not unpack $archive"
+    [ -d "$work/Sparkle.framework/Versions/B" ] || die "the archive has no Sparkle.framework/Versions/B"
+    [ -f "$work/LICENSE" ] || die "the archive has no LICENSE"
+
+    rm -rf "$work/Sparkle.framework/Versions/B/XPCServices" \
+           "$work/Sparkle.framework/XPCServices"
+
+    rm -rf "${cache:?}/bin"
+    ditto "$work/bin" "$cache/bin"
+
+    mkdir -p "$dest"
+    rm -rf "$dest/Sparkle.framework.new"
+    ditto "$work/Sparkle.framework" "$dest/Sparkle.framework.new"
+    rm -rf "$dest/Sparkle.framework"
+    mv "$dest/Sparkle.framework.new" "$dest/Sparkle.framework"
+    cp "$work/LICENSE" "$dest/LICENSE"
+    cat > "$dest/README.chromium" <<EOF
+Name: Sparkle
+URL: https://github.com/sparkle-project/Sparkle
+Version: $SPARKLE_VERSION
+License: MIT, BSD-2-Clause, Zlib
+License File: LICENSE
+Security Critical: yes
+Update Mechanism: Manual
+Shipped: yes
+
+Description:
+Sparkle 2, the macOS software update framework, as its release archive
+Sparkle-$SPARKLE_VERSION.tar.xz ships it (sha256 $SPARKLE_SHA256),
+without the XPC services only a sandboxed app uses. Put here by Stedding's
+tooling/fetch-sparkle; not part of the checkout (Stedding ADR 0022).
+EOF
+    printf '%s\n' "$want" > "$stamp"
+    log "Sparkle $SPARKLE_VERSION in $dest"
+}
+
+main "$@"

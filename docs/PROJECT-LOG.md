@@ -7,6 +7,41 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-16 -- Stedding updates itself on the Mac, and says thank you (patch 0068)
+
+The operator asked for automatic updates like Arc's and for pages on stedding.dev that
+thank people and ask them to sponsor the project, after the install and after each update;
+they chose Sparkle 2, on by default, and both pages. Patch 0068 and ADR 0022 hold it
+(`docs/features/updates.md` Up1-Up13).
+
+- The updater: Sparkle 2.10.0 (`tooling/fetch-sparkle`) driven by the browser as its user
+  driver, from a feed in this repository signed with the project's EdDSA key; "New Stedding
+  Version Available" at the sidebar's foot, About, the command bar and Stedding › Check for
+  Updates…; a switch in Settings › Stedding › Updates that stops every request. Only a
+  team-signed bundle runs it. `tooling/publish-appcast` offers a release.
+- The thank-you pages: `/thanks/` and `/thanks/updated/` on stedding.dev (the site's
+  `87cfd6a`), which run no analytics and set no cookie; on the live site a browser's request
+  for them gets no Cloudflare beacon while the home page's does.
+- Found on the way, on the Windows checks build: patch 0067's `AltGrChords` held its window's
+  widget by a raw pointer that dangled at every window's close, and crashed one test at
+  shutdown in the release build two runs in four; it now holds it weakly (folded into 0067,
+  trap 91). Two older failures there are filed (`S-213`, `S-214`).
+
+- The n-1 check on the Mac (docs/HANDOFF.md, "The updater"): two copies of one build signed
+  with the Developer ID, the older fed a local signed feed. Ten seconds after launch it
+  fetched the feed and the image; about twenty seconds in the pill showed; a press quit it
+  cleanly and opened the newer copy in its place, with the test tab back. Check for Updates…
+  opened About with "Stedding is up to date". A feed edited after signing was refused before
+  any download, and an image swapped under a valid feed downloaded and was not installed.
+  The first live check showed the pill from edge to edge of the sidebar; it now keeps the tab
+  rows' column, with a test that failed without that.
+- Sparkle's helpers come signed ad hoc, which `codesign` replaces only with `--force`; the
+  signer now takes those signatures off before signing them (`parts.py`).
+
+Tests: on the Mac's release build 865 unit tests, 20 component tests and 165 browser tests;
+on the PC's, from the same tree, 852 unit tests and 158 browser tests; all passing. On the
+PC's checks build only the two filed failures (four tests).
+
 ## 2026-10-15, night -- the review's remaining items, and a new default favicon (patch 0067)
 
 The operator asked for `S-179` to `S-189` to be fixed too, and for Chromium's grey default

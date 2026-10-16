@@ -1,0 +1,3516 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Fri, 16 Oct 2026 06:28:51 -0400
+Subject: feat: Stedding updates itself on the Mac, and says thank you after an
+ install and an update
+
+The Mac gains an updater (docs/features/updates.md, ADR 0022). Sparkle 2, which
+tooling/fetch-sparkle puts at third_party/stedding_sparkle, is bundled into
+Contents/Frameworks when stedding_sparkle is set, and the browser loads it at
+runtime and is both its user driver and its delegate, so no Sparkle window opens.
+It checks a signed feed (SUFeedURL, SUPublicEDKey, SURequireSignedFeed and
+SUVerifyUpdateBeforeExtraction in app-Info.plist) once a day and downloads in the
+background; a downloaded version waits behind "New Stedding Version Available" at
+the sidebar's foot, above the Space row, as Arc does, and a click restarts into it
+with the session restored. The About page checks when it opens, shows the
+download, and its Relaunch restarts through the updater; the command bar lists
+Restart to Update Stedding and Check for Updates, and the Stedding menu has Check
+for Updates... under About. "Update Stedding automatically" in Settings > Stedding >
+Updates turns it off, and then Sparkle is never started. Only a bundle signed by a
+team starts it, so a local build never replaces itself.
+
+CFBundleVersion now carries Stedding's version (10020.16 for 0.2.0-beta.16;
+tweak_info_plist.py), which Sparkle and LaunchServices compare, and Chromium's
+signer signs Sparkle's helpers and framework before the app (parts.py).
+
+After the install, when the welcome flow ends, and on the first launch of each
+later version, the browser opens one thank-you page on stedding.dev; the
+update's names the version in its fragment, and "Show a thank-you page after an
+update" turns it off. The version that ran is kept in local state.
+
+Why: the owner asked for automatic updates like Arc's and for the thank-you pages
+(2026-10-16), and a Chromium fork that cannot deliver its own security updates
+leaves its users behind.
+Removable when: never as a whole; the updater is Stedding's own, and a move to
+another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
+---
+ build/apple/tweak_info_plist.py               |  43 ++
+ chrome/BUILD.gn                               |  21 +
+ chrome/app/app-Info.plist                     |  21 +
+ chrome/browser/BUILD.gn                       |   1 +
+ chrome/browser/app_controller_mac.mm          |  14 +
+ chrome/browser/chrome_browser_main_mac.mm     |  35 +
+ .../api/settings_private/prefs_util.cc        |   5 +
+ .../settings/about_page/about_page.ts         |  10 +-
+ .../stedding_page/stedding_page.html.ts       |  23 +-
+ chrome/browser/ui/BUILD.gn                    |   5 +
+ chrome/browser/ui/cocoa/main_menu_builder.mm  |  18 +
+ chrome/browser/ui/stedding/BUILD.gn           |  52 ++
+ chrome/browser/ui/stedding/app_updater.cc     | 106 +++
+ chrome/browser/ui/stedding/app_updater.h      | 114 +++
+ chrome/browser/ui/stedding/app_updater_mac.mm | 723 ++++++++++++++++++
+ .../browser/ui/stedding/fake_app_updater.cc   |  25 +
+ chrome/browser/ui/stedding/fake_app_updater.h |  44 ++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   6 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |  17 +-
+ .../ui/stedding/stedding_prefs_unittest.cc    |  13 +
+ .../browser/ui/stedding/stedding_updates.gni  |  12 +
+ .../browser/ui/stedding/stedding_version.cc   |  85 ++
+ chrome/browser/ui/stedding/stedding_version.h |  21 +
+ .../ui/stedding/stedding_version_unittest.cc  |  49 ++
+ chrome/browser/ui/stedding/thanks_pages.cc    | 134 ++++
+ chrome/browser/ui/stedding/thanks_pages.h     |  60 ++
+ .../ui/stedding/thanks_pages_unittest.cc      |  95 +++
+ chrome/browser/ui/views/commandbar/BUILD.gn   |   1 +
+ .../ui/views/commandbar/command_bar_view.cc   |  26 +
+ chrome/browser/ui/views/frame/browser_view.cc |   5 +-
+ .../frame/vertical_tab_strip_region_view.cc   |  15 +
+ chrome/browser/ui/views/stedding/BUILD.gn     |  26 +
+ .../browser/ui/views/stedding/update_pill.cc  | 160 ++++
+ .../browser/ui/views/stedding/update_pill.h   |  62 ++
+ .../ui/views/stedding/update_pill_unittest.cc | 124 +++
+ .../stedding_welcome/welcome_dialog_view.cc   |  10 +
+ chrome/browser/ui/webui/help/BUILD.gn         |  13 +-
+ .../help/version_updater_stedding_mac.cc      | 113 ++-
+ chrome/browser/ui/webui/settings/BUILD.gn     |   1 +
+ .../settings/browser_lifetime_handler.cc      |  10 +
+ .../browser/ui/webui/settings/settings_ui.cc  |  18 +
+ chrome/installer/mac/signing/parts.py         |  50 ++
+ chrome/test/stedding/BUILD.gn                 |   5 +
+ chrome/test/stedding/updates_browsertest.cc   | 352 +++++++++
+ third_party/.gitignore                        |   2 +
+ 45 files changed, 2725 insertions(+), 20 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/app_updater.cc
+ create mode 100644 chrome/browser/ui/stedding/app_updater.h
+ create mode 100644 chrome/browser/ui/stedding/app_updater_mac.mm
+ create mode 100644 chrome/browser/ui/stedding/fake_app_updater.cc
+ create mode 100644 chrome/browser/ui/stedding/fake_app_updater.h
+ create mode 100644 chrome/browser/ui/stedding/stedding_updates.gni
+ create mode 100644 chrome/browser/ui/stedding/thanks_pages.cc
+ create mode 100644 chrome/browser/ui/stedding/thanks_pages.h
+ create mode 100644 chrome/browser/ui/stedding/thanks_pages_unittest.cc
+ create mode 100644 chrome/browser/ui/views/stedding/update_pill.cc
+ create mode 100644 chrome/browser/ui/views/stedding/update_pill.h
+ create mode 100644 chrome/browser/ui/views/stedding/update_pill_unittest.cc
+ create mode 100644 chrome/test/stedding/updates_browsertest.cc
+
+diff --git a/build/apple/tweak_info_plist.py b/build/apple/tweak_info_plist.py
+index 23d3c4d244596..71a9fcdf623f5 100755
+--- a/build/apple/tweak_info_plist.py
++++ b/build/apple/tweak_info_plist.py
+@@ -109,6 +109,28 @@ def _GetVersion(version_format, values, overrides=None):
+     return result
+ 
+ 
++def _SteddingBundleVersion(version):
++    """CFBundleVersion for a Stedding version (docs/features/updates.md Up11).
++
++    <major>.<minor>.<patch>[-beta.<n>] becomes
++    "<10000 + 1000 * major + 10 * minor + patch>.<n>", with n the beta's
++    number and 999 for the release: two numbers, as LaunchServices wants,
++    ordered as the versions are (Sparkle compares this key), and above the
++    Chromium build numbers (8059.12) the versions before the updater carried.
++    Returns None for a version outside that shape or past its room (minor up
++    to 99, patch up to 9, beta up to 998).
++    """
++    match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?', version)
++    if not match:
++        return None
++    major, minor, patch = (int(match.group(i)) for i in (1, 2, 3))
++    beta = int(match.group(4)) if match.group(4) else 999
++    if minor > 99 or patch > 9 or not 1 <= beta <= 999 or (
++            match.group(4) and beta == 999):
++        return None
++    return '%d.%d' % (10000 + 1000 * major + 10 * minor + patch, beta)
++
++
+ def _AddVersionKeys(
+     plist, version_format_for_key, version=None, overrides=None
+ ):
+@@ -429,6 +451,14 @@ def Main(argv):
+         default=None,
+         help='The version string [major.minor.build.patch]',
+     )
++    parser.add_option(
++        '--stedding_version',
++        dest='stedding_version',
++        action='store',
++        type='string',
++        default='',
++        help='Stedding\'s version, which CFBundleVersion then carries.',
++    )
+     parser.add_option(
+         '--privileged_helper_id',
+         dest='privileged_helper_id',
+@@ -505,6 +535,19 @@ def Main(argv):
+     ):
+         return 2
+ 
++    # Stedding: LaunchServices and Sparkle compare CFBundleVersion, so on the
++    # Mac it carries Stedding's version rather than Chromium's build number.
++    if options.platform == 'mac' and options.stedding_version:
++        bundle_version = _SteddingBundleVersion(options.stedding_version)
++        if bundle_version is None:
++            print(
++                'Unsupported --stedding_version:',
++                options.stedding_version,
++                file=sys.stderr,
++            )
++            return 1
++        plist['CFBundleVersion'] = bundle_version
++
+     # Add Breakpad if configured to do so.
+     if options.use_breakpad:
+         if options.branding is None:
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+index 8a60d7061bbfb..5abc25981dbca 100644
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -16,6 +16,8 @@ import("//build/config/win/manifest.gni")
+ import("//build/private_code_test/private_code_test.gni")
+ import("//build/toolchain/toolchain.gni")
+ import("//chrome/browser/buildflags.gni")
++import("//chrome/browser/ui/stedding/stedding_updates.gni")
++import("//chrome/browser/ui/stedding/stedding_version.gni")
+ import("//chrome/chrome_paks.gni")
+ import("//chrome/common/features.gni")
+ import("//chrome/process_version_rc_template.gni")
+@@ -515,6 +517,11 @@ if (is_win) {
+       "--scm=1",
+       "--bundle_id=$chrome_mac_bundle_id",
+     ]
++    # Stedding: CFBundleVersion carries Stedding's version, which Sparkle and
++    # LaunchServices compare (docs/features/updates.md Up11).
++    if (stedding_version != "") {
++      args += [ "--stedding_version=$stedding_version" ]
++    }
+     if (enable_updater) {
+       args += [ "--privileged_helper_id=$privileged_helper_name" ]
+       if (is_chrome_branded) {
+@@ -564,6 +571,11 @@ if (is_win) {
+       deps += [ ":chromium_updater_privileged_helper" ]
+     }
+ 
++    # Stedding's updater (ADR 0022).
++    if (stedding_sparkle) {
++      deps += [ ":stedding_sparkle_bundle_data" ]
++    }
++
+     if (enable_stripping) {
+       # At link time, preserve the global symbols specified in the .exports
+       # file. All other global symbols will be marked as private. The default
+@@ -685,6 +697,15 @@ if (is_win) {
+     ]
+   }
+ 
++  # Sparkle.framework as tooling/fetch-sparkle left it, beside the browser's
++  # own framework in Contents/Frameworks (docs/features/updates.md).
++  if (stedding_sparkle) {
++    bundle_data("stedding_sparkle_bundle_data") {
++      sources = [ "//third_party/stedding_sparkle/Sparkle.framework" ]
++      outputs = [ "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}" ]
++    }
++  }
++
+   bundle_data("chrome_versioned_bundle_data") {
+     sources = [ "$root_out_dir/$chrome_framework_name.framework" ]
+     outputs = [ "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}" ]
+diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
+index 6fada0a2b1a1f..7f1942bcd47dd 100644
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -725,5 +725,26 @@
+ 	<array>
+ 		<string>_googlecast._tcp</string>
+ 	</array>
++	<!-- Stedding's updater (docs/features/updates.md, ADR 0022): Sparkle reads
++	     the signed feed the release tooling publishes, accepts only archives
++	     and feeds signed with this public key, checks once a day without
++	     sending anything about the machine, and downloads in the background.
++	     The browser sets the two automatic keys from its own setting. -->
++	<key>SUFeedURL</key>
++	<string>https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast.xml</string>
++	<key>SUPublicEDKey</key>
++	<string>O2jDFqjwqSzrBCp/1p2MvxaLVVKJonXI9JVhG8fwoHM=</string>
++	<key>SURequireSignedFeed</key>
++	<true/>
++	<key>SUVerifyUpdateBeforeExtraction</key>
++	<true/>
++	<key>SUEnableAutomaticChecks</key>
++	<true/>
++	<key>SUAutomaticallyUpdate</key>
++	<true/>
++	<key>SUScheduledCheckInterval</key>
++	<integer>86400</integer>
++	<key>SUEnableSystemProfiling</key>
++	<false/>
+ </dict>
+ </plist>
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 77c5f599da4b8..8b3139dbc3657 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1535,6 +1535,7 @@ source_set("core") {
+       "//chrome/browser/ui:browser_mac",
+       "//chrome/browser/ui/browser_window:create_browser_window",
+       "//chrome/browser/ui/cocoa",
++      "//chrome/browser/ui/stedding:app_updater",
+       "//chrome/browser/ui/views:color_provider_browser_helper",
+       "//chrome/browser/web_applications/os_integration/mac:web_app_shortcut_copier_lib",
+       "//chrome/browser/webshare",
+diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
+index b3cb6a8a8252b..dac495dc8d9e3 100644
+--- a/chrome/browser/app_controller_mac.mm
++++ b/chrome/browser/app_controller_mac.mm
+@@ -106,6 +106,7 @@
+ #include "chrome/browser/ui/startup/startup_tab.h"
+ #include "chrome/browser/ui/startup/startup_types.h"
+ #include "chrome/browser/ui/startup/url_util.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
+ #include "chrome/browser/ui/stedding/little_window.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -1731,6 +1732,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+     enable = canOpenNewBrowser;
+   } else if (action == @selector(orderFrontStandardAboutPanel:)) {
+     enable = canOpenNewBrowser;
++  } else if (action == @selector(steddingCheckForUpdates:)) {
++    // updates Up8: only where the build has an updater.
++    enable = canOpenNewBrowser && stedding::AppUpdater::Get() != nullptr;
+   } else if (action == @selector(toggleConfirmToQuit:)) {
+     [self updateConfirmToQuitPrefMenuItem:static_cast<NSMenuItem*>(item)];
+     enable = [self shouldEnableConfirmToQuitPrefMenuItem];
+@@ -2204,6 +2208,16 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+   }
+ }
+ 
++// updates Up8 (docs/features/updates.md): Stedding › Check for Updates…
++// asks the updater now, automatic updates on or off, and opens the About
++// page, which shows the answer.
++- (IBAction)steddingCheckForUpdates:(id)sender {
++  if (stedding::AppUpdater* const updater = stedding::AppUpdater::Get()) {
++    updater->CheckNow();
++  }
++  [self orderFrontStandardAboutPanel:sender];
++}
++
+ - (IBAction)toggleConfirmToQuit:(id)sender {
+   PrefService* prefService = g_browser_process->local_state();
+   bool enabled = prefService->GetBoolean(prefs::kConfirmToQuitEnabled);
+diff --git a/chrome/browser/chrome_browser_main_mac.mm b/chrome/browser/chrome_browser_main_mac.mm
+index b269f1610a55d..6f3171837b4d8 100644
+--- a/chrome/browser/chrome_browser_main_mac.mm
++++ b/chrome/browser/chrome_browser_main_mac.mm
+@@ -30,8 +30,14 @@
+ #include "chrome/browser/first_run/first_run.h"
+ #include "chrome/browser/mac/install_from_dmg.h"
+ #include "chrome/browser/mac/metrics.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_data_service.h"
++#include "chrome/browser/sessions/session_data_service_factory.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/cocoa/main_menu_builder.h"
+ #include "chrome/browser/ui/cocoa/renderer_context_menu/chrome_swizzle_services_menu_updater.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
+ #include "chrome/browser/updater/updater.h"
+ #include "chrome/common/channel_info.h"
+ #include "chrome/common/chrome_paths.h"
+@@ -39,6 +45,7 @@
+ #include "chrome/common/pref_names.h"
+ #include "chrome/grit/branded_strings.h"
+ #include "components/metrics/metrics_service.h"
++#include "components/prefs/pref_service.h"
+ #include "components/version_info/channel.h"
+ #include "content/public/common/main_function_params.h"
+ #include "content/public/common/result_codes.h"
+@@ -176,9 +183,37 @@ void ChromeBrowserMainPartsMac::PreProfileInit() {
+   g_browser_process->platform_part()->app_shim_listener()->Init();
+ }
+ 
++namespace {
++
++// updates Up3 (docs/features/updates.md): what chrome::AttemptRestart does
++// before it quits, so the version the updater installs opens on the session
++// it replaced, with nothing of it cleared on exit.
++void PrepareUpdateRestart() {
++  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++      [](BrowserWindowInterface* browser) {
++        browser->GetProfile()->SaveSessionState();
++        if (SessionDataService* const service =
++                SessionDataServiceFactory::GetForProfile(
++                    browser->GetProfile())) {
++          service->SetForceKeepSessionState();
++        }
++        return true;
++      });
++  PrefService* const local_state = g_browser_process->local_state();
++  local_state->SetBoolean(prefs::kWasRestarted, true);
++  local_state->CommitPendingWrite();
++}
++
++}  // namespace
++
+ void ChromeBrowserMainPartsMac::PostProfileInit(Profile* profile,
+                                                 bool is_initial_profile) {
+   ChromeBrowserMainPartsPosix::PostProfileInit(profile, is_initial_profile);
++  // Stedding's updater: Sparkle, once per process (ADR 0022).
++  if (is_initial_profile) {
++    stedding::StartAppUpdater(g_browser_process->local_state(),
++                              base::BindRepeating(&PrepareUpdateRestart));
++  }
+ }
+ 
+ void ChromeBrowserMainPartsMac::DidEndMainMessageLoop() {
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 80b7a9a768c0b..19a247cdeb482 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -332,6 +332,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kNumber;
+   (*s_allowlist)[stedding::prefs::kSidebarTextSize] =
+       settings_api::PrefType::kNumber;
++  // updates Up1, Up10: browser-wide, in local state like the two above.
++  (*s_allowlist)[stedding::prefs::kUpdatesAutomatic] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kThanksAfterUpdate] =
++      settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kSidebarHoverDelayMs] =
+       settings_api::PrefType::kNumber;
+   (*s_allowlist)[stedding::prefs::kSidebarClosedForm] =
+diff --git a/chrome/browser/resources/settings/about_page/about_page.ts b/chrome/browser/resources/settings/about_page/about_page.ts
+index aaaf8c6e7e535..ec24e08ec25e2 100644
+--- a/chrome/browser/resources/settings/about_page/about_page.ts
++++ b/chrome/browser/resources/settings/about_page/about_page.ts
+@@ -235,12 +235,18 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
+       this.showUpdateStatus_ = false;
+       return;
+     }
++    // Stedding (updates Up6): a disabled updater that says why, as the Mac's
++    // does with automatic updates off, keeps its line.
+     this.showUpdateStatus_ =
+-        this.currentUpdateStatusEvent_!.status !== UpdateStatus.DISABLED;
++        this.currentUpdateStatusEvent_!.status !== UpdateStatus.DISABLED ||
++        !!this.currentUpdateStatusEvent_!.message;
+   }
+ 
+   protected shouldShowLearnMoreLink_(): boolean {
+-    return this.currentUpdateStatusEvent_!.status === UpdateStatus.FAILED;
++    // Stedding: the link is Google's help page for Google Update's errors,
++    // which say nothing about this browser's updater; its message stands
++    // alone (docs/features/updates.md Up5).
++    return false;
+   }
+ 
+   protected getUpdateStatusMessage_(): TrustedHTML {
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 26a4ad66b0f8d..302f3b1589347 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -3,7 +3,7 @@
+ // found in the LICENSE file.
+ 
+ import {html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+-import {isWindows} from 'chrome://resources/js/platform.js';
++import {isMac, isWindows} from 'chrome://resources/js/platform.js';
+ 
+ import type {SettingsSteddingPageElement} from './stedding_page.js';
+ 
+@@ -317,6 +317,27 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingSuggestLabel}"
+       sub-label="$i18n{steddingSuggestSubLabel}">
+   </settings-toggle-button>
++  <div class="cr-row section-header" id="updatesHeader">
++    <div class="flex">
++      <h2 class="cr-title-text">$i18n{steddingUpdatesTitle}</h2>
++      <div class="secondary">$i18n{steddingUpdatesIntro}</div>
++    </div>
++  </div>
++  ${isMac ? html`
++  <settings-toggle-button
++      id="updatesAutomatic"
++      class="hr"
++      pref-key="stedding.updates.automatic"
++      label="$i18n{steddingUpdatesAutomaticLabel}"
++      sub-label="$i18n{steddingUpdatesAutomaticSubLabel}">
++  </settings-toggle-button>` : ''}
++  <settings-toggle-button
++      id="thanksAfterUpdate"
++      class="hr"
++      pref-key="stedding.updates.thanks_after_update"
++      label="$i18n{steddingThanksAfterUpdateLabel}"
++      sub-label="$i18n{steddingThanksAfterUpdateSubLabel}">
++  </settings-toggle-button>
+   <div class="cr-row section-header" id="spacesHeader">
+     <div class="flex">
+       <h2 class="cr-title-text">$i18n{steddingSpacesTitle}</h2>
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 1de07f59c2fb9..4d18316efa1db 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1567,6 +1567,11 @@ static_library("ui") {
+     if (is_win) {
+       deps += [ "//chrome/browser/ui/views/stedding:altgr_chords" ]
+     }
++    deps += [
++      "//chrome/browser/ui/stedding:app_updater",
++      "//chrome/browser/ui/stedding:thanks_pages",
++      "//chrome/browser/ui/views/stedding:update_pill",
++    ]
+     deps += [
+       ":accelerator_table",
+       ":browser_actions",
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index da0fb8f085836..6e611f449a623 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -46,6 +46,12 @@ typedef NS_ENUM(NSInteger, NSMenuItemImageVisibility) {
+ 
+ #endif
+ 
++// Stedding (updates Up8): the app controller's action for Check for
++// Updates…, declared for the selector below.
++@protocol SteddingUpdateMenuActions
++- (void)steddingCheckForUpdates:(id)sender;
++@end
++
+ namespace chrome {
+ namespace {
+ 
+@@ -119,6 +125,18 @@ NSMenuItem* BuildAppMenu(NSApplication* nsapp,
+           .Build();
+   // clang-format on
+ 
++  // Stedding (updates Up8): Check for Updates…, under About as Mac apps put
++  // it. The app controller enables it where the build has an updater.
++  if (!is_pwa) {
++    NSMenuItem* const check_for_updates =
++        [[NSMenuItem alloc] initWithTitle:@"Check for Updates\u2026"
++                                   action:@selector(steddingCheckForUpdates:)
++                            keyEquivalent:@""];
++    check_for_updates.target = app_delegate;
++    [item.submenu insertItem:check_for_updates
++                     atIndex:[item.submenu indexOfItemWithTag:IDC_ABOUT] + 1];
++  }
++
+   NSMenuItem* services_item = [item.submenu itemWithTag:-1];
+   services_item.tag = 0;
+ 
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index bbfd0af87a9b1..a8f83c79a7aa0 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -347,6 +347,55 @@ source_set("motion") {
+   ]
+ }
+ 
++# docs/features/updates.md: the browser's own updater, behind one interface
++# the sidebar's button, the command bar, the About page and the app menu
++# share. Sparkle drives it on the Mac (ADR 0022); elsewhere there is none yet.
++source_set("app_updater") {
++  public = [ "app_updater.h" ]
++  sources = [ "app_updater.cc" ]
++  public_deps = [ "//base" ]
++  if (is_mac) {
++    sources += [ "app_updater_mac.mm" ]
++    deps = [
++      ":prefs",
++      ":version",
++      "//components/prefs",
++      "//content/public/common",
++    ]
++    frameworks = [
++      "Foundation.framework",
++      "Security.framework",
++    ]
++  }
++}
++
++source_set("app_updater_test_support") {
++  testonly = true
++  public = [ "fake_app_updater.h" ]
++  sources = [ "fake_app_updater.cc" ]
++  public_deps = [ ":app_updater" ]
++}
++
++# updates Up9, Up10: stedding.dev's thank-you pages after the install and
++# after each update.
++source_set("thanks_pages") {
++  public = [ "thanks_pages.h" ]
++  sources = [ "thanks_pages.cc" ]
++  public_deps = [ "//url" ]
++  deps = [
++    ":prefs",
++    ":version",
++    "//base",
++    "//chrome/browser:browser_process",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/browser_window",
++    "//chrome/browser/ui/navigator",
++    "//chrome/common",
++    "//components/prefs",
++    "//ui/base",
++  ]
++}
++
+ source_set("unit_tests") {
+   testonly = true
+   sources = [
+@@ -373,6 +422,7 @@ source_set("unit_tests") {
+     "tab_menu_verbs_unittest.cc",
+     "tab_names_unittest.cc",
+     "tab_numbers_unittest.cc",
++    "thanks_pages_unittest.cc",
+   ]
+   deps = [
+     ":address_row",
+@@ -396,6 +446,7 @@ source_set("unit_tests") {
+     ":tab_menu_verbs",
+     ":tab_names",
+     ":tab_numbers",
++    ":thanks_pages",
+     ":version",
+     "//chrome/app:command_ids",
+     "//chrome/browser/media/webrtc",
+@@ -425,6 +476,7 @@ source_set("unit_tests") {
+     "//components/content_settings/core/common",
+     "//components/embedder_support",
+     "//components/privacy_sandbox:privacy_sandbox_prefs",
++    "//components/prefs:test_support",
+     "//components/sync_preferences:test_support",
+     "//media/mojo/mojom",
+     "//net",
+diff --git a/chrome/browser/ui/stedding/app_updater.cc b/chrome/browser/ui/stedding/app_updater.cc
+new file mode 100644
+index 0000000000000..159e8210831d8
+--- /dev/null
++++ b/chrome/browser/ui/stedding/app_updater.cc
+@@ -0,0 +1,106 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/app_updater.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "build/build_config.h"
++
++namespace stedding {
++
++namespace {
++
++AppUpdater* g_updater = nullptr;
++AppUpdater* g_updater_for_testing = nullptr;
++
++}  // namespace
++
++// static
++AppUpdater* AppUpdater::Get() {
++  return g_updater_for_testing ? g_updater_for_testing : g_updater;
++}
++
++// static
++void AppUpdater::SetForTesting(AppUpdater* updater) {
++  g_updater_for_testing = updater;
++}
++
++// static
++void AppUpdater::SetInstance(AppUpdater* updater) {
++  g_updater = updater;
++}
++
++AppUpdater::AppUpdater() = default;
++
++AppUpdater::~AppUpdater() {
++  if (g_updater == this) {
++    g_updater = nullptr;
++  }
++}
++
++void AppUpdater::AddObserver(Observer* observer) {
++  observers_.AddObserver(observer);
++}
++
++void AppUpdater::RemoveObserver(Observer* observer) {
++  observers_.RemoveObserver(observer);
++}
++
++void AppUpdater::SetState(State state) {
++  if (state_ == state) {
++    return;
++  }
++  state_ = state;
++  if (state != State::kFailed) {
++    error_.clear();
++  }
++  if (state != State::kDownloading) {
++    progress_ = 0;
++  }
++  NotifyChanged();
++}
++
++void AppUpdater::SetVersion(std::u16string version) {
++  if (version_ == version) {
++    return;
++  }
++  version_ = std::move(version);
++  NotifyChanged();
++}
++
++void AppUpdater::SetProgress(int progress) {
++  progress = std::clamp(progress, 0, 100);
++  if (progress_ == progress) {
++    return;
++  }
++  progress_ = progress;
++  NotifyChanged();
++}
++
++void AppUpdater::SetError(std::u16string error) {
++  error_ = std::move(error);
++  NotifyChanged();
++}
++
++void AppUpdater::NotifyChanged() {
++  for (Observer& observer : observers_) {
++    observer.OnAppUpdaterChanged();
++  }
++}
++
++bool OffersRestart(AppUpdater::State state) {
++  return state == AppUpdater::State::kReady ||
++         state == AppUpdater::State::kAvailable;
++}
++
++#if !BUILDFLAG(IS_MAC)
++// No updater on this platform yet (BACKLOG S-74): releases are installed by
++// hand, and the update's thank-you page still follows (updates Up10).
++void StartAppUpdater(PrefService* local_state,
++                     base::RepeatingClosure prepare_restart) {}
++#endif
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/app_updater.h b/chrome/browser/ui/stedding/app_updater.h
+new file mode 100644
+index 0000000000000..b052078444575
+--- /dev/null
++++ b/chrome/browser/ui/stedding/app_updater.h
+@@ -0,0 +1,114 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_APP_UPDATER_H_
++#define CHROME_BROWSER_UI_STEDDING_APP_UPDATER_H_
++
++#include <string>
++
++#include "base/functional/callback.h"
++#include "base/observer_list.h"
++#include "base/observer_list_types.h"
++
++class PrefService;
++
++namespace stedding {
++
++// The browser's own updater (docs/features/updates.md): Sparkle on the Mac
++// (ADR 0022), none yet elsewhere. One per process, made at startup; the
++// sidebar's button, the command bar, the About page and the app menu read it
++// and drive it. Everything runs on the UI thread.
++class AppUpdater {
++ public:
++  enum class State {
++    // Nothing found yet, or automatic updates are off and nobody asked.
++    kIdle,
++    // A check the user asked for is under way (About, Check for Updates).
++    kChecking,
++    // That check found nothing later than this version.
++    kUpToDate,
++    // A later version was found and is downloading.
++    kDownloading,
++    // A later version was found and waits for the user's go-ahead to
++    // download it, as Sparkle asks when installing it needs the user's
++    // password (updates Up4).
++    kAvailable,
++    // A later version is downloaded and ready: a restart installs it, and so
++    // does quitting (updates Up3).
++    kReady,
++    // Restarting into it.
++    kInstalling,
++    // The check or the download failed; error() says why.
++    kFailed,
++  };
++
++  class Observer : public base::CheckedObserver {
++   public:
++    virtual void OnAppUpdaterChanged() = 0;
++  };
++
++  // The process's updater, or null: this build has none (Windows, a build
++  // without Sparkle, a test).
++  static AppUpdater* Get();
++  // Tests: `updater` answers Get() until it is reset with null.
++  static void SetForTesting(AppUpdater* updater);
++
++  AppUpdater(const AppUpdater&) = delete;
++  AppUpdater& operator=(const AppUpdater&) = delete;
++  virtual ~AppUpdater();
++
++  State state() const { return state_; }
++  // The later version's name, as its release calls it ("0.2.0-beta.16"),
++  // once one is found.
++  const std::u16string& version() const { return version_; }
++  // 0-100 while downloading.
++  int progress() const { return progress_; }
++  // What went wrong, in a sentence, in kFailed.
++  const std::u16string& error() const { return error_; }
++
++  // Checks now, whatever the automatic setting says: the user asked. A later
++  // version found this way downloads at once (updates Up5).
++  virtual void CheckNow() = 0;
++  // Restarts into the downloaded version (kReady), or, in kAvailable,
++  // downloads it and then restarts (updates Up3, Up4).
++  virtual void InstallNow() = 0;
++
++  void AddObserver(Observer* observer);
++  void RemoveObserver(Observer* observer);
++
++ protected:
++  AppUpdater();
++
++  // The platform's updater, once made (StartAppUpdater).
++  static void SetInstance(AppUpdater* updater);
++
++  void SetState(State state);
++  void SetVersion(std::u16string version);
++  void SetProgress(int progress);
++  void SetError(std::u16string error);
++  // Tells the observers, once per change.
++  void NotifyChanged();
++
++ private:
++  State state_ = State::kIdle;
++  std::u16string version_;
++  int progress_ = 0;
++  std::u16string error_;
++  base::ObserverList<Observer> observers_;
++};
++
++// updates Up3, Up4: the states in which the sidebar shows its "New Stedding
++// Version Available" button and the command bar its Restart to Update row.
++bool OffersRestart(AppUpdater::State state);
++
++// Makes the process's updater, where the platform has one: the Mac, with
++// Sparkle.framework in the app bundle and a Stedding version in this build,
++// outside tests. `prepare_restart` runs before the updater quits the browser
++// to install, so the next launch restores the session as a restart does.
++void StartAppUpdater(PrefService* local_state,
++                     base::RepeatingClosure prepare_restart);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_APP_UPDATER_H_
+diff --git a/chrome/browser/ui/stedding/app_updater_mac.mm b/chrome/browser/ui/stedding/app_updater_mac.mm
+new file mode 100644
+index 0000000000000..91ed9b176f58f
+--- /dev/null
++++ b/chrome/browser/ui/stedding/app_updater_mac.mm
+@@ -0,0 +1,723 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/app_updater.h"
++
++#import <Foundation/Foundation.h>
++#include <Security/Security.h>
++
++#include <memory>
++#include <string>
++#include <utility>
++
++#include "base/apple/bundle_locations.h"
++#include "base/apple/foundation_util.h"
++#include "base/apple/scoped_cftyperef.h"
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/logging.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
++#include "base/strings/sys_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/stedding_version.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/common/content_switches.h"
++
++// Sparkle 2.10's interface, as far as Stedding uses it (the framework's
++// Headers/SPUUpdater.h, SPUUserDriver.h, SPUUpdaterDelegate.h,
++// SPUUserUpdateState.h, SUAppcastItem.h). Declared here, not imported:
++// tooling/fetch-sparkle puts the framework into the app bundle and the browser
++// loads it at runtime, so the browser builds without its headers and a bundle
++// without it has no updater rather than failing to start. Sparkle calls the
++// user driver and the delegate by selector and checks neither for a protocol.
++
++// SPUUserUpdateChoice.
++typedef NS_ENUM(NSInteger, SteddingSparkleChoice) {
++  SteddingSparkleChoiceSkip = 0,
++  SteddingSparkleChoiceInstall = 1,
++  SteddingSparkleChoiceDismiss = 2,
++};
++
++// SPUUserUpdateStage.
++typedef NS_ENUM(NSInteger, SteddingSparkleStage) {
++  SteddingSparkleStageNotDownloaded = 0,
++  SteddingSparkleStageDownloaded = 1,
++  SteddingSparkleStageInstalling = 2,
++};
++
++// SPUUpdateCheck: the check a user asked for.
++constexpr NSInteger kSparkleUserCheck = 0;
++// SPUAppcastSigningValidationStatusFailed.
++constexpr NSInteger kSparkleFeedSignatureFailed = 2;
++// SUError: no later version; the user cancelled installing it.
++constexpr NSInteger kSparkleNoUpdateError = 1001;
++constexpr NSInteger kSparkleInstallationCanceledError = 4007;
++
++@protocol SteddingSparkleUpdater <NSObject>
++- (instancetype)initWithHostBundle:(NSBundle*)hostBundle
++                 applicationBundle:(NSBundle*)applicationBundle
++                        userDriver:(id)userDriver
++                          delegate:(id)delegate;
++- (BOOL)startUpdater:(NSError**)error;
++- (void)checkForUpdates;
++@property(nonatomic) BOOL automaticallyChecksForUpdates;
++@property(nonatomic) BOOL automaticallyDownloadsUpdates;
++@property(nonatomic) BOOL sendsSystemProfile;
++@property(nonatomic, readonly) BOOL canCheckForUpdates;
++@end
++
++@protocol SteddingSparkleItem <NSObject>
++@property(nonatomic, copy, readonly) NSString* displayVersionString;
++@property(nonatomic, getter=isInformationOnlyUpdate, readonly)
++    BOOL informationOnlyUpdate;
++@property(nonatomic, readonly) NSInteger signingValidationStatus;
++@end
++
++@protocol SteddingSparkleUserState <NSObject>
++@property(nonatomic, readonly) NSInteger stage;
++@property(nonatomic, readonly) BOOL userInitiated;
++@end
++
++@protocol SteddingSparklePermissionResponse <NSObject>
++- (instancetype)initWithAutomaticUpdateChecks:(BOOL)automaticUpdateChecks
++                            sendSystemProfile:(BOOL)sendSystemProfile;
++@end
++
++typedef void (^SteddingSparkleReply)(NSInteger choice);
++
++namespace stedding {
++namespace {
++
++// How long a restart may take before the button comes back: a page's "Leave
++// site?" or the downloads' warning can stop the quit (updates Up3).
++constexpr base::TimeDelta kQuitGrace = base::Seconds(20);
++// The first scheduled check waits for startup to settle.
++constexpr base::TimeDelta kStartDelay = base::Seconds(10);
++
++class SparkleAppUpdater;
++
++}  // namespace
++}  // namespace stedding
++
++// Sparkle's user driver and updater delegate in one: everything Sparkle would
++// show, it tells SparkleAppUpdater instead, so no Sparkle window ever opens
++// (updates Up2).
++@interface SteddingSparkleBridge : NSObject
++- (instancetype)initWithUpdater:
++    (base::WeakPtr<stedding::SparkleAppUpdater>)updater;
++@end
++
++namespace stedding {
++namespace {
++
++class SparkleAppUpdater : public AppUpdater {
++ public:
++  SparkleAppUpdater(Class updater_class,
++                    PrefService* local_state,
++                    base::RepeatingClosure prepare_restart)
++      : local_state_(local_state),
++        prepare_restart_(std::move(prepare_restart)) {
++    bridge_ =
++        [[SteddingSparkleBridge alloc] initWithUpdater:weak_factory_.GetWeakPtr()];
++    NSBundle* const bundle = base::apple::OuterBundle();
++    updater_ = [(id<SteddingSparkleUpdater>)[updater_class alloc]
++        initWithHostBundle:bundle
++         applicationBundle:bundle
++                userDriver:bridge_
++                  delegate:bridge_];
++    // Nothing about the machine goes with a check (docs/PRIVACY.md).
++    updater_.sendsSystemProfile = NO;
++    ApplyAutomatic();
++    registrar_.Init(local_state_);
++    registrar_.Add(prefs::kUpdatesAutomatic,
++                   base::BindRepeating(&SparkleAppUpdater::OnAutomaticChanged,
++                                       base::Unretained(this)));
++    SetInstance(this);
++    // updates Up6: with automatic updates off Sparkle is not started at all,
++    // so it makes no request until the user asks (Check for Updates).
++    if (Automatic()) {
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++          FROM_HERE,
++          base::BindOnce(&SparkleAppUpdater::StartOnSchedule,
++                         weak_factory_.GetWeakPtr()),
++          kStartDelay);
++    }
++  }
++
++  ~SparkleAppUpdater() override = default;
++
++  // AppUpdater:
++  void CheckNow() override {
++    switch (state()) {
++      case State::kChecking:
++      case State::kDownloading:
++      case State::kAvailable:
++      case State::kReady:
++      case State::kInstalling:
++        // An answer is in hand or on its way; the observers hear of it.
++        return;
++      case State::kIdle:
++      case State::kUpToDate:
++      case State::kFailed:
++        break;
++    }
++    if (!Start()) {
++      SetError(u"The updater could not start.");
++      SetState(State::kFailed);
++      return;
++    }
++    user_asked_ = true;
++    SetState(State::kChecking);
++    // While Sparkle checks or downloads on its own schedule it takes no
++    // check from the user; that session's answer comes through the delegate
++    // all the same.
++    if (updater_.canCheckForUpdates) {
++      [updater_ checkForUpdates];
++    }
++  }
++
++  void InstallNow() override {
++    if (state() == State::kAvailable) {
++      // Download it, then restart: the user has already said yes.
++      restart_when_ready_ = true;
++      SetState(State::kDownloading);
++      if (SteddingSparkleReply reply = TakeReply()) {
++        reply(SteddingSparkleChoiceInstall);
++      }
++      return;
++    }
++    if (state() != State::kReady) {
++      return;
++    }
++    PrepareRestart();
++    SetState(State::kInstalling);
++    if (retry_quit_) {
++      void (^retry)(void) = retry_quit_;
++      retry_quit_ = nil;
++      retry();
++    } else if (SteddingSparkleReply reply = TakeReply()) {
++      reply(SteddingSparkleChoiceInstall);
++    } else if (install_on_quit_) {
++      // Sparkle 2.3 and later take this more than once, for a quit the
++      // browser cancelled.
++      install_on_quit_();
++    }
++    WatchTheQuit();
++  }
++
++  // Sparkle, through the bridge.
++
++  void OnUserCheckStarted() {
++    user_asked_ = true;
++    SetState(State::kChecking);
++  }
++
++  void OnUpdateFound(id<SteddingSparkleItem> item,
++                     id<SteddingSparkleUserState> found,
++                     SteddingSparkleReply reply) {
++    // updates Up12: an informational entry, or one from a feed whose
++    // signature fails, is never offered: the feed is signed, so either means
++    // the feed is not ours.
++    if (item.informationOnlyUpdate ||
++        item.signingValidationStatus == kSparkleFeedSignatureFailed) {
++      reply(SteddingSparkleChoiceDismiss);
++      FinishUserCheck(State::kUpToDate);
++      return;
++    }
++    SetVersion(base::SysNSStringToUTF16(item.displayVersionString));
++    user_asked_ = false;
++    switch (found.stage) {
++      case SteddingSparkleStageNotDownloaded:
++      case SteddingSparkleStageDownloaded:
++        // A check the user asked for downloads at once (Up5); one Sparkle
++        // made on its schedule and could not finish alone (its install needs
++        // the user's password, Up4) waits for the button.
++        if (found.userInitiated || restart_when_ready_) {
++          SetState(State::kDownloading);
++          reply(SteddingSparkleChoiceInstall);
++        } else {
++          pending_reply_ = reply;
++          SetState(State::kAvailable);
++        }
++        return;
++      case SteddingSparkleStageInstalling:
++        // Downloaded, and installing waits for the quit: the button restarts.
++        pending_reply_ = reply;
++        SetState(State::kReady);
++        return;
++    }
++    reply(SteddingSparkleChoiceDismiss);
++  }
++
++  void OnDownloadStarted() {
++    expected_ = 0;
++    received_ = 0;
++    SetState(State::kDownloading);
++  }
++
++  void OnExpectedLength(uint64_t length) {
++    expected_ = length;
++    received_ = 0;
++  }
++
++  void OnReceived(uint64_t length) {
++    received_ += length;
++    if (expected_ > 0) {
++      SetProgress(static_cast<int>(received_ * 100 / expected_));
++    }
++  }
++
++  void OnReadyToRelaunch(SteddingSparkleReply reply) {
++    if (restart_when_ready_) {
++      PrepareRestart();
++      SetState(State::kInstalling);
++      reply(SteddingSparkleChoiceInstall);
++      WatchTheQuit();
++      return;
++    }
++    pending_reply_ = reply;
++    SetState(State::kReady);
++  }
++
++  void OnInstalling(bool terminated, void (^retry)(void)) {
++    if (!terminated) {
++      retry_quit_ = retry;
++    }
++    SetState(State::kInstalling);
++  }
++
++  void OnNotFound() { FinishUserCheck(State::kUpToDate); }
++
++  void OnError(NSError* error) {
++    if (error.code == kSparkleInstallationCanceledError) {
++      FinishUserCheck(State::kIdle);
++      return;
++    }
++    if (error.code == kSparkleNoUpdateError) {
++      FinishUserCheck(State::kUpToDate);
++      return;
++    }
++    user_asked_ = false;
++    restart_when_ready_ = false;
++    SetError(base::SysNSStringToUTF16(error.localizedDescription));
++    SetState(State::kFailed);
++  }
++
++  void OnDismissed() {
++    pending_reply_ = nil;
++    switch (state()) {
++      case State::kChecking:
++      case State::kDownloading:
++      case State::kAvailable:
++        SetState(State::kIdle);
++        return;
++      case State::kReady:
++        // Sparkle still installs a prepared version at the quit; the button
++        // stays while there is a way to restart into it.
++        if (!install_on_quit_ && !retry_quit_) {
++          SetState(State::kIdle);
++        }
++        return;
++      case State::kIdle:
++      case State::kUpToDate:
++      case State::kInstalling:
++      case State::kFailed:
++        return;
++    }
++  }
++
++  void OnValidUpdate(id<SteddingSparkleItem> item) {
++    SetVersion(base::SysNSStringToUTF16(item.displayVersionString));
++    // A scheduled check downloads without telling the user driver.
++    if (state() == State::kIdle || state() == State::kChecking ||
++        state() == State::kUpToDate) {
++      SetState(State::kDownloading);
++    }
++  }
++
++  void OnNoValidUpdate() { FinishUserCheck(State::kUpToDate); }
++
++  void OnWillInstallOnQuit(id<SteddingSparkleItem> item,
++                           void (^install)(void)) {
++    install_on_quit_ = install;
++    SetVersion(base::SysNSStringToUTF16(item.displayVersionString));
++    if (restart_when_ready_) {
++      PrepareRestart();
++      SetState(State::kInstalling);
++      install_on_quit_();
++      WatchTheQuit();
++      return;
++    }
++    SetState(State::kReady);
++  }
++
++  void OnAborted(NSError* error) {
++    if (state() == State::kChecking || user_asked_) {
++      OnError(error);
++      return;
++    }
++    // A scheduled check that failed says nothing: the next one tries again.
++    VLOG(1) << "Stedding's updater stopped: "
++            << base::SysNSStringToUTF8(error.localizedDescription);
++    if (state() == State::kDownloading) {
++      SetState(State::kIdle);
++    }
++  }
++
++  void OnCycleFinished(NSError* error) {
++    if (state() != State::kChecking) {
++      return;
++    }
++    if (error && error.code != kSparkleNoUpdateError) {
++      OnError(error);
++    } else {
++      FinishUserCheck(State::kUpToDate);
++    }
++  }
++
++  bool MayCheck(NSInteger check) {
++    return check == kSparkleUserCheck || Automatic();
++  }
++
++  void PrepareRestart() {
++    if (!restart_prepared_ && prepare_restart_) {
++      restart_prepared_ = true;
++      prepare_restart_.Run();
++    }
++  }
++
++  bool Automatic() const {
++    return local_state_->GetBoolean(prefs::kUpdatesAutomatic);
++  }
++
++ private:
++  void StartOnSchedule() { Start(); }
++
++  // Starts Sparkle's schedule; false if Sparkle refused its configuration.
++  bool Start() {
++    if (started_) {
++      return true;
++    }
++    NSError* error = nil;
++    if (![updater_ startUpdater:&error]) {
++      LOG(ERROR) << "Stedding's updater did not start: "
++                 << base::SysNSStringToUTF8(error.localizedDescription);
++      return false;
++    }
++    started_ = true;
++    return true;
++  }
++
++  void ApplyAutomatic() {
++    const bool automatic = Automatic();
++    updater_.automaticallyChecksForUpdates = automatic;
++    updater_.automaticallyDownloadsUpdates = automatic;
++  }
++
++  void OnAutomaticChanged() {
++    ApplyAutomatic();
++    if (Automatic()) {
++      Start();
++    }
++  }
++
++  // Ends a check the user asked for with `result`; a scheduled check's
++  // answer changes nothing on screen.
++  void FinishUserCheck(State result) {
++    if (!user_asked_ && state() != State::kChecking) {
++      return;
++    }
++    user_asked_ = false;
++    SetState(result);
++  }
++
++  SteddingSparkleReply TakeReply() {
++    SteddingSparkleReply reply = pending_reply_;
++    pending_reply_ = nil;
++    return reply;
++  }
++
++  // updates Up3: a quit the browser cancelled ("Leave site?", downloads)
++  // brings the button back, and its next press asks Sparkle to try again.
++  void WatchTheQuit() {
++    quit_grace_.Start(FROM_HERE, kQuitGrace,
++                      base::BindOnce(&SparkleAppUpdater::OnQuitTookTooLong,
++                                     base::Unretained(this)));
++  }
++
++  void OnQuitTookTooLong() {
++    if (state() == State::kInstalling) {
++      restart_prepared_ = false;
++      SetState(State::kReady);
++    }
++  }
++
++  const raw_ptr<PrefService> local_state_;
++  const base::RepeatingClosure prepare_restart_;
++  SteddingSparkleBridge* bridge_ = nil;
++  id<SteddingSparkleUpdater> updater_ = nil;
++  PrefChangeRegistrar registrar_;
++  bool started_ = false;
++  bool user_asked_ = false;
++  bool restart_when_ready_ = false;
++  bool restart_prepared_ = false;
++  uint64_t expected_ = 0;
++  uint64_t received_ = 0;
++  SteddingSparkleReply pending_reply_ = nil;
++  void (^install_on_quit_)(void) = nil;
++  void (^retry_quit_)(void) = nil;
++  base::OneShotTimer quit_grace_;
++  base::WeakPtrFactory<SparkleAppUpdater> weak_factory_{this};
++};
++
++// ADR 0022: whether the running browser is signed by a team -- a release,
++// or a test build signed the same way. A build made here is signed ad hoc,
++// and it must never be replaced by a release at its next quit.
++bool SignedByATeam() {
++  base::apple::ScopedCFTypeRef<SecCodeRef> code;
++  if (SecCodeCopySelf(kSecCSDefaultFlags, code.InitializeInto()) !=
++      errSecSuccess) {
++    return false;
++  }
++  base::apple::ScopedCFTypeRef<SecStaticCodeRef> static_code;
++  if (SecCodeCopyStaticCode(code.get(), kSecCSDefaultFlags,
++                            static_code.InitializeInto()) != errSecSuccess) {
++    return false;
++  }
++  base::apple::ScopedCFTypeRef<CFDictionaryRef> info;
++  if (SecCodeCopySigningInformation(static_code.get(),
++                                    kSecCSSigningInformation,
++                                    info.InitializeInto()) != errSecSuccess) {
++    return false;
++  }
++  CFStringRef const team = base::apple::GetValueFromDictionary<CFStringRef>(
++      info.get(), kSecCodeInfoTeamIdentifier);
++  return team && CFStringGetLength(team) > 0;
++}
++
++}  // namespace
++
++void StartAppUpdater(PrefService* local_state,
++                     base::RepeatingClosure prepare_restart) {
++  // One per process; none in tests, in a build made outside the tooling (no
++  // version to compare), out of an app bundle, or in a build signed ad hoc.
++  if (AppUpdater::Get() || !local_state || SteddingVersion().empty() ||
++      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType) ||
++      !base::apple::AmIBundled() || !SignedByATeam()) {
++    return;
++  }
++  NSString* const path = [base::apple::OuterBundle().privateFrameworksPath
++      stringByAppendingPathComponent:@"Sparkle.framework"];
++  NSBundle* const sparkle = [NSBundle bundleWithPath:path];
++  if (!sparkle) {
++    // A build without the framework (tooling/fetch-sparkle).
++    return;
++  }
++  NSError* error = nil;
++  if (![sparkle loadAndReturnError:&error]) {
++    LOG(ERROR) << "Sparkle.framework did not load: "
++               << base::SysNSStringToUTF8(error.localizedDescription);
++    return;
++  }
++  Class const updater_class = [sparkle classNamed:@"SPUUpdater"];
++  if (!updater_class) {
++    LOG(ERROR) << "Sparkle.framework has no SPUUpdater";
++    return;
++  }
++  // The process's for as long as it runs.
++  static base::NoDestructor<std::unique_ptr<SparkleAppUpdater>> updater;
++  *updater = std::make_unique<SparkleAppUpdater>(updater_class, local_state,
++                                                 std::move(prepare_restart));
++}
++
++}  // namespace stedding
++
++using stedding::SparkleAppUpdater;
++
++@implementation SteddingSparkleBridge {
++  base::WeakPtr<SparkleAppUpdater> _updater;
++}
++
++- (instancetype)initWithUpdater:(base::WeakPtr<SparkleAppUpdater>)updater {
++  if ((self = [super init])) {
++    _updater = std::move(updater);
++  }
++  return self;
++}
++
++// SPUUserDriver.
++
++- (void)showUpdatePermissionRequest:(id)request
++                              reply:(void (^)(id))reply {
++  // Info.plist's SUEnableAutomaticChecks means Sparkle never asks; should it,
++  // the answer is the setting's.
++  const bool automatic = _updater && _updater->Automatic();
++  Class const response_class = NSClassFromString(@"SUUpdatePermissionResponse");
++  reply([(id<SteddingSparklePermissionResponse>)[response_class alloc]
++      initWithAutomaticUpdateChecks:automatic
++                  sendSystemProfile:NO]);
++}
++
++- (void)showUserInitiatedUpdateCheckWithCancellation:
++    (void (^)(void))cancellation {
++  if (_updater) {
++    _updater->OnUserCheckStarted();
++  }
++}
++
++- (void)showUpdateFoundWithAppcastItem:(id)appcastItem
++                                 state:(id)state
++                                 reply:(void (^)(NSInteger))reply {
++  if (!_updater) {
++    reply(SteddingSparkleChoiceDismiss);
++    return;
++  }
++  _updater->OnUpdateFound(appcastItem, state, reply);
++}
++
++- (void)showUpdateReleaseNotesWithDownloadData:(id)downloadData {
++}
++
++- (void)showUpdateReleaseNotesFailedToDownloadWithError:(NSError*)error {
++}
++
++- (void)showUpdateNotFoundWithError:(NSError*)error
++                    acknowledgement:(void (^)(void))acknowledgement {
++  if (_updater) {
++    _updater->OnNotFound();
++  }
++  acknowledgement();
++}
++
++- (void)showUpdaterError:(NSError*)error
++         acknowledgement:(void (^)(void))acknowledgement {
++  if (_updater) {
++    _updater->OnError(error);
++  }
++  acknowledgement();
++}
++
++- (void)showDownloadInitiatedWithCancellation:(void (^)(void))cancellation {
++  if (_updater) {
++    _updater->OnDownloadStarted();
++  }
++}
++
++- (void)showDownloadDidReceiveExpectedContentLength:
++    (uint64_t)expectedContentLength {
++  if (_updater) {
++    _updater->OnExpectedLength(expectedContentLength);
++  }
++}
++
++- (void)showDownloadDidReceiveDataOfLength:(uint64_t)length {
++  if (_updater) {
++    _updater->OnReceived(length);
++  }
++}
++
++- (void)showDownloadDidStartExtractingUpdate {
++}
++
++- (void)showExtractionReceivedProgress:(double)progress {
++}
++
++- (void)showReadyToInstallAndRelaunch:(void (^)(NSInteger))reply {
++  if (!_updater) {
++    reply(SteddingSparkleChoiceDismiss);
++    return;
++  }
++  _updater->OnReadyToRelaunch(reply);
++}
++
++- (void)showInstallingUpdateWithApplicationTerminated:(BOOL)applicationTerminated
++                          retryTerminatingApplication:
++                              (void (^)(void))retryTerminatingApplication {
++  if (_updater) {
++    _updater->OnInstalling(applicationTerminated, retryTerminatingApplication);
++  }
++}
++
++- (void)showUpdateInstalledAndRelaunched:(BOOL)relaunched
++                         acknowledgement:(void (^)(void))acknowledgement {
++  acknowledgement();
++}
++
++- (void)dismissUpdateInstallation {
++  if (_updater) {
++    _updater->OnDismissed();
++  }
++}
++
++// SPUUpdaterDelegate.
++
++- (BOOL)updater:(id)updater
++    mayPerformUpdateCheck:(NSInteger)updateCheck
++                    error:(NSError**)error {
++  return _updater && _updater->MayCheck(updateCheck);
++}
++
++- (BOOL)updaterShouldPromptForPermissionToCheckForUpdates:(id)updater {
++  return NO;
++}
++
++- (NSArray*)feedParametersForUpdater:(id)updater
++                sendingSystemProfile:(BOOL)sendingProfile {
++  return @[];
++}
++
++- (NSArray*)allowedSystemProfileKeysForUpdater:(id)updater {
++  return @[];
++}
++
++- (void)updater:(id)updater didFindValidUpdate:(id)item {
++  if (_updater) {
++    _updater->OnValidUpdate(item);
++  }
++}
++
++- (void)updaterDidNotFindUpdate:(id)updater error:(NSError*)error {
++  if (_updater) {
++    _updater->OnNoValidUpdate();
++  }
++}
++
++- (BOOL)updater:(id)updater
++       willInstallUpdateOnQuit:(id)item
++    immediateInstallationBlock:(void (^)(void))immediateInstallHandler {
++  if (!_updater) {
++    return NO;
++  }
++  _updater->OnWillInstallOnQuit(item, immediateInstallHandler);
++  return YES;
++}
++
++- (void)updater:(id)updater didAbortWithError:(NSError*)error {
++  if (_updater) {
++    _updater->OnAborted(error);
++  }
++}
++
++- (void)updater:(id)updater
++    didFinishUpdateCycleForUpdateCheck:(NSInteger)updateCheck
++                                 error:(NSError*)error {
++  if (_updater) {
++    _updater->OnCycleFinished(error);
++  }
++}
++
++- (void)updaterWillRelaunchApplication:(id)updater {
++  if (_updater) {
++    _updater->PrepareRestart();
++  }
++}
++
++@end
+diff --git a/chrome/browser/ui/stedding/fake_app_updater.cc b/chrome/browser/ui/stedding/fake_app_updater.cc
+new file mode 100644
+index 0000000000000..87a49ce2d5399
+--- /dev/null
++++ b/chrome/browser/ui/stedding/fake_app_updater.cc
+@@ -0,0 +1,25 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/fake_app_updater.h"
++
++namespace stedding {
++
++FakeAppUpdater::FakeAppUpdater() {
++  AppUpdater::SetForTesting(this);
++}
++
++FakeAppUpdater::~FakeAppUpdater() {
++  AppUpdater::SetForTesting(nullptr);
++}
++
++void FakeAppUpdater::CheckNow() {
++  ++checks;
++}
++
++void FakeAppUpdater::InstallNow() {
++  ++installs;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/fake_app_updater.h b/chrome/browser/ui/stedding/fake_app_updater.h
+new file mode 100644
+index 0000000000000..c69cf6df24b28
+--- /dev/null
++++ b/chrome/browser/ui/stedding/fake_app_updater.h
+@@ -0,0 +1,44 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_FAKE_APP_UPDATER_H_
++#define CHROME_BROWSER_UI_STEDDING_FAKE_APP_UPDATER_H_
++
++#include <string>
++#include <utility>
++
++#include "chrome/browser/ui/stedding/app_updater.h"
++
++namespace stedding {
++
++// An updater a test sets the state of, which counts what it is asked to do.
++// While it lives it answers AppUpdater::Get().
++class FakeAppUpdater : public AppUpdater {
++ public:
++  FakeAppUpdater();
++  FakeAppUpdater(const FakeAppUpdater&) = delete;
++  FakeAppUpdater& operator=(const FakeAppUpdater&) = delete;
++  ~FakeAppUpdater() override;
++
++  void Set(State state, std::u16string version = std::u16string()) {
++    SetVersion(std::move(version));
++    SetState(state);
++  }
++  void SetDownloadProgress(int progress) { SetProgress(progress); }
++  void Fail(std::u16string error) {
++    SetError(std::move(error));
++    SetState(State::kFailed);
++  }
++
++  // AppUpdater:
++  void CheckNow() override;
++  void InstallNow() override;
++
++  int checks = 0;
++  int installs = 0;
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_FAKE_APP_UPDATER_H_
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index aee5b43252de3..01d230ccd6c69 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ 
++#include <string>
++
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_registry_simple.h"
+ 
+@@ -54,5 +56,9 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kGlobalPrivacyControl, true);
+   registry->RegisterIntegerPref(kSidebarDensity, 0);
+   registry->RegisterIntegerPref(kSidebarTextSize, 0);
++  registry->RegisterBooleanPref(kUpdatesAutomatic, true);
++  registry->RegisterBooleanPref(kThanksAfterUpdate, true);
++  registry->RegisterStringPref(kLastRunVersion, std::string());
++  registry->RegisterBooleanPref(kThanksAfterInstallShown, false);
+ }
+ }  // namespace stedding::prefs
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 7829181711db0..b3e2959b300b1 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -121,8 +121,23 @@ inline constexpr char kExternalDefaultSpace[] =
+ // next window of the profile finishes them (BACKLOG S-206).
+ inline constexpr char kPendingJarWipes[] = "stedding.spaces.pending_jar_wipes";
+ 
++// updates Up1, Up6 (docs/features/updates.md): the Mac's updater checks once
++// a day and downloads a new version in the background; off, it makes no
++// request at all. Browser-wide, like the updater. On by default (the owner,
++// 2026-10-16).
++inline constexpr char kUpdatesAutomatic[] = "stedding.updates.automatic";
++// updates Up10: the first launch of a later version opens stedding.dev's
++// thank-you page in one tab. On by default.
++inline constexpr char kThanksAfterUpdate[] =
++    "stedding.updates.thanks_after_update";
++// updates Up9, Up10: the Stedding version that last ran, and whether the
++// install's thank-you page has been shown.
++inline constexpr char kLastRunVersion[] = "stedding.updates.last_run_version";
++inline constexpr char kThanksAfterInstallShown[] =
++    "stedding.updates.thanks_after_install_shown";
++
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+-// The browser-wide ones (privacy Q4).
++// The browser-wide ones (privacy Q4, sidebar Y1, updates Up1).
+ void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
+ 
+ }  // namespace stedding::prefs
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index e73565f3654dd..5d8a47d33086d 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ 
++#include "components/prefs/testing_pref_service.h"
+ #include "components/sync_preferences/testing_pref_service_syncable.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ 
+@@ -42,5 +43,17 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   EXPECT_EQ(kSidebarClosedToIcons, service.GetInteger(kSidebarClosedForm));
+ }
+ 
++// updates Up1, Up10: automatic updates and the thank-you page after an update
++// start on; nothing has run and no thank-you page has been shown yet.
++TEST(SteddingPrefsTest, TheBrowserWidePreferencesRegisterWithTheirDefaults) {
++  TestingPrefServiceSimple local_state;
++  RegisterLocalStatePrefs(local_state.registry());
++  EXPECT_TRUE(local_state.GetBoolean(kGlobalPrivacyControl));
++  EXPECT_TRUE(local_state.GetBoolean(kUpdatesAutomatic));
++  EXPECT_TRUE(local_state.GetBoolean(kThanksAfterUpdate));
++  EXPECT_EQ("", local_state.GetString(kLastRunVersion));
++  EXPECT_FALSE(local_state.GetBoolean(kThanksAfterInstallShown));
++}
++
+ }  // namespace
+ }  // namespace stedding::prefs
+diff --git a/chrome/browser/ui/stedding/stedding_updates.gni b/chrome/browser/ui/stedding/stedding_updates.gni
+new file mode 100644
+index 0000000000000..4cb263077e713
+--- /dev/null
++++ b/chrome/browser/ui/stedding/stedding_updates.gni
+@@ -0,0 +1,12 @@
++# Copyright 2026 The Stedding Authors
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++declare_args() {
++  # docs/features/updates.md, ADR 0022: bundle Sparkle.framework into the Mac
++  # app. tooling/fetch-sparkle puts the pinned release at
++  # //third_party/stedding_sparkle and tooling/build-chromium then sets this.
++  # Off in a build made without the tooling: the browser runs, with no
++  # updater.
++  stedding_sparkle = false
++}
+diff --git a/chrome/browser/ui/stedding/stedding_version.cc b/chrome/browser/ui/stedding/stedding_version.cc
+index 71a937d44b7f1..e94ef6ecb7178 100644
+--- a/chrome/browser/ui/stedding/stedding_version.cc
++++ b/chrome/browser/ui/stedding/stedding_version.cc
+@@ -4,13 +4,50 @@
+ 
+ #include "chrome/browser/ui/stedding/stedding_version.h"
+ 
++#include <limits>
++#include <tuple>
++#include <utility>
++#include <vector>
++
++#include "base/no_destructor.h"
+ #include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/version_info/version_info.h"
+ #include "chrome/browser/ui/stedding/stedding_version_buildflags.h"
+ 
+ namespace stedding {
+ 
++namespace {
++
++std::optional<std::string>& VersionForTesting() {
++  static base::NoDestructor<std::optional<std::string>> version;
++  return *version;
++}
++
++// A number of the version: digits only, no sign, no space.
++std::optional<int> ParsePart(std::string_view part) {
++  if (part.empty() || part.size() > 6 ||
++      part.find_first_not_of("0123456789") != std::string_view::npos) {
++    return std::nullopt;
++  }
++  int value = 0;
++  if (!base::StringToInt(part, &value)) {
++    return std::nullopt;
++  }
++  return value;
++}
++
++// The order of two versions: the release after every beta of it.
++auto OrderOf(const SteddingVersionNumber& version) {
++  return std::make_tuple(
++      version.major, version.minor, version.patch,
++      version.beta == 0 ? std::numeric_limits<int>::max() : version.beta);
++}
++
++}  // namespace
++
+ std::u16string FormatAboutVersion(std::string_view stedding_version,
+                                   std::string_view chromium_version,
+                                   std::u16string_view processor) {
+@@ -32,7 +69,55 @@ std::u16string AboutVersionString(std::u16string_view processor) {
+ }
+ 
+ std::string_view SteddingVersion() {
++  if (const std::optional<std::string>& version = VersionForTesting()) {
++    return *version;
++  }
+   return BUILDFLAG(STEDDING_VERSION);
+ }
+ 
++std::optional<SteddingVersionNumber> ParseSteddingVersion(
++    std::string_view version) {
++  std::string_view core = version;
++  std::optional<int> beta;
++  if (const size_t dash = version.find('-'); dash != std::string_view::npos) {
++    core = version.substr(0, dash);
++    constexpr std::string_view kBeta = "beta.";
++    const std::string_view rest = version.substr(dash + 1);
++    if (!rest.starts_with(kBeta)) {
++      return std::nullopt;
++    }
++    beta = ParsePart(rest.substr(kBeta.size()));
++    if (!beta || *beta == 0) {
++      return std::nullopt;
++    }
++  }
++  const std::vector<std::string_view> parts = base::SplitStringPiece(
++      core, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
++  if (parts.size() != 3) {
++    return std::nullopt;
++  }
++  SteddingVersionNumber number;
++  const std::optional<int> major = ParsePart(parts[0]);
++  const std::optional<int> minor = ParsePart(parts[1]);
++  const std::optional<int> patch = ParsePart(parts[2]);
++  if (!major || !minor || !patch) {
++    return std::nullopt;
++  }
++  number.major = *major;
++  number.minor = *minor;
++  number.patch = *patch;
++  number.beta = beta.value_or(0);
++  return number;
++}
++
++bool IsLaterSteddingVersion(std::string_view version, std::string_view than) {
++  const std::optional<SteddingVersionNumber> a = ParseSteddingVersion(version);
++  const std::optional<SteddingVersionNumber> b = ParseSteddingVersion(than);
++  return a && b && OrderOf(*a) > OrderOf(*b);
++}
++
++void SetSteddingVersionForTesting(std::optional<std::string> version) {
++  VersionForTesting() = std::move(version);
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/stedding_version.h b/chrome/browser/ui/stedding/stedding_version.h
+index 9c9a24bbd25cd..5a443d98ba0e9 100644
+--- a/chrome/browser/ui/stedding/stedding_version.h
++++ b/chrome/browser/ui/stedding/stedding_version.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_STEDDING_STEDDING_VERSION_H_
+ #define CHROME_BROWSER_UI_STEDDING_STEDDING_VERSION_H_
+ 
++#include <optional>
+ #include <string>
+ #include <string_view>
+ 
+@@ -26,6 +27,26 @@ std::u16string AboutVersionString(std::u16string_view processor);
+ // This build's Stedding version, empty when the build was made without it.
+ std::string_view SteddingVersion();
+ 
++// updates Up11 (docs/features/updates.md): a Stedding version as VERSION and
++// the release tags write it, <major>.<minor>.<patch>, with -beta.<n> for a beta
++// (ADR 0014's tag shape). A beta comes before the release it leads to, and
++// betas follow their numbers.
++struct SteddingVersionNumber {
++  int major = 0;
++  int minor = 0;
++  int patch = 0;
++  // 0 for a release.
++  int beta = 0;
++};
++std::optional<SteddingVersionNumber> ParseSteddingVersion(
++    std::string_view version);
++// Whether `version` is later than `than`. False when either is not a Stedding
++// version: a version nobody can read is never an update.
++bool IsLaterSteddingVersion(std::string_view version, std::string_view than);
++
++// Tests: what SteddingVersion() answers until it is reset with nullopt.
++void SetSteddingVersionForTesting(std::optional<std::string> version);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_STEDDING_STEDDING_VERSION_H_
+diff --git a/chrome/browser/ui/stedding/stedding_version_unittest.cc b/chrome/browser/ui/stedding/stedding_version_unittest.cc
+index 7b929bba60949..84e73ec630fb3 100644
+--- a/chrome/browser/ui/stedding/stedding_version_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_version_unittest.cc
+@@ -26,5 +26,54 @@ TEST(SteddingVersionTest, AboutStringNamesBothVersions) {
+       << base::UTF16ToUTF8(line);
+ }
+ 
++// updates Up11: the versions VERSION and the tags write, in release order.
++TEST(SteddingVersionTest, VersionsCompareInReleaseOrder) {
++  const std::optional<SteddingVersionNumber> beta =
++      ParseSteddingVersion("0.2.0-beta.16");
++  ASSERT_TRUE(beta);
++  EXPECT_EQ(0, beta->major);
++  EXPECT_EQ(2, beta->minor);
++  EXPECT_EQ(0, beta->patch);
++  EXPECT_EQ(16, beta->beta);
++  EXPECT_EQ(0, ParseSteddingVersion("1.0.0")->beta);
++
++  // Each pair: the later version first.
++  const char* const kLater[][2] = {
++      {"0.2.0-beta.16", "0.2.0-beta.15"},
++      {"0.2.0-beta.10", "0.2.0-beta.9"},
++      {"0.2.0", "0.2.0-beta.99"},
++      {"0.2.1-beta.1", "0.2.0"},
++      {"0.3.0-beta.1", "0.2.9"},
++      {"1.0.0-beta.1", "0.99.99"},
++      {"0.10.0", "0.9.0"},
++  };
++  for (const auto& pair : kLater) {
++    EXPECT_TRUE(IsLaterSteddingVersion(pair[0], pair[1]))
++        << pair[0] << " after " << pair[1];
++    EXPECT_FALSE(IsLaterSteddingVersion(pair[1], pair[0]))
++        << pair[1] << " before " << pair[0];
++  }
++  EXPECT_FALSE(IsLaterSteddingVersion("0.2.0-beta.16", "0.2.0-beta.16"));
++}
++
++// updates Up11: anything else is not a Stedding version, and never an update.
++TEST(SteddingVersionTest, OtherStringsAreNotVersions) {
++  for (const char* text :
++       {"", "0.2", "0.2.0.1", "0.2.0-rc.1", "0.2.0-beta", "0.2.0-beta.",
++        "0.2.0-beta.0", "0.2.0-beta.1x", "0.2.0-beta.1-2", "v0.2.0", " 0.2.0",
++        "0.2.0 ", "0.-2.0", "0.+2.0", "150.0.1234.5", "0..0"}) {
++    EXPECT_FALSE(ParseSteddingVersion(text)) << '"' << text << '"';
++    EXPECT_FALSE(IsLaterSteddingVersion(text, "0.0.1")) << text;
++    EXPECT_FALSE(IsLaterSteddingVersion("9.0.0", text)) << text;
++  }
++}
++
++TEST(SteddingVersionTest, TestsCanSetTheVersion) {
++  SetSteddingVersionForTesting("0.2.0-beta.40");
++  EXPECT_EQ("0.2.0-beta.40", SteddingVersion());
++  SetSteddingVersionForTesting(std::nullopt);
++  EXPECT_NE("0.2.0-beta.40", SteddingVersion());
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/thanks_pages.cc b/chrome/browser/ui/stedding/thanks_pages.cc
+new file mode 100644
+index 0000000000000..06c16e4e68c9b
+--- /dev/null
++++ b/chrome/browser/ui/stedding/thanks_pages.cc
+@@ -0,0 +1,134 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/thanks_pages.h"
++
++#include <string>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/memory/weak_ptr.h"
++#include "base/strings/strcat.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/stedding_version.h"
++#include "chrome/common/chrome_switches.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/page_transition_types.h"
++#include "ui/base/window_open_disposition.h"
++
++namespace stedding {
++
++namespace {
++
++bool g_decided_after_update = false;
++bool g_ignore_no_first_run = false;
++
++bool FirstRunSuppressed() {
++  return !g_ignore_no_first_run &&
++         base::CommandLine::ForCurrentProcess()->HasSwitch(
++             switches::kNoFirstRun);
++}
++
++void OpenThanksTab(base::WeakPtr<BrowserWindowInterface> browser, GURL url) {
++  if (!browser) {
++    return;
++  }
++  NavigateParams params(browser.get(), url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
++  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  Navigate(&params);
++}
++
++// The tab opens on the next turn of the loop, as the welcome flow does: the
++// window is shown before its restored tabs are settled.
++void OpenThanksTabSoon(BrowserWindowInterface& browser, GURL url) {
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(&OpenThanksTab, browser.GetWeakPtr(), std::move(url)));
++}
++
++}  // namespace
++
++GURL ThanksAfterUpdateUrl(std::string_view version) {
++  return GURL(base::StrCat({kThanksAfterUpdateUrl, "#v", version}));
++}
++
++bool ShouldOpenThanksAfterUpdate(PrefService& local_state,
++                                 std::string_view version,
++                                 bool first_run_suppressed,
++                                 bool welcome_pending) {
++  if (version.empty()) {
++    return false;
++  }
++  const std::string last = local_state.GetString(prefs::kLastRunVersion);
++  local_state.SetString(prefs::kLastRunVersion, std::string(version));
++  if (first_run_suppressed || last == version ||
++      !local_state.GetBoolean(prefs::kThanksAfterUpdate)) {
++    return false;
++  }
++  if (last.empty()) {
++    // No version recorded: the install's own first run, whose page comes
++    // with the welcome flow, or a profile from a build before this one
++    // recorded versions, which is an update.
++    return !welcome_pending;
++  }
++  return IsLaterSteddingVersion(version, last);
++}
++
++bool ShouldOpenThanksAfterInstall(PrefService& local_state,
++                                  std::string_view version,
++                                  bool welcome_forced) {
++  if (version.empty() || welcome_forced ||
++      local_state.GetBoolean(prefs::kThanksAfterInstallShown)) {
++    return false;
++  }
++  local_state.SetBoolean(prefs::kThanksAfterInstallShown, true);
++  return true;
++}
++
++void MaybeOpenThanksAfterUpdate(BrowserWindowInterface& browser) {
++  // The first normal window decides, once per run; a popup or a private
++  // window that opens first leaves it to the next one.
++  if (g_decided_after_update ||
++      browser.GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      !browser.GetProfile() || browser.GetProfile()->IsOffTheRecord() ||
++      !g_browser_process || !g_browser_process->local_state()) {
++    return;
++  }
++  g_decided_after_update = true;
++  const bool welcome_pending =
++      !browser.GetProfile()->GetPrefs()->GetBoolean(prefs::kWelcomeShown);
++  if (ShouldOpenThanksAfterUpdate(*g_browser_process->local_state(),
++                                  SteddingVersion(), FirstRunSuppressed(),
++                                  welcome_pending)) {
++    OpenThanksTabSoon(browser, ThanksAfterUpdateUrl(SteddingVersion()));
++  }
++}
++
++void MaybeOpenThanksAfterInstall(BrowserWindowInterface& browser,
++                                 bool welcome_forced) {
++  if (!g_browser_process || !g_browser_process->local_state()) {
++    return;
++  }
++  if (ShouldOpenThanksAfterInstall(*g_browser_process->local_state(),
++                                   SteddingVersion(), welcome_forced)) {
++    OpenThanksTabSoon(browser, GURL(kThanksAfterInstallUrl));
++  }
++}
++
++void ResetThanksAfterUpdateForTesting() {
++  g_decided_after_update = false;
++}
++
++void IgnoreNoFirstRunForTesting(bool ignore) {
++  g_ignore_no_first_run = ignore;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/thanks_pages.h b/chrome/browser/ui/stedding/thanks_pages.h
+new file mode 100644
+index 0000000000000..67a3a3aa3a215
+--- /dev/null
++++ b/chrome/browser/ui/stedding/thanks_pages.h
+@@ -0,0 +1,60 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_THANKS_PAGES_H_
++#define CHROME_BROWSER_UI_STEDDING_THANKS_PAGES_H_
++
++#include <string_view>
++
++#include "url/gurl.h"
++
++class BrowserWindowInterface;
++class PrefService;
++
++namespace stedding {
++
++// updates Up9, Up10 (docs/features/updates.md): stedding.dev's thank-you
++// pages, each opened once in one tab: after the install, when the welcome
++// flow is finished or skipped, and after each update, on the first launch of
++// the later version.
++inline constexpr char kThanksAfterInstallUrl[] = "https://stedding.dev/thanks/";
++inline constexpr char kThanksAfterUpdateUrl[] =
++    "https://stedding.dev/thanks/updated/";
++
++// The update's page, its fragment naming the version that started: the page
++// links that version's notes, and a fragment never leaves the browser.
++GURL ThanksAfterUpdateUrl(std::string_view version);
++
++// Whether the first window of this run opens the update's page. Records
++// `version` as the one that last ran whatever the answer. Never on a build
++// with no version, under --no-first-run (`first_run_suppressed`), on the run
++// that installed the browser (no version recorded and the welcome flow still
++// to come), for a version that is not later than the last one, or with the
++// setting off.
++bool ShouldOpenThanksAfterUpdate(PrefService& local_state,
++                                 std::string_view version,
++                                 bool first_run_suppressed,
++                                 bool welcome_pending);
++
++// Whether the welcome flow's end opens the install's page, recording that it
++// did: once per installation, never on a build with no version and never for
++// a welcome forced from the command line (the captures' --stedding-welcome).
++bool ShouldOpenThanksAfterInstall(PrefService& local_state,
++                                  std::string_view version,
++                                  bool welcome_forced);
++
++// The browser's calls: the first normal window of each run (BrowserView::Show
++// beside the welcome flow), and the welcome flow when it closes finished or
++// skipped. Each opens its page in a new foreground tab of `browser`.
++void MaybeOpenThanksAfterUpdate(BrowserWindowInterface& browser);
++void MaybeOpenThanksAfterInstall(BrowserWindowInterface& browser,
++                                 bool welcome_forced);
++
++// Tests: decide again on the next window, and read --no-first-run as absent.
++void ResetThanksAfterUpdateForTesting();
++void IgnoreNoFirstRunForTesting(bool ignore);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_THANKS_PAGES_H_
+diff --git a/chrome/browser/ui/stedding/thanks_pages_unittest.cc b/chrome/browser/ui/stedding/thanks_pages_unittest.cc
+new file mode 100644
+index 0000000000000..cfc52f56a460e
+--- /dev/null
++++ b/chrome/browser/ui/stedding/thanks_pages_unittest.cc
+@@ -0,0 +1,95 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/thanks_pages.h"
++
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/prefs/testing_pref_service.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace stedding {
++namespace {
++
++class ThanksPagesTest : public testing::Test {
++ protected:
++  ThanksPagesTest() { prefs::RegisterLocalStatePrefs(local_state_.registry()); }
++
++  bool AfterUpdate(std::string_view version,
++                   bool first_run_suppressed = false,
++                   bool welcome_pending = false) {
++    return ShouldOpenThanksAfterUpdate(local_state_, version,
++                                       first_run_suppressed, welcome_pending);
++  }
++
++  TestingPrefServiceSimple local_state_;
++};
++
++// updates Up10: a later version opens the page once, on its first launch.
++TEST_F(ThanksPagesTest, ALaterVersionOpensTheUpdatePageOnce) {
++  local_state_.SetString(prefs::kLastRunVersion, "0.2.0-beta.15");
++  EXPECT_TRUE(AfterUpdate("0.2.0-beta.16"));
++  EXPECT_EQ("0.2.0-beta.16", local_state_.GetString(prefs::kLastRunVersion));
++  EXPECT_FALSE(AfterUpdate("0.2.0-beta.16")) << "the second launch";
++  EXPECT_TRUE(AfterUpdate("0.2.0")) << "the release after its betas";
++}
++
++// updates Up10: a profile from before versions were recorded is an update;
++// the install's own first run is not (its page comes with the welcome flow).
++TEST_F(ThanksPagesTest, NoRecordedVersionIsAnUpdateUnlessWelcomeIsToCome) {
++  EXPECT_FALSE(AfterUpdate("0.2.0-beta.16", false, /*welcome_pending=*/true));
++  EXPECT_EQ("0.2.0-beta.16", local_state_.GetString(prefs::kLastRunVersion))
++      << "the install's version is recorded, so its next launch is quiet";
++  EXPECT_FALSE(AfterUpdate("0.2.0-beta.16"));
++
++  local_state_.ClearPref(prefs::kLastRunVersion);
++  EXPECT_TRUE(AfterUpdate("0.2.0-beta.16", false, /*welcome_pending=*/false));
++}
++
++// updates Up10: never for an older or unreadable version, a build with no
++// version, under --no-first-run, or with the setting off; the version that
++// ran is recorded all the same.
++TEST_F(ThanksPagesTest, TheUpdatePageStaysClosedWhenItShould) {
++  local_state_.SetString(prefs::kLastRunVersion, "0.2.0-beta.16");
++  EXPECT_FALSE(AfterUpdate("0.2.0-beta.15")) << "an older version";
++  local_state_.SetString(prefs::kLastRunVersion, "0.2.0-beta.15");
++  EXPECT_FALSE(AfterUpdate("0.2.0-rc.1")) << "not a Stedding version";
++  EXPECT_FALSE(AfterUpdate("")) << "a build with no version";
++  EXPECT_EQ("0.2.0-rc.1", local_state_.GetString(prefs::kLastRunVersion));
++
++  local_state_.SetString(prefs::kLastRunVersion, "0.2.0-beta.15");
++  EXPECT_FALSE(AfterUpdate("0.2.0-beta.16", /*first_run_suppressed=*/true));
++  EXPECT_EQ("0.2.0-beta.16", local_state_.GetString(prefs::kLastRunVersion));
++
++  local_state_.SetString(prefs::kLastRunVersion, "0.2.0-beta.15");
++  local_state_.SetBoolean(prefs::kThanksAfterUpdate, false);
++  EXPECT_FALSE(AfterUpdate("0.2.0-beta.16")) << "the setting is off";
++  EXPECT_EQ("0.2.0-beta.16", local_state_.GetString(prefs::kLastRunVersion));
++}
++
++// updates Up9: the install's page opens once, and not for a forced welcome.
++TEST_F(ThanksPagesTest, TheInstallPageOpensOnce) {
++  EXPECT_FALSE(ShouldOpenThanksAfterInstall(local_state_, "0.2.0-beta.16",
++                                            /*welcome_forced=*/true));
++  EXPECT_FALSE(ShouldOpenThanksAfterInstall(local_state_, "",
++                                            /*welcome_forced=*/false));
++  EXPECT_TRUE(ShouldOpenThanksAfterInstall(local_state_, "0.2.0-beta.16",
++                                           /*welcome_forced=*/false));
++  EXPECT_FALSE(ShouldOpenThanksAfterInstall(local_state_, "0.2.0-beta.16",
++                                            /*welcome_forced=*/false))
++      << "a second profile's welcome flow";
++}
++
++// updates Up10: the version rides in the fragment, which the browser never
++// sends.
++TEST_F(ThanksPagesTest, TheUpdatePageNamesTheVersionInItsFragment) {
++  const GURL url = ThanksAfterUpdateUrl("0.2.0-beta.16");
++  EXPECT_EQ("https://stedding.dev/thanks/updated/#v0.2.0-beta.16", url.spec());
++  EXPECT_EQ("v0.2.0-beta.16", url.ref());
++  EXPECT_FALSE(url.has_query());
++  EXPECT_EQ("https://stedding.dev/thanks/", GURL(kThanksAfterInstallUrl).spec());
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
+index a1951187b8071..a1973941c440e 100644
+--- a/chrome/browser/ui/views/commandbar/BUILD.gn
++++ b/chrome/browser/ui/views/commandbar/BUILD.gn
+@@ -14,6 +14,7 @@ source_set("commandbar") {
+ 
+   deps = [
+     "//chrome/browser/ui/stedding:little_window",
++    "//chrome/browser/ui/stedding:app_updater",
+     "//chrome/browser:browser_process",
+     "//chrome/browser/ui/stedding:sidebar_density",
+     "//components/sessions",
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index f42c6074f6c97..4eb8dfd1f54a3 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -43,6 +43,7 @@
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/browser/ui/spaces/space_query.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
+ #include "chrome/browser/ui/stedding/media_keys.h"
+ #include "chrome/browser/ui/stedding/new_documents.h"
+ #include "chrome/browser/ui/stedding/sidebar_density.h"
+@@ -746,6 +747,31 @@ void CommandBarView::BuildActions() {
+                                   WindowOpenDisposition::NEW_FOREGROUND_TAB);
+                             },
+                             base::Unretained(browser_))});
++    // updates Up7: the updater's rows, where the build has one: Restart to
++    // Update while a later version waits (the sidebar's button), and Check
++    // for Updates, which asks now and shows the answer on the About page.
++    if (stedding::AppUpdater* const updater = stedding::AppUpdater::Get()) {
++      if (stedding::OffersRestart(updater->state())) {
++        actions_.push_back({u"Restart to Update Stedding", std::u16string(),
++                            base::BindRepeating([]() {
++                              if (stedding::AppUpdater* const now =
++                                      stedding::AppUpdater::Get()) {
++                                now->InstallNow();
++                              }
++                            })});
++      }
++      actions_.push_back(
++          {u"Check for Updates", std::u16string(),
++           base::BindRepeating(
++               [](BrowserWindowInterface* browser) {
++                 if (stedding::AppUpdater* const now =
++                         stedding::AppUpdater::Get()) {
++                   now->CheckNow();
++                 }
++                 ShowSingletonTab(browser, GURL("chrome://settings/help"));
++               },
++               base::Unretained(browser_))});
++    }
+     // commandbar K28 (BACKLOG S-116): a row per service's blank document,
+     // each opening the service's own new-document address in a new tab of
+     // the active Space. Normal windows only (K15).
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index 553acd0021583..70ddf9bc40acb 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -122,6 +122,7 @@
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
+ #include "chrome/browser/ui/stedding/address_row.h"
+ #include "chrome/browser/ui/stedding/private_window.h"
++#include "chrome/browser/ui/stedding/thanks_pages.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/views/frame/stedding_fullscreen_sidebar_toggle.h"
+ #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
+@@ -1670,8 +1671,10 @@ void BrowserView::Show() {
+   }
+ 
+   OnWindowDidShow();
+-  // Stedding: a profile's first normal window gets the welcome flow.
++  // Stedding: a profile's first normal window gets the welcome flow, and the
++  // first window of a later version its thank-you page (updates Up10).
+   stedding::MaybeShowWelcomeDialog(*browser());
++  stedding::MaybeOpenThanksAfterUpdate(*browser());
+ 
+   // The fullscreen transition clears out focus, but there are some cases (for
+   // example, new window in Mac fullscreen with toolbar showing) where we need
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 97f1a5f6ef977..177606fe49c34 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -78,6 +78,7 @@
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
+ #include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
++#include "chrome/browser/ui/views/stedding/update_pill.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
+@@ -355,6 +356,12 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+         views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                                  views::MaximumFlexSizeRule::kPreferred));
+     archived_row_ = AddChildView(std::move(archived_row));
++    // updates Up3: "New Stedding Version Available", between the Archived
++    // row and the Space row, as Arc puts its own above the Spaces; hidden
++    // until a later version is ready.
++    if (stedding::UpdatePill* const pill = stedding::AddUpdatePill(*this)) {
++      pill->SetRailForm(rail_form_);
++    }
+ 
+     auto* const bottom_row = AddChildView(std::make_unique<views::View>());
+     bottom_row_ = bottom_row;
+@@ -2340,6 +2347,14 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+             vector_icons::kHistoryIcon, kColorTabForegroundInactiveFrameActive,
+             stedding::SidebarFaviconSize() + (rail ? 4 : 0)));
+   }
++  // The update pill sits on the rows' column too, a little apart from the
++  // rows above and below it (updates Up3, sidebar Y25).
++  if (stedding::UpdatePill* const pill = stedding::FindUpdatePill(*this)) {
++    pill->SetRailForm(rail);
++    pill->SetProperty(views::kMarginsKey,
++                      gfx::Insets::TLBR(6, padding + rail_left_, 6,
++                                        padding + rail_right_));
++  }
+   if (space_switcher_) {
+     space_switcher_->SetCollapsed(rail);
+   }
+diff --git a/chrome/browser/ui/views/stedding/BUILD.gn b/chrome/browser/ui/views/stedding/BUILD.gn
+index 5df75849e0dcb..34464a72510cb 100644
+--- a/chrome/browser/ui/views/stedding/BUILD.gn
++++ b/chrome/browser/ui/views/stedding/BUILD.gn
+@@ -62,15 +62,41 @@ if (use_aura) {
+   }
+ }
+ 
++# updates Up3, Up4: the sidebar's "New Stedding Version Available". It reads
++# and drives the updater, and takes nothing of the browser's.
++source_set("update_pill") {
++  sources = [
++    "update_pill.cc",
++    "update_pill.h",
++  ]
++  public_deps = [
++    "//base",
++    "//chrome/browser/ui/stedding:app_updater",
++    "//ui/views",
++  ]
++  deps = [
++    "//chrome/app/vector_icons",
++    "//chrome/browser/ui:layout_constants",
++    "//chrome/browser/ui:stedding_ui_metrics",
++    "//chrome/browser/ui/color:color_headers",
++    "//ui/accessibility",
++    "//ui/base",
++    "//ui/gfx",
++  ]
++}
++
+ source_set("unit_tests") {
+   testonly = true
+   sources = [
+     "rename_field_watcher_unittest.cc",
+     "sidebar_resize_handle_unittest.cc",
++    "update_pill_unittest.cc",
+   ]
+   deps = [
+     ":rename_field_watcher",
+     ":sidebar_resize_handle",
++    ":update_pill",
++    "//chrome/browser/ui/stedding:app_updater_test_support",
+     "//base",
+     "//base/test:test_support",
+     "//testing/gtest",
+diff --git a/chrome/browser/ui/views/stedding/update_pill.cc b/chrome/browser/ui/views/stedding/update_pill.cc
+new file mode 100644
+index 0000000000000..f25e2114589fb
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/update_pill.cc
+@@ -0,0 +1,160 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/stedding/update_pill.h"
++
++#include <memory>
++#include <string>
++
++#include "base/functional/bind.h"
++#include "base/strings/strcat.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/views/tabs/common/sidebar_font.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/image_model.h"
++#include "ui/gfx/font.h"
++#include "ui/gfx/geometry/insets.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/gfx/text_constants.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/animation/ink_drop.h"
++#include "ui/views/animation/ink_drop_host.h"
++#include "ui/views/background.h"
++#include "ui/views/border.h"
++#include "ui/views/controls/highlight_path_generator.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/layout/flex_layout_types.h"
++#include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
++
++namespace stedding {
++
++namespace {
++
++// Arc's words, with Stedding's name (the owner, 2026-10-16).
++constexpr char16_t kPillText[] = u"New Stedding Version Available";
++constexpr int kIconSize = 16;
++// The pill sits a little apart from the Archived row above it and the Space
++// row below.
++constexpr int kVerticalMargin = 6;
++
++}  // namespace
++
++UpdatePill::UpdatePill(AppUpdater& updater)
++    : views::LabelButton(
++          base::BindRepeating(&UpdatePill::OnPressed, base::Unretained(this)),
++          kPillText),
++      updater_(updater) {
++  SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  SetEnabledTextColors(kColorTabForegroundActiveFrameActive);
++  SetTextColor(views::Button::STATE_DISABLED,
++               kColorTabForegroundInactiveFrameActive);
++  label()->SetElideBehavior(gfx::ELIDE_TAIL);
++  SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
++  SetProperty(views::kMarginsKey, gfx::Insets::VH(kVerticalMargin, 0));
++  SetProperty(views::kFlexBehaviorKey,
++              views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
++                                       views::MaximumFlexSizeRule::kPreferred));
++  // A hover and a press show on the pill as on a tab row.
++  views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
++  views::InkDrop::Get(this)->SetBaseColor(kColorTabForegroundActiveFrameActive);
++  SetHasInkDropActionOnClick(true);
++  views::InstallRoundRectHighlightPathGenerator(
++      this, gfx::Insets(),
++      GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius));
++  observation_.Observe(&updater);
++  Refresh();
++}
++
++UpdatePill::~UpdatePill() = default;
++
++void UpdatePill::SetRailForm(bool rail) {
++  if (rail_ == rail) {
++    return;
++  }
++  rail_ = rail;
++  Refresh();
++}
++
++void UpdatePill::OnThemeChanged() {
++  views::LabelButton::OnThemeChanged();
++  // sidebar Y2, Y3: the rows' height and text size (a density change
++  // arrives as a theme change).
++  Refresh();
++}
++
++void UpdatePill::OnAppUpdaterChanged() {
++  Refresh();
++}
++
++void UpdatePill::Refresh() {
++  const AppUpdater::State state = updater_->state();
++  const bool installing = state == AppUpdater::State::kInstalling;
++  SetVisible(OffersRestart(state) || installing);
++  SetEnabled(!installing);
++
++  // The tooltip and the rail's name say what a click does; the version, when
++  // the release names one.
++  std::u16string tooltip = installing ? u"Restarting into the new version"
++                                      : u"Restart to update Stedding";
++  if (!updater_->version().empty() && !installing) {
++    tooltip = base::StrCat(
++        {u"Restart to update Stedding to ", updater_->version()});
++  }
++  SetTooltipText(tooltip);
++
++  SetText(rail_ ? std::u16string()
++                : std::u16string(installing ? u"Restarting…" : kPillText));
++  GetViewAccessibility().SetName(
++      rail_ ? tooltip
++            : std::u16string(installing ? u"Restarting…" : kPillText));
++  SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  SetImageModel(views::Button::STATE_NORMAL,
++                rail_ ? ui::ImageModel::FromVectorIcon(
++                            kBrowserToolsUpdateChromeRefreshOldIcon,
++                            kColorTabForegroundActiveFrameActive, kIconSize)
++                      : ui::ImageModel());
++  SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, rail_ ? 0 : 10)));
++
++  const gfx::FontList font = SidebarFont().DeriveWithWeight(
++      gfx::Font::Weight::MEDIUM);
++  if (!SameFont(label()->font_list(), font)) {
++    label()->SetFontList(font);
++  }
++  const int height = GetLayoutConstant(LayoutConstant::kVerticalTabHeight);
++  SetPreferredSize(gfx::Size(0, height));
++  SetBackground(views::CreateRoundedRectBackground(
++      kColorTabBackgroundActiveFrameActive,
++      GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)));
++  InvalidateLayout();
++}
++
++void UpdatePill::OnPressed() {
++  updater_->InstallNow();
++}
++
++BEGIN_METADATA(UpdatePill)
++END_METADATA
++
++UpdatePill* AddUpdatePill(views::View& parent) {
++  AppUpdater* const updater = AppUpdater::Get();
++  if (!updater) {
++    return nullptr;
++  }
++  return parent.AddChildView(std::make_unique<UpdatePill>(*updater));
++}
++
++UpdatePill* FindUpdatePill(views::View& parent) {
++  for (views::View* const child : parent.children()) {
++    if (UpdatePill* const pill = views::AsViewClass<UpdatePill>(child)) {
++      return pill;
++    }
++  }
++  return nullptr;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/stedding/update_pill.h b/chrome/browser/ui/views/stedding/update_pill.h
+new file mode 100644
+index 0000000000000..b0c5af55c7a4d
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/update_pill.h
+@@ -0,0 +1,62 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STEDDING_UPDATE_PILL_H_
++#define CHROME_BROWSER_UI_VIEWS_STEDDING_UPDATE_PILL_H_
++
++#include "base/memory/raw_ref.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/controls/button/label_button.h"
++
++namespace views {
++class View;
++}
++
++namespace stedding {
++
++// updates Up3, Up4 (docs/features/updates.md): Arc's "New Arc Version
++// Available". At the sidebar's foot, above the Space row, a pill in the
++// selected tab's colours shows "New Stedding Version Available" while a later
++// version is downloaded or waits for the go-ahead, and a click restarts into
++// it. The rail shows its icon alone, with the name as its tooltip. Hidden in
++// every other state, so the sidebar's layout gives it no room.
++class UpdatePill : public views::LabelButton, public AppUpdater::Observer {
++  METADATA_HEADER(UpdatePill, views::LabelButton)
++
++ public:
++  explicit UpdatePill(AppUpdater& updater);
++  UpdatePill(const UpdatePill&) = delete;
++  UpdatePill& operator=(const UpdatePill&) = delete;
++  ~UpdatePill() override;
++
++  // The rail's form: the icon alone, centred.
++  void SetRailForm(bool rail);
++
++  // views::View:
++  void OnThemeChanged() override;
++
++  // AppUpdater::Observer:
++  void OnAppUpdaterChanged() override;
++
++ private:
++  void Refresh();
++  void OnPressed();
++
++  const raw_ref<AppUpdater> updater_;
++  bool rail_ = false;
++  base::ScopedObservation<AppUpdater, AppUpdater::Observer> observation_{this};
++};
++
++// Adds the pill to the end of `parent`'s children when the process has an
++// updater (AppUpdater::Get()); the sidebar's region calls it just before its
++// Space row. Null when there is no updater.
++UpdatePill* AddUpdatePill(views::View& parent);
++// The pill AddUpdatePill put into `parent`, or null.
++UpdatePill* FindUpdatePill(views::View& parent);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STEDDING_UPDATE_PILL_H_
+diff --git a/chrome/browser/ui/views/stedding/update_pill_unittest.cc b/chrome/browser/ui/views/stedding/update_pill_unittest.cc
+new file mode 100644
+index 0000000000000..ae9a002562710
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/update_pill_unittest.cc
+@@ -0,0 +1,124 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/stedding/update_pill.h"
++
++#include <memory>
++#include <optional>
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/ui/stedding/fake_app_updater.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/base/models/image_model.h"
++#include "ui/events/base_event_utils.h"
++#include "ui/events/event.h"
++#include "ui/gfx/geometry/point.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/test/views_test_base.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget.h"
++
++namespace stedding {
++namespace {
++
++using State = AppUpdater::State;
++
++class UpdatePillTest : public views::ViewsTestBase {
++ protected:
++  void SetUp() override {
++    views::ViewsTestBase::SetUp();
++    widget_ = CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++    sidebar_ = widget_->SetContentsView(std::make_unique<views::View>());
++    pill_ = AddUpdatePill(*sidebar_);
++    widget_->Show();
++  }
++
++  void TearDown() override {
++    pill_ = nullptr;
++    sidebar_ = nullptr;
++    widget_.reset();
++    views::ViewsTestBase::TearDown();
++  }
++
++  void Click() {
++    const gfx::Point center = pill_->GetLocalBounds().CenterPoint();
++    pill_->OnMousePressed(ui::MouseEvent(
++        ui::EventType::kMousePressed, center, center, ui::EventTimeForNow(),
++        ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
++    pill_->OnMouseReleased(ui::MouseEvent(
++        ui::EventType::kMouseReleased, center, center, ui::EventTimeForNow(),
++        ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
++  }
++
++  bool HasIcon() {
++    const std::optional<ui::ImageModel>& image =
++        pill_->GetImageModel(views::Button::STATE_NORMAL);
++    return image && !image->IsEmpty();
++  }
++
++  // Constructed before the widget, so it outlives the pill that watches it.
++  FakeAppUpdater updater_;
++  std::unique_ptr<views::Widget> widget_;
++  raw_ptr<views::View> sidebar_ = nullptr;
++  raw_ptr<UpdatePill> pill_ = nullptr;
++};
++
++// updates Up3: the pill shows Arc's words while a version waits, and only
++// then; a click restarts into it.
++TEST_F(UpdatePillTest, ShowsWhileAVersionWaitsAndRestartsOnClick) {
++  ASSERT_TRUE(pill_);
++  EXPECT_EQ(pill_, FindUpdatePill(*sidebar_));
++  for (const State state : {State::kIdle, State::kChecking, State::kUpToDate,
++                            State::kDownloading, State::kFailed}) {
++    updater_.Set(state);
++    EXPECT_FALSE(pill_->GetVisible()) << static_cast<int>(state);
++  }
++  updater_.Set(State::kReady, u"0.2.0-beta.16");
++  EXPECT_TRUE(pill_->GetVisible());
++  EXPECT_TRUE(pill_->GetEnabled());
++  EXPECT_EQ(u"New Stedding Version Available", pill_->GetText());
++  EXPECT_EQ(u"Restart to update Stedding to 0.2.0-beta.16",
++            pill_->GetRenderedTooltipText(gfx::Point()));
++  pill_->SetBoundsRect(gfx::Rect(0, 0, 220, 36));
++  Click();
++  EXPECT_EQ(1, updater_.installs);
++}
++
++// updates Up4: a version whose install waits for the go-ahead shows the same
++// pill; restarting shows it greyed until the browser quits.
++TEST_F(UpdatePillTest, AvailableShowsThePillAndInstallingGreysIt) {
++  updater_.Set(State::kAvailable);
++  EXPECT_TRUE(pill_->GetVisible());
++  EXPECT_TRUE(pill_->GetEnabled());
++  updater_.Set(State::kInstalling);
++  EXPECT_TRUE(pill_->GetVisible());
++  EXPECT_FALSE(pill_->GetEnabled());
++  EXPECT_EQ(u"Restarting…", pill_->GetText());
++}
++
++// updates Up3: the rail draws the icon alone and names the pill for
++// VoiceOver; the open sidebar gets the words back.
++TEST_F(UpdatePillTest, TheRailShowsTheIconAlone) {
++  updater_.Set(State::kReady);
++  pill_->SetRailForm(true);
++  EXPECT_TRUE(pill_->GetText().empty());
++  EXPECT_TRUE(HasIcon());
++  EXPECT_EQ(u"Restart to update Stedding",
++            pill_->GetViewAccessibility().GetCachedName());
++  pill_->SetRailForm(false);
++  EXPECT_EQ(u"New Stedding Version Available", pill_->GetText());
++  EXPECT_FALSE(HasIcon());
++}
++
++// No updater, no pill: Windows, a build without Sparkle.
++TEST_F(UpdatePillTest, NoUpdaterNoPill) {
++  AppUpdater::SetForTesting(nullptr);
++  views::View other;
++  EXPECT_FALSE(AddUpdatePill(other));
++  EXPECT_FALSE(FindUpdatePill(other));
++  AppUpdater::SetForTesting(&updater_);
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.cc b/chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.cc
+index d6af478460514..ae89e2e626331 100644
+--- a/chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.cc
++++ b/chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/thanks_pages.h"
+ #include "chrome/browser/ui/webui/stedding_welcome/stedding_welcome_ui.h"
+ #include "chrome/browser/ui/webui/stedding_welcome/welcome_host.h"
+ #include "chrome/common/chrome_switches.h"
+@@ -101,6 +102,7 @@ class WelcomeDialog : public views::DialogDelegate {
+   }
+ 
+   void Show(BrowserWindowInterface& browser) {
++    browser_ = browser.GetWeakPtr();
+     // The page's handler reaches this window's Spaces through this (W7).
+     if (content::WebContents* const contents = web_view_->GetWebContents()) {
+       WelcomeHost::CreateForWebContents(contents, &browser);
+@@ -126,12 +128,20 @@ class WelcomeDialog : public views::DialogDelegate {
+ 
+  private:
+   void OnFinished() {
++    // updates Up9: the install's thank-you page follows the flow, finished
++    // or skipped, in the window the flow floated over.
++    if (browser_ && profile_->GetPrefs()->GetBoolean(prefs::kWelcomeShown)) {
++      MaybeOpenThanksAfterInstall(
++          *browser_, base::CommandLine::ForCurrentProcess()->HasSwitch(
++                         kForceWelcomeSwitch));
++    }
+     if (widget_ && !widget_->IsClosed()) {
+       widget_->Close();
+     }
+   }
+ 
+   const raw_ptr<const Profile> profile_;
++  base::WeakPtr<BrowserWindowInterface> browser_;
+   raw_ptr<views::WebView> web_view_ = nullptr;
+   std::unique_ptr<views::Widget> widget_;
+   PrefChangeRegistrar registrar_;
+diff --git a/chrome/browser/ui/webui/help/BUILD.gn b/chrome/browser/ui/webui/help/BUILD.gn
+index 86f1392671052..f40ba5326b864 100644
+--- a/chrome/browser/ui/webui/help/BUILD.gn
++++ b/chrome/browser/ui/webui/help/BUILD.gn
+@@ -36,11 +36,16 @@ source_set("help") {
+   }
+ 
+   if (is_mac) {
+-    # Stedding: no Keystone in an unsigned build. The Keystone-backed updater
+-    # reports "error code 0" on chrome://settings/help; the basic stub reports
+-    # a plain disabled state instead, the same as non-branded Windows. Real
+-    # updates ship via GitHub Releases until M7 wires an updater.
++    # Stedding: no Keystone. The About page reads Stedding's own updater
++    # (Sparkle, docs/features/updates.md Up5) instead of reporting Keystone's
++    # "error code 0".
+     sources = [ "version_updater_stedding_mac.cc" ]
++    deps += [
++      "//chrome/browser:browser_process",
++      "//chrome/browser/ui/stedding:app_updater",
++      "//chrome/browser/ui/stedding:prefs",
++      "//components/prefs",
++    ]
+   }
+ 
+   if (is_win) {
+diff --git a/chrome/browser/ui/webui/help/version_updater_stedding_mac.cc b/chrome/browser/ui/webui/help/version_updater_stedding_mac.cc
+index d283426af1757..807ea85399397 100644
+--- a/chrome/browser/ui/webui/help/version_updater_stedding_mac.cc
++++ b/chrome/browser/ui/webui/help/version_updater_stedding_mac.cc
+@@ -4,20 +4,33 @@
+ 
+ #include <memory>
+ #include <string>
++#include <utility>
+ 
++#include "base/scoped_observation.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/webui/help/version_updater.h"
+ #include "chrome/browser/upgrade_detector/upgrade_detector.h"
++#include "components/prefs/pref_service.h"
+ 
+ namespace {
+ 
+-// The macOS updater for a build with no Keystone. The stock VersionUpdaterMac
+-// asks Keystone and, in a build that does not ship it, reports "error code 0"
+-// on chrome://settings/help. This one reports a plain disabled state instead.
+-// Updates ship via GitHub Releases until an updater lands (docs/ROADMAP.md M7).
++using UpdaterState = stedding::AppUpdater::State;
++
++// updates Up5, Up6 (docs/features/updates.md): chrome://settings/help on the
++// Mac, from Stedding's updater (Sparkle, ADR 0022) rather than Keystone,
++// which this build does not ship. Opening the page checks, as Chrome's About
++// page does, while automatic updates are on; off, it says so and checks only
++// when asked (Stedding › Check for Updates…). A later version downloads at
++// once and the page's Relaunch restarts into it (BrowserLifetimeHandler).
+ //
+-// This mirrors upstream's VersionUpdaterBasic, which cannot be used directly on
+-// macOS: PromoteUpdater() is a Mac-only pure virtual it does not implement.
+-class VersionUpdaterSteddingMac : public VersionUpdater {
++// Without an updater (a build without Sparkle, a test) it reports what the
++// stock basic updater would: nothing, or "nearly up to date" once a newer
++// version is on disk.
++class VersionUpdaterSteddingMac : public VersionUpdater,
++                                  public stedding::AppUpdater::Observer {
+  public:
+   VersionUpdaterSteddingMac() = default;
+   VersionUpdaterSteddingMac(const VersionUpdaterSteddingMac&) = delete;
+@@ -27,14 +40,92 @@ class VersionUpdaterSteddingMac : public VersionUpdater {
+ 
+   // VersionUpdater:
+   void CheckForUpdate(StatusCallback callback, PromoteCallback) override {
+-    const Status status = UpgradeDetector::GetInstance()->is_upgrade_available()
+-                              ? NEARLY_UPDATED
+-                              : DISABLED;
+-    callback.Run(status, 0, false, false, std::string(), 0, std::u16string());
++    callback_ = std::move(callback);
++    stedding::AppUpdater* const updater = stedding::AppUpdater::Get();
++    if (!updater) {
++      const Status status =
++          UpgradeDetector::GetInstance()->is_upgrade_available()
++              ? NEARLY_UPDATED
++              : DISABLED;
++      callback_.Run(status, 0, false, false, std::string(), 0,
++                    std::u16string());
++      return;
++    }
++    if (!observation_.IsObserving()) {
++      observation_.Observe(updater);
++    }
++    if (Automatic()) {
++      updater->CheckNow();
++    }
++    Report(*updater);
+   }
+ 
+   // There is no updater to promote.
+   void PromoteUpdater() override {}
++
++  // stedding::AppUpdater::Observer:
++  void OnAppUpdaterChanged() override {
++    if (stedding::AppUpdater* const updater = stedding::AppUpdater::Get()) {
++      Report(*updater);
++    }
++  }
++
++ private:
++  static bool Automatic() {
++    PrefService* const local_state =
++        g_browser_process ? g_browser_process->local_state() : nullptr;
++    return local_state &&
++           local_state->GetBoolean(stedding::prefs::kUpdatesAutomatic);
++  }
++
++  void Report(const stedding::AppUpdater& updater) {
++    if (!callback_) {
++      return;
++    }
++    const std::string version = base::UTF16ToUTF8(updater.version());
++    Status status = DISABLED;
++    int progress = 0;
++    std::u16string message;
++    switch (updater.state()) {
++      case UpdaterState::kIdle:
++        // With automatic updates on a check is about to start; off, the page
++        // says why it shows nothing newer.
++        if (Automatic()) {
++          status = CHECKING;
++        } else {
++          message =
++              u"Automatic updates are off. To look for a new version now, "
++              u"choose Stedding › Check for Updates…";
++        }
++        break;
++      case UpdaterState::kChecking:
++        status = CHECKING;
++        break;
++      case UpdaterState::kUpToDate:
++        status = UPDATED;
++        break;
++      case UpdaterState::kDownloading:
++        status = UPDATING;
++        progress = updater.progress();
++        break;
++      case UpdaterState::kAvailable:
++      case UpdaterState::kReady:
++        status = NEARLY_UPDATED;
++        break;
++      case UpdaterState::kInstalling:
++        status = UPDATING;
++        break;
++      case UpdaterState::kFailed:
++        status = FAILED;
++        message = updater.error();
++        break;
++    }
++    callback_.Run(status, progress, false, false, version, 0, message);
++  }
++
++  StatusCallback callback_;
++  base::ScopedObservation<stedding::AppUpdater, stedding::AppUpdater::Observer>
++      observation_{this};
+ };
+ 
+ }  // namespace
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index 8f7ad640db85f..77f9c176435e2 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -189,6 +189,7 @@ source_set("impl") {
+     ":settings",
+     "//chrome/app:command_ids",
+     "//chrome/app:generated_resources",
++    "//chrome/browser/ui/stedding:app_updater",
+     "//chrome/app/vector_icons",
+     "//chrome/browser:browser_process",
+     "//chrome/browser:browser_process_platform_part",
+diff --git a/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc b/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc
+index c36737ae91c45..f4bcdbec34f34 100644
+--- a/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc
++++ b/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc
+@@ -9,6 +9,7 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
+ #include "chrome/browser/lifetime/application_lifetime.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
+ #include "chrome/grit/branded_strings.h"
+ #include "components/policy/core/common/management/management_service.h"
+ 
+@@ -102,6 +103,15 @@ void BrowserLifetimeHandler::HandleRestart(const base::ListValue& args) {
+ }
+ 
+ void BrowserLifetimeHandler::HandleRelaunch(const base::ListValue& args) {
++  // Stedding (updates Up5): with a later version downloaded, Relaunch
++  // restarts through the updater, which installs it while the browser is
++  // closed and then opens it; Chromium's own relaunch would open the old
++  // bundle while the updater replaces it.
++  if (stedding::AppUpdater* const updater = stedding::AppUpdater::Get();
++      updater && stedding::OffersRestart(updater->state())) {
++    updater->InstallNow();
++    return;
++  }
+   chrome::AttemptRelaunch();
+ }
+ 
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 3a251ea7fc706..a4aa7096174f6 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -842,6 +842,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "Send what you type to the search engine for suggestions");
+   html_source->AddString("steddingSuggestSubLabel",
+                          "Off keeps every keystroke local until Enter.");
++  // updates Up1, Up6, Up10 (docs/features/updates.md).
++  html_source->AddString("steddingUpdatesTitle", "Updates");
++  html_source->AddString(
++      "steddingUpdatesIntro",
++      "New versions are published on the project\u2019s GitHub releases "
++      "page.");
++  html_source->AddString("steddingUpdatesAutomaticLabel",
++                         "Update Stedding automatically");
++  html_source->AddString(
++      "steddingUpdatesAutomaticSubLabel",
++      "Checks once a day and downloads a new version in the background; a "
++      "restart installs it. Off, Stedding makes no update request unless "
++      "you choose Check for Updates.");
++  html_source->AddString("steddingThanksAfterUpdateLabel",
++                         "Show a thank-you page after an update");
++  html_source->AddString(
++      "steddingThanksAfterUpdateSubLabel",
++      "One tab on stedding.dev the first time a new version starts.");
+   html_source->AddString("steddingHideAddressRowLabel",
+                          "Hide the address row with the sidebar");
+   html_source->AddString(
+diff --git a/chrome/installer/mac/signing/parts.py b/chrome/installer/mac/signing/parts.py
+index caf9b6f5447af..8573618e430c6 100644
+--- a/chrome/installer/mac/signing/parts.py
++++ b/chrome/installer/mac/signing/parts.py
+@@ -205,6 +205,43 @@ def get_parts(config):
+     return parts
+ 
+ 
++def _get_sparkle_parts(paths, config):
++    """Stedding (ADR 0022): Sparkle.framework, when the build bundles it.
++
++    Its helpers come signed ad hoc; each is nested code of the app, signed
++    inside out before the framework, and the framework before the app.
++
++    Returns:
++        A list of |model.CodeSignedProduct|, in signing order; empty when the
++        app has no Sparkle.framework.
++    """
++    framework = '{.app_product}.app/Contents/Frameworks/Sparkle.framework'.format(
++        config)
++    if not os.path.isdir(os.path.join(paths.work, framework)):
++        return []
++    verify_options = VerifyOptions.DEEP | VerifyOptions.STRICT
++    return [
++        CodeSignedProduct(
++            framework + '/Versions/B/Autoupdate',
++            'org.sparkle-project.Sparkle.Autoupdate',
++            options=CodeSignOptions.FULL_HARDENED_RUNTIME_OPTIONS,
++            sign_with_identifier=True,
++            verify_options=verify_options,
++        ),
++        CodeSignedProduct(
++            framework + '/Versions/B/Updater.app',
++            'org.sparkle-project.Sparkle.Updater',
++            options=CodeSignOptions.FULL_HARDENED_RUNTIME_OPTIONS,
++            verify_options=verify_options,
++        ),
++        CodeSignedProduct(
++            framework,
++            'org.sparkle-project.Sparkle',
++            verify_options=verify_options,
++        ),
++    ]
++
++
+ def get_installer_tools(config):
+     """Returns all the |model.CodeSignedProduct| objects to be signed for
+     creating the installer tools package.
+@@ -272,6 +309,19 @@ async def sign_chrome(paths, config, sign_framework=False):
+         # Sign the framework bundle.
+         signing.sign_part(paths, config, parts['framework'])
+ 
++        # Stedding: Sparkle's helpers and framework (ADR 0022). Sparkle's own
++        # build signs them ad hoc, and codesign replaces such a signature only
++        # with --force, so each is taken off first; then they are signed
++        # inside out, before the app.
++        sparkle_parts = _get_sparkle_parts(paths, config)
++        for part in sparkle_parts:
++            commands.run_command([
++                'codesign', '--remove-signature',
++                os.path.join(paths.work, part.path)
++            ])
++        for part in sparkle_parts:
++            signing.sign_part(paths, config, part)
++
+     provisioning_profile_basename = config.provisioning_profile_basename
+     if provisioning_profile_basename:
+         commands.copy_files(
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index b38dab09efd06..a52084be604e4 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -50,6 +50,7 @@ test("stedding_browser_tests") {
+     "space_switch_browsertest.cc",
+     "space_worker_browsertest.cc",
+     "tab_drop_browsertest.cc",
++    "updates_browsertest.cc",
+     "welcome_browsertest.cc",
+   ]
+ 
+@@ -84,6 +85,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/stedding/theme",
+     "//chrome/browser/ui/spaces",
+     "//chrome/browser/ui/stedding:address_row",
++    "//chrome/browser/ui/stedding:app_updater_test_support",
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:media_keys",
+     "//chrome/browser/ui/stedding:motion",
+@@ -92,6 +94,9 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/stedding:prefs",
+     "//chrome/browser/ui/stedding:sleep_tabs",
+     "//chrome/browser/ui/stedding:tab_names",
++    "//chrome/browser/ui/stedding:thanks_pages",
++    "//chrome/browser/ui/stedding:version",
++    "//chrome/browser/ui/views/stedding:update_pill",
+     "//chrome/browser/ui/stedding/screenshot",
+     "//chrome/browser/ui/tabs",
+     "//chrome/browser/ui/tabs:tab_menu",
+diff --git a/chrome/test/stedding/updates_browsertest.cc b/chrome/test/stedding/updates_browsertest.cc
+new file mode 100644
+index 0000000000000..124e9114f368d
+--- /dev/null
++++ b/chrome/test/stedding/updates_browsertest.cc
+@@ -0,0 +1,352 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// The updater's parts in a real window (docs/features/updates.md), against a
++// fake updater: the sidebar's "New Stedding Version Available" (Up3), the
++// command bar's rows (Up7), the About page (Up5, Up6), and the thank-you
++// pages after an update and after the install (Up9, Up10). Sparkle itself is
++// tried end to end on a signed build (docs/HANDOFF.md, the updater's n-1
++// check).
++
++#include <algorithm>
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/run_loop.h"
++#include "base/test/run_until.h"
++#include "build/build_config.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/animation/browser_animation_controller.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stedding/fake_app_updater.h"
++#include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/stedding_version.h"
++#include "chrome/browser/ui/stedding/thanks_pages.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
++#include "chrome/browser/ui/views/commandbar/command_bar_view.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/spaces/space_switcher_view.h"
++#include "chrome/browser/ui/views/stedding/update_pill.h"
++#include "chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/events/event.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/test/views_test_utils.h"
++#include "ui/views/view.h"
++#include "url/gurl.h"
++
++namespace {
++
++using State = stedding::AppUpdater::State;
++
++class UpdatesTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
++ protected:
++  // Before the first window, so its sidebar has the pill.
++  void SetUpInProcessBrowserTestFixture() override {
++    VerticalTabsBrowserTestMixin<
++        InProcessBrowserTest>::SetUpInProcessBrowserTestFixture();
++    updater_ = std::make_unique<stedding::FakeAppUpdater>();
++  }
++
++  // After the windows, which watch it.
++  void TearDownInProcessBrowserTestFixture() override {
++    updater_.reset();
++    stedding::SetSteddingVersionForTesting(std::nullopt);
++    stedding::IgnoreNoFirstRunForTesting(false);
++    VerticalTabsBrowserTestMixin<
++        InProcessBrowserTest>::TearDownInProcessBrowserTestFixture();
++  }
++
++  BrowserView* browser_view(BrowserWindowInterface* window = nullptr) {
++    return BrowserView::GetBrowserViewForBrowser(window ? window : browser());
++  }
++
++  stedding::UpdatePill* Pill() {
++    return stedding::test::FindView<stedding::UpdatePill>(
++        browser_view()->vertical_tab_strip_region_view_for_testing());
++  }
++
++  stedding::CommandBarView* Palette() {
++    chrome::ExecuteCommand(browser(), IDC_STEDDING_COMMAND_PALETTE);
++    return stedding::CommandBarView::GetOpenBar(browser_view());
++  }
++
++  std::vector<std::u16string> Titles(stedding::CommandBarView* bar,
++                                     const std::u16string& text) {
++    bar->field_for_testing()->SetText(text);
++    bar->ContentsChanged(bar->field_for_testing(), text);
++    std::vector<std::u16string> titles;
++    for (size_t i = 0; i < bar->row_count_for_testing(); ++i) {
++      titles.push_back(bar->row_title_for_testing(i));
++    }
++    return titles;
++  }
++
++  // Lists the rows `text` finds, then runs the one titled `title`.
++  void Run(const std::u16string& text, const std::u16string& title) {
++    stedding::CommandBarView* const bar = Palette();
++    ASSERT_TRUE(bar);
++    const std::vector<std::u16string> titles = Titles(bar, text);
++    const auto it = std::ranges::find(titles, title);
++    ASSERT_NE(titles.end(), it) << "no row " << title;
++    // A key as the bar's field receives it.
++    views::View* const field = bar->field_for_testing();
++    for (auto row = titles.begin(); row != it; ++row) {
++      field->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyPressed,
++                                       ui::VKEY_DOWN, ui::EF_NONE));
++    }
++    field->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyPressed,
++                                     ui::VKEY_RETURN, ui::EF_NONE));
++    base::RunLoop().RunUntilIdle();
++    if (stedding::CommandBarView* const open =
++            stedding::CommandBarView::GetOpenBar(browser_view())) {
++      open->Close();
++      base::RunLoop().RunUntilIdle();
++    }
++  }
++
++  // The visible URL of the window's active tab.
++  GURL ActiveUrl(BrowserWindowInterface* window) {
++    return window->GetTabStripModel()->GetActiveWebContents()->GetVisibleURL();
++  }
++
++  PrefService* local_state() { return g_browser_process->local_state(); }
++
++  std::unique_ptr<stedding::FakeAppUpdater> updater_;
++};
++
++// updates Up3: the pill sits at the sidebar's foot above the Space row, shows
++// only while a version waits, restarts on a click, and keeps to the rail.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, ThePillShowsAboveTheSpacesAndRestarts) {
++  stedding::UpdatePill* const pill = Pill();
++  ASSERT_TRUE(pill) << "the sidebar has no pill";
++  views::Widget* const widget = browser_view()->GetWidget();
++  views::test::RunScheduledLayout(widget);
++  EXPECT_FALSE(pill->GetVisible()) << "nothing waits yet";
++
++  updater_->Set(State::kReady, u"0.2.0-beta.99");
++  views::test::RunScheduledLayout(widget);
++  ASSERT_TRUE(pill->GetVisible());
++  EXPECT_EQ(u"New Stedding Version Available", pill->GetText());
++  const gfx::Rect pill_bounds = pill->GetBoundsInScreen();
++  EXPECT_GT(pill_bounds.width(), 100) << pill_bounds.ToString();
++  EXPECT_GT(pill_bounds.height(), 20) << pill_bounds.ToString();
++  if (spaces::SpaceSwitcherView* const switcher =
++          stedding::test::FindDrawnSwitcher(widget->GetRootView())) {
++    EXPECT_LE(pill_bounds.bottom(), switcher->GetBoundsInScreen().y())
++        << "above the Space row";
++  }
++  // On the rows' column: the first live check drew it from edge to edge of
++  // the sidebar.
++  if (TabView* const row = stedding::test::FindDrawnRow(
++          widget->GetRootView(),
++          browser()->GetTabStripModel()->GetActiveTab())) {
++    const gfx::Rect row_bounds = row->GetBoundsInScreen();
++    EXPECT_NEAR(row_bounds.x(), pill_bounds.x(), 2)
++        << row_bounds.ToString() << " " << pill_bounds.ToString();
++    EXPECT_NEAR(row_bounds.right(), pill_bounds.right(), 2)
++        << row_bounds.ToString() << " " << pill_bounds.ToString();
++  }
++  stedding::test::ClickLeftMouse(widget, pill_bounds.CenterPoint());
++  EXPECT_EQ(1, updater_->installs);
++
++  // The rail: the icon alone, inside the rail's width.
++  tabs::VerticalTabStripStateController::From(browser())->RequestCollapse(
++      true);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return !BrowserAnimationController::From(browser())->IsAnimating(
++        TabStripAnimations::kVerticalTabStrip);
++  }));
++  views::test::RunScheduledLayout(widget);
++  EXPECT_TRUE(pill->GetVisible());
++  EXPECT_TRUE(pill->GetText().empty());
++  EXPECT_LE(pill->width(),
++            browser_view()->vertical_tab_strip_region_view_for_testing()
++                ->width());
++  tabs::VerticalTabStripStateController::From(browser())->RequestCollapse(
++      false);
++
++  updater_->Set(State::kUpToDate);
++  EXPECT_FALSE(pill->GetVisible());
++}
++
++// updates Up7: the command bar offers the restart while a version waits, and
++// Check for Updates always, which asks and opens the About page.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, TheCommandBarRestartsAndChecks) {
++  {
++    stedding::CommandBarView* const bar = Palette();
++    ASSERT_TRUE(bar);
++    const std::vector<std::u16string> titles = Titles(bar, u"Update");
++    EXPECT_FALSE(std::ranges::contains(
++        titles, std::u16string(u"Restart to Update Stedding")))
++        << "nothing waits";
++    EXPECT_TRUE(
++        std::ranges::contains(titles, std::u16string(u"Check for Updates")));
++    bar->Close();
++    base::RunLoop().RunUntilIdle();
++  }
++  updater_->Set(State::kReady, u"0.2.0-beta.99");
++  ASSERT_NO_FATAL_FAILURE(Run(u"Update", u"Restart to Update Stedding"));
++  EXPECT_EQ(1, updater_->installs);
++
++  updater_->Set(State::kIdle);
++  const int checks = updater_->checks;
++  ASSERT_NO_FATAL_FAILURE(Run(u"Update", u"Check for Updates"));
++  EXPECT_EQ(checks + 1, updater_->checks);
++  EXPECT_EQ(GURL("chrome://settings/help"), ActiveUrl(browser()));
++}
++
++// updates Up5: the About page's Relaunch restarts through the updater while a
++// version waits. Chromium's own relaunch would end this test.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, AboutsRelaunchRestartsThroughTheUpdater) {
++  updater_->Set(State::kReady, u"0.2.0-beta.99");
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings/help")));
++  content::WebContents* const page =
++      browser()->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(content::ExecJs(page, "chrome.send('relaunch', [])"));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return updater_->installs == 1; }));
++}
++
++#if BUILDFLAG(IS_MAC)
++// The About page's update line, found through the settings page's shadow
++// roots: its text while shown, or "(hidden)".
++constexpr char kAboutUpdateLine[] = R"(
++    (() => {
++      const find = (root) => {
++        const hit = root.querySelector('#updateStatusMessage');
++        if (hit) return hit;
++        for (const el of root.querySelectorAll('*')) {
++          if (el.shadowRoot) {
++            const deep = find(el.shadowRoot);
++            if (deep) return deep;
++          }
++        }
++        return null;
++      };
++      const line = find(document);
++      if (!line) return '(none)';
++      return line.hidden ? '(hidden)' : line.innerText.trim();
++    })())";
++
++// updates Up5, Up6: opening the About page checks while automatic updates
++// are on; off, it does not, and says how to check.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, AboutChecksOnlyWithAutomaticUpdatesOn) {
++  local_state()->SetBoolean(stedding::prefs::kUpdatesAutomatic, true);
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings/help")));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return updater_->checks == 1; }));
++
++  local_state()->SetBoolean(stedding::prefs::kUpdatesAutomatic, false);
++  updater_->Set(State::kIdle);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings/help")));
++  content::WebContents* const page =
++      browser()->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return content::EvalJs(page, kAboutUpdateLine).ExtractString() !=
++           "(none)";
++  }));
++  EXPECT_EQ(1, updater_->checks) << "no check with automatic updates off";
++  EXPECT_EQ(
++      "Automatic updates are off. To look for a new version now, choose "
++      "Stedding › Check for Updates…",
++      content::EvalJs(page, kAboutUpdateLine).ExtractString());
++
++  updater_->Set(State::kUpToDate);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return content::EvalJs(page, kAboutUpdateLine).ExtractString() ==
++           "Stedding is up to date";
++  }));
++}
++#endif  // BUILDFLAG(IS_MAC)
++
++// updates Up10: the first window of a later version opens the update's
++// thank-you page, naming the version in its fragment, once per run.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, ALaterVersionOpensTheThanksPageOnce) {
++  stedding::SetSteddingVersionForTesting("0.2.0-beta.99");
++  stedding::IgnoreNoFirstRunForTesting(true);
++  stedding::ResetThanksAfterUpdateForTesting();
++  local_state()->SetString(stedding::prefs::kLastRunVersion, "0.2.0-beta.98");
++
++  BrowserWindowInterface* const window = CreateBrowser(browser()->GetProfile());
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return ActiveUrl(window) ==
++           GURL("https://stedding.dev/thanks/updated/#v0.2.0-beta.99");
++  }));
++  EXPECT_EQ("0.2.0-beta.99",
++            local_state()->GetString(stedding::prefs::kLastRunVersion));
++
++  // Once per run: the next window opens without it.
++  BrowserWindowInterface* const next = CreateBrowser(browser()->GetProfile());
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(1, next->GetTabStripModel()->count());
++  EXPECT_NE(GURL("https://stedding.dev/thanks/updated/#v0.2.0-beta.99"),
++            ActiveUrl(next));
++}
++
++// updates Up10: with the setting off, a later version opens nothing.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, TheSettingKeepsTheThanksPageClosed) {
++  stedding::SetSteddingVersionForTesting("0.2.0-beta.99");
++  stedding::IgnoreNoFirstRunForTesting(true);
++  stedding::ResetThanksAfterUpdateForTesting();
++  local_state()->SetString(stedding::prefs::kLastRunVersion, "0.2.0-beta.98");
++  local_state()->SetBoolean(stedding::prefs::kThanksAfterUpdate, false);
++
++  BrowserWindowInterface* const window = CreateBrowser(browser()->GetProfile());
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(1, window->GetTabStripModel()->count());
++  EXPECT_EQ("0.2.0-beta.99",
++            local_state()->GetString(stedding::prefs::kLastRunVersion));
++}
++
++// updates Up9: the welcome flow's end, finished or skipped, opens the
++// install's thank-you page once.
++IN_PROC_BROWSER_TEST_F(UpdatesTest, TheWelcomeFlowsEndOpensTheInstallsPage) {
++  stedding::SetSteddingVersionForTesting("0.2.0-beta.99");
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  prefs->SetBoolean(stedding::prefs::kWelcomeShown, false);
++  stedding::ShowWelcomeDialog(*browser());
++  base::RunLoop().RunUntilIdle();
++  const int tabs = browser()->GetTabStripModel()->count();
++  // What the flow's Finish and Skip do (stedding_welcome_handler.cc).
++  prefs->SetBoolean(stedding::prefs::kWelcomeShown, true);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return ActiveUrl(browser()) == GURL("https://stedding.dev/thanks/");
++  }));
++  EXPECT_EQ(tabs + 1, browser()->GetTabStripModel()->count());
++  EXPECT_TRUE(
++      local_state()->GetBoolean(stedding::prefs::kThanksAfterInstallShown));
++
++  // A second profile's flow, or the same one again, opens no second page.
++  prefs->SetBoolean(stedding::prefs::kWelcomeShown, false);
++  stedding::ShowWelcomeDialog(*browser());
++  base::RunLoop().RunUntilIdle();
++  prefs->SetBoolean(stedding::prefs::kWelcomeShown, true);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(tabs + 1, browser()->GetTabStripModel()->count());
++}
++
++}  // namespace
+diff --git a/third_party/.gitignore b/third_party/.gitignore
+index 33637b2b240bf..0bddc10f9499c 100644
+--- a/third_party/.gitignore
++++ b/third_party/.gitignore
+@@ -94,6 +94,8 @@
+ /mesa/src
+ /microsoft_dxheaders/src
+ /microsoft_multimedia_redirection/src
++# Stedding: Sparkle.framework from tooling/fetch-sparkle (ADR 0022).
++/stedding_sparkle/
+ /webauthn/src
+ /mingw-w64
+ /mkl
