@@ -1299,9 +1299,9 @@ profile and its cache folder, and `defaults delete` the test domain.
 
 ## Release channel
 
-Pre-releases on GitHub Releases: the Mac's DMG signed with the Developer ID and
-notarized (since beta 10), the Windows installer an unsigned preview, each with its
-sha256 beside it. The Mac's order, all from the repo root with a clean tree: bump
+Pre-releases on GitHub Releases: the Mac's DMG, with the app in it signed with the
+Developer ID and notarized (since beta 10; the image itself is not signed), the Windows
+installer an unsigned preview, each with its sha256 beside it. The Mac's order, all from the repo root with a clean tree: bump
 `VERSION`, `tooling/dev build release chrome` (the About line is a build flag), empty
 `dist/`, `tooling/sign-release release` (`--check` first; it signs, notarizes and staples
 into `dist/signed/stable/Stedding.app`), `tooling/verify-build --app
@@ -1313,7 +1313,10 @@ then `tooling/publish-release`. Then, once the release has been tried the way a 
 it, offer it to installed copies: `tooling/publish-appcast --check`, then
 `tooling/publish-appcast --push` (ADR 0022; it signs the image, writes and signs
 `updates/appcast.xml`, commits and pushes it; the push is the release's own step and needs
-the operator's yes like the publish). Betas 1 to 8 went out unsigned, with `docs/INSTALL.md`'s
+the operator's yes like the publish). Then fetch the feed from its raw.githubusercontent.com
+URL: it should be byte for byte the commit's, `sign_update --account stedding --verify` should
+pass on it, and the image downloaded from the release should verify against the feed's
+`edSignature` (`sign_update --verify <image> <signature>`). Betas 1 to 8 went out unsigned, with `docs/INSTALL.md`'s
 `xattr` command in their notes. The Windows
 image joins the same release from the Windows PC: `tooling\win\build-until-done.ps1`
 (then both suites on that exact build), `tooling\win\package-installer.ps1`,

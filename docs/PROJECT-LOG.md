@@ -7,6 +7,40 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-16, midday -- beta 16 released from both platforms, and the first update feed
+
+The operator asked for the round to be pushed, built and tested on Windows over SSH, and
+released for both platforms. `v0.2.0-beta.16` went out from tag commit `8c5360b`, the series
+of 68 patches: the Mac's signed and notarized DMG first, then the Windows installer from the
+PC into the same release, then `updates/appcast.xml` (`ea37536`), the feed's first entry.
+Beta 16 is the first release built with the updater, so installed copies of it find
+themselves up to date; the first update anyone receives is from beta 16 to the release after
+it (`S-74`).
+
+- **The PC, driven from the Mac over SSH:** its checkout holds the same tree as the Mac's.
+  The release build's suites ran in the operator's desktop session through temporary
+  scheduled tasks, deleted after: 852 unit tests (the first run had two Space tests time out;
+  each passed three runs in three alone, and the whole run passed again) and 158 browser
+  tests. The installer was run in its upgrade mode over the beta 15 install, after a backup:
+  the installed `chrome.dll` is the build's, the profile is where it was, and one launch of
+  the installed build drew the window, the sidebar and the address row. The uninstall and
+  clean-install modes were not run for this release.
+- **The Mac:** the release build with the version set, signed and notarized; 865 unit, 20
+  component and 165 browser tests on the exact build; `verify-build` (offline, without its
+  full-screen check) and `syspolicy_check distribution` passed. After publishing, both
+  images were downloaded from the release and matched their checksums; the DMG, marked as
+  quarantined the way a browser marks a download, mounted, and Gatekeeper accepted the app in
+  it as notarized Developer ID with its ticket stapled. The image itself is not signed, as
+  before; the app is.
+- **The feed:** `tooling/publish-appcast --push` signed the image and the feed. The copy
+  raw.githubusercontent.com serves is byte for byte the commit's, its signature verifies,
+  and the downloaded image matches the `edSignature` the feed gives it. The site's rebuild
+  was triggered and its download page offers beta 16.
+- Not done for this release: use by hand with the real pointer and keyboard on either
+  platform, ASan (`S-106`), `components_unittests` on Windows, a real update through the real
+  feed (the next release is the first that can be one). The pin, 155.0.8059.12, is behind the
+  stable channel's 155.0.8059.85, as the notes say.
+
 ## 2026-10-16 -- Stedding updates itself on the Mac, and says thank you (patch 0068)
 
 The operator asked for automatic updates like Arc's and for pages on stedding.dev that
