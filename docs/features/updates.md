@@ -5,8 +5,8 @@ the Mac's n-1 check passed on two Developer-ID-signed builds (docs/HANDOFF.md, "
 updater"). The first update through the real feed waits for the release after the first one
 built with the updater (BACKLOG S-74). On Windows only Up9–Up11 apply (no updater there
 yet).
-Owner docs: `docs/decisions/0022-sparkle-updates-the-mac.md`, `docs/PRIVACY.md` (the update
-check), `docs/QUALITY.md` (rollback).
+Owner docs: `docs/decisions/0022-sparkle-updates-the-mac.md`, `docs/decisions/0023-updates-on-windows-and-linux.md`
+(Windows and Linux, planned), `docs/PRIVACY.md` (the update check), `docs/QUALITY.md` (rollback).
 Patch: `0068`.
 
 Stedding updates itself on the Mac the way Arc does: it checks once a day, downloads a new
@@ -28,6 +28,12 @@ How it fits together:
   `app_updater_mac.mm` loads Sparkle at runtime and is its user driver and delegate.
 - `tooling/publish-appcast` offers a release: it signs the image and writes and signs
   `updates/appcast.xml`, which Sparkle reads from `main`.
+
+Windows and Linux are planned, not built (ADR 0023, 2026-10-16). Windows gets the browser's
+own updater behind the same `stedding::AppUpdater`, reading a feed of its own,
+`updates/appcast-windows.xml`, signed with the same key (`S-215`, after the installer's
+version numbers, `S-72`). On Linux the package system updates Stedding, and the pill follows
+what Chromium's upgrade detector sees (`S-216`). `updates/appcast.xml` stays the Mac's alone.
 
 ## Behaviours
 

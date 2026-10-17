@@ -306,7 +306,7 @@ name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM cla
 sandbox prefix (N3–N4) -- and Chromium's `mini_installer` from the `win-release`
 configuration (ADR 0018), a preview since beta 5 (N6); Arc's keyboard for Windows (N7,
 patch 0043). Not done: little windows and links from other applications, signing and
-SmartScreen, updates, CI, Windows performance budgets, and importing from Arc for Windows
+SmartScreen, updates (planned in ADR 0023: `S-72`, then `S-215`), CI, Windows performance budgets, and importing from Arc for Windows
 (`BACKLOG.md` S-81). `BACKLOG.md` S-56.
 
 Scope:

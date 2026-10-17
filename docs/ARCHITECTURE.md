@@ -541,8 +541,8 @@ Three findings worth knowing before M1 is planned:
   Two more surfaces hardcode ids — `chrome/updater/branding.gni` and
   `chrome/enterprise_companion/branding.gni` — but neither ships for us:
   `enable_updater = is_chrome_branded && …` (`chrome/browser/buildflags.gni:16`), and we
-  build unbranded. They become relevant only if the Chromium updater is adopted, which ADR 0014
-  did not choose (update checks go to GitHub Releases).
+  build unbranded. They become relevant only if the Chromium updater is adopted, which neither ADR 0014
+  nor ADR 0023 chose (Sparkle on the Mac, the browser's own updater planned for Windows).
 
   Some hardcoded `org.chromium.*` strings should deliberately **stay**: the
   `org.chromium.extension` and `org.chromium.shortcut` UTIs and the clipboard pasteboard
