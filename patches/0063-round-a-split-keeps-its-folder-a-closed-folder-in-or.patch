@@ -59,16 +59,16 @@ Removable when: never; these are Stedding's own behaviours.
  chrome/browser/ui/archive/archive_mark.cc     |  30 +++
  chrome/browser/ui/archive/archive_mark.h      |  18 ++
  chrome/browser/ui/archive/archived_tabs.cc    |   4 +
- chrome/browser/ui/archive/closed_folder.cc    | 218 ++++++++++++++----
+ chrome/browser/ui/archive/closed_folder.cc    | 223 ++++++++++++++----
  chrome/browser/ui/archive/closed_folder.h     |  11 +-
  .../ui/archive/closed_folder_unittest.cc      |  27 +++
  chrome/browser/ui/browser_commands.cc         |   9 +-
  .../ui/cocoa/history_menu_cocoa_controller.mm |   4 +-
  .../ui/infobars/browser_infobar_registry.cc   |   2 +
- .../ui/spaces/tab_space_restore_data.cc       |  52 ++++-
+ .../ui/spaces/tab_space_restore_data.cc       |  52 +++-
  .../ui/spaces/tab_space_restore_data.h        |  45 +++-
  .../ui/tabs/stedding_folder_session.cc        | 192 +++++++++++++--
- chrome/browser/ui/tabs/tab_strip_model.cc     | 168 +++++++++++++-
+ chrome/browser/ui/tabs/tab_strip_model.cc     | 168 ++++++++++++-
  chrome/browser/ui/tabs/tab_strip_model.h      |  16 +-
  .../ui/tabs/tab_strip_model_unittest.cc       | 149 ++++++++++++
  .../frame/vertical_tab_strip_region_view.cc   |   9 +-
@@ -84,7 +84,7 @@ Removable when: never; these are Stedding's own behaviours.
  chrome/test/stedding/tab_drop_browsertest.cc  |  38 +++
  components/tabs/impl/tab_strip_collection.cc  |  55 ++++-
  components/tabs/public/tab_strip_collection.h |  31 ++-
- 29 files changed, 1393 insertions(+), 111 deletions(-)
+ 29 files changed, 1398 insertions(+), 111 deletions(-)
 
 diff --git a/chrome/browser/ui/archive/BUILD.gn b/chrome/browser/ui/archive/BUILD.gn
 index 63c4768f928dd..5b8e035073717 100644
@@ -219,7 +219,7 @@ index 18109e537e6d9..1fefb35fdff9e 100644
    // The user's name for the tab (tabs R14), which a restore reads back.
    if (const std::u16string name = TabName(contents); !name.empty()) {
 diff --git a/chrome/browser/ui/archive/closed_folder.cc b/chrome/browser/ui/archive/closed_folder.cc
-index 0779343b0bf77..80fd97d1b4725 100644
+index 0779343b0bf77..d0ffb682f0ecd 100644
 --- a/chrome/browser/ui/archive/closed_folder.cc
 +++ b/chrome/browser/ui/archive/closed_folder.cc
 @@ -4,10 +4,19 @@
@@ -345,7 +345,7 @@ index 0779343b0bf77..80fd97d1b4725 100644
      }
    }
    if (!folder.tabs.empty()) {
-@@ -95,49 +179,103 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
+@@ -95,49 +179,108 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
      sessions::LiveTabContext* context,
      std::string_view batch,
      WindowOpenDisposition disposition) {
@@ -381,14 +381,10 @@ index 0779343b0bf77..80fd97d1b4725 100644
 +      }
      }
 -    ids.push_back((*entry)->id);
--  }
+   }
 -  // With no window to restore into, each tab finds the window the first one
 -  // opened through its own browser id, which only UNKNOWN reads.
--  if (!context) {
--    disposition = WindowOpenDisposition::UNKNOWN;
-   }
-   std::vector<sessions::LiveTab*> restored;
--  const auto restore = [&](SessionID id, WindowOpenDisposition how) {
++  std::vector<sessions::LiveTab*> restored;
 +  if (items.empty()) {
 +    return restored;
 +  }
@@ -396,34 +392,33 @@ index 0779343b0bf77..80fd97d1b4725 100644
 +  sessions::LiveTab* first = nullptr;
 +  const auto restore = [&](sessions::LiveTabContext* into, SessionID id,
 +                           WindowOpenDisposition how) {
-     for (sessions::LiveTab* const live :
--         service.RestoreEntryById(context, id, how)) {
--      if (live) {
--        restored.push_back(live);
-+         service.RestoreEntryById(into, id, how)) {
++    // Nothing when the entry is gone: no tab came back.
++    const std::optional<std::vector<sessions::LiveTab*>> lives =
++        service.RestoreEntryById(into, id, how);
++    if (!lives) {
++      return;
++    }
++    for (sessions::LiveTab* const live : *lives) {
 +      if (!live) {
 +        continue;
-       }
++      }
 +      if (!first && id == items.front().id) {
 +        first = live;
 +      }
 +      restored.push_back(live);
-     }
-   };
--  // UNKNOWN puts each tab back at the index it was closed from, and a close
--  // records each index after the tabs before it went: newest first, the
--  // restores undo the closes in turn and every tab lands where it was, the
--  // first of the folder last, and shown. Where the window has fewer tabs than
--  // the folder's place now, each goes to its end, so oldest first.
--  if (disposition == WindowOpenDisposition::UNKNOWN && context &&
--      first_index >= 0 && first_index <= context->GetTabCount()) {
--    for (auto id = ids.rbegin(); id != ids.rend(); ++id) {
--      restore(*id, WindowOpenDisposition::UNKNOWN);
++    }
++  };
 +  // With no window to restore into, the tabs go back to their own window, or
 +  // to the one the first restore opens, which only UNKNOWN reads.
-+  if (!context) {
-+    disposition = WindowOpenDisposition::UNKNOWN;
-+  }
+   if (!context) {
+     disposition = WindowOpenDisposition::UNKNOWN;
+   }
+-  std::vector<sessions::LiveTab*> restored;
+-  const auto restore = [&](SessionID id, WindowOpenDisposition how) {
+-    for (sessions::LiveTab* const live :
+-         service.RestoreEntryById(context, id, how)) {
+-      if (live) {
+-        restored.push_back(live);
 +  if (disposition != WindowOpenDisposition::UNKNOWN) {
 +    restore(context, items.front().id, disposition);
 +    // NEW_WINDOW opens a window for the first entry. RestoreTab returns that
@@ -434,13 +429,9 @@ index 0779343b0bf77..80fd97d1b4725 100644
 +    for (size_t i = 1; i < items.size(); ++i) {
 +      restore(landed ? landed : context, items[i].id,
 +              WindowOpenDisposition::NEW_BACKGROUND_TAB);
-     }
-     return restored;
-   }
--  for (size_t i = 0; i < ids.size(); ++i) {
--    restore(ids[i], i == 0 || disposition == WindowOpenDisposition::UNKNOWN
--                        ? disposition
--                        : WindowOpenDisposition::NEW_BACKGROUND_TAB);
++    }
++    return restored;
++  }
 +  // UNKNOWN puts each tab back at the index its entry holds, and shows it.
 +  // Where the window still reaches the folder's place, the tab entries go
 +  // back newest first, each at that place, so they undo the closes in turn;
@@ -453,16 +444,30 @@ index 0779343b0bf77..80fd97d1b4725 100644
 +    for (auto item = items.rbegin(); item != items.rend(); ++item) {
 +      if (!item->split) {
 +        restore(context, item->id, WindowOpenDisposition::UNKNOWN);
-+      }
-+    }
+       }
+     }
+-  };
+-  // UNKNOWN puts each tab back at the index it was closed from, and a close
+-  // records each index after the tabs before it went: newest first, the
+-  // restores undo the closes in turn and every tab lands where it was, the
+-  // first of the folder last, and shown. Where the window has fewer tabs than
+-  // the folder's place now, each goes to its end, so oldest first.
+-  if (disposition == WindowOpenDisposition::UNKNOWN && context &&
+-      first_index >= 0 && first_index <= context->GetTabCount()) {
+-    for (auto id = ids.rbegin(); id != ids.rend(); ++id) {
+-      restore(*id, WindowOpenDisposition::UNKNOWN);
 +    for (const Item& item : items) {
 +      if (item.split) {
 +        restore(context, item.id, WindowOpenDisposition::UNKNOWN);
 +      }
-+    }
+     }
 +    Show(first);
-+    return restored;
-+  }
+     return restored;
+   }
+-  for (size_t i = 0; i < ids.size(); ++i) {
+-    restore(ids[i], i == 0 || disposition == WindowOpenDisposition::UNKNOWN
+-                        ? disposition
+-                        : WindowOpenDisposition::NEW_BACKGROUND_TAB);
 +  // The folder's place is past the window's end now, or its window is gone:
 +  // the first goes back with UNKNOWN, which opens a window for a window since
 +  // closed, and is shown; the rest are added at that window's end, in the
@@ -556,10 +561,10 @@ index 92972228a887b..3fa4933802041 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
-index c11160bac610e..8621dbb51e2b3 100644
+index 29565d8631f77..5b4d4625be57d 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
-@@ -1828,8 +1828,13 @@ void NewSplitTab(BrowserWindowInterface* browser,
+@@ -1838,8 +1838,13 @@ void NewSplitTab(BrowserWindowInterface* browser,
        new_tab_url, active_index + 1, true,
        tab_strip_model->GetTabGroupForTab(active_index),
        tab_strip_model->IsTabPinned(active_index));
@@ -591,17 +596,17 @@ index d4e994ad1cc7c..2e8f5a1da77a7 100644
      sessions::TabRestoreService* const service =
          TabRestoreServiceFactory::GetForProfile(profile);
 diff --git a/chrome/browser/ui/infobars/browser_infobar_registry.cc b/chrome/browser/ui/infobars/browser_infobar_registry.cc
-index 1e83612fa63a4..e5e5e06ee7c99 100644
+index ebce29d5f03e7..e9c7e06e328b4 100644
 --- a/chrome/browser/ui/infobars/browser_infobar_registry.cc
 +++ b/chrome/browser/ui/infobars/browser_infobar_registry.cc
-@@ -359,6 +359,8 @@ void RegisterInfoBars() {
+@@ -376,6 +376,8 @@ void RegisterInfoBars() {
                                   : omnibox::kProductChromeRefreshOldIcon)
              .SetScope(InfoBarScope::kGlobal)
              .SetExpireOnNavigation(false)
 +            // Stedding (BACKLOG S-69): as SessionRestoreInfoBarDelegate.
 +            .SetShouldHideInFullscreen(true)
-             .SetBrowserFilter(base::BindRepeating(
-                 [](BrowserWindowInterface* browser) {
+             .SetBrowserFilter(
+                 base::BindRepeating([](BrowserWindowInterface* browser) {
                    return session_restore_infobar::
 diff --git a/chrome/browser/ui/spaces/tab_space_restore_data.cc b/chrome/browser/ui/spaces/tab_space_restore_data.cc
 index 950f698f094b1..4e087b97ee573 100644
@@ -1056,10 +1061,10 @@ index 266d0491755dd..202825f08c606 100644
    }
    PersistAllPaths();
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 62c48adcda129..dd7a18974dd59 100644
+index 8f0dbe9a0bc32..8162d0f5db6b7 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -4634,10 +4634,21 @@ split_tabs::SplitTabId TabStripModel::AddToSplitImpl(
+@@ -4764,10 +4764,21 @@ split_tabs::SplitTabId TabStripModel::AddToSplitImpl(
      tabs.push_back(tab);
    }
  
@@ -1083,7 +1088,7 @@ index 62c48adcda129..dd7a18974dd59 100644
  
    contents_data_->CreateSplit(split_id, tabs, visual_data);
    selection_model_.InvalidateListSelectionModel(base::PassKey<TabStripModel>());
-@@ -5107,12 +5118,49 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
+@@ -5235,12 +5246,49 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
    // folder's name into the recently-closed list, which shows them as one
    // folder and brings them back together (archive/closed_folder.h).
    // An unnamed folder goes under the name its header shows (folder_view.cc).
@@ -1134,7 +1139,7 @@ index 62c48adcda129..dd7a18974dd59 100644
    }
    ExecuteCloseTabs(
        base::BindRepeating(
-@@ -5167,6 +5215,104 @@ bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
+@@ -5295,6 +5343,104 @@ bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
    return moved;
  }
  
@@ -1239,7 +1244,7 @@ index 62c48adcda129..dd7a18974dd59 100644
  namespace {
  
  // Stedding (folders F31): what a folder's child is -- the tab, or the split
-@@ -5247,7 +5393,8 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
+@@ -5375,7 +5521,8 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
      const std::vector<int>& indices,
      int destination_index,
      std::optional<tab_groups::TabGroupId> group,
@@ -1249,7 +1254,7 @@ index 62c48adcda129..dd7a18974dd59 100644
    if (!group_model_) {
      return;
    }
-@@ -5266,11 +5413,18 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
+@@ -5394,11 +5541,18 @@ void TabStripModel::MoveTabsAndSetPropertiesImpl(
    }
    destination_index -= num_tabs_to_left_of_destination;
  
@@ -1272,10 +1277,10 @@ index 62c48adcda129..dd7a18974dd59 100644
  
  void TabStripModel::AddToReadLaterImpl(const std::vector<int>& indices) {
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
-index 8317c10097c03..cf7b510658cd9 100644
+index db2c9c0758373..f3b3c6cb78b52 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.h
 +++ b/chrome/browser/ui/tabs/tab_strip_model.h
-@@ -741,6 +741,16 @@ class TabStripModel {
+@@ -744,6 +744,16 @@ class TabStripModel {
    bool MoveTabsToFolder(const std::vector<int> indices,
                          tabs::FolderTabCollection* folder);
  
@@ -1292,7 +1297,7 @@ index 8317c10097c03..cf7b510658cd9 100644
    // Stedding (docs/features/menus.md M7): moves every tab of `folder` out
    // to where the folder sits, in order; the emptied folder leaves the tree.
    // A nested folder's tabs come out with the rest.
-@@ -1316,11 +1326,13 @@ class TabStripModel {
+@@ -1350,11 +1360,13 @@ class TabStripModel {
    // `indices` to the `destination_index` and updates the tabs to the
    // appropriate `group` and `pinned` properties.
    // Note: `destination_index` refers to a place in the tabstrip prior to the
@@ -1309,7 +1314,7 @@ index 8317c10097c03..cf7b510658cd9 100644
    void AddToReadLaterImpl(const std::vector<int>& indices);
  
 diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
-index ca61c4198bb9f..b1b6ad4c6e2b0 100644
+index 76e68c0e01cc1..ce8fdb5c2a2a7 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
 @@ -14,6 +14,7 @@
@@ -1320,7 +1325,7 @@ index ca61c4198bb9f..b1b6ad4c6e2b0 100644
  #include <vector>
  
  #include "base/containers/fixed_flat_map.h"
-@@ -6863,6 +6864,154 @@ TEST_F(TabStripModelTest, ASplitInsideAFolderNestsInPlace) {
+@@ -7002,6 +7003,154 @@ TEST_F(TabStripModelTest, ASplitInsideAFolderNestsInPlace) {
    tabstrip()->CloseAllTabs();
  }
  
@@ -1476,10 +1481,10 @@ index ca61c4198bb9f..b1b6ad4c6e2b0 100644
  // stays in the middle; it used to jump to the parent's end.
  TEST_F(TabStripModelTest, ANestedFolderStaysWhereItsTabWas) {
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 83896efe49d3d..c9b2e33608408 100644
+index 39ef2b15ed604..4b61640fccb38 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -1645,12 +1645,13 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTargetInsideTabStrip(
+@@ -1820,12 +1820,13 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTargetInsideTabStrip(
  
  TabDragTarget* VerticalTabStripRegionView::GetTabDragTarget(
      const gfx::Point& point_in_screen) {
@@ -1498,10 +1503,10 @@ index 83896efe49d3d..c9b2e33608408 100644
    }
    return BaseTabStripRegionView::GetTabDragTarget(point_in_screen);
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 2efe0208d3f93..9bd2252aadfd7 100644
+index 1039d02f17d9f..2fa3edb0ef716 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -204,6 +204,8 @@ class VerticalTabStripRegionView final
+@@ -215,6 +215,8 @@ class VerticalTabStripRegionView final
    VerticalTabStripFocusSwipeController* focus_swipe_controller_for_testing() {
      return focus_swipe_controller_.get();
    }
@@ -1541,10 +1546,10 @@ index 7fb5a1d2364c2..89cc0860cf6db 100644
    std::u16string GetLinkText() const override;
    int GetButtons() const override;
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-index 6bd36f0c479eb..ede7f09e6d6b6 100644
+index e5b705eea5e4e..d2e1b1a550d2c 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-@@ -185,6 +185,19 @@ class SpaceChipButton : public views::LabelButton {
+@@ -191,6 +191,19 @@ class SpaceChipButton : public views::LabelButton {
          pixels - label()->font_list().GetFontSize()));
    }
  
@@ -1564,7 +1569,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
    void OnMouseEntered(const ui::MouseEvent& event) override {
      views::LabelButton::OnMouseEntered(event);
      hovered_.Run(true);
-@@ -201,6 +214,7 @@ class SpaceChipButton : public views::LabelButton {
+@@ -207,6 +220,7 @@ class SpaceChipButton : public views::LabelButton {
    base::RepeatingClosure capture_lost_;
    gfx::Point press_point_;
    bool dragging_ = false;
@@ -1572,7 +1577,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
  };
  
  BEGIN_METADATA(SpaceChipButton)
-@@ -261,6 +275,15 @@ void SpaceSwitcherView::Rebuild() {
+@@ -267,6 +281,15 @@ void SpaceSwitcherView::Rebuild() {
    if (!icon_row_) {
      return;
    }
@@ -1588,7 +1593,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
    icon_row_->RemoveAllChildViews();
    chips_.clear();
    // A drag in progress was on a chip that is gone.
-@@ -348,7 +371,8 @@ void SpaceSwitcherView::Rebuild() {
+@@ -354,7 +377,8 @@ void SpaceSwitcherView::Rebuild() {
                              base::Unretained(this), chip_index));
      button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
      button->SetPreferredSize(gfx::Size(kIconSize, kIconSize));
@@ -1598,7 +1603,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
      button->set_context_menu_controller(this);
      // The reference shows the bare emoji, no disc: the active Space at full
      // strength, the others faded through the glyph's alpha.
-@@ -359,7 +383,13 @@ void SpaceSwitcherView::Rebuild() {
+@@ -365,7 +389,13 @@ void SpaceSwitcherView::Rebuild() {
      button->SetProperty(views::kMarginsKey, chip_margin);
      button->SetEnabledTextColors(
          SkColorSetA(SK_ColorWHITE, active ? 0xFF : kInactiveAlpha));
@@ -1613,7 +1618,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
    }
    add_spacer();
  
-@@ -411,7 +441,7 @@ void SpaceSwitcherView::ApplyOverflow() {
+@@ -417,7 +447,7 @@ void SpaceSwitcherView::ApplyOverflow() {
    const auto& spaces = model_->spaces();
    std::vector<int> widths;
    for (size_t i = 0; i < chips_.size(); ++i) {
@@ -1622,7 +1627,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
      if (!chip) {
        continue;
      }
-@@ -439,7 +469,23 @@ void SpaceSwitcherView::ApplyOverflow() {
+@@ -445,7 +475,23 @@ void SpaceSwitcherView::ApplyOverflow() {
      const bool dot = chip_width == kSwitcherDot;
      chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
                                 : gfx::Size(kIconSize, kIconSize));
@@ -1647,7 +1652,7 @@ index 6bd36f0c479eb..ede7f09e6d6b6 100644
      if (dot) {
        chip->SetBackground(
            views::CreateRoundedRectBackground(space.color(), kSwitcherDot / 2));
-@@ -969,23 +1015,20 @@ void SpaceSwitcherView::OnThemeChanged() {
+@@ -975,23 +1021,20 @@ void SpaceSwitcherView::OnThemeChanged() {
  }
  
  void SpaceSwitcherView::SetNumberBadges(bool showing) {
@@ -1961,7 +1966,7 @@ index 1dde320f0ac82..a75b863dffbfb 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
-index faf2327e78a96..1ee2b4b9dbec8 100644
+index 2f3098ada0278..0cc2712b5904d 100644
 --- a/chrome/test/stedding/sidebar_forms_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
 @@ -19,6 +19,7 @@
@@ -1990,7 +1995,7 @@ index faf2327e78a96..1ee2b4b9dbec8 100644
  #include "components/prefs/pref_service.h"
  #include "components/split_tabs/split_tab_id.h"
  #include "components/split_tabs/split_tab_visual_data.h"
-@@ -530,6 +535,43 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, APageInItsOwnFullScreenIsEdgeToEdge) {
+@@ -532,6 +537,43 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, APageInItsOwnFullScreenIsEdgeToEdge) {
    EXPECT_EQ(Strip().right() + stedding::kCardGutter.Get(), Page().x());
  }
  

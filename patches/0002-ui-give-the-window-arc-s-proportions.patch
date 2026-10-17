@@ -46,46 +46,54 @@ are themable without a patch. Then the parameters become theme values.
  .../chrome_location_bar_model_delegate.cc     |  25 ++++-
  .../chrome_location_bar_model_delegate.h      |   1 +
  ...location_bar_model_delegate_browsertest.cc |   6 +
+ chrome/browser/ui/views/frame/BUILD.gn        |  26 +++++
  .../views/frame/layout/browser_view_layout.cc |   5 +
  .../layout/stedding_browser_view_layout.cc    | 103 ++++++++++++++++++
  .../layout/stedding_browser_view_layout.h     |  34 ++++++
  .../ui/views/frame/multi_contents_view.cc     |  14 ++-
  .../frame/vertical_tab_strip_region_view.h    |   2 +-
  .../tabs/common/pinned_tab_container_view.cc  |  21 +++-
- chrome/browser/ui/views/tabs/tab/tab_icon.cc  |  38 ++++---
+ chrome/browser/ui/views/tabs/tab/tab_icon.cc  |  32 +++---
  chrome/browser/ui/views/tabs/tab_unittest.cc  |  21 +++-
  .../vertical_tab_strip_bottom_container.cc    |   4 +
  .../vertical_tab_strip_bottom_container.h     |   4 +
  .../vertical_tab_strip_top_container.cc       |   8 ++
  .../browser/ui/views/toolbar/toolbar_view.cc  |  45 +++++++-
- 20 files changed, 438 insertions(+), 37 deletions(-)
+ 21 files changed, 461 insertions(+), 34 deletions(-)
  create mode 100644 chrome/browser/ui/stedding_ui_metrics.cc
  create mode 100644 chrome/browser/ui/stedding_ui_metrics.h
  create mode 100644 chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
  create mode 100644 chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.h
 
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 82f397571fefa..0c5f162f6c823 100644
+index 238f8625e42d8..a5c6f79de0d66 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1566,6 +1566,7 @@ static_library("ui") {
-       ":confirm_bubble_model",
+@@ -2336,6 +2336,7 @@ static_library("ui") {
        ":focus_tab_after_navigation_helper",
+       ":intent_picker_tab_helper",
        ":layout_constants",
 +      ":stedding_ui_metrics",
+       ":tab_helpers",
+       ":tab_helpers_impl",
        ":tab_ui_helper",
-       ":uma_browsing_activity_observer",
-       "//base",
-@@ -2741,6 +2742,8 @@ static_library("ui") {
-       "views/frame/layout/browser_view_popup_layout_impl.cc",
-       "views/frame/layout/browser_view_popup_layout_impl.h",
-       "views/frame/layout/browser_view_tabbed_layout_impl.cc",
-+      "views/frame/layout/stedding_browser_view_layout.cc",
-+      "views/frame/layout/stedding_browser_view_layout.h",
-       "views/frame/layout/browser_view_tabbed_layout_impl.h",
-       "views/frame/multi_contents_view.cc",
-       "views/frame/multi_contents_view.h",
-@@ -3873,6 +3876,15 @@ source_set("confirm_bubble") {
+@@ -3789,6 +3790,7 @@ static_library("ui") {
+       "//chrome/browser/ui/views/frame:shadow",
+       "//chrome/browser/ui/views/frame:shadow_overlay_view",
+       "//chrome/browser/ui/views/frame:shadow_overlay_view_impl",
++      "//chrome/browser/ui/views/frame:stedding_browser_view_layout",
+       "//chrome/browser/ui/views/frame:system_menu_model_builder",
+       "//chrome/browser/ui/views/frame:system_menu_model_builder_impl",
+       "//chrome/browser/ui/views/frame:system_menu_model_delegate",
+@@ -4108,6 +4110,7 @@ static_library("ui") {
+       "//chrome/browser/ui/views/frame:multi_contents_view_mini_toolbar_impl",
+       "//chrome/browser/ui/views/frame:scrim_view_controller_impl",
+       "//chrome/browser/ui/views/frame:shadow_overlay_view_impl",
++      "//chrome/browser/ui/views/frame:stedding_browser_view_layout",
+       "//chrome/browser/ui/views/frame:system_menu_model_builder_impl",
+       "//chrome/browser/ui/views/frame:system_menu_model_delegate_impl",
+       "//chrome/browser/ui/views/frame:tab_modal_dialog_host_impl",
+@@ -4774,6 +4777,15 @@ source_set("confirm_bubble") {
    ]
  }
  
@@ -101,7 +109,7 @@ index 82f397571fefa..0c5f162f6c823 100644
  source_set("layout_constants") {
    sources = [
      "layout_constants.cc",
-@@ -3882,6 +3894,7 @@ source_set("layout_constants") {
+@@ -4783,6 +4795,7 @@ source_set("layout_constants") {
    public_deps = [ "//ui/gfx/geometry" ]
  
    deps = [
@@ -110,7 +118,7 @@ index 82f397571fefa..0c5f162f6c823 100644
      "//chrome/browser/ui:ui_features",
      "//chrome/common:chrome_features",
 diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_constants.cc
-index 7d1a2d797fc2c..98d6d0bebc1e9 100644
+index 5b86765bfa208..b10562c1ca887 100644
 --- a/chrome/browser/ui/layout_constants.cc
 +++ b/chrome/browser/ui/layout_constants.cc
 @@ -3,6 +3,7 @@
@@ -143,7 +151,7 @@ index 7d1a2d797fc2c..98d6d0bebc1e9 100644
      case LayoutConstant::kToolbarDividerCornerRadius:
        return 1;
      case LayoutConstant::kToolbarDividerHeight:
-@@ -145,10 +146,11 @@ int GetLayoutConstant(LayoutConstant constant) {
+@@ -147,10 +148,11 @@ int GetLayoutConstant(LayoutConstant constant) {
        return 20;
      case LayoutConstant::kMainBackgroundRegionCornerRadius:
      case LayoutConstant::kToolbarCornerRadius:
@@ -157,7 +165,7 @@ index 7d1a2d797fc2c..98d6d0bebc1e9 100644
      case LayoutConstant::kVerticalTabPinnedHeight:
        return 32;
      case LayoutConstant::kVerticalTabMinWidth:
-@@ -211,7 +213,7 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
+@@ -213,7 +215,7 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
      }
  
      case TOOLBAR_BUTTON:
@@ -166,7 +174,7 @@ index 7d1a2d797fc2c..98d6d0bebc1e9 100644
  
      case BROWSER_APP_MENU_CHIP_PADDING:
        if (touch_ui) {
-@@ -234,7 +236,9 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
+@@ -236,7 +238,9 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
        }
  
      case TOOLBAR_INTERIOR_MARGIN:
@@ -390,6 +398,50 @@ index 2b08d1a7f1d73..212cf5d807c2a 100644
    EXPECT_FALSE(delegate()->ShouldPreventElision());
    delegate()->set_cert_status(net::CERT_STATUS_REVOKED);
    EXPECT_TRUE(delegate()->ShouldPreventElision());
+diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
+index d1973034eed48..e4bcfc9483d35 100644
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -2309,6 +2309,7 @@ source_set("browser_view_layout_core_impl") {
+     ":browser_view_popup_layout_impl",
+     ":browser_view_tabbed_layout_impl",
+     ":multi_contents_view",
++    ":stedding_browser_view_layout",
+     "//base",
+     "//chrome/browser/ui:ui_features",
+     "//chrome/browser/ui/browser_window",
+@@ -2430,6 +2431,31 @@ source_set("browser_view_popup_layout_impl") {
+   ]
+ }
+ 
++# Stedding's tabbed layout (patch 0002): the window's proportions, Arc's. Like
++# browser_view_tabbed_layout_impl, it includes vertical_tab_strip_region_view.h
++# from //chrome/browser/ui:ui, which lists it in allow_circular_includes_from.
++source_set("stedding_browser_view_layout") {
++  public = [ "layout/stedding_browser_view_layout.h" ]
++  sources = [ "layout/stedding_browser_view_layout.cc" ]
++  public_deps = [
++    ":browser_view_tabbed_layout_impl",
++    "//chrome/browser/ui:stedding_ui_metrics",
++  ]
++  deps = [
++    ":browser_view_header",
++    ":browser_view_layout_delegate",
++    ":custom_corners_background",
++    ":custom_floating_corner",
++    ":multi_contents_view",
++    "//base",
++    "//chrome/browser/ui:layout_constants",
++    "//chrome/browser/ui/immersive:immersive_mode_controller",
++    "//chrome/browser/ui/views/toolbar",
++    "//ui/gfx/geometry",
++    "//ui/views",
++  ]
++}
++
+ source_set("browser_view_tabbed_layout_impl") {
+   public = [ "layout/browser_view_tabbed_layout_impl.h" ]
+   sources = [ "layout/browser_view_tabbed_layout_impl.cc" ]
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/browser_view_layout.cc
 index 778997a0f1aec..dfad7c27d53d2 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_layout.cc
@@ -563,7 +615,7 @@ index 0000000000000..c24b0a2d4f2d5
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_FRAME_LAYOUT_STEDDING_BROWSER_VIEW_LAYOUT_H_
 diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
-index 76475b569327f..4ece1bd500f6a 100644
+index a756f076ffce5..16d183f20ae9e 100644
 --- a/chrome/browser/ui/views/frame/multi_contents_view.cc
 +++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
 @@ -4,6 +4,8 @@
@@ -575,7 +627,7 @@ index 76475b569327f..4ece1bd500f6a 100644
  #include <algorithm>
  #include <cstdlib>
  
-@@ -506,8 +508,12 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+@@ -507,8 +509,12 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
  
    gfx::Rect available_space = gfx::Rect(width, height);
  
@@ -589,7 +641,7 @@ index 76475b569327f..4ece1bd500f6a 100644
    layouts.child_layouts.emplace_back(background_view_.get(), show_background,
                                       available_space);
  
-@@ -521,6 +527,12 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+@@ -522,6 +528,12 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
  
    if (IsInSplitView()) {
      available_space.Inset(split_view_insets_);
@@ -603,10 +655,10 @@ index 76475b569327f..4ece1bd500f6a 100644
    ViewSizes sizes = GetViewSizes(available_space);
  
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 76f8e997d61b2..3f315860fc89a 100644
+index 52ee4b9479a2a..ee354714bda11 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -65,7 +65,7 @@ class VerticalTabStripRegionView final
+@@ -69,7 +69,7 @@ class VerticalTabStripRegionView final
    static constexpr int kUncollapsedMinWidth = 126;
    // TODO(crbug.com/465832180): Replace constant based width final max width for
    // view.
@@ -616,7 +668,7 @@ index 76f8e997d61b2..3f315860fc89a 100644
    // TODO(crbug.com/465833741): Determine snapping behavior.
    static constexpr int kCollapseSnapWidth =
 diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-index 4c53686233f55..f9300d42dee8c 100644
+index 365ebd7f65491..f3cbdd3d03048 100644
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 @@ -4,6 +4,8 @@
@@ -655,7 +707,7 @@ index 4c53686233f55..f9300d42dee8c 100644
  
    int row_index = 0;
 diff --git a/chrome/browser/ui/views/tabs/tab/tab_icon.cc b/chrome/browser/ui/views/tabs/tab/tab_icon.cc
-index 496a254fc9e49..3ad773cd1dfd5 100644
+index dca6d709238e9..5015329d2fd8a 100644
 --- a/chrome/browser/ui/views/tabs/tab/tab_icon.cc
 +++ b/chrome/browser/ui/views/tabs/tab/tab_icon.cc
 @@ -4,6 +4,8 @@
@@ -667,7 +719,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
  #include "base/check.h"
  #include "base/i18n/rtl.h"
  #include "base/memory/raw_ptr.h"
-@@ -136,7 +138,7 @@ TabIcon::TabIcon()
+@@ -100,7 +102,7 @@ TabIcon::TabIcon()
    // elements will anchor to the center of the favicon.
    SetBorder(views::CreateEmptyBorder(kAttentionIndicatorRadius));
  
@@ -676,7 +728,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
    SetPreferredSize(gfx::Size(preferred_width, preferred_width));
  
    // Initial state (before any data) should not be animating.
-@@ -238,7 +240,7 @@ void TabIcon::StepLoadingAnimation(const base::TimeDelta& elapsed_time) {
+@@ -196,7 +198,7 @@ void TabIcon::StepLoadingAnimation(const base::TimeDelta& elapsed_time) {
  
  void TabIcon::ResizeDiscardIndicatorRadiusForWidth(int width) {
    increased_discard_indicator_radius_ =
@@ -685,7 +737,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
            ? kIncreasedDiscardIndicatorRadiusDp
            : 0;
  }
-@@ -274,11 +276,11 @@ void TabIcon::OnPaint(gfx::Canvas* canvas) {
+@@ -232,11 +234,11 @@ void TabIcon::OnPaint(gfx::Canvas* canvas) {
    }
  
    gfx::Rect icon_bounds(
@@ -700,7 +752,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
  
    // Don't paint the attention indicator during the loading animation.
    if (!GetShowingLoadingAnimation() && GetShowingAttentionIndicator() &&
-@@ -338,8 +340,8 @@ void TabIcon::PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
+@@ -282,8 +284,8 @@ void TabIcon::PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
    TRACE_EVENT0("views", "TabIcon::PaintAttentionIndicatorAndIcon");
  
    gfx::Point circle_center(
@@ -711,7 +763,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
  
    // The attention indicator consists of two parts:
    // . a clear (totally transparent) part over the bottom right (or left in rtl)
-@@ -348,7 +350,7 @@ void TabIcon::PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
+@@ -292,7 +294,7 @@ void TabIcon::PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
    // . a circle in the bottom right (or left in rtl) of the favicon.
    if (!icon.isNull()) {
      canvas->SaveLayerAlpha(0xff);
@@ -720,7 +772,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
                           bounds.x(), bounds.y(), bounds.width(),
                           bounds.height(), false);
      cc::PaintFlags clear_flags;
-@@ -452,12 +454,12 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
+@@ -396,12 +398,12 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
      // stroke + an additional dp to create some visual separation.
      const float kInitialFaviconInsetDp = 1 + kLoadingAnimationStrokeWidthDp;
      const float kInitialFaviconDiameterDp =
@@ -735,7 +787,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
  
      SkScalar diameter = kInitialFaviconDiameterDp;
      if (was_discard_indicator_shown_ ||
-@@ -474,11 +476,11 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
+@@ -418,11 +420,11 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
      // This scales and offsets painting so that the drawn favicon is downscaled
      // to fit in the cropping area.
      const float offset =
@@ -751,7 +803,7 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
      // Translating to/from bounds offset is done to scale around the center
      // point. This fixes RTL issues where bounds.x() is non-zero. See
      // https://crbug.com/40730696
-@@ -488,7 +490,7 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
+@@ -432,7 +434,7 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
      canvas->Translate(gfx::Vector2d(-bounds.x(), -bounds.y()));
    }
  
@@ -760,21 +812,6 @@ index 496a254fc9e49..3ad773cd1dfd5 100644
                         bounds.y(), bounds.width(), bounds.height(),
                         /*filter=*/true);
  
-@@ -659,11 +661,11 @@ void TabIcon::UpdateThrobber() {
- 
-     // Calculate and update the icon's visual bounds.
-     gfx::Rect icon_bounds(
--        GetMirroredXWithWidthInView(contents_bounds.x(), gfx::kFaviconSize),
-+        GetMirroredXWithWidthInView(contents_bounds.x(), stedding::kTabFaviconSize.Get()),
-         contents_bounds.y() +
-             static_cast<int>(contents_bounds.height() * hiding_fraction_),
--        std::min(gfx::kFaviconSize, contents_bounds.width()),
--        std::min(gfx::kFaviconSize, contents_bounds.height()));
-+        std::min(stedding::kTabFaviconSize.Get(), contents_bounds.width()),
-+        std::min(stedding::kTabFaviconSize.Get(), contents_bounds.height()));
- 
-     if (throbber_view_->bounds() != icon_bounds) {
-       throbber_view_->SetBoundsRect(icon_bounds);
 diff --git a/chrome/browser/ui/views/tabs/tab_unittest.cc b/chrome/browser/ui/views/tabs/tab_unittest.cc
 index b248ef47972bd..ec1012fb2c677 100644
 --- a/chrome/browser/ui/views/tabs/tab_unittest.cc
@@ -884,10 +921,10 @@ index d69e4dd30f732..5a3bb53514cbc 100644
  
  VerticalTabStripTopContainer::~VerticalTabStripTopContainer() = default;
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-index bfc981b7ee720..f81c55bdb224c 100644
+index f9bb38f923745..c26eb80a0c15e 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-@@ -57,6 +57,7 @@
+@@ -58,6 +58,7 @@
  #include "chrome/browser/ui/global_error/global_error_service_factory.h"
  #include "chrome/browser/ui/intent_picker_tab_helper.h"
  #include "chrome/browser/ui/layout_constants.h"
@@ -895,7 +932,7 @@ index bfc981b7ee720..f81c55bdb224c 100644
  #include "chrome/browser/ui/omnibox/omnibox_view.h"
  #include "chrome/browser/ui/page_action/page_action_properties_provider.h"
  #include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
-@@ -598,7 +599,10 @@ void ToolbarView::Init() {
+@@ -613,7 +614,10 @@ void ToolbarView::Init() {
      avatar_ = AddChildView(std::make_unique<AvatarToolbarButton>(browser_));
      bool show_avatar_toolbar_button =
          AvatarToolbarButtonInterface::CanShowForProfile(browser_->GetProfile());
@@ -907,7 +944,7 @@ index bfc981b7ee720..f81c55bdb224c 100644
    }
  
    // Only manage the overflow button when there are at least some views
-@@ -1563,6 +1567,45 @@ void ToolbarView::InitLayout() {
+@@ -1596,6 +1600,45 @@ void ToolbarView::InitLayout() {
                                      location_bar_flex_rule);
      location_bar_view_->SetProperty(views::kMarginsKey,
                                      gfx::Insets::VH(0, location_bar_margin));

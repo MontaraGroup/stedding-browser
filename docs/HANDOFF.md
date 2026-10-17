@@ -37,17 +37,17 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Ninety-one traps follow. Read the one for the topic in front of you, not the list.
+Ninety-two traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90 |
-| The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89 |
+| The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91 |
 | Release and signing | 44, 47, 49, 62, 85 |
-| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73 |
+| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92 |
 
 ## Where things live
 
@@ -1105,7 +1105,15 @@ private window has.
     signed build is a new program to it: `verify-build`'s network check waited behind the
     unanswered question and timed out, and the probe took 75 s instead of 7 (2026-10-12).
     The question is the operator's to answer; run `verify-build --offline` and say so in
-    the notes, and count the questions left on screen for the operator.
+    the notes, and count the questions left on screen for the operator. From M156 a held
+    connection also costs the quit. At shutdown Chromium waits up to 10 s for the network
+    service to exit, and M156's new shutdown watchdog (`chrome/browser/shutdown_watchdog_mac.cc`)
+    ends any quit that takes 10 s with a dump and `RESULT_CODE_HUNG`; `tooling/drive` then
+    reports that the pid "did not quit". On 2026-10-16 the ad hoc build did that three times
+    in three after a few Settings pages. The same steps on a Developer-ID-signed copy of the
+    same build, which the firewall lets through, quit in 2 s. The dump goes to the real
+    data folder's `Crashpad/pending`, whatever `--user-data-dir` says, so move a test's
+    dumps out of it: `S-66` reads that folder for the owner's crashes.
 
 86. **A layout that is right at rest can be wrong for the length of an animation.** The
     tests settled the sidebar before they measured, and every steady form cleared the Mac's
@@ -1186,6 +1194,55 @@ private window has.
     true. Two failures it showed on 2026-10-16 are older than that round (`S-213`, `S-214`).
     And a `tar` made on the Mac for the PC carries `._*` files unless
     `COPYFILE_DISABLE=1` is set; they turn up as untracked files in the checkout there.
+
+92. **M156 rebuilt the sidebar's region view; the rebase compiles long before it lays out
+    right.** The move from 155.0.8059.12 to 156.0.8078.36 (2026-10-16) needed hand merges
+    in 27 of 68 patches. `VerticalTabStripRegionView` now lays itself out through a
+    `DelegatingLayoutManager` (`CalculateProposedLayout`) and holds its rows in
+    `content_area_view_`, a `FlexLayoutView`. Stedding's switcher row, Archived row,
+    bottom row and update pill go in that content area. The hover pill stays a direct
+    child on a layer of its own. The rail's side margins are the content area's interior
+    margin. The top row's height comes from the top container's `kMarginsKey` and from
+    whether the layout lets that container be visible. Elsewhere:
+    - `OnTabStripViewSet` / `OnTabStripViewWillClear` became `AddTabStripView` /
+      `RemoveTabStripView`, and the state controller's logic moved to
+      `vertical_tab_strip_state_controller_impl.cc`.
+    - Upstream removed `kSigninPromoOnAvatarPill`; a feature of Stedding's own,
+      `kSteddingSigninPromoOnAvatarPill`, now keeps the promo off.
+    - `TabGroupHeaderView` colours its parts in `UpdateColors()`.
+    - `TabRestoreService::RestoreEntryById` returns an optional.
+    - `AutocompleteMatchType` is an enum class with kCamelCase names.
+    - Upstream took toast ids 59 and 60, so Stedding's are 61 to 65. They are histogram
+      values: append after upstream's and move `kMaxValue`.
+    - A new WebUI lint rule (`lit-element-template-structure`) wants a ternary in a
+      template to return an `html` literal in its true branch: invert the condition.
+    - The engine list gained Perplexity, which needed a mark in the welcome flow.
+    - New upstream tests assumed defaults Stedding changes (HTTPS-First starting
+      disabled, the long tab menu). They now assert Stedding's defaults, in the patch that
+      changes each default.
+    - `gn check` refused the window layout's include of the region view's header, so the
+      layout has a target of its own,
+      `//chrome/browser/ui/views/frame:stedding_browser_view_layout`.
+    - The content area is a layer that is not opaque. A label in it that draws subpixel
+      text trips `Label::PaintText`'s DCHECK at a window's first paint (on 2026-10-17, 110
+      of the 158 browser tests on `win-checks`), and on Windows it draws colour fringes in a
+      release build (beta 16's Archived row had them). Stedding's rows there turn subpixel
+      text off, as `tab_strip_view.cc`'s rows already did:
+      `SetSubpixelRenderingEnabled(false)` and `SetSkipSubpixelRenderingOpacityCheck(true)`.
+
+    What worked: `git rebase --onto <new pin> <old pin> stedding-work` with `rerere` and
+    `zdiff3`; the compiler's whole error list in one pass (trap 50); the port's fixes
+    folded into their patches by blame with `tooling/fold-fix`, which rewrites no file and
+    so costs no rebuild; and the two machines' trees compared by hash after every fold.
+    Then the window's states were captured beside the previous release
+    (`tooling/capture-state --build b16ref` against a copy of the released app in
+    `out/b16ref`). The captures show a row laid out in the wrong container; the suites do
+    not. `capture-state` cannot open a chrome:// page, because Chromium opens none named on
+    its command line and shows the new tab page instead; the first comparison's Settings,
+    About and Archived captures were five pictures of the new tab page, identical in both
+    builds. `capture-state` now refuses such an address. Drive the address bar to those
+    pages instead (`tooling/drive`: `key l+cmd`, `type chrome://settings/stedding`,
+    `key enter`).
 
 ## The Windows build
 
@@ -1296,6 +1353,23 @@ copy, started without `--use-mock-keychain`, would otherwise wait on
 its decision: export it before, and afterwards delete the domain and import the export
 (`defaults import` alone keeps keys the test added). Afterwards: stop both, delete the test
 profile and its cache folder, and `defaults delete` the test domain.
+
+Before a release that moves the pin or changes the updater, run the same check from the
+release people have installed. The older copy is that release's app, out of its DMG, with
+the same three keys changed in its `Info.plist` and only the outer bundle signed again
+with the same Developer ID: `codesign --force --sign <identity> --options
+runtime,library,restrict,kill --timestamp=none
+--preserve-metadata=identifier,entitlements,requirements`. Its nested code keeps the
+release's signatures. `--options` has to name the release's flags, because once
+`--options` is given, `--preserve-metadata=flags` does not keep them. The newer copy is the
+new build, signed as above, with the next release's `CFBundleVersion`. On 2026-10-16 beta 16
+updated itself this way to the 156 build. The pill showed in about twenty seconds, the new
+version was running a second after the press, the tab came back, and the profile's `Last
+Version` read 156. The relaunched build can then show the welcome flow or Chromium's
+engine chooser. That is the test profile, not the update: the older copy ran with
+`--no-first-run`, so the profile never finished the welcome or chose an engine. Seeding
+`Default/Preferences` with `{"stedding":{"welcome":{"shown":true}}}` skips the welcome.
+The chooser then opens as it does for a beta 16 user who never chose an engine (trap 51).
 
 ## Release channel
 

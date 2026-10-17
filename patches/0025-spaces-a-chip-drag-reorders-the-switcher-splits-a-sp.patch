@@ -22,13 +22,13 @@ reorder and treats a split as one unit for membership and pins.
  chrome/browser/ui/spaces/space_model.cc       |  31 ++++-
  chrome/browser/ui/spaces/space_model.h        |   9 ++
  .../ui/spaces/space_model_window_unittest.cc  |  37 ++++++
- chrome/browser/ui/stedding/sleep_tabs.cc      |  19 ++++
+ chrome/browser/ui/stedding/sleep_tabs.cc      |  19 +++
  .../ui/views/spaces/space_switcher_rules.cc   |  12 ++
  .../ui/views/spaces/space_switcher_rules.h    |   6 +
  .../spaces/space_switcher_rules_unittest.cc   |  12 ++
- .../ui/views/spaces/space_switcher_view.cc    | 106 +++++++++++++++++-
+ .../ui/views/spaces/space_switcher_view.cc    | 112 +++++++++++++++++-
  .../ui/views/spaces/space_switcher_view.h     |  14 +++
- 9 files changed, 242 insertions(+), 4 deletions(-)
+ 9 files changed, 248 insertions(+), 4 deletions(-)
 
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
 index ad166dea06903..49cc853c13631 100644
@@ -285,7 +285,7 @@ index 82971d99daf06..cd628e150a362 100644
    EXPECT_FALSE(SwitcherOverflows(352, 5));
    EXPECT_FALSE(SwitcherOverflows(352, 8));
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-index 75d9bf85a9a4c..0731b5835de0d 100644
+index 75d9bf85a9a4c..cacc5b9b151ff 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
 @@ -13,6 +13,7 @@
@@ -296,7 +296,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
  #include "cc/paint/paint_flags.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
  #include "chrome/browser/ui/spaces/space.h"
-@@ -108,13 +109,36 @@ class SpaceChipButton : public views::LabelButton {
+@@ -108,13 +109,42 @@ class SpaceChipButton : public views::LabelButton {
    METADATA_HEADER(SpaceChipButton, views::LabelButton)
  
   public:
@@ -313,7 +313,13 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
 +        hovered_(std::move(hovered)),
 +        dragged_(std::move(dragged)),
 +        released_(std::move(released)),
-+        capture_lost_(std::move(capture_lost)) {}
++        capture_lost_(std::move(capture_lost)) {
++    // The chips sit in the sidebar's content area, a layer that is not
++    // opaque, on the sidebar's ground: no subpixel text, which Label DCHECKs
++    // must be painted onto an opaque region.
++    label()->SetSkipSubpixelRenderingOpacityCheck(true);
++    label()->SetSubpixelRenderingEnabled(false);
++  }
    ~SpaceChipButton() override = default;
  
 +  // spaces B27: the row hears the drag and the drop; the button keeps its
@@ -335,7 +341,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
    // LabelButton keeps label() protected; the row sets the glyph size.
    void SetGlyphSize(int pixels) {
      label()->SetFontList(label()->font_list().DeriveWithSizeDelta(
-@@ -132,6 +156,9 @@ class SpaceChipButton : public views::LabelButton {
+@@ -132,6 +162,9 @@ class SpaceChipButton : public views::LabelButton {
  
   private:
    base::RepeatingCallback<void(bool)> hovered_;
@@ -345,7 +351,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
  };
  
  BEGIN_METADATA(SpaceChipButton)
-@@ -179,6 +206,9 @@ void SpaceSwitcherView::Rebuild() {
+@@ -179,6 +212,9 @@ void SpaceSwitcherView::Rebuild() {
    }
    icon_row_->RemoveAllChildViews();
    chips_.clear();
@@ -355,7 +361,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
  
    const views::FlexSpecification stretch(
        views::MinimumFlexSizeRule::kScaleToZero,
-@@ -226,7 +256,13 @@ void SpaceSwitcherView::Rebuild() {
+@@ -226,7 +262,13 @@ void SpaceSwitcherView::Rebuild() {
                self->hover_callback_.Run(entered ? name : std::u16string(),
                                          bounds);
              },
@@ -370,7 +376,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
      button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
      button->SetPreferredSize(gfx::Size(kIconSize, kIconSize));
      button->SetTooltipText(name);
-@@ -293,6 +329,12 @@ void SpaceSwitcherView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+@@ -293,6 +335,12 @@ void SpaceSwitcherView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
    }
  }
  
@@ -383,7 +389,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
  void SpaceSwitcherView::OnMouseEntered(const ui::MouseEvent& event) {
    if (!row_hovered_) {
      row_hovered_ = true;
-@@ -364,6 +406,8 @@ void SpaceSwitcherView::ShowMenuForSpace(
+@@ -364,6 +412,8 @@ void SpaceSwitcherView::ShowMenuForSpace(
    menu_model_->AddItem(kMoveSpaceRightCommand, u"Move Right");
    menu_model_->AddItem(kRemoveSpaceCommand, u"Delete Space");
  
@@ -392,7 +398,7 @@ index 75d9bf85a9a4c..0731b5835de0d 100644
    menu_runner_ = std::make_unique<views::MenuRunner>(
        menu_model_.get(), views::MenuRunner::CONTEXT_MENU);
    menu_runner_->RunMenuAt(GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
-@@ -490,6 +534,62 @@ bool SpaceSwitcherView::HandleKeyEvent(views::Textfield* sender,
+@@ -490,6 +540,62 @@ bool SpaceSwitcherView::HandleKeyEvent(views::Textfield* sender,
    return false;
  }
  

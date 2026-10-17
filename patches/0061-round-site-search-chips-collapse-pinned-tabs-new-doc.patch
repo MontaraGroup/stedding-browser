@@ -38,7 +38,7 @@ Removable when: never; these are Stedding's own behaviours.
  chrome/browser/ui/views/commandbar/BUILD.gn   |   3 +
  .../ui/views/commandbar/command_bar_view.cc   | 407 ++++++++++++-
  .../ui/views/commandbar/command_bar_view.h    |  51 +-
- .../commandbar/command_bar_view_unittest.cc   | 562 ++++++++++++++++++
+ .../commandbar/command_bar_view_unittest.cc   | 566 +++++++++++++++++-
  .../ui/views/spaces/space_switcher_view.cc    |  25 +
  .../spaces/space_tab_visibility_controller.cc |  26 +-
  .../spaces/space_tab_visibility_controller.h  |   7 +-
@@ -53,7 +53,7 @@ Removable when: never; these are Stedding's own behaviours.
  chrome/test/stedding/BUILD.gn                 |   1 +
  .../test/stedding/command_bar_browsertest.cc  |  79 +++
  .../test/stedding/pinned_run_browsertest.cc   | 222 +++++++
- 30 files changed, 1938 insertions(+), 26 deletions(-)
+ 30 files changed, 1940 insertions(+), 28 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/new_documents.cc
  create mode 100644 chrome/browser/ui/stedding/new_documents.h
  create mode 100644 chrome/browser/ui/stedding/new_documents_unittest.cc
@@ -823,7 +823,7 @@ index fa17387bbf145..a1951187b8071 100644
      "//content/public/browser",
      "//ui/base",
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index c06dfc34a4345..b9bc0ea6b210b 100644
+index f461ca7a44816..a93b28e96a58e 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -44,6 +44,7 @@
@@ -1517,7 +1517,7 @@ index 120842202c225..888a0a10dec01 100644
    std::vector<Row> rows_;
    std::vector<stedding::ArchivedTab> ArchivedTabs() const;
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
-index 889c6bdccc53c..3777ee68b2b44 100644
+index 889c6bdccc53c..9749810a90232 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 @@ -4,6 +4,7 @@
@@ -1571,6 +1571,15 @@ index 889c6bdccc53c..3777ee68b2b44 100644
  // Enter on the chosen row, through the bar's own key handling.
  bool Enter(CommandBarView& bar) {
    return bar.HandleKeyEvent(bar.field_for_testing(), Press(ui::VKEY_RETURN));
+@@ -123,7 +146,7 @@ AutocompleteMatch SiteMatch(const std::u16string& typed,
+                             const GURL& url) {
+   AutocompleteMatch match(/*provider=*/nullptr, /*relevance=*/1400,
+                           /*deletable=*/false,
+-                          AutocompleteMatchType::HISTORY_URL);
++                          omnibox::AutocompleteMatchType::kHistoryUrl);
+   match.destination_url = url;
+   match.fill_into_edit = shown;
+   match.contents = shown;
 @@ -156,6 +179,50 @@ class CommandBarViewTest : public BrowserWithTestWindowTest {
      TemplateURLServiceFactory::GetForProfile(profile())->Add(
          std::make_unique<TemplateURL>(data));
@@ -1757,6 +1766,15 @@ index 889c6bdccc53c..3777ee68b2b44 100644
  // commandbar K10: the chord is drawn from the window's accelerator provider.
  TEST_F(CommandBarViewTest, ActionRowsCarryAccelerators) {
    AddTab(browser(), GURL("https://example.com/"));
+@@ -1102,7 +1297,7 @@ TEST_F(CommandBarViewTest, OnlyASiteCompletes) {
+   TypeInto(*bar, u"g");
+ 
+   AutocompleteMatch search = SiteMatch(u"g", u"github.com", github);
+-  search.type = AutocompleteMatchType::SEARCH_SUGGEST;
++  search.type = omnibox::AutocompleteMatchType::kSearchSuggest;
+   bar->SetAutocompleteResultForTesting(ResultOf({search}));
+   EXPECT_EQ(u"g", field->GetText());
+   EXPECT_EQ(u"g", bar->row_title_for_testing(0));
 @@ -1302,6 +1497,53 @@ TEST_F(CommandBarViewTest, FolderRowsCollapseAndExpandTheSpacesFolders) {
    EXPECT_FALSE(w->collapsed());
  }
@@ -1950,7 +1968,7 @@ index 889c6bdccc53c..3777ee68b2b44 100644
 +
 +  AutocompleteMatch own(/*provider=*/nullptr, /*relevance=*/1200,
 +                        /*deletable=*/false,
-+                        AutocompleteMatchType::SEARCH_SUGGEST);
++                        omnibox::AutocompleteMatchType::kSearchSuggest);
 +  own.keyword = u"zt";
 +  own.contents = u"rust book";
 +  own.destination_url = GURL("https://zettel.example/find?q=rust+book");
@@ -2137,7 +2155,7 @@ index 889c6bdccc53c..3777ee68b2b44 100644
 +
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-index c5c88af089efa..5842864681c0f 100644
+index 50230f3d39090..fb9451816ed77 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
 @@ -114,6 +114,8 @@ constexpr int kMoveSpaceRightCommand = 202;
@@ -2149,7 +2167,7 @@ index c5c88af089efa..5842864681c0f 100644
  
  // The colour choices live in space_colors.h: the welcome flow shows the same
  // five (welcome W7).
-@@ -525,6 +527,18 @@ void SpaceSwitcherView::BuildMenu(const SpaceId& id) {
+@@ -531,6 +533,18 @@ void SpaceSwitcherView::BuildMenu(const SpaceId& id) {
    }
    menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
    menu_model_->AddItem(kMoveTabHereCommand, u"Move Current Tab Here");
@@ -2168,7 +2186,7 @@ index c5c88af089efa..5842864681c0f 100644
    menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
    for (size_t i = 0; i < kSpaceColors.size(); ++i) {
      // A swatch of the colour beside its name.
-@@ -569,6 +583,12 @@ void SpaceSwitcherView::ExecuteCommand(int command_id, int event_flags) {
+@@ -575,6 +589,12 @@ void SpaceSwitcherView::ExecuteCommand(int command_id, int event_flags) {
      }
      return;
    }
@@ -2181,7 +2199,7 @@ index c5c88af089efa..5842864681c0f 100644
    if (command_id == kIsolateSpaceCommand) {
      // PLAN.md SPC-9: open pages reload in the other jar; it asks first.
      SetSpaceIsolatedAfterAsking(&*browser_, *menu_space_,
-@@ -676,6 +696,11 @@ bool SpaceSwitcherView::IsCommandIdEnabled(int command_id) const {
+@@ -682,6 +702,11 @@ bool SpaceSwitcherView::IsCommandIdEnabled(int command_id) const {
    if (command_id == kWipeSessionCommand) {
      return menu_space_ && model_->SpaceIsIsolated(*menu_space_);
    }
@@ -2291,7 +2309,7 @@ index 0203f9ed15ab5..9bda11da57a17 100644
    void RunPostedUpdate();
  
 diff --git a/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc b/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
-index c6eeed3dcef35..ec1b7499bcec3 100644
+index 3c7b0a5cc0412..516e6277202b2 100644
 --- a/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
 +++ b/chrome/browser/ui/views/tabs/browser_tab_strip_controller.cc
 @@ -179,6 +179,11 @@ class BrowserTabStripController::TabFilterObserver
@@ -2306,7 +2324,7 @@ index c6eeed3dcef35..ec1b7499bcec3 100644
    void OnSpaceModelDestroying() override { space_observation_.Reset(); }
  
    // tabs::TabCollectionObserver:
-@@ -763,10 +768,16 @@ void BrowserTabStripController::OnTabStripModelChanged(
+@@ -767,10 +772,16 @@ void BrowserTabStripController::OnTabStripModelChanged(
  
    // Stedding: a collapsed folder keeps the active tab, and its split's other
    // pane, on screen (folders F3), so what the folder filters out follows the
@@ -2389,7 +2407,7 @@ index 283bf581bfc3f..a8accd7b94201 100644
  
  // spaces B17, sidebar Y8: in the rail's column the Clear line has no room
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index f24914ea85ee2..f8d308be3ddb6 100644
+index f5be06e891d63..ef43ad5e3a9ba 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 @@ -122,6 +122,14 @@ void UnpinnedTabContainerView::SetSpaceBoundary(
@@ -2434,7 +2452,7 @@ index a3957c88c5e75..416d1e9807de9 100644
    views::SizeBound available_space_;
  
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index e2d6adcfeb31d..c0d07a0e5ea86 100644
+index 61007b4077e74..5d1d57cce5349 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 @@ -13,6 +13,7 @@
@@ -2445,7 +2463,7 @@ index e2d6adcfeb31d..c0d07a0e5ea86 100644
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
-@@ -295,9 +296,13 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -310,9 +311,13 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
      if (clear_line) {
        const int line_height = clear_line->GetPreferredSize().height();
        // The line divides a pinned run from the tabs below it; with nothing
@@ -2463,10 +2481,10 @@ index e2d6adcfeb31d..c0d07a0e5ea86 100644
            clear_line, show,
            gfx::Rect(horizontal_padding, height, boundary_width,
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index bad22b7bb3098..3a251ea7fc706 100644
+index 7ce560140f827..d80e88774f7c3 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -916,7 +916,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -917,7 +917,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString(
        "steddingHoldCmdNumbersSubLabel",
        base::StrCat({key("\u23181\u2013\u23189", "Ctrl+1\u2013Ctrl+9"),

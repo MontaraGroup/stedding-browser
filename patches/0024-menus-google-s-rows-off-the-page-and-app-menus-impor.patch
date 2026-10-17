@@ -36,7 +36,7 @@ reaches Google by default.
 Removable when: Chromium's menus can be curated without a fork.
 ---
  chrome/browser/renderer_context_menu/BUILD.gn |  2 +
- .../render_view_context_menu.cc               | 32 +++---
+ .../render_view_context_menu.cc               |  8 ++
  .../render_view_context_menu_unittest.cc      | 22 ++++-
  .../ui/browser_tab_menu_model_delegate.cc     | 26 +++++
  .../ui/browser_tab_menu_model_delegate.h      |  1 +
@@ -75,29 +75,29 @@ Removable when: Chromium's menus can be curated without a fork.
  .../tabs/tab/tab_context_menu_controller.h    |  5 +
  .../browser/ui/webui/settings/settings_ui.cc  |  5 +-
  .../tabs/public/tab_context_menu_command.h    |  6 ++
- 40 files changed, 961 insertions(+), 70 deletions(-)
+ 40 files changed, 950 insertions(+), 57 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/menu_rules.cc
  create mode 100644 chrome/browser/ui/stedding/menu_rules.h
  create mode 100644 chrome/browser/ui/stedding/menu_rules_unittest.cc
 
 diff --git a/chrome/browser/renderer_context_menu/BUILD.gn b/chrome/browser/renderer_context_menu/BUILD.gn
-index b2e9ee838ff8c..899011a53ced8 100644
+index beb9606cb654f..be84d49386b8e 100644
 --- a/chrome/browser/renderer_context_menu/BUILD.gn
 +++ b/chrome/browser/renderer_context_menu/BUILD.gn
-@@ -148,6 +148,8 @@ source_set("impl") {
-       "//chrome/browser/sync",
-       "//chrome/browser/translate",
+@@ -152,6 +152,8 @@ source_set("impl") {
        "//chrome/browser/ui",
+       "//chrome/browser/ui:browser_commands",
+       "//chrome/browser/ui:browser_window_header",
 +      "//chrome/browser/ui/stedding:menu_rules",
 +      "//chrome/browser/ui/stedding:prefs",
        "//chrome/browser/ui:chrome_pages",
        "//chrome/browser/ui:confirm_bubble",
-       "//chrome/browser/ui:ui_features",
+       "//chrome/browser/ui:scoped_tabbed_browser_displayer",
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-index 5271cc2681aac..84a75c564fd4f 100644
+index abdfdada9bfe7..e5b8c3a86fd11 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-@@ -131,6 +131,8 @@
+@@ -134,6 +134,8 @@
  #include "chrome/browser/ui/read_anything/read_anything_side_panel_controller_utils.h"
  #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
  #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_context_menu_delegate.h"
@@ -106,38 +106,7 @@ index 5271cc2681aac..84a75c564fd4f 100644
  #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/page_context_eligibility_helper.h"
-@@ -2054,13 +2056,14 @@ void RenderViewContextMenu::AppendLinkItems() {
-         enterprise_isolated_mode::IsolatedModeReplacesIncognito(GetProfile());
- 
-     if (show_open_link_off_the_record && isolated_mode_enabled) {
--      AddItemWithOptionalIcon(IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED,
--                              features::IsMenuSimplificationEnabled()
--                                  ? IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED_V2
--                                  : IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED,
--                              features::IsRoundedIconsEnabled()
--                                  ? vector_icons::kDomainIcon
--                                  : vector_icons::kBusinessChromeRefreshOldIcon);
-+      AddItemWithOptionalIcon(
-+          IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED,
-+          features::IsMenuSimplificationEnabled()
-+              ? IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED_V2
-+              : IDS_CONTENT_CONTEXT_OPENLINK_ISOLATED,
-+          features::IsRoundedIconsEnabled()
-+              ? vector_icons::kDomainIcon
-+              : vector_icons::kBusinessChromeRefreshOldIcon);
-     }
- 
-     AppendOpenInWebAppLinkItems();
-@@ -3269,8 +3272,6 @@ void RenderViewContextMenu::AppendSharingItems() {
-   }
- }
- 
--
--
- void RenderViewContextMenu::AppendRegionSearchItem() {
-   auto* entry_point_controller =
-       GetBrowser() ? lens::LensOverlayEntryPointController::From(GetBrowser())
-@@ -3748,6 +3749,12 @@ bool RenderViewContextMenu::IsCommandIdVisible(int id) const {
+@@ -3784,6 +3786,12 @@ bool RenderViewContextMenu::IsCommandIdVisible(int id) const {
    if (ContextMenuMatcher::IsExtensionsCustomCommandId(id)) {
      return extension_items_.IsCommandIdVisible(id);
    }
@@ -150,22 +119,8 @@ index 5271cc2681aac..84a75c564fd4f 100644
    return RenderViewContextMenuBase::IsCommandIdVisible(id);
  }
  
-@@ -4820,10 +4827,9 @@ void RenderViewContextMenu::AppendSendTabToSelfItem(bool add_separator) {
-             : send_tab_to_self::kSendTabToSelfEnhancedDesktopUI;
- 
-     // TODO(crbug.com/516708776): Remove new feature tag when no longer new.
--    menu_model_.SetIsNewFeatureAt(
--        menu_model_.GetItemCount() - 1,
--        UserEducationService::MaybeShowNewBadge(GetBrowserContext(),
--                                                stts_feature));
-+    menu_model_.SetIsNewFeatureAt(menu_model_.GetItemCount() - 1,
-+                                  UserEducationService::MaybeShowNewBadge(
-+                                      GetBrowserContext(), stts_feature));
-     return;
-   }
- 
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
-index bac91c0f2a283..c097d1acc04b9 100644
+index d998bfcb5d32b..1e2ad017c8007 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
 @@ -49,6 +49,7 @@
@@ -176,7 +131,7 @@ index bac91c0f2a283..c097d1acc04b9 100644
  #include "chrome/browser/ui/tabs/page_context_eligibility_helper.h"
  #include "chrome/browser/ui/ui_features.h"
  #include "chrome/browser/user_education/user_education_service.h"
-@@ -531,6 +532,24 @@ class RenderViewContextMenuPrefsTest
+@@ -543,6 +544,24 @@ class RenderViewContextMenuPrefsTest
  
  // Verifies when Incognito Mode is not available (disabled by policy),
  // Open Link in Incognito Window link in the context menu is disabled.
@@ -201,7 +156,7 @@ index bac91c0f2a283..c097d1acc04b9 100644
  TEST_F(RenderViewContextMenuPrefsTest,
         DisableOpenInIncognitoWindowWhenIncognitoIsDisabled) {
    std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
-@@ -1903,8 +1922,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
+@@ -1915,8 +1934,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
    ASSERT_EQ(initial_num_processes, mock_rph_factory().GetProcesses()->size());
  }
  
@@ -572,7 +527,7 @@ index 13cf9c48d22a2..a8116b4f0ca00 100644
  
    scoped_refptr<ThumbnailImage> thumbnail;
 diff --git a/chrome/browser/ui/tabs/tab_menu_model.cc b/chrome/browser/ui/tabs/tab_menu_model.cc
-index 049dc8d08844f..f5bb32064ed97 100644
+index ca3f24c4a4b8e..e884fcae09743 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model.cc
 +++ b/chrome/browser/ui/tabs/tab_menu_model.cc
 @@ -13,6 +13,8 @@
@@ -584,7 +539,7 @@ index 049dc8d08844f..f5bb32064ed97 100644
  #include "build/build_config.h"
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/app/vector_icons/vector_icons.h"
-@@ -108,6 +110,38 @@ TabMenuModel::TabMenuModel(ui::SimpleMenuModel::Delegate* delegate,
+@@ -109,6 +111,38 @@ TabMenuModel::TabMenuModel(ui::SimpleMenuModel::Delegate* delegate,
  
  TabMenuModel::~TabMenuModel() = default;
  
@@ -623,7 +578,7 @@ index 049dc8d08844f..f5bb32064ed97 100644
  void TabMenuModel::BuildStedding(int index) {
    std::vector<int> indices;
    if (tab_strip_->IsTabSelected(index)) {
-@@ -136,14 +170,44 @@ void TabMenuModel::BuildStedding(int index) {
+@@ -137,14 +171,44 @@ void TabMenuModel::BuildStedding(int index) {
                                             num_tabs));
    AddItemWithStringId(TabStripModel::CommandSteddingRenameTab,
                        IDS_STEDDING_RENAME_TAB);
@@ -673,7 +628,7 @@ index 049dc8d08844f..f5bb32064ed97 100644
    AddItem(TabStripModel::CommandSteddingSleepTab,
            l10n_util::GetPluralStringFUTF16(IDS_STEDDING_TAB_CXMENU_SLEEP_TAB,
                                             num_tabs));
-@@ -169,6 +233,8 @@ void TabMenuModel::BuildStedding(int index) {
+@@ -170,6 +234,8 @@ void TabMenuModel::BuildStedding(int index) {
            l10n_util::GetPluralStringFUTF16(
                IDS_STEDDING_TAB_CXMENU_COPY_MARKDOWN_LINK, num_tabs));
  
@@ -682,7 +637,7 @@ index 049dc8d08844f..f5bb32064ed97 100644
    AddSeparator(ui::NORMAL_SEPARATOR);
    AddItemWithStringId(TabStripModel::CommandCloseTab, IDS_TAB_CXMENU_CLOSETAB);
    AddItemWithStringId(TabStripModel::CommandCloseOtherTabs,
-@@ -735,27 +801,7 @@ void TabMenuModel::Build(int index) {
+@@ -743,27 +809,7 @@ void TabMenuModel::Build(int index) {
      }
    }
  
@@ -712,7 +667,7 @@ index 049dc8d08844f..f5bb32064ed97 100644
    // Separator Close Tab items
    AddSeparator(ui::NORMAL_SEPARATOR);
 diff --git a/chrome/browser/ui/tabs/tab_menu_model.h b/chrome/browser/ui/tabs/tab_menu_model.h
-index 229cec361c601..7022389560ab3 100644
+index b7c5bd906fe64..f5fa1cbfe06c1 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model.h
 +++ b/chrome/browser/ui/tabs/tab_menu_model.h
 @@ -87,6 +87,8 @@ class TabMenuModel : public ui::SimpleMenuModel {
@@ -758,10 +713,10 @@ index 55f060fa6daa4..8591998f8c088 100644
    ui::ScopedUnownedUserData<TabMenuModelDelegate> scoped_unowned_user_data_;
  };
 diff --git a/chrome/browser/ui/tabs/tab_menu_model_unittest.cc b/chrome/browser/ui/tabs/tab_menu_model_unittest.cc
-index 8293f3b19ad55..e7bcb7bee8210 100644
+index a36f62f3c8bfd..3bf8f64313f97 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model_unittest.cc
 +++ b/chrome/browser/ui/tabs/tab_menu_model_unittest.cc
-@@ -6,11 +6,13 @@
+@@ -6,12 +6,14 @@
  
  #include "build/build_config.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -769,13 +724,14 @@ index 8293f3b19ad55..e7bcb7bee8210 100644
  #include "chrome/browser/ui/tabs/tab_menu_model_delegate.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
+ #include "chrome/browser/ui/ui_features.h"
  #include "chrome/test/base/menu_model_test.h"
  #include "chrome/test/base/testing_profile.h"
 +#include "components/split_tabs/split_tab_visual_data.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/test/browser_task_environment.h"
  #include "extensions/buildflags/buildflags.h"
-@@ -133,6 +135,62 @@ TEST_F(TabMenuModelTest, SteddingOrder) {
+@@ -134,6 +136,62 @@ TEST_F(TabMenuModelTest, SteddingOrder) {
    }
  }
  
@@ -839,10 +795,10 @@ index 8293f3b19ad55..e7bcb7bee8210 100644
    // Create a tabbed web app window without home tab.
    WebAppTabStripModelDelegate delegate;
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index f0c1240b2b460..67b737e492304 100644
+index e5fc7ae08f9b3..1ec0bf24fc832 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -2718,6 +2718,9 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -2809,6 +2809,9 @@ bool TabStripModel::IsContextMenuCommandEnabled(
      case CommandSteddingResetToHome:
      case CommandSteddingSetHome:
      case CommandSteddingRenameTab:
@@ -852,7 +808,7 @@ index f0c1240b2b460..67b737e492304 100644
        return false;
  
      case CommandGoBack:
-@@ -3116,6 +3119,9 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -3212,6 +3215,9 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
      case CommandSteddingResetToHome:
      case CommandSteddingSetHome:
      case CommandSteddingRenameTab:
@@ -862,7 +818,7 @@ index f0c1240b2b460..67b737e492304 100644
        break;
  
      case CommandGoBack: {
-@@ -4893,6 +4899,24 @@ tabs::FolderTabCollection* TabStripModel::AddToNewFolder(
+@@ -5018,6 +5024,24 @@ tabs::FolderTabCollection* TabStripModel::AddToNewFolder(
    return folder_ptr;
  }
  
@@ -888,10 +844,10 @@ index f0c1240b2b460..67b737e492304 100644
                                       tabs::FolderTabCollection* folder) {
    CHECK(folder);
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
-index 8a5db1b83dbf2..da8098768e3fb 100644
+index 05928d9242dc7..5109dcd06a8d3 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.h
 +++ b/chrome/browser/ui/tabs/tab_strip_model.h
-@@ -724,6 +724,11 @@ class TabStripModel {
+@@ -727,6 +727,11 @@ class TabStripModel {
    bool MoveTabsToFolder(const std::vector<int> indices,
                          tabs::FolderTabCollection* folder);
  
@@ -904,10 +860,10 @@ index 8a5db1b83dbf2..da8098768e3fb 100644
    // The tabs take on the pinnedness of the tabs already in the group. Tabs
    // before the group will move to the start, while tabs after the group will
 diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
-index 131c2b911abc0..40f78fe6afa52 100644
+index cc80383fb9d6d..456f4c36c636d 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
-@@ -6685,6 +6685,30 @@ TEST_F(TabStripModelTest, MoveTabRelativeStaysInsideItsFolder) {
+@@ -6824,6 +6824,30 @@ TEST_F(TabStripModelTest, MoveTabRelativeStaysInsideItsFolder) {
    EXPECT_EQ(4, tabstrip()->count());
  }
  
@@ -939,10 +895,10 @@ index 131c2b911abc0..40f78fe6afa52 100644
  // one by one so the tree stays valid; pinned tabs are refused untouched.
  TEST_F(TabStripModelTest, MoveTabsToFolderAppendsNestsAndRefusesPins) {
 diff --git a/chrome/browser/ui/toolbar/BUILD.gn b/chrome/browser/ui/toolbar/BUILD.gn
-index 605a25e6dec8b..b48c05b62d210 100644
+index cbcfc3ab2ea3f..c0e36f586330b 100644
 --- a/chrome/browser/ui/toolbar/BUILD.gn
 +++ b/chrome/browser/ui/toolbar/BUILD.gn
-@@ -120,6 +120,8 @@ source_set("impl") {
+@@ -121,6 +121,8 @@ source_set("impl") {
        "//build:branding_buildflags",
        "//chrome/app:branded_strings",
        "//chrome/app:command_ids",
@@ -952,7 +908,7 @@ index 605a25e6dec8b..b48c05b62d210 100644
        "//chrome/app/theme:theme_resources",
        "//chrome/app/vector_icons",
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
-index 168ca692926fb..8222e730f1560 100644
+index 46ba365db3a69..07ccd4d358060 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
 @@ -18,6 +18,7 @@
@@ -972,10 +928,10 @@ index 168ca692926fb..8222e730f1560 100644
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
-@@ -1997,11 +2000,27 @@ bool AppMenuModel::IsCommandIdEnabled(int command_id) const {
-   switch (command_id) {
-     case IDC_NEW_INCOGNITO_WINDOW:
-       return IncognitoModePrefs::IsIncognitoAllowed(browser_->GetProfile());
+@@ -2035,11 +2038,27 @@ bool AppMenuModel::IsCommandIdEnabled(int command_id) const {
+       return IncognitoModePrefs::IsIncognitoTypeAllowed(
+           browser_->GetProfile(),
+           IncognitoModePrefs::IncognitoModeType::kStandard);
 +    // Stedding (docs/features/menus.md M3): submenu containers the command
 +    // updater never hears of; their rows answer for themselves.
 +    case kSteddingScreenshotMenuPlaceholder:
@@ -1000,7 +956,7 @@ index 168ca692926fb..8222e730f1560 100644
  bool AppMenuModel::IsCommandIdAlerted(int command_id) const {
    if (command_id == IDC_VIEW_PASSWORDS ||
        command_id == IDC_SHOW_PASSWORD_MANAGER) {
-@@ -2169,6 +2188,54 @@ void AppMenuModel::Build() {
+@@ -2207,6 +2226,54 @@ void AppMenuModel::Build() {
        features::IsRoundedIconsEnabled() ? kDownloadIcon : kDownloadMenuOldIcon);
    SetElementIdentifierAt(GetIndexOfCommandId(IDC_SHOW_DOWNLOADS).value(),
                           kDownloadsMenuItem);
@@ -1056,10 +1012,10 @@ index 168ca692926fb..8222e730f1560 100644
      bookmark_sub_menu_model_ =
          std::make_unique<BookmarkSubMenuModel>(this, browser_);
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.h b/chrome/browser/ui/toolbar/app_menu_model.h
-index ed3f1fa50b588..9dd417f64b20c 100644
+index 7fd1446d69240..99ba6207039b5 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.h
 +++ b/chrome/browser/ui/toolbar/app_menu_model.h
-@@ -234,6 +234,10 @@ class AppMenuModel : public ui::SimpleMenuModel,
+@@ -253,6 +253,10 @@ class AppMenuModel : public ui::SimpleMenuModel,
        IDC_SAVED_TAB_GROUPS_MENU;
    static constexpr int kMoreToolsMenuPlaceholder = IDC_MORE_TOOLS_MENU;
    static constexpr int kHelpMenuPlaceholder = IDC_HELP_MENU;
@@ -1070,7 +1026,7 @@ index ed3f1fa50b588..9dd417f64b20c 100644
  
    // Number of menus within the app menu with an arbitrarily high (variable)
    // number of menu items. For example, the number of bookmarks menu items
-@@ -284,6 +288,7 @@ class AppMenuModel : public ui::SimpleMenuModel,
+@@ -311,6 +315,7 @@ class AppMenuModel : public ui::SimpleMenuModel,
    bool IsCommandIdChecked(int command_id) const override;
    bool IsCommandIdEnabled(int command_id) const override;
    bool IsCommandIdAlerted(int command_id) const override;
@@ -1091,7 +1047,7 @@ index 31c837ad99d91..f63dd352aa429 100644
      "//components/search_engines",
      "//ui/actions",
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index 59aa9bf63b674..868e435deaeee 100644
+index 14e34087795c0..9766b2f3f5c13 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -34,6 +34,7 @@
@@ -1272,10 +1228,10 @@ index ff36d8bffc684..33c3291cea442 100644
        model->AddItemWithStringId(
            IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER,
 diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
-index 860f6041c0fd8..3b4f862bab453 100644
+index c17eb5f83fdb8..120ec52eccb81 100644
 --- a/chrome/browser/ui/views/tabs/common/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
-@@ -102,6 +102,7 @@ source_set("impl") {
+@@ -103,6 +103,7 @@ source_set("impl") {
      "//chrome/browser/dictation",
      "//chrome/browser/glic",
      "//components/vector_icons",
@@ -1503,7 +1459,7 @@ index ade9b1b841a0c..455216384d9f4 100644
  
  #endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_FOLDER_VIEW_H_
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
-index f5082eecbcf85..0b5490d0c43f1 100644
+index d9ac3c938e524..9ddc13c348b76 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
 @@ -16,8 +16,10 @@
@@ -1619,7 +1575,7 @@ index f5082eecbcf85..0b5490d0c43f1 100644
      stedding::ResetToHome(browser_view_->browser(), tab);
      return;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h
-index bf8f2ac01e155..6f13f4e2b660c 100644
+index 76f68f83afb2f..eb6b203d49b29 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h
 @@ -27,6 +27,7 @@ class TabGroup;
@@ -1639,9 +1595,9 @@ index bf8f2ac01e155..6f13f4e2b660c 100644
 +  void CloseFolderTabs(tabs::FolderTabCollection* folder);
 +
    // Updates the browser theme when focus mode is active for a tab group.
-   // Triggered when tab group focus changes or when the color of the currently
-   // focused tab group changes.
-@@ -145,6 +150,9 @@ class TabStripCollectionController : public TabContextMenuController::Delegate {
+   // Only updates themes for permanent tab groups; non-group focus mode does not
+   // theme the browser. Triggered when tab group focus changes or when the color
+@@ -146,6 +151,9 @@ class TabStripCollectionController : public TabContextMenuController::Delegate {
        TabStripModel::ContextMenuCommand command_id) override;
    bool IsContextMenuCommandAlerted(
        TabStripModel::ContextMenuCommand command_id) override;
@@ -1652,7 +1608,7 @@ index bf8f2ac01e155..6f13f4e2b660c 100644
                                   TabStripModel::ContextMenuCommand command_id,
                                   int event_flags) override;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 5c70e6b94c384..759a22077bb71 100644
+index aa9d913ac5158..58842c3da990f 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -43,6 +43,7 @@
@@ -1703,7 +1659,7 @@ index 5c70e6b94c384..759a22077bb71 100644
    if (number_badge_ && number_badge_->GetVisible()) {
      stedding::TabRowState row;
      row.pinned = pinned_;
-@@ -715,7 +735,12 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
+@@ -747,7 +767,12 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
      const bool on_favicon = icon_ && icon_->bounds().Contains(event.location());
      const bool reset =
          on_favicon && !pinned_ && (HasDriftedFromHome() || event.IsAltDown());
@@ -1717,7 +1673,7 @@ index 5c70e6b94c384..759a22077bb71 100644
      if (reset || reset_card) {
        tabs::TabInterface* const tab =
            const_cast<tabs::TabInterface*>(GetTabInterface());
-@@ -1223,9 +1248,45 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1257,9 +1282,45 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    // Stedding (pins H4): the dot on a drifted pin.
    icon_->SetAttention(TabIcon::AttentionType::kNavigatedAwayFromHome,
                        HasDriftedFromHome());
@@ -1764,7 +1720,7 @@ index 5c70e6b94c384..759a22077bb71 100644
  }
  
  bool TabView::HasDriftedFromHome() const {
-@@ -1306,6 +1367,15 @@ void TabView::UpdateColors() {
+@@ -1340,6 +1401,15 @@ void TabView::UpdateColors() {
    if (icon_->layer()) {
      icon_->layer()->SetOpacity(stedding::kSleptIconOpacity);
    }
@@ -1940,10 +1896,10 @@ index e5741fd0404ab..ca6faaee3e829 100644
          tabs::TabInterface* tab,
          TabStripModel::ContextMenuCommand command_id,
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 32f1248e541ba..cf7b9e34da417 100644
+index 5b7e78ccfca6c..dd27855cbc373 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -720,8 +720,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -721,8 +721,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingMenusShortLabel", "Short context menus");
    html_source->AddString(
        "steddingMenusShortSubLabel",

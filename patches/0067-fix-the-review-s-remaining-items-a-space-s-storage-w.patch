@@ -55,7 +55,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../browser/sessions/session_service_base.cc  |  23 ++-
  chrome/browser/ui/BUILD.gn                    |   3 +
  chrome/browser/ui/accelerator_table.cc        |   6 +-
- chrome/browser/ui/archive/archived_tabs.cc    | 104 ++++++++--
+ chrome/browser/ui/archive/archived_tabs.cc    | 112 +++++++++--
  chrome/browser/ui/archive/archived_tabs.h     |  10 +-
  .../ui/archive/archived_tabs_unittest.cc      |  43 +++++
  chrome/browser/ui/browser_tabrestore.cc       |  37 ++--
@@ -109,7 +109,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../stedding_notification_partition.h         |  40 ++++
  content/public/browser/BUILD.gn               |   1 +
  .../public/browser/stedding_session_storage.h |  37 ++++
- 61 files changed, 2159 insertions(+), 131 deletions(-)
+ 61 files changed, 2165 insertions(+), 133 deletions(-)
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.cc
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.h
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords_unittest.cc
@@ -123,10 +123,10 @@ that owns its code (patches/README.md, the round-patch exception).
  create mode 100644 content/public/browser/stedding_session_storage.h
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 19045777b3d81..2ffdcb1de617e 100644
+index 2e0f287290b76..d9323612f595f 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -202,6 +202,8 @@
+@@ -204,6 +204,8 @@
  #include "chrome/browser/ui/navigator/browser_navigator_params.h"
  #include "chrome/browser/ui/prefs/pref_watcher.h"
  #include "chrome/browser/ui/select_file_policy/chrome_select_file_policy.h"
@@ -135,7 +135,7 @@ index 19045777b3d81..2ffdcb1de617e 100644
  #include "chrome/browser/ui/startup/google_chrome_scheme_util.h"
  #include "chrome/browser/ui/startup/url_util.h"
  #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
-@@ -5518,6 +5520,16 @@ void ChromeContentBrowserClient::OpenURL(
+@@ -5614,6 +5616,16 @@ void ChromeContentBrowserClient::OpenURL(
    NavigateParams nav_params(Profile::FromBrowserContext(browser_context),
                              params.url, params.transition);
    nav_params.FillNavigateParamsFromOpenURLParams(params);
@@ -277,10 +277,10 @@ index 8dd776bb9e33f..8b88c2b98f84c 100644
      row.append(remove);
      list.append(row);
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index e3185d7ee239e..56a429aa089ce 100644
+index 82703556aa674..77239c3841310 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
-@@ -353,6 +353,14 @@ function renderStep(main: HTMLElement) {
+@@ -354,6 +354,14 @@ function renderStep(main: HTMLElement) {
          if (state.chosenSource < 0) {
            return;
          }
@@ -295,7 +295,7 @@ index e3185d7ee239e..56a429aa089ce 100644
          chrome.send('importData', [state.chosenSource, {
            'import_dialog_autofill_form_data': false,
            'import_dialog_bookmarks': state.importFavorites,
-@@ -443,6 +451,7 @@ function renderStep(main: HTMLElement) {
+@@ -444,6 +452,7 @@ function renderStep(main: HTMLElement) {
            pill.dataset['focus'] = `behaviour-${behaviour.name}-${value}`;
            pill.addEventListener('click', () => {
              state.behaviour[behaviour.name] = value;
@@ -303,7 +303,7 @@ index e3185d7ee239e..56a429aa089ce 100644
              chrome.send('setBehaviour', [behaviour.name, value]);
              render();
              // render() rebuilt the step; the focus stays on this choice.
-@@ -694,10 +703,25 @@ sendWithPromise('getSpaceColors').then((colors: unknown) => {
+@@ -695,10 +704,25 @@ sendWithPromise('getSpaceColors').then((colors: unknown) => {
    render();
  });
  // W12: the behaviour step shows what the profile has set.
@@ -333,7 +333,7 @@ index e3185d7ee239e..56a429aa089ce 100644
    state.importStatus = status as string;
    render();
 diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
-index 0a5b4a3c6b090..a93a75a1f55a1 100644
+index eeaf487d559fc..50b1da83bd02e 100644
 --- a/chrome/browser/sessions/session_restore.cc
 +++ b/chrome/browser/sessions/session_restore.cc
 @@ -4,6 +4,8 @@
@@ -345,7 +345,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
  
  #include <stddef.h>
  
-@@ -811,12 +813,33 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -814,12 +816,33 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
      }
  #endif  //  BUILDFLAG(IS_CHROMEOS)
  
@@ -380,7 +380,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
        const bool is_normal_window =
            window->type == sessions::SessionWindow::TYPE_NORMAL;
        const bool is_app_window =
-@@ -828,8 +851,7 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -831,8 +854,7 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
          counts->app_windows++;
        }
  
@@ -390,7 +390,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
          // The first set of tabs is added to the existing browser.
          browser = browser_;
        } else {
-@@ -883,7 +905,7 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -886,7 +908,7 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
        WebContents* active_tab =
            browser->GetTabStripModel()->GetActiveWebContents();
        int initial_tab_count = browser->GetTabStripModel()->count();
@@ -399,7 +399,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
                                is_normal_window && active_tab &&
                                browser == browser_ && !window->tabs.empty();
        if (close_active_tab) {
-@@ -906,6 +928,15 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -909,6 +931,15 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
        RestoreTabsToBrowser(*window, browser, initial_tab_count,
                             browser == browser_to_activate, restored_tabs,
                             &new_group_ids, did_show_browser);
@@ -415,7 +415,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
        // Newly created browsers should be shown by RestoreTabsToBrowser. If they
        // aren't shown, they are likely to be never shown.
        if (browser != browser_) {
-@@ -982,6 +1013,15 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -985,6 +1016,15 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
      // Session cookies/storage needed for the session restore have now been
      // recreated by RestoreTab so it's safe to start deleting leftover data.
      profile_->GetDefaultStoragePartition()->DeleteStaleSessionData();
@@ -431,7 +431,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
  
      return last_normal_browser ? last_normal_browser : last_app_browser;
    }
-@@ -1112,10 +1152,21 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -1127,10 +1167,21 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
      scoped_refptr<content::SessionStorageNamespaceHandle>
          session_storage_namespace;
      if (!tab.session_storage_persistent_id.empty()) {
@@ -454,7 +454,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
      }
  
      // Relabel group IDs to prevent duplicating groups. See crbug.com/40055647.
-@@ -1464,6 +1515,10 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -1479,6 +1530,10 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
    // The profile to create the sessions for.
    raw_ptr<Profile> profile_;
  
@@ -466,7 +466,7 @@ index 0a5b4a3c6b090..a93a75a1f55a1 100644
    raw_ptr<BrowserWindowInterface, DanglingUntriaged> browser_;
  
 diff --git a/chrome/browser/sessions/session_service_base.cc b/chrome/browser/sessions/session_service_base.cc
-index c3ca7b4563670..297393ae3c2eb 100644
+index bdc0adac9c388..0f73bf6d322e8 100644
 --- a/chrome/browser/sessions/session_service_base.cc
 +++ b/chrome/browser/sessions/session_service_base.cc
 @@ -60,6 +60,11 @@
@@ -528,10 +528,10 @@ index c3ca7b4563670..297393ae3c2eb 100644
        session_tab_helper->session_id(), session_storage_namespace->id()));
  }
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 319b1d9da7b1b..1de07f59c2fb9 100644
+index f7ef16312d9f2..7586ae41a0741 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1564,6 +1564,9 @@ static_library("ui") {
+@@ -2326,6 +2326,9 @@ static_library("ui") {
        "//chrome/browser/ui/views/peek",
        "//chrome/browser/ui/views/stedding:sidebar_resize_handle",
      ]
@@ -559,7 +559,7 @@ index fe42289d13858..6271aefd159a8 100644
  const AcceleratorMapping kSteddingCtrlAltAcceleratorMap[] = {
      // spaces B19, B22: the Spaces and the tab's move between them.
 diff --git a/chrome/browser/ui/archive/archived_tabs.cc b/chrome/browser/ui/archive/archived_tabs.cc
-index 1fefb35fdff9e..64ca896ef7f51 100644
+index 1fefb35fdff9e..9230706391b1c 100644
 --- a/chrome/browser/ui/archive/archived_tabs.cc
 +++ b/chrome/browser/ui/archive/archived_tabs.cc
 @@ -239,16 +239,13 @@ std::vector<ArchivedTab> ListArchivedTabs(
@@ -704,6 +704,21 @@ index 1fefb35fdff9e..64ca896ef7f51 100644
        break;
      }
    }
+@@ -358,8 +432,12 @@ bool RestoreArchivedTab(BrowserWindowInterface* browser,
+ 
+   // In the background: a hidden restored tab loads nothing until it is
+   // shown, so it is in its Space and its jar before any request leaves.
+-  const std::vector<sessions::LiveTab*> live = service->RestoreEntryById(
+-      context, id, WindowOpenDisposition::NEW_BACKGROUND_TAB);
++  // Nothing when the entry is gone: no tab came back.
++  const std::vector<sessions::LiveTab*> live =
++      service
++          ->RestoreEntryById(context, id,
++                             WindowOpenDisposition::NEW_BACKGROUND_TAB)
++          .value_or(std::vector<sessions::LiveTab*>());
+   if (live.empty()) {
+     return false;
+   }
 diff --git a/chrome/browser/ui/archive/archived_tabs.h b/chrome/browser/ui/archive/archived_tabs.h
 index fe329e293636f..f3f4407d83c2c 100644
 --- a/chrome/browser/ui/archive/archived_tabs.h
@@ -843,10 +858,10 @@ index 4d34156da92ac..9520e74bf24a6 100644
    create_params.desired_renderer_state =
        WebContents::CreateParams::kNoRendererProcess;
 diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
-index 0e8c10d2ffd18..90ed450bd2073 100644
+index 4278771f0ae67..f1eec8d8090f9 100644
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
-@@ -505,9 +505,24 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+@@ -522,9 +522,24 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
    if (!params.opener) {
      const bool essential =
          (params.tabstrip_add_types & AddTabTypes::ADD_PINNED) != 0;
@@ -1562,10 +1577,10 @@ index 6073c8c08ea2a..eb6cf90cbda20 100644
  
  void SleepTabs(BrowserWindowInterface* browser,
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index d46d1cbb52585..553acd0021583 100644
+index cb5a1a9e87325..6f156fed0a0b9 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -412,6 +412,7 @@
+@@ -414,6 +414,7 @@
  
  #if BUILDFLAG(IS_WIN)
  #include "chrome/browser/taskbar/taskbar_decorator_win.h"
@@ -1573,7 +1588,7 @@ index d46d1cbb52585..553acd0021583 100644
  #include "chrome/browser/win/jumplist.h"
  #include "chrome/browser/win/jumplist_factory.h"
  #include "ui/gfx/color_palette.h"
-@@ -5024,6 +5025,14 @@ void BrowserView::AddedToWidget() {
+@@ -5062,6 +5063,14 @@ void BrowserView::AddedToWidget() {
  
    widget_observation_.Observe(GetWidget());
  
@@ -1589,10 +1604,10 @@ index d46d1cbb52585..553acd0021583 100644
        BrowserElements::From(browser_)->AsA<BrowserElementsViewsImpl>();
    browser_elements->Init(this);
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index c9b2e33608408..97f1a5f6ef977 100644
+index 4b61640fccb38..74d3411c37090 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -1367,8 +1367,28 @@ void VerticalTabStripRegionView::OnTabStripViewSet() {
+@@ -1542,8 +1542,28 @@ void VerticalTabStripRegionView::AddTabStripView(
      TabStripView* const strip = static_cast<TabStripView*>(tab_strip_view());
      strip->SetUpSpaceBoundary(base::BindRepeating(
          [](spaces::SpaceModel* model, const views::View* child) {
@@ -2579,10 +2594,10 @@ index 0a14b514c51f7..f946739260551 100644
    base::ListValue args;
    args.Append("callback-id");
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 92d2c528b9d0a..d48207f0b8c1a 100644
+index c1441c6c2ccdc..699496ec0e07c 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -5127,6 +5127,7 @@ test("unit_tests") {
+@@ -5138,6 +5138,7 @@ test("unit_tests") {
      "//chrome/browser/ui/views/commandbar:unit_tests",
      "//chrome/browser/ui/views/switcher:unit_tests",
      "//chrome/browser/ui/stedding:unit_tests",
@@ -2774,7 +2789,7 @@ index 928d02db89996..d848db6e76ddb 100644
  // it is there after a restart; a Space that was not collapsed is not.
  IN_PROC_BROWSER_TEST_F(PinnedRunTest, PRE_TheCollapseSurvivesARestart) {
 diff --git a/chrome/test/stedding/restore_browsertest.cc b/chrome/test/stedding/restore_browsertest.cc
-index 705aa57a99c20..28f9d609cd6c8 100644
+index 84654683baef6..5d10b19f08b56 100644
 --- a/chrome/test/stedding/restore_browsertest.cc
 +++ b/chrome/test/stedding/restore_browsertest.cc
 @@ -38,6 +38,7 @@
@@ -2794,7 +2809,7 @@ index 705aa57a99c20..28f9d609cd6c8 100644
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "chrome/test/stedding/sidebar_test_util.h"
-@@ -524,6 +527,171 @@ IN_PROC_BROWSER_TEST_F(RestoreTest, ABlankWindowComesBackBlank) {
+@@ -525,6 +528,171 @@ IN_PROC_BROWSER_TEST_F(RestoreTest, ABlankWindowComesBackBlank) {
        << "the Blank Window came back as an ordinary one";
  }
  
@@ -2966,7 +2981,7 @@ index 705aa57a99c20..28f9d609cd6c8 100644
  // PLAN.md TAB-15, SPC-8 (sessions S23): a renamed tab put to sleep and woken
  // keeps its name, and contents replaced under a tab -- a sleep through
  // Chromium's own lifecycle unit, a jar rebind -- get the tab's Space, pin,
-@@ -692,6 +860,8 @@ IN_PROC_BROWSER_TEST_F(RestoreTest,
+@@ -693,6 +861,8 @@ IN_PROC_BROWSER_TEST_F(RestoreTest,
      stedding::SetTabName(browser(), tab, u"Notes");
      ASSERT_TRUE(spaces::IsSpaceStoragePartition(
          spaces::StoragePartitionConfigForWebContents(tab->GetContents())));
@@ -2975,7 +2990,7 @@ index 705aa57a99c20..28f9d609cd6c8 100644
      ASSERT_TRUE(m->SetActiveSpace(home));
      tabs()->CloseWebContentsAt(Index(tab),
                                 TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
-@@ -708,6 +878,13 @@ IN_PROC_BROWSER_TEST_F(RestoreTest,
+@@ -709,6 +879,13 @@ IN_PROC_BROWSER_TEST_F(RestoreTest,
          spaces::StoragePartitionConfigForWebContents(back->GetContents())))
          << "back in its Space's jar, not the shared one";
      EXPECT_EQ(u"Notes", stedding::TabName(back->GetContents()));
@@ -3345,7 +3360,7 @@ index 61d726c9eb197..f5d339abd62c0 100644
  // United States' list of five.
  class WelcomeEnginesTest : public InProcessBrowserTest,
 diff --git a/components/permissions/permission_util.cc b/components/permissions/permission_util.cc
-index d20920174d7e7..782b01a289954 100644
+index 867fc205aaa78..f629847f8917f 100644
 --- a/components/permissions/permission_util.cc
 +++ b/components/permissions/permission_util.cc
 @@ -28,6 +28,8 @@
@@ -3357,7 +3372,7 @@ index d20920174d7e7..782b01a289954 100644
  #include "content/public/browser/web_contents.h"
  #include "content/public/common/content_features.h"
  #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
-@@ -681,6 +683,17 @@ bool PermissionUtil::IsPermissionBlockedInPartition(
+@@ -685,6 +687,17 @@ bool PermissionUtil::IsPermissionBlockedInPartition(
      case PermissionDelegationMode::kDoubleKeyed:
        return false;
      case PermissionDelegationMode::kUndelegated:
@@ -3408,10 +3423,10 @@ index 517796c54eb85..36b50cfe7fe68 100644
  ContentPlatformSpecificTabData::ContentPlatformSpecificTabData() = default;
  ContentPlatformSpecificTabData::~ContentPlatformSpecificTabData() = default;
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 53dd562d46bae..94cb8a3c890ff 100644
+index 3162721b67d5b..411c133c14835 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -934,6 +934,7 @@ source_set("browser") {
+@@ -939,6 +939,7 @@ source_set("browser") {
      "dom_storage/dom_storage_context_wrapper.h",
      "dom_storage/session_storage_namespace_handle_impl.cc",
      "dom_storage/session_storage_namespace_handle_impl.h",
@@ -3419,7 +3434,7 @@ index 53dd562d46bae..94cb8a3c890ff 100644
      "download/data_url_blob_reader.cc",
      "download/data_url_blob_reader.h",
      "download/download_item_utils.cc",
-@@ -1383,6 +1384,8 @@ source_set("browser") {
+@@ -1376,6 +1377,8 @@ source_set("browser") {
      "notifications/platform_notification_context_impl.h",
      "notifications/platform_notification_service_proxy.cc",
      "notifications/platform_notification_service_proxy.h",
@@ -3506,7 +3521,7 @@ index a17db79ca9cc3..c881508027cde 100644
    scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
        static_cast<ServiceWorkerContextWrapper*>(
 diff --git a/content/browser/notifications/platform_notification_context_impl.cc b/content/browser/notifications/platform_notification_context_impl.cc
-index eee0c716fb4bf..2745d3245965a 100644
+index e68bccb5233f5..f23880ee79bba 100644
 --- a/content/browser/notifications/platform_notification_context_impl.cc
 +++ b/content/browser/notifications/platform_notification_context_impl.cc
 @@ -4,6 +4,7 @@
@@ -3586,7 +3601,7 @@ index eee0c716fb4bf..2745d3245965a 100644
    service_proxy_ = std::make_unique<PlatformNotificationServiceProxy>(
        service_worker_context_, browser_context_);
  
-@@ -1017,6 +1052,16 @@ void PlatformNotificationContextImpl::DoWriteNotificationData(
+@@ -1029,6 +1064,16 @@ void PlatformNotificationContextImpl::DoWriteNotificationData(
        notification_id_generator_.GenerateForPersistentNotification(
            origin, database_data.notification_data.tag,
            database_data.is_shown_by_browser, persistent_notification_id);

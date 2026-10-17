@@ -7,6 +7,71 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-16, evening -- the pin moves to 156.0.8078.36
+
+The operator asked for Chromium's latest stable, `npm audit` fixed, and updates that will
+also work on Windows and Linux; then, with the Mac's disk freed, for the move built on the
+Mac too and checked until nothing was broken.
+
+- **The pin and the series:** `tooling/update-pin --to 156.0.8078.36` on both machines,
+  M156's newest stable-channel build that day (ADR 0007; `S-217`). The Mac's milestone sync
+  wanted 100 GB free, which the operator made. `git rebase --onto` the new pin needed hand
+  merges in 27 of the 68 patches, then the port to M156's rebuilt sidebar region view and the
+  rest that only the compiler finds (HANDOFF trap 92); every fix went into the patch that
+  owns its lines. The PC's source is the Mac's tree byte for byte, branding aside. The
+  same evening, at 20:04 UTC, Google took M156's early stable to 0% on the Mac and
+  Windows (156.0.8078.35 had gone to 0.5% of stable users on 2026-10-14; 156.0.8078.36,
+  the pin, has been listed at 0% since then), so Chrome's stable channel serves
+  155.0.8059.85 alone, and `tooling/check-pin` reports the pin as ahead of a pulled
+  rollout.
+- **The suites, on the exact builds:** the Mac 855 unit tests (Stedding's suites count what
+  they counted on 155; Chromium's own cases in the legs went from 394 to 383), 20 component,
+  165 browser and 115 rebase tests; the PC 842 unit, 158 browser and 114 rebase tests. All
+  passed. On the PC's checks build (DCHECKs and the dangling-pointer detector) the unit
+  tests passed, and 110 of the 158 browser tests stopped at a window's first paint on one
+  DCHECK: three of Stedding's sidebar labels drew subpixel text onto M156's new content-area
+  layer, which is not opaque (trap 92). With subpixel text off there, as on the sidebar's
+  other rows, the run stopped only on `S-214`'s two older DCHECKs and reported no dangling
+  pointer, and the suites passed again on both release builds. On Windows the same change
+  takes the colour fringes off the Archived row's text, which beta 16 has too.
+- **The window, against beta 16:** `verify-build` passed, full screen included. 13 window
+  states captured beside a copy of the released beta 16 (`capture-state --build b16ref`:
+  the sidebar at rest, three Spaces with pins and folders, Space pins, the command bar, the
+  rail, light, dark and grey, the welcome flow's four steps, the new tab page) differ only
+  in a throbber's frame and the shuffled engine list. Driven with the real
+  pointer and keyboard on the Mac (tabs, the tab menu, the command bar, Spaces, the rail,
+  full screen, a drag) and on the PC (the same, with Ctrl in place of ⌘). Stedding's own
+  pages (its Settings section four screens down, Settings, About, Archived), driven through
+  the address bar because `capture-state` cannot open them (trap 92), are beta 16's pixel
+  for pixel, but for About's Chromium number and its update check, which only a
+  team-signed build runs. A profile beta 16 made with three Spaces, an essential and nested
+  folders opens in the 156 build exactly as it does in beta 16. Two faults showed, and
+  beta 16 has both: Ctrl+Alt+→ does nothing while the address bar has focus on Windows
+  (`S-218`), and on the Mac the sidebar sometimes slid out again after a collapse with its
+  toggle (`S-219`).
+- **Install and update:** on the PC the installer ran in its upgrade mode over an installed
+  beta 16, a real upgrade now that the version goes from 155 to 156; the installed
+  `chrome.dll` is the build's. On the Mac the released beta 16, pointed at a local signed
+  feed, updated itself to the 156 build through Sparkle: the pill in about twenty seconds,
+  the new version running a second after the press, the tab and the profile kept (HANDOFF,
+  "The updater").
+- **The network:** a fresh profile's network log, six minutes with a window, beside the
+  same run of beta 16: the 156 build asked for the hosts beta 16 asks for (component
+  updates, the Safe Browsing list, network time) and nothing else, Google's push service
+  and account check included. Beta 16 went on to download components; the 156 build could
+  not, because this Mac's firewall held its connections (trap 85). The same hold made the
+  ad hoc build's quit take 10 s after a few Settings pages, which M156's new shutdown
+  watchdog ends with a local dump; a Developer-ID-signed copy of the build quit in 2 s.
+- **Updates on Windows and Linux:** designed, not built (ADR 0023): the browser's own
+  updater on Windows after `S-72` (`S-215`), the package system on Linux (`S-216`).
+- **The site:** `npm audit` is clean in `stedding.dev` (`e91d529`: sharp 0.35.5,
+  source-map-js 1.2.2, smol-toml 1.9.1); the built site is byte for byte what it was, and its
+  checks passed.
+- **Docs:** the README and the user pages still named beta 14 and "the next release" for
+  what betas 15 and 16 shipped; they name them now.
+- Not done: ASan (`S-106`), `components_unittests` on Windows, notarization of a 156 build,
+  a real update through the real feed (the next release is the first that can be one).
+
 ## 2026-10-16, midday -- beta 16 released from both platforms, and the first update feed
 
 The operator asked for the round to be pushed, built and tested on Windows over SSH, and

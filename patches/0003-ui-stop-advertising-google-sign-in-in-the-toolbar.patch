@@ -45,13 +45,13 @@ its own onboarding that makes the question ours to ask.
  .../search_engine_choice_dialog_service.cc    |  6 +++++
  ...ch_engine_choice_dialog_service_factory.cc | 11 +++-----
  .../search_engine_choice_tab_helper.cc        |  2 ++
+ .../avatar_toolbar_button_state_manager.cc    | 10 +++++++
  .../new_tab_page_third_party_ui.cc            |  6 +++++
- .../browser/ui/webui/settings/settings_ui.cc  | 12 ++++++---
+ .../browser/ui/webui/settings/settings_ui.cc  | 10 +++++--
  .../regional_capabilities/program_settings.cc | 26 ++++++++++++++-----
  .../template_url_prepopulate_data.cc          |  7 ++++-
- .../signin/public/base/signin_switches.cc     |  5 +++-
  ui/webui/resources/cr_elements/icons.html.ts  |  4 +--
- 15 files changed, 112 insertions(+), 25 deletions(-)
+ 15 files changed, 117 insertions(+), 23 deletions(-)
 
 diff --git a/chrome/browser/history/top_sites_factory.cc b/chrome/browser/history/top_sites_factory.cc
 index 2b2e9f41874d7..bec4816239288 100644
@@ -156,10 +156,10 @@ index feff9bdf64552..af48d135380ea 100644
    }
  
 diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
-index 2aaa938c7e14a..ca03351e5763e 100644
+index d733ae8b320e3..75cf7dcc1f6f4 100644
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -339,7 +339,8 @@ export let routes: SettingsRoutes = Router.getInstance().getRoutes();
+@@ -342,7 +342,8 @@ export let routes: SettingsRoutes = Router.getInstance().getRoutes();
  // Returns the "effective" route when at chrome://settings/.
  export function getTopLevelRoute(): Route {
    if (!loadTimeData.getBoolean('isGuest')) {
@@ -241,6 +241,34 @@ index adafa857b61f9..3808ea381ea55 100644
  #include "base/check_deref.h"
  #include "chrome/browser/first_run/first_run.h"
  #include "chrome/browser/profiles/profile.h"
+diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc b/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc
+index c35e4c87eec61..00663764e4007 100644
+--- a/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc
++++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc
+@@ -107,6 +107,12 @@ std::optional<base::TimeDelta> g_show_signin_pending_text_delay_for_testing;
+ 
+ constexpr base::TimeDelta kPromoDuration = base::Seconds(20);
+ std::optional<base::TimeDelta> g_promo_duration_for_testing;
++
++// Stedding does not advertise Google sign-in (docs/PRIVACY.md): the avatar
++// pill's signed-out promotion stays off unless this is enabled. The pill is a
++// promotion, not a control; signing in stays available from the profile menu.
++BASE_FEATURE(kSteddingSigninPromoOnAvatarPill,
++             base::FEATURE_DISABLED_BY_DEFAULT);
+ #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+ 
+ constexpr base::TimeDelta kOnSigninDuration = base::Seconds(20);
+@@ -948,6 +954,10 @@ class PromoStateProviderCoordinator
+       return;
+     }
+ 
++    if (!base::FeatureList::IsEnabled(kSteddingSigninPromoOnAvatarPill)) {
++      return;
++    }
++
+     if (!IsSignedIn()) {
+       Trigger();
+     }
 diff --git a/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc b/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc
 index 151c14c9ab043..e6f9863252466 100644
 --- a/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc
@@ -259,24 +287,23 @@ index 151c14c9ab043..e6f9863252466 100644
    const ui::ThemeProvider* theme_provider =
        webui::GetThemeProviderDeprecated(web_contents);
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 798b115148941..073aecac4214a 100644
+index c1bb5d445e89d..223d11bd6fde9 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -657,9 +657,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
-   // Within the AI subpage are separate sections for Glic and for all other AI
-   // features, the visibility of these are separately controlled but we want to
-   // show the subpage if any of the AI features or Glic are enabled.
--  html_source->AddBoolean("showAiPage", show_glic_section ||
--                                            show_ai_features_section ||
--                                            enable_ai_mode_search);
+@@ -658,9 +658,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   // Within the AI subpage are separate sections for Glic, for GEIC, and for all
+   // other AI features. The visibility of these is separately controlled, but
+   // we want to show the subpage if any of them are enabled.
 +  // Stedding: no "AI in Chrome" page, and no "You and Google" page either
 +  // (docs/PRIVACY.md: no accounts, no Google services). The people page is
 +  // hidden on the TypeScript side through steddingHidesGoogleSections.
 +  constexpr bool kSteddingShowsAiPage = false;
-+  html_source->AddBoolean("showAiPage", kSteddingShowsAiPage &&
-+                                            (show_glic_section ||
-+                                             show_ai_features_section ||
-+                                             enable_ai_mode_search));
+   html_source->AddBoolean("showAiPage",
+-                          show_glic_section || show_ai_features_section ||
+-                              enable_ai_mode_search || show_geic_section);
++                          kSteddingShowsAiPage &&
++                              (show_glic_section || show_ai_features_section ||
++                               enable_ai_mode_search || show_geic_section));
 +  html_source->AddBoolean("steddingHidesGoogleSections", true);
    html_source->AddBoolean("showAiPageAiFeatureSection",
                            show_ai_features_section);
@@ -351,22 +378,6 @@ index 85b0c960533ac..51d798955c1c0 100644
                                          /*use_first_as_fallback=*/true);
  }
  
-diff --git a/components/signin/public/base/signin_switches.cc b/components/signin/public/base/signin_switches.cc
-index 9b5c0e17950f5..fb500136d1aeb 100644
---- a/components/signin/public/base/signin_switches.cc
-+++ b/components/signin/public/base/signin_switches.cc
-@@ -892,7 +892,10 @@ BASE_FEATURE(kSignInPromoMaterialNextUI, base::FEATURE_ENABLED_BY_DEFAULT);
- #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
- 
- #if BUILDFLAG(ENABLE_DICE_SUPPORT)
--BASE_FEATURE(kSigninPromoOnAvatarPill, base::FEATURE_ENABLED_BY_DEFAULT);
-+// Stedding does not advertise Google sign-in. The pill is a promotion, not a
-+// control: signing in stays available from the profile menu, and everything
-+// that depends on it works unchanged. See docs/PRIVACY.md.
-+BASE_FEATURE(kSigninPromoOnAvatarPill, base::FEATURE_DISABLED_BY_DEFAULT);
- BASE_FEATURE_PARAM(base::TimeDelta,
-                    kSigninPromoOnAvatarPillStartupDelayForPromoShow,
-                    &kSigninPromoOnAvatarPill,
 diff --git a/ui/webui/resources/cr_elements/icons.html.ts b/ui/webui/resources/cr_elements/icons.html.ts
 index d3f4f9fb26658..7f96b8f0071a9 100644
 --- a/ui/webui/resources/cr_elements/icons.html.ts

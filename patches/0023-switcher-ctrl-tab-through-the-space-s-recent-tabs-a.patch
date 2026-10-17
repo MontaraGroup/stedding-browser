@@ -54,10 +54,10 @@ and shows a strip, and its relative tab move understands folders.
  create mode 100644 chrome/browser/ui/views/switcher/recent_tabs_switcher_view_unittest.cc
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index a0e6a40adc022..cf30497c1cfe5 100644
+index 1e2383e9a59c8..e52d1a72a1b0c 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -333,6 +333,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -326,6 +326,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kHoldCmdNumbers] =
        settings_api::PrefType::kBoolean;
@@ -100,22 +100,22 @@ index fca3354ed819c..31c1b75aa8ece 100644
      <div class="start" id="sidebarWidthLabel">
        <div class="label">$i18n{steddingSidebarWidthLabel}</div>
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index e1faef631e75a..2493a3d183e67 100644
+index 2836e414e8787..25843e9ed9708 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1585,6 +1585,7 @@ static_library("ui") {
+@@ -2357,6 +2357,7 @@ static_library("ui") {
        "//chrome/browser/ui/stedding:motion",
        "//chrome/browser/ui/views/commandbar",
        "//chrome/browser/ui/views/peek",
 +      "//chrome/browser/ui/views/switcher",
        ":tab_ui_helper",
        ":uma_browsing_activity_observer",
-       "//base",
+       ":unload_controller",
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 4ed3ba9a54cf2..88ef76216d896 100644
+index 9f682f8b7be11..c8ad1f6eb1c9a 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -100,6 +100,7 @@
+@@ -103,6 +103,7 @@
  #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/side_panel/tabs_from_other_devices/tabs_from_other_devices_side_panel_coordinator.h"
@@ -123,7 +123,7 @@ index 4ed3ba9a54cf2..88ef76216d896 100644
  #include "chrome/browser/ui/web_applications/app_browser_controller.h"
  #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
  #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
-@@ -821,6 +822,12 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -822,6 +823,12 @@ void BrowserCommandController::HandleCommandWithDisposition(
                TabStripUserGestureDetails::GestureType::kKeyboard, time_stamp));
        break;
      case IDC_CYCLE_TO_NEXT_TAB:
@@ -136,7 +136,7 @@ index 4ed3ba9a54cf2..88ef76216d896 100644
        if (IsCtrlTabMruEnabled(browser_)) {
          base::RecordAction(base::UserMetricsAction("Accel_CycleToNextTab"));
          CycleToMruTab(browser_,
-@@ -836,6 +843,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -837,6 +844,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        }
        break;
      case IDC_CYCLE_TO_PREV_TAB:
@@ -705,10 +705,10 @@ index aab131e6b68f0..6619d4286e6d4 100644
  void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
  
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 203d6767c3ac5..f0c1240b2b460 100644
+index 7d0495fdf6dcd..e5fc7ae08f9b3 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -4311,6 +4311,25 @@ void TabStripModel::MoveTabRelative(TabRelativeDirection direction) {
+@@ -4441,6 +4441,25 @@ void TabStripModel::MoveTabRelative(TabRelativeDirection direction) {
            ? GetIndexRangeOfSplit(active_tab->GetSplit().value())
            : gfx::Range{active_tab_index, active_tab_index + 1};
  
@@ -735,7 +735,7 @@ index 203d6767c3ac5..f0c1240b2b460 100644
    // destination index of the current tab at moving_index_range.start().
    int target_index = moving_index_range.start();
 diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
-index e74e7a25b5f20..131c2b911abc0 100644
+index ae129e5e4aafe..cc80383fb9d6d 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
 @@ -56,9 +56,9 @@
@@ -749,7 +749,7 @@ index e74e7a25b5f20..131c2b911abc0 100644
  #include "components/tabs/public/tab_group_tab_collection.h"
  #include "components/tabs/public/tab_interface.h"
  #include "components/web_modal/web_contents_modal_dialog_manager.h"
-@@ -6613,8 +6613,7 @@ TEST_F(TabStripModelTest, AddToNewFolderKeepsTabsAndNests) {
+@@ -6752,8 +6752,7 @@ TEST_F(TabStripModelTest, AddToNewFolderKeepsTabsAndNests) {
    tabs::TabInterface* const moved_a = tabstrip()->GetTabAtIndex(1);
    tabs::TabInterface* const moved_b = tabstrip()->GetTabAtIndex(2);
  
@@ -759,7 +759,7 @@ index e74e7a25b5f20..131c2b911abc0 100644
    ASSERT_NE(nullptr, folder);
  
    // No tab was lost, and the folder holds exactly the two moved tabs.
-@@ -6634,6 +6633,58 @@ TEST_F(TabStripModelTest, AddToNewFolderKeepsTabsAndNests) {
+@@ -6773,6 +6772,58 @@ TEST_F(TabStripModelTest, AddToNewFolderKeepsTabsAndNests) {
        << "the nested tab still counts inside the outer folder";
  }
  
@@ -819,7 +819,7 @@ index e74e7a25b5f20..131c2b911abc0 100644
  // one by one so the tree stays valid; pinned tabs are refused untouched.
  TEST_F(TabStripModelTest, MoveTabsToFolderAppendsNestsAndRefusesPins) {
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index 04391c3d06cfe..59aa9bf63b674 100644
+index 23bf46cf8cc6f..14e34087795c0 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -27,6 +27,7 @@
@@ -1440,10 +1440,10 @@ index 0000000000000..06fa3f257af37
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 5ae7659b60825..32f1248e541ba 100644
+index a1dd557a4ce50..5b7e78ccfca6c 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -728,6 +728,12 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -729,6 +729,12 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "steddingHoldCmdNumbersSubLabel",
        "\u23181\u2013\u23189 jump to the first nine rows you can see; hold "
        "\u2318 a moment to see which is which.");
@@ -1486,10 +1486,10 @@ index e2d2b48e73900..cb8c6b54163d4 100644
    Add(diverges, IDC_STEDDING_SPACE_PREVIOUS, u"Previous Space",
        u"Previous tab");
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 7c92c1557b479..c636512038546 100644
+index 3ed70001b654b..2dedd2f71cd47 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -5123,6 +5123,7 @@ test("unit_tests") {
+@@ -5134,6 +5134,7 @@ test("unit_tests") {
      "//chrome/browser/ui/spaces:unit_tests",
      "//chrome/browser/ui/archive:unit_tests",
      "//chrome/browser/ui/views/commandbar:unit_tests",

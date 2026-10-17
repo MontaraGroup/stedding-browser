@@ -45,7 +45,7 @@ its code (patches/README.md, the round-patch exception).
  chrome/browser/app_controller_mac.mm          |  64 ++++++--
  .../browser/resources/stedding_welcome/app.ts |  89 +++++++++--
  .../ssl/https_first_mode_settings_tracker.cc  |   4 +
- ...ps_first_mode_settings_tracker_unittest.cc |  37 ++++-
+ ...ps_first_mode_settings_tracker_unittest.cc |  47 ++++--
  chrome/browser/ui/archive/closed_tabs_undo.cc |   9 ++
  chrome/browser/ui/archive/closed_tabs_undo.h  |   2 +
  .../ui/spaces/arc_data_importer_unittest.cc   |   9 +-
@@ -62,9 +62,9 @@ its code (patches/README.md, the round-patch exception).
  .../views/tabs/common/clear_tabs_separator.cc |  80 +++++++++-
  .../views/tabs/common/clear_tabs_separator.h  |   9 ++
  .../common/stedding_tab_row_rules_unittest.cc |  49 ++++++
- .../tabs/common/tab_group_header_view.cc      |  88 +++++++++--
+ .../tabs/common/tab_group_header_view.cc      |  81 +++++++++-
  .../views/tabs/common/tab_group_header_view.h |  10 ++
- .../common/tab_group_header_view_unittest.cc  |  47 ++++++
+ .../common/tab_group_header_view_unittest.cc  |  45 ++++++
  chrome/common/chrome_paths_internal.h         |  12 ++
  chrome/common/chrome_paths_mac.mm             |  22 ++-
  chrome/common/chrome_paths_unittest.cc        |  37 +++++
@@ -74,11 +74,11 @@ its code (patches/README.md, the round-patch exception).
  .../test/stedding/media_keys_browsertest.cc   |  39 ++---
  .../stedding/shortcut_file_mac_browsertest.mm | 143 ++++++++++++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  14 ++
- 32 files changed, 1051 insertions(+), 92 deletions(-)
+ 32 files changed, 1052 insertions(+), 92 deletions(-)
  create mode 100644 chrome/test/stedding/shortcut_file_mac_browsertest.mm
 
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
-index 2e7908a901554..b3cb6a8a8252b 100644
+index 46359d22b1a5e..872a92c6f2307 100644
 --- a/chrome/browser/app_controller_mac.mm
 +++ b/chrome/browser/app_controller_mac.mm
 @@ -439,14 +439,52 @@ base::FilePath GetStartupProfilePathMac() {
@@ -182,10 +182,10 @@ index 2e7908a901554..b3cb6a8a8252b 100644
    }
    if (as_tabs.empty()) {
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index 38037196d9167..e3185d7ee239e 100644
+index 79cc41d2ec622..82703556aa674 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
-@@ -211,9 +211,10 @@ function engineMark(engine: SearchEngine): HTMLSpanElement {
+@@ -212,9 +212,10 @@ function engineMark(engine: SearchEngine): HTMLSpanElement {
  
  function tile(opts: {
    mark?: HTMLElement, glyph?: string, name: string, hint?: string,
@@ -197,7 +197,7 @@ index 38037196d9167..e3185d7ee239e 100644
    button.setAttribute('role', 'radio');
    button.setAttribute('aria-pressed', String(opts.pressed));
    button.append(opts.mark || el('span', 'glyph', opts.glyph || ''));
-@@ -227,11 +228,12 @@ function tile(opts: {
+@@ -228,11 +229,12 @@ function tile(opts: {
    return button;
  }
  
@@ -212,7 +212,7 @@ index 38037196d9167..e3185d7ee239e 100644
    input.checked = checked;
    input.addEventListener('change', () => onChange(input.checked));
    wrap.append(input, document.createTextNode(' ' + label));
-@@ -250,10 +252,12 @@ function renderStep(main: HTMLElement) {
+@@ -251,10 +253,12 @@ function renderStep(main: HTMLElement) {
                    ' goes here. Change it any time in Settings.');
        const list = el('div', 'list');
        list.setAttribute('role', 'radiogroup');
@@ -225,7 +225,7 @@ index 38037196d9167..e3185d7ee239e 100644
            onClick: () => {
              state.chosenEngine = e.prepopulateId;
              chrome.send('setSearchEngine', [e.prepopulateId]);
-@@ -282,14 +286,18 @@ function renderStep(main: HTMLElement) {
+@@ -283,14 +287,18 @@ function renderStep(main: HTMLElement) {
              'Everything stays on this Mac. For the passwords, macOS asks once whether Stedding may read Arc\u2019s keychain item.'));
          const choices = el('div', 'import-row');
          choices.append(
@@ -249,7 +249,7 @@ index 38037196d9167..e3185d7ee239e 100644
          button.disabled = state.arcStatus !== '';
          button.addEventListener('click', () => {
            state.arcStatus = 'inProgress';
-@@ -316,10 +324,12 @@ function renderStep(main: HTMLElement) {
+@@ -317,10 +325,12 @@ function renderStep(main: HTMLElement) {
                ' and choose Turn Bookmarks into Pinned Tabs.'));
        const list = el('div', 'list');
        list.setAttribute('role', 'radiogroup');
@@ -262,7 +262,7 @@ index 38037196d9167..e3185d7ee239e 100644
            onClick: () => {
              state.chosenSource = s.index;
              render();
-@@ -328,12 +338,16 @@ function renderStep(main: HTMLElement) {
+@@ -329,12 +339,16 @@ function renderStep(main: HTMLElement) {
        }
        const row = el('div', 'import-row');
        row.append(
@@ -282,7 +282,7 @@ index 38037196d9167..e3185d7ee239e 100644
        button.disabled = state.importStatus === 'inProgress';
        button.addEventListener('click', () => {
          if (state.chosenSource < 0) {
-@@ -356,6 +370,7 @@ function renderStep(main: HTMLElement) {
+@@ -357,6 +371,7 @@ function renderStep(main: HTMLElement) {
                'Sand by day, a blue-to-plum gradient by night. Follow the system, or pick one.');
        const list = el('div', 'list');
        list.setAttribute('role', 'radiogroup');
@@ -290,7 +290,7 @@ index 38037196d9167..e3185d7ee239e 100644
        const schemes: Array<[string, string, string]> = [
          ['system', 'Follow the system', '🌗'],
          ['light', 'Light', '☀️'],
-@@ -364,6 +379,7 @@ function renderStep(main: HTMLElement) {
+@@ -365,6 +380,7 @@ function renderStep(main: HTMLElement) {
        for (const [scheme, name, glyph] of schemes) {
          list.append(tile({
            glyph, name, pressed: state.scheme === scheme,
@@ -298,7 +298,7 @@ index 38037196d9167..e3185d7ee239e 100644
            onClick: () => {
              state.scheme = scheme;
              chrome.send('setAppearance', [scheme]);
-@@ -380,6 +396,7 @@ function renderStep(main: HTMLElement) {
+@@ -381,6 +397,7 @@ function renderStep(main: HTMLElement) {
          state.spaceColors.forEach((choice, index) => {
            const swatch = el('button', 'swatch');
            swatch.type = 'button';
@@ -306,7 +306,7 @@ index 38037196d9167..e3185d7ee239e 100644
            swatch.style.background = choice.color;
            swatch.title = choice.name;
            swatch.setAttribute('role', 'radio');
-@@ -423,6 +440,7 @@ function renderStep(main: HTMLElement) {
+@@ -424,6 +441,7 @@ function renderStep(main: HTMLElement) {
                String(state.behaviour[behaviour.name] === value));
            pill.dataset['name'] = behaviour.name;
            pill.dataset['value'] = String(value);
@@ -314,7 +314,7 @@ index 38037196d9167..e3185d7ee239e 100644
            pill.addEventListener('click', () => {
              state.behaviour[behaviour.name] = value;
              chrome.send('setBehaviour', [behaviour.name, value]);
-@@ -448,6 +466,7 @@ function renderStep(main: HTMLElement) {
+@@ -449,6 +467,7 @@ function renderStep(main: HTMLElement) {
        const row = el('div', 'import-row');
        const button = el('button', 'secondary',
            state.defaultState === 'default' ? 'Stedding is the default' : 'Set as default');
@@ -322,7 +322,7 @@ index 38037196d9167..e3185d7ee239e 100644
        button.disabled = state.defaultState === 'default';
        button.addEventListener('click', () => chrome.send('setDefaultBrowser'));
        row.append(button);
-@@ -510,14 +529,40 @@ function updateMore(main: HTMLElement) {
+@@ -511,14 +530,40 @@ function updateMore(main: HTMLElement) {
  // welcome W12: render() rebuilds the whole flow, and it runs again whenever an
  // answer comes in late (the Arc check, the importer's list, the default
  // browser check, an import's progress). The control that had the focus is
@@ -365,7 +365,7 @@ index 38037196d9167..e3185d7ee239e 100644
  function focusPlace(app: HTMLElement): FocusPlace|null {
    const focused = document.activeElement;
    if (!(focused instanceof HTMLElement) || !app.contains(focused)) {
-@@ -527,13 +572,26 @@ function focusPlace(app: HTMLElement): FocusPlace|null {
+@@ -528,13 +573,26 @@ function focusPlace(app: HTMLElement): FocusPlace|null {
    for (let node = focused; node !== app; node = node.parentElement!) {
      path.unshift(Array.from(node.parentElement!.children).indexOf(node));
    }
@@ -393,7 +393,7 @@ index 38037196d9167..e3185d7ee239e 100644
    let node: Element|undefined = app;
    for (const index of place.path) {
      node = node?.children[index];
-@@ -568,14 +626,17 @@ function render() {
+@@ -569,14 +627,17 @@ function render() {
    const footer = el('footer');
    footer.append(el('span', 'status', `Step ${index + 1} of ${STEPS.length}`));
    const skip = el('button', 'quiet', 'Skip');
@@ -412,7 +412,7 @@ index 38037196d9167..e3185d7ee239e 100644
      if (index === STEPS.length - 1) {
        chrome.send('finish');
 diff --git a/chrome/browser/ssl/https_first_mode_settings_tracker.cc b/chrome/browser/ssl/https_first_mode_settings_tracker.cc
-index 83e90858d13c0..6a05132bb4e3e 100644
+index 1ae6671e99cdd..0bc30371bf856 100644
 --- a/chrome/browser/ssl/https_first_mode_settings_tracker.cc
 +++ b/chrome/browser/ssl/https_first_mode_settings_tracker.cc
 @@ -236,6 +236,10 @@ HttpsFirstModeStartupState GetStartupDetailedState(Profile* profile) {
@@ -427,7 +427,7 @@ index 83e90858d13c0..6a05132bb4e3e 100644
        if (prefs->GetBoolean(prefs::kHttpsOnlyModeAutoEnabled)) {
          return HttpsFirstModeStartupState::kEnabledBalancedTypicallySecure;
 diff --git a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
-index 73948c8d039bf..8ec749512c797 100644
+index cc083ed865f63..3e772bd9ae47a 100644
 --- a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
 +++ b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
 @@ -1204,10 +1204,10 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupBalancedModeAvailable) {
@@ -471,8 +471,33 @@ index 73948c8d039bf..8ec749512c797 100644
 +            HttpsFirstModeSetting::kEnabledBalanced);
  }
  
- TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
-@@ -1292,7 +1296,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+ // Checks that enabling Advanced Protection clears the HTTP allowlist, just as a
+@@ -1287,9 +1291,12 @@ TEST_F(HttpsFirstModeSettingsTrackerTest,
+   content::StoragePartition* storage_partition =
+       profile()->GetDefaultStoragePartition();
+ 
+-  ASSERT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
++  // Stedding: balanced is the default (docs/PRIVACY.md), where upstream's is
++  // disabled; the allowlist is cleared on the change all the same.
++  ASSERT_EQ(service->GetCurrentSetting(),
++            HttpsFirstModeSetting::kEnabledBalanced);
+ 
+-  // Allowlist a host for http while HTTPS-First Mode is disabled.
++  // Allowlist a host for http before Advanced Protection is enabled.
+   state->AllowHttpForHost("http-allowed.com", storage_partition);
+   EXPECT_TRUE(
+       state->IsHttpAllowedForHost("http-allowed.com", storage_partition));
+@@ -1307,7 +1314,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest,
+   EXPECT_TRUE(
+       state->IsHttpAllowedForHost("http-allowed.com", storage_partition));
+   aps_manager->SetAdvancedProtectionStatusForTesting(false);
+-  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
++  EXPECT_EQ(service->GetCurrentSetting(),
++            HttpsFirstModeSetting::kEnabledBalanced);
+   EXPECT_TRUE(
+       state->IsHttpAllowedForHost("http-allowed.com", storage_partition));
+ }
+@@ -1341,7 +1349,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
    EXPECT_FALSE(
        safe_browsing::IsEnhancedProtectionEnabled(*profile()->GetPrefs()));
    EXPECT_TRUE(IsBalancedModeEnabled(profile()->GetPrefs()));
@@ -482,7 +507,7 @@ index 73948c8d039bf..8ec749512c797 100644
  
    // 3. Enable ESB. Balanced Mode should now be enabled by default.
    safe_browsing::SetEnhancedProtectionPref(profile()->GetPrefs(), true);
-@@ -1321,6 +1326,9 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+@@ -1370,6 +1379,9 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
  }
  
  TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
@@ -492,7 +517,7 @@ index 73948c8d039bf..8ec749512c797 100644
    base::HistogramTester histograms;
    HttpsFirstModeService* service =
        HttpsFirstModeServiceFactory::GetForProfile(profile());
-@@ -1331,6 +1339,21 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
+@@ -1380,6 +1392,21 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
        HttpsFirstModeStartupState::kDisabled, 1);
  }
  
@@ -515,7 +540,7 @@ index 73948c8d039bf..8ec749512c797 100644
    profile()->GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled, true);
  
 diff --git a/chrome/browser/ui/archive/closed_tabs_undo.cc b/chrome/browser/ui/archive/closed_tabs_undo.cc
-index eeb4c6da60a17..663c4c26ab66c 100644
+index ccd3125dcb9b7..0cf371f4171fc 100644
 --- a/chrome/browser/ui/archive/closed_tabs_undo.cc
 +++ b/chrome/browser/ui/archive/closed_tabs_undo.cc
 @@ -99,6 +99,7 @@ std::optional<ClosedEntry> DescribeClosedEntry(
@@ -526,7 +551,7 @@ index eeb4c6da60a17..663c4c26ab66c 100644
        return described;
      }
      if (entry->type == sessions::tab_restore::SPLIT) {
-@@ -404,6 +405,14 @@ size_t ClosedTabsUndo::Undo() {
+@@ -408,6 +409,14 @@ size_t ClosedTabsUndo::Undo() {
        if (from != TabStripModel::kNoTab && from != to) {
          strip->MoveWebContentsAt(from, to, /*select_after_move=*/false);
        }
@@ -1093,7 +1118,7 @@ index f569d36b1a8c1..7829181711db0 100644
  void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
  // The browser-wide ones (privacy Q4).
 diff --git a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
-index 85ed06edacbd2..4993ed95a3a84 100644
+index e101c7f3bb49d..50320bc6a3f70 100644
 --- a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
 +++ b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
 @@ -4,16 +4,27 @@
@@ -1225,10 +1250,10 @@ index 85ed06edacbd2..4993ed95a3a84 100644
    return std::u16string();
  }
 diff --git a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
-index 258aa4af6736f..1ad18f3f8d95f 100644
+index 9877741e07ecc..09e8bf882edcb 100644
 --- a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
 +++ b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
-@@ -37,9 +37,18 @@ class ClearTabsSeparator : public views::Separator {
+@@ -38,9 +38,18 @@ class ClearTabsSeparator : public FrameSeparator {
    void OnPaint(gfx::Canvas* canvas) override;
    bool OnMousePressed(const ui::MouseEvent& event) override;
    void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -1324,17 +1349,17 @@ index 3227a45ec8739..41509b61d4017 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
-index c7c218422c023..af1ac51fc0415 100644
+index ee897b06f49c1..333382a938a4e 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
-@@ -7,13 +7,17 @@
+@@ -7,14 +7,17 @@
  #include "base/task/single_thread_task_runner.h"
  #include "build/build_config.h"
  #include "build/buildflag.h"
 +#include "cc/paint/paint_flags.h"
  #include "chrome/app/vector_icons/vector_icons.h"
  #include "chrome/browser/ui/browser_element_identifiers.h"
-+#include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/tab_group_data.h"
  #include "chrome/browser/ui/tabs/tab_group_theme.h"
@@ -1345,7 +1370,7 @@ index c7c218422c023..af1ac51fc0415 100644
  #include "chrome/browser/ui/views/tabs/common/tab_group_style.h"
  #include "chrome/browser/ui/views/tabs/groups/tab_group_accessibility.h"
  #include "chrome/browser/ui/views/tabs/groups/tab_group_editor_bubble_tracker.h"
-@@ -32,6 +36,7 @@
+@@ -33,6 +36,7 @@
  #include "ui/base/mojom/menu_source_type.mojom-shared.h"
  #include "ui/base/ui_base_features.h"
  #include "ui/color/color_provider.h"
@@ -1353,7 +1378,7 @@ index c7c218422c023..af1ac51fc0415 100644
  #include "ui/gfx/color_utils.h"
  #include "ui/views/accessibility/view_accessibility.h"
  #include "ui/views/animation/ink_drop.h"
-@@ -49,6 +54,14 @@
+@@ -50,6 +54,14 @@
  #include "ui/views/view_class_properties.h"
  #include "ui/views/widget/widget.h"
  
@@ -1368,7 +1393,7 @@ index c7c218422c023..af1ac51fc0415 100644
  namespace {
  constexpr int kIconSize = 16;
  constexpr int kFocusRingInset = 2;
-@@ -171,7 +184,12 @@ TabGroupHeaderView::TabGroupHeaderView(
+@@ -172,7 +184,12 @@ TabGroupHeaderView::TabGroupHeaderView(
            &TabGroupHeaderView::OnBubbleClosed, base::Unretained(this)));
  
    SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
@@ -1382,15 +1407,15 @@ index c7c218422c023..af1ac51fc0415 100644
    SetDefault(views::kFlexBehaviorKey,
               views::FlexSpecification(
                   views::MinimumFlexSizeRule::kScaleToMinimumSnapToZero,
-@@ -391,6 +409,7 @@ void TabGroupHeaderView::OnMouseEntered(const ui::MouseEvent& event) {
-     delegate_->HideHoverCard(TabSlotController::HoverCardUpdateType::kHover);
-   }
+@@ -388,6 +405,7 @@ void TabGroupHeaderView::OnMouseMoved(const ui::MouseEvent& event) {
+ void TabGroupHeaderView::OnMouseEntered(const ui::MouseEvent& event) {
+   delegate_->UpdateHoverCard(TabSlotController::HoverCardUpdateType::kHover);
    UpdateEditorBubbleButtonVisibility();
 +  UpdateSteddingBackground();
  }
  
  void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
-@@ -401,6 +420,22 @@ void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
+@@ -398,6 +416,22 @@ void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
  #else
    UpdateEditorBubbleButtonVisibility();
  #endif
@@ -1413,80 +1438,63 @@ index c7c218422c023..af1ac51fc0415 100644
  }
  
  void TabGroupHeaderView::OnFocus() {
-@@ -524,15 +559,24 @@ void TabGroupHeaderView::OnDataChanged(
-   tab_group_visual_data_ = tab_group_data.visual_data;
-   is_shared_ = tab_group_data.is_sharing_group;
- 
--  group_header_label_->SetText(tab_group_visual_data_.title());
-+  const bool unnamed = tab_group_visual_data_.title().empty();
-+  group_header_label_->SetText(
-+      IsSteddingRow() && unnamed
-+          ? l10n_util::GetPluralStringFUTF16(
-+                IDS_TAB_GROUPS_UNNAMED_GROUP_HOVER_CARD_HEADER,
-+                tab_group_data.num_tabs_in_group)
-+          : tab_group_visual_data_.title());
-   if (GetColorProvider()) {
-     SkColor background_color = GetColorProvider()->GetColor(
-         GetTabGroupTabStripColorId(tab_group_visual_data_.color(),
-                                    GetWidget()->ShouldPaintAsActive()));
-     SkColor foreground_color = GetForegroundColor();
- 
--    // Update label.
--    group_header_label_->SetEnabledColor(foreground_color);
-+    // Update label. Stedding: an unnamed group's tab count is muted, as a
-+    // folder's count is.
-+    group_header_label_->SetEnabledColor(
-+        IsSteddingRow() && unnamed ? stedding::SleptTitleColor(foreground_color)
-+                                   : foreground_color);
- 
-     // Update save tab group related items, the sync icon and attention
-     // indicator.
-@@ -573,8 +617,12 @@ void TabGroupHeaderView::OnDataChanged(
-     }
- 
-     // Update background.
--    SetBackground(views::CreateRoundedRectBackground(background_color,
--                                                     GetCornerRadius()));
-+    if (IsSteddingRow()) {
-+      UpdateSteddingBackground();
-+    } else {
-+      SetBackground(views::CreateRoundedRectBackground(background_color,
-+                                                       GetCornerRadius()));
-+    }
-     UpdateAttentionState(
-         data_sharing::features::IsDataSharingFunctionalityEnabled() &&
-         tab_group_data.needs_attention);
-@@ -591,14 +639,15 @@ void TabGroupHeaderView::OnDataChanged(
- }
- 
- void TabGroupHeaderView::UpdateTooltipText() {
--  if (group_header_label_->GetText().empty()) {
-+  // By the group's title: the label shows a placeholder for an unnamed group
-+  // in the sidebar (IsSteddingRow).
-+  if (tab_group_visual_data_.title().empty()) {
-     SetTooltipText(
-         l10n_util::GetStringFUTF16(IDS_TAB_GROUPS_UNNAMED_GROUP_TOOLTIP,
-                                    delegate_->GetGroupContentString()));
+@@ -521,7 +555,13 @@ void TabGroupHeaderView::OnDataChanged(
+   if (delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral()) {
+     OnTabCountChanged();
    } else {
-     SetTooltipText(l10n_util::GetStringFUTF16(
--        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
--        std::u16string(group_header_label_->GetText()),
-+        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP, tab_group_visual_data_.title(),
-         delegate_->GetGroupContentString()));
+-    group_header_label_->SetText(tab_group_visual_data_.title());
++    // Stedding: in the sidebar an unnamed group's header shows its tab count.
++    group_header_label_->SetText(
++        IsSteddingRow() && tab_group_visual_data_.title().empty()
++            ? l10n_util::GetPluralStringFUTF16(
++                  IDS_TAB_GROUPS_UNNAMED_GROUP_HOVER_CARD_HEADER,
++                  tab_group_data.num_tabs_in_group)
++            : tab_group_visual_data_.title());
    }
- }
-@@ -675,6 +724,10 @@ void TabGroupHeaderView::UpdateAccessibleName() {
- }
  
- SkColor TabGroupHeaderView::GetForegroundColor() const {
-+  if (GetColorProvider() && IsSteddingRow()) {
+   UpdateColors();
+@@ -600,6 +640,10 @@ SkColor TabGroupHeaderView::GetForegroundColor() const {
+   if (!GetColorProvider()) {
+     return SK_ColorBLACK;
+   }
++  if (IsSteddingRow()) {
 +    // The rows' own text colour, as a folder's title (folders F12).
 +    return GetColorProvider()->GetColor(kColorTabForegroundInactiveFrameActive);
 +  }
-   if (GetColorProvider()) {
-     SkColor background_color = GetColorProvider()->GetColor(
-         GetTabGroupTabStripColorId(tab_group_visual_data_.color(),
-@@ -747,5 +800,22 @@ int TabGroupHeaderView::GetHorizontalInset() const {
+   if (delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral()) {
+     const bool frame_active = GetWidget() && GetWidget()->ShouldPaintAsActive();
+     return GetColorProvider()->GetColor(
+@@ -616,8 +660,12 @@ void TabGroupHeaderView::UpdateColors() {
+   const SkColor background_color = GetBackgroundColor();
+   const SkColor foreground_color = GetForegroundColor();
+ 
+-  // Update label.
+-  group_header_label_->SetEnabledColor(foreground_color);
++  // Update label. Stedding: an unnamed group's tab count is muted, as a
++  // folder's count is.
++  group_header_label_->SetEnabledColor(
++      IsSteddingRow() && tab_group_visual_data_.title().empty()
++          ? stedding::SleptTitleColor(foreground_color)
++          : foreground_color);
+ 
+   // Update save tab group related items, the sync icon and attention
+   // indicator.
+@@ -658,8 +706,12 @@ void TabGroupHeaderView::UpdateColors() {
+   }
+ 
+   // Update background.
+-  SetBackground(
+-      views::CreateRoundedRectBackground(background_color, GetCornerRadius()));
++  if (IsSteddingRow()) {
++    UpdateSteddingBackground();
++  } else {
++    SetBackground(views::CreateRoundedRectBackground(background_color,
++                                                     GetCornerRadius()));
++  }
+ }
+ 
+ void TabGroupHeaderView::UpdateEditorBubbleButtonVisibility() {
+@@ -727,5 +779,22 @@ int TabGroupHeaderView::GetHorizontalInset() const {
    return TabGroupStyle::GetInsetsForHeaderChip(orientation_).left();
  }
  
@@ -1510,10 +1518,10 @@ index c7c218422c023..af1ac51fc0415 100644
  BEGIN_METADATA(TabGroupHeaderView)
  END_METADATA
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.h b/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
-index 29caf0cd7f2aa..16971a3d75fdc 100644
+index a06c09e58d60e..d3185746f3886 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
-@@ -90,6 +90,7 @@ class TabGroupHeaderView : public views::FlexLayoutView,
+@@ -89,6 +89,7 @@ class TabGroupHeaderView : public views::FlexLayoutView,
    void OnMouseMoved(const ui::MouseEvent& event) override;
    void OnMouseEntered(const ui::MouseEvent& event) override;
    void OnMouseExited(const ui::MouseEvent& event) override;
@@ -1538,10 +1546,10 @@ index 29caf0cd7f2aa..16971a3d75fdc 100644
    void OnBubbleOpened();
    void OnBubbleClosed();
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
-index a4d4b6cbed1f5..9545e68482f3a 100644
+index 2c4c231fb3276..993179a690cfd 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
-@@ -24,8 +24,11 @@
+@@ -22,8 +22,11 @@
  #include "testing/gmock/include/gmock/gmock.h"
  #include "testing/gtest/include/gtest/gtest.h"
  #include "ui/base/l10n/l10n_util.h"
@@ -1553,7 +1561,7 @@ index a4d4b6cbed1f5..9545e68482f3a 100644
  #include "ui/gfx/text_elider.h"
  #include "ui/views/controls/button/label_button.h"
  #include "ui/views/test/views_test_base.h"
-@@ -197,6 +200,50 @@ TEST_P(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
+@@ -166,6 +169,48 @@ TEST_F(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
              constrained_height);
  }
  
@@ -1561,7 +1569,7 @@ index a4d4b6cbed1f5..9545e68482f3a 100644
 +// count where Chromium's bar in the group's colour was blank, a named group
 +// its title, and neither has a fill at rest: the header is a row, as a
 +// folder's is (2026-10-15).
-+TEST_P(TabGroupHeaderViewTest, SteddingAnUnnamedGroupShowsItsTabCount) {
++TEST_F(TabGroupHeaderViewTest, SteddingAnUnnamedGroupShowsItsTabCount) {
 +  MockDelegate delegate;
 +  tab_groups::TabGroupVisualData visual_data(
 +      u"", tab_groups::TabGroupColorId::kBlue, false);
@@ -1574,8 +1582,6 @@ index a4d4b6cbed1f5..9545e68482f3a 100644
 +  data.num_tabs_in_group = 3;
 +  EXPECT_CALL(delegate, GetTabGroupData())
 +      .WillRepeatedly(testing::ReturnRef(data));
-+  EXPECT_CALL(delegate, GetGroupContentString())
-+      .WillRepeatedly(testing::Return(u"a.test and 2 other tabs"));
 +
 +  std::unique_ptr<views::Widget> widget =
 +      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
@@ -1601,7 +1607,7 @@ index a4d4b6cbed1f5..9545e68482f3a 100644
 +  EXPECT_FALSE(header->GetBackground());
 +}
 +
- TEST_P(TabGroupHeaderViewTest, ShowHoverCardOnMouseEnter) {
+ TEST_F(TabGroupHeaderViewTest, ShowHoverCardOnMouseEnter) {
    MockDelegate delegate;
    tab_groups::TabGroupVisualData visual_data(
 diff --git a/chrome/common/chrome_paths_internal.h b/chrome/common/chrome_paths_internal.h

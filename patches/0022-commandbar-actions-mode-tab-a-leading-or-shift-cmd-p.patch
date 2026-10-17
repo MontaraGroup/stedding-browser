@@ -23,19 +23,19 @@ Removable when: Chromium ships a command palette of its own.
 ---
  chrome/app/chrome_command_ids.h               |   2 +
  .../browser/global_keyboard_shortcuts_mac.mm  |   3 +
- .../browser/ui/browser_command_controller.cc  |  39 +-
+ .../browser/ui/browser_command_controller.cc  |  38 +-
  chrome/browser/ui/views/commandbar/BUILD.gn   |  11 +
  .../ui/views/commandbar/command_bar_view.cc   | 415 +++++++++++++++++-
  .../ui/views/commandbar/command_bar_view.h    |  55 ++-
  .../commandbar/command_bar_view_unittest.cc   | 218 +++++++++
  .../settings/stedding_shortcuts_handler.cc    |   2 +
- 8 files changed, 733 insertions(+), 12 deletions(-)
+ 8 files changed, 733 insertions(+), 11 deletions(-)
 
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index 4adca7f793012..6c6d83f31ecdc 100644
+index 078eee999685c..2a909edd683e7 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
-@@ -590,6 +590,8 @@
+@@ -599,6 +599,8 @@
  #define IDC_STEDDING_MOVE_TAB_TO_PREVIOUS_SPACE 55125
  // Stedding: copy the link as Markdown (docs/features/copy-link.md L3).
  #define IDC_STEDDING_COPY_MARKDOWN_LINK         55130
@@ -59,7 +59,7 @@ index 05594c582a49b..ad0a60837ab6a 100644
        {false, false, false, false, kVK_F6,                IDC_FOCUS_NEXT_PANE},
        {false, true,  false, false, kVK_F6,                IDC_FOCUS_PREVIOUS_PANE},
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 6513e62916ba4..4ed3ba9a54cf2 100644
+index 5514c434c92a6..9f682f8b7be11 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
 @@ -4,8 +4,6 @@
@@ -71,7 +71,7 @@ index 6513e62916ba4..4ed3ba9a54cf2 100644
  #include <stddef.h>
  
  #include <algorithm>
-@@ -22,6 +20,8 @@
+@@ -23,6 +21,8 @@
  #include "base/metrics/user_metrics.h"
  #include "base/notimplemented.h"
  #include "base/strings/strcat.h"
@@ -80,7 +80,7 @@ index 6513e62916ba4..4ed3ba9a54cf2 100644
  #include "base/time/time.h"
  #include "build/branding_buildflags.h"
  #include "build/build_config.h"
-@@ -59,12 +59,6 @@
+@@ -61,12 +61,6 @@
  #include "chrome/browser/ui/actions/command_action_updater.h"
  #include "chrome/browser/ui/browser_actions.h"
  #include "chrome/browser/ui/browser_commands.h"
@@ -93,7 +93,7 @@ index 6513e62916ba4..4ed3ba9a54cf2 100644
  #include "chrome/browser/ui/browser_element_identifiers.h"
  #include "chrome/browser/ui/browser_select_file_dialog_controller.h"
  #include "chrome/browser/ui/browser_window.h"
-@@ -88,8 +82,12 @@
+@@ -90,8 +84,12 @@
  #include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
  #include "chrome/browser/ui/side_panel/side_panel_ui.h"
  #include "chrome/browser/ui/singleton_tabs.h"
@@ -106,23 +106,15 @@ index 6513e62916ba4..4ed3ba9a54cf2 100644
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
  #include "chrome/browser/ui/tabs/tab_change_type.h"
-@@ -99,6 +97,7 @@
- #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+@@ -102,6 +100,7 @@
  #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
  #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 +#include "chrome/browser/ui/views/commandbar/command_bar_view.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/side_panel/tabs_from_other_devices/tabs_from_other_devices_side_panel_coordinator.h"
  #include "chrome/browser/ui/web_applications/app_browser_controller.h"
-@@ -614,7 +613,6 @@ void BrowserCommandController::GlicActiveInstanceChanged(
-   UpdateGlicState();
- }
- 
--
- void BrowserCommandController::FindBarVisibilityChanged() {
-   // Block find command updates in locked fullscreen mode unless the instance is
-   // locked for OnTask (only relevant for non-web browser scenarios).
-@@ -1194,8 +1192,24 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -1195,8 +1194,24 @@ void BrowserCommandController::HandleCommandWithDisposition(
          break;
        }
        base::RecordAction(base::UserMetricsAction("Accel_Focus_Location"));
@@ -147,7 +139,7 @@ index 6513e62916ba4..4ed3ba9a54cf2 100644
      case IDC_FOCUS_SEARCH:
        base::RecordAction(base::UserMetricsAction("Accel_Focus_Search"));
        FocusSearch(browser_);
-@@ -2041,6 +2055,13 @@ void BrowserCommandController::InitCommandState() {
+@@ -2049,6 +2064,13 @@ void BrowserCommandController::InitCommandState() {
        !sharing_hub::SharingIsDisabledByPolicy(browser_->GetProfile());
    command_updater_->UpdateCommandEnabled(IDC_COPY_URL, enable_copy_url);
    // Stedding: the Markdown twin goes wherever the plain copy goes.
@@ -197,7 +189,7 @@ index b188aa57a69fb..31c837ad99d91 100644
      "//chrome/test:test_support",
      "//testing/gtest",
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index 9dd7a4b1c9128..04391c3d06cfe 100644
+index d9b42929bc913..23bf46cf8cc6f 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -13,16 +13,23 @@

@@ -97,6 +97,7 @@ into the feature patches they belong to.
  .../ui/views/commandbar/command_bar_view.cc   |  31 ++-
  .../ui/views/commandbar/command_bar_view.h    |   3 +
  .../commandbar/command_bar_view_unittest.cc   |  34 +++
+ chrome/browser/ui/views/frame/BUILD.gn        |   1 +
  .../layout/browser_view_tabbed_layout_impl.cc |  12 ++
  .../views/frame/stedding_window_background.cc |  86 ++++++--
  .../views/frame/stedding_window_background.h  |  20 ++
@@ -129,7 +130,7 @@ into the feature patches they belong to.
  chrome/test/stedding/welcome_browsertest.cc   | 110 ++++++++++
  .../stedding/window_buttons_browsertest.mm    |  36 ++++
  .../renderer_host/navigation_entry_impl.cc    |  37 +++-
- 53 files changed, 1984 insertions(+), 134 deletions(-)
+ 54 files changed, 1985 insertions(+), 134 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color.cc
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color.h
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color_unittest.cc
@@ -1175,7 +1176,7 @@ index 0000000000000..253e39787f951
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index 27140737ebe8d..6dac0dc159ab8 100644
+index ab28e12ec2e99..fdf09f78d8d2c 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -47,6 +47,7 @@
@@ -1289,8 +1290,20 @@ index 74fd9006469bf..29ba163424dc5 100644
  // commandbar K12: the search chord (Option-Cmd-F, Ctrl+E) opens the bar
  // empty, and what is typed there navigates the open tab too.
  TEST_F(CommandBarViewTest, FocusSearchOpensTheBarForThisTab) {
+diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
+index e4bcfc9483d35..3350aa17f193c 100644
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -2480,6 +2480,7 @@ source_set("browser_view_tabbed_layout_impl") {
+     "//base",
+     "//build:buildflag_header_h",
+     "//chrome/browser/ui:layout_constants",
++    "//chrome/browser/ui:stedding_ui_metrics",
+     "//chrome/browser/ui:ui_features",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/color:color_headers",
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-index 29dfbde914c55..f662e5bb6dce6 100644
+index 389c6f8c6e667..37c77fd75f357 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 @@ -9,6 +9,7 @@
@@ -1306,10 +1319,10 @@ index 29dfbde914c55..f662e5bb6dce6 100644
  #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
  #include "chrome/browser/ui/layout_constants.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/organizer/organizer_panel_controller.h"
  #include "chrome/browser/ui/ui_features.h"
  #include "chrome/browser/ui/views/animations/organizer_panel_animations.h"
- #include "chrome/browser/ui/views/animations/side_panel_animations.h"
-@@ -258,6 +260,16 @@ BrowserViewTabbedLayoutImpl::CalculateSeparatorInfo() const {
+@@ -268,6 +270,16 @@ BrowserViewTabbedLayoutImpl::CalculateSeparatorInfo() const {
        break;
    }
  
@@ -1528,10 +1541,10 @@ index bb6460de5b316..067596e00d174 100644
  #endif
    View::PaintChildren(paint_info);
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index f7d27660e6b79..b703183d30017 100644
+index 5ba4f68cd5fbb..2da45b9a3ca93 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -420,17 +420,19 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -460,17 +460,19 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
    if (base::FeatureList::IsEnabled(features::kTabGroupsFocusing)) {
      focus_swipe_controller_ =
          std::make_unique<VerticalTabStripFocusSwipeController>(this);
@@ -1559,7 +1572,7 @@ index f7d27660e6b79..b703183d30017 100644
    }
  
    SetNotifyEnterExitOnChild(true);
-@@ -1285,6 +1287,15 @@ void VerticalTabStripRegionView::OnTabStripViewSet() {
+@@ -1458,6 +1460,15 @@ void VerticalTabStripRegionView::AddTabStripView(
  
  void VerticalTabStripRegionView::SlideInSpaceList(const spaces::SpaceId& from,
                                                    const spaces::SpaceId& to) {
@@ -1575,7 +1588,7 @@ index f7d27660e6b79..b703183d30017 100644
    // The Space's own rows -- its pins, tabs and folders -- live in the unpinned
    // list; the essentials above them are in every Space and stay still.
    views::ScrollView* const list =
-@@ -1308,25 +1319,139 @@ void VerticalTabStripRegionView::SlideInSpaceList(const spaces::SpaceId& from,
+@@ -1481,25 +1492,139 @@ void VerticalTabStripRegionView::SlideInSpaceList(const spaces::SpaceId& from,
    }
    const int direction =
        stedding::SpaceSlideDirection(from_index, to_index, base::i18n::IsRTL());
@@ -1732,18 +1745,18 @@ index f7d27660e6b79..b703183d30017 100644
  
  TabDragTarget* VerticalTabStripRegionView::GetTabDragTargetInsideTabStrip(
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index bc6b3c5a1cd73..7665a77aaae20 100644
+index 1810fa641877a..9a6aaaad06766 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -6,6 +6,7 @@
- #define CHROME_BROWSER_UI_VIEWS_FRAME_VERTICAL_TAB_STRIP_REGION_VIEW_H_
+@@ -7,6 +7,7 @@
  
+ #include <memory>
  #include <optional>
 +#include <vector>
  
  #include "base/callback_list.h"
  #include "base/containers/flat_set.h"
-@@ -390,6 +391,22 @@ class VerticalTabStripRegionView final
+@@ -408,6 +409,22 @@ class VerticalTabStripRegionView final
    // Spaces B32: the list slides in from the side of the Space being entered.
    void SlideInSpaceList(const spaces::SpaceId& from, const spaces::SpaceId& to);
  
@@ -1886,7 +1899,7 @@ index e1739a9f37961..53d023e8cabe7 100644
  TEST(SwitcherRulesTest, StackOverflowsByCountAndMeasuresItself) {
    EXPECT_FALSE(SwitcherStackOverflows(1));
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-index 14623b38d64ad..c5c88af089efa 100644
+index bd499ff58ea1b..50230f3d39090 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
 @@ -7,6 +7,7 @@
@@ -1897,7 +1910,7 @@ index 14623b38d64ad..c5c88af089efa 100644
  #include <string>
  #include <utility>
  #include <vector>
-@@ -392,10 +393,15 @@ void SpaceSwitcherView::ApplyOverflow() {
+@@ -398,10 +399,15 @@ void SpaceSwitcherView::ApplyOverflow() {
      return;
    }
    // In the row the rule is the width; stacked in the rail, one chip wide,
@@ -1917,7 +1930,7 @@ index 14623b38d64ad..c5c88af089efa 100644
    const auto& spaces = model_->spaces();
    std::vector<int> widths;
    for (size_t i = 0; i < chips_.size(); ++i) {
-@@ -428,6 +434,10 @@ void SpaceSwitcherView::ApplyOverflow() {
+@@ -434,6 +440,10 @@ void SpaceSwitcherView::ApplyOverflow() {
      chip->SetBackground(dot ? views::CreateRoundedRectBackground(
                                    space.color(), kSwitcherDot / 2)
                              : nullptr);
@@ -1929,7 +1942,7 @@ index 14623b38d64ad..c5c88af089efa 100644
    if (collapsed_) {
      // As tall as the stack it holds, so the "+" is never laid out past the
 diff --git a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
-index 28ec01a958400..85ed06edacbd2 100644
+index a1d2e3a472077..e101c7f3bb49d 100644
 --- a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
 +++ b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.cc
 @@ -60,18 +60,25 @@ void ClearTabsSeparator::OnPaint(gfx::Canvas* canvas) {
@@ -2276,10 +2289,10 @@ index e15f8af8ac8b0..283bf581bfc3f 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 1ccaabc847bce..0daeec306d9be 100644
+index c91f220c1cde4..4a011a1069f6c 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -1045,10 +1045,15 @@ void TabView::UpdateLayerRoundedCorners() {
+@@ -1079,10 +1079,15 @@ void TabView::UpdateLayerRoundedCorners() {
  void TabView::OnThemeChanged() {
    views::View::OnThemeChanged();
    // sidebar Y2: the title at the chosen size. A density change is sent to
@@ -2300,7 +2313,7 @@ index 1ccaabc847bce..0daeec306d9be 100644
    UpdateColors();
  }
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index 2f27c5f357a32..f24914ea85ee2 100644
+index 19323672908ac..f5be06e891d63 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 @@ -4,6 +4,8 @@
@@ -2844,7 +2857,7 @@ index 0000000000000..43f088c9d44ad
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index 6db9ef9161f16..190a5efb88117 100644
+index ab32df6703c72..3e47f18cf36a8 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
 @@ -21,6 +21,7 @@
@@ -2855,7 +2868,7 @@ index 6db9ef9161f16..190a5efb88117 100644
  #include "base/notreached.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/test/run_until.h"
-@@ -92,6 +93,12 @@ spaces::SpaceSwitcherView* FindDrawnSwitcher(views::View* view) {
+@@ -93,6 +94,12 @@ spaces::SpaceSwitcherView* FindDrawnSwitcher(views::View* view) {
  class SidebarClickTest
      : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
   protected:

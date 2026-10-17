@@ -52,7 +52,7 @@ Removable when: never, unless Stedding stops having preferences.
  chrome/browser/ui/stedding/stedding_prefs.cc  | 17 ++++++
  chrome/browser/ui/stedding/stedding_prefs.h   | 30 ++++++++++
  .../ui/stedding/stedding_prefs_unittest.cc    | 26 ++++++++
- .../vertical_tab_strip_state_controller.cc    | 12 ++++
+ ...ertical_tab_strip_state_controller_impl.cc | 12 ++++
  .../frame/vertical_tab_strip_region_view.cc   | 14 +++++
  chrome/browser/ui/views/peek/BUILD.gn         |  2 +
  .../ui/views/peek/peek_navigation_throttle.cc | 11 +++-
@@ -72,18 +72,18 @@ Removable when: never, unless Stedding stops having preferences.
  create mode 100644 chrome/browser/ui/stedding/stedding_prefs_unittest.cc
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 3b2361d90cb07..0cfc236f4ac79 100644
+index 618a67dabc0fd..bbfbda8b50c6a 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -38,6 +38,7 @@
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
  #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
- #include "chrome/common/chrome_features.h"
  #include "chrome/common/extensions/api/settings_private.h"
 +#include "chrome/browser/ui/stedding/stedding_prefs.h"
  #include "chrome/common/pref_names.h"
  #include "components/autofill/core/common/autofill_prefs.h"
  #include "components/bookmarks/common/bookmark_pref_names.h"
-@@ -292,6 +293,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -285,6 +286,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[::prefs::kVerticalTabsExpandOnHoverEnabled] =
        settings_api::PrefType::kBoolean;
@@ -93,7 +93,7 @@ index 3b2361d90cb07..0cfc236f4ac79 100644
    (*s_allowlist)[::prefs::kTabSearchPinnedToTabstrip] =
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[::prefs::kTabScrollButtonsPinnedToTabstrip] =
-@@ -308,6 +312,13 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -301,6 +305,13 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
  #endif
    (*s_allowlist)[::prefs::kShowHomeButton] = settings_api::PrefType::kBoolean;
@@ -123,10 +123,10 @@ index ead56623b60b6..a3eb66ade93ef 100644
      <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
    </body>
 diff --git a/chrome/browser/resources/settings/BUILD.gn b/chrome/browser/resources/settings/BUILD.gn
-index 5b58a98f56da9..14eca5e980a72 100644
+index 1795e894fc56d..859df475d7b8a 100644
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
-@@ -270,6 +270,8 @@ build_webui("build") {
+@@ -277,6 +277,8 @@ build_webui("build") {
      "downloads_page/downloads_browser_proxy.ts",
      "downloads_page/downloads_page.html.ts",
      "downloads_page/downloads_page.ts",
@@ -134,8 +134,8 @@ index 5b58a98f56da9..14eca5e980a72 100644
 +    "stedding_page/stedding_page.ts",
      "ensure_lazy_loaded.ts",
      "focus_config.ts",
-     "glic_page/glic_browser_proxy.ts",
-@@ -535,6 +537,7 @@ build_webui("build") {
+     "geic_page/geic_page.html.ts",
+@@ -600,6 +602,7 @@ build_webui("build") {
      "glic_page/glic_login_permissions_page.css",
      "glic_page/glic_page.css",
      "glic_page/glic_subpage.css",
@@ -144,7 +144,7 @@ index 5b58a98f56da9..14eca5e980a72 100644
      "languages_page/edit_dictionary_page.css",
      "languages_page/languages_page.css",
 diff --git a/chrome/browser/resources/settings/lazy_load.ts b/chrome/browser/resources/settings/lazy_load.ts
-index e33a9caafc2ba..5dafb9ac619bd 100644
+index bb59c5753aea0..21d820b64597d 100644
 --- a/chrome/browser/resources/settings/lazy_load.ts
 +++ b/chrome/browser/resources/settings/lazy_load.ts
 @@ -106,6 +106,7 @@ import './people_page/sync_page.js';
@@ -192,7 +192,7 @@ index af48d135380ea..65ef7a31e23c4 100644
      extensions: false,
      languages: true,
 diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
-index ca03351e5763e..016609766688a 100644
+index 75cf7dcc1f6f4..683ad0a5b0e2e 100644
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
 @@ -155,6 +155,12 @@ function createRoutes(): SettingsRoutes {
@@ -209,7 +209,7 @@ index ca03351e5763e..016609766688a 100644
      r.PEOPLE = r.BASIC.createSection(
          '/people', 'people', loadTimeData.getString('peoplePageTitle'));
 diff --git a/chrome/browser/resources/settings/router.ts b/chrome/browser/resources/settings/router.ts
-index a6b043271a731..7e9c61cd99d50 100644
+index 5c07af7bf6d8c..685c90564e477 100644
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
 @@ -32,6 +32,7 @@ export interface SettingsRoutes {
@@ -221,7 +221,7 @@ index a6b043271a731..7e9c61cd99d50 100644
    FONTS: Route;
    GEMINI: Route;
 diff --git a/chrome/browser/resources/settings/settings_main/settings_main.html b/chrome/browser/resources/settings/settings_main/settings_main.html
-index b5c3842ff0449..2a47b02cfa3fb 100644
+index 2ef4dcad53f0e..cc94322a0dd75 100644
 --- a/chrome/browser/resources/settings/settings_main/settings_main.html
 +++ b/chrome/browser/resources/settings/settings_main/settings_main.html
 @@ -50,6 +50,15 @@
@@ -241,10 +241,10 @@ index b5c3842ff0449..2a47b02cfa3fb 100644
      <div slot="view" id="people">
        <template is="dom-if" if="[[renderPlugin_(
 diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.html b/chrome/browser/resources/settings/settings_menu/settings_menu.html
-index 4a7bd7d746c19..6f0094672d317 100644
+index 0d30190f42bf2..7a66946913147 100644
 --- a/chrome/browser/resources/settings/settings_menu/settings_menu.html
 +++ b/chrome/browser/resources/settings/settings_menu/settings_menu.html
-@@ -75,6 +75,13 @@
+@@ -86,6 +86,13 @@
        <cr-menu-selector id="menu" selectable="a:not(#extensionsLink)"
            attr-for-selected="href" on-iron-activate="onSelectorActivate_"
            on-click="onLinkClick_" selected-attribute="selected">
@@ -402,10 +402,10 @@ index 0000000000000..aeb531da5527e
 +customElements.define(
 +    SettingsSteddingPageElement.is, SettingsSteddingPageElement);
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 6c82bcc51848f..8987371553689 100644
+index 768b40624f526..0488cc7805414 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1557,7 +1557,10 @@ static_library("ui") {
+@@ -2319,7 +2319,10 @@ static_library("ui") {
      }
  
      # Non-android deps for "ui" target.
@@ -418,7 +418,7 @@ index 6c82bcc51848f..8987371553689 100644
        ":accelerator_table",
        ":browser_actions",
 diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
-index 6997bb36d901f..3ccdd3a660077 100644
+index d2264ce903105..bc9c10f6c9f60 100644
 --- a/chrome/browser/ui/browser_ui_prefs.cc
 +++ b/chrome/browser/ui/browser_ui_prefs.cc
 @@ -4,6 +4,8 @@
@@ -560,11 +560,11 @@ index 0000000000000..9ecd18b4a1fa0
 +
 +}  // namespace
 +}  // namespace stedding::prefs
-diff --git a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.cc b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.cc
-index 22ece00a8c729..712938001f459 100644
---- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.cc
-+++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.cc
-@@ -79,6 +79,18 @@ VerticalTabStripStateController::VerticalTabStripStateController(
+diff --git a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
+index 76487de5df187..7bc523b060e21 100644
+--- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
++++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
+@@ -77,6 +77,18 @@ VerticalTabStripStateControllerImpl::VerticalTabStripStateControllerImpl(
              base::Unretained(this)));
    }
  
@@ -574,7 +574,7 @@ index 22ece00a8c729..712938001f459 100644
 +  pref_change_registrar_.Add(
 +      prefs::kVerticalTabsUncollapsedWidth,
 +      base::BindRepeating(
-+          [](VerticalTabStripStateController* self) {
++          [](VerticalTabStripStateControllerImpl* self) {
 +            self->SetUncollapsedWidth(self->pref_service_->GetInteger(
 +                prefs::kVerticalTabsUncollapsedWidth));
 +          },
@@ -584,10 +584,10 @@ index 22ece00a8c729..712938001f459 100644
      SetCollapsed(restored_state_collapsed.value());
    }
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index ef3443d476380..e797dfaed8994 100644
+index ca5818f3254d4..099b30db3b4bd 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -881,6 +881,20 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
+@@ -1019,6 +1019,20 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
    // the collapsing state.
    bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
  
@@ -736,12 +736,12 @@ index e6f9863252466..4771dafa309ac 100644
    const ui::ThemeProvider* theme_provider =
        webui::GetThemeProviderDeprecated(web_contents);
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 073aecac4214a..5ee71bd5dd287 100644
+index 223d11bd6fde9..d4a1ed3ccce61 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -666,6 +666,35 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
-                                              show_ai_features_section ||
-                                              enable_ai_mode_search));
+@@ -667,6 +667,35 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                               (show_glic_section || show_ai_features_section ||
+                                enable_ai_mode_search || show_geic_section));
    html_source->AddBoolean("steddingHidesGoogleSections", true);
 +  // The Stedding section (docs/features/settings.md). Literals, like the
 +  // command bar's: Stedding's own strings are not localised yet.
@@ -776,10 +776,10 @@ index 073aecac4214a..5ee71bd5dd287 100644
                            show_ai_features_section);
  
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 028137267e3cc..c2b1fb13fa304 100644
+index 43171fb81c7c0..23f4adbb9bed4 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -5122,6 +5122,7 @@ test("unit_tests") {
+@@ -5133,6 +5133,7 @@ test("unit_tests") {
      "//chrome/browser/ui/file_system_access:unit_tests",
      "//chrome/browser/ui/spaces:unit_tests",
      "//chrome/browser/ui/views/commandbar:unit_tests",

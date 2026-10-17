@@ -68,10 +68,10 @@ are upstream or the features are withdrawn.
  24 files changed, 534 insertions(+), 100 deletions(-)
 
 diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
-index bbbbe51c2cf94..9ab561f99cf5a 100644
+index 3689bc1cd4bfc..60a7b8bea2f12 100644
 --- a/chrome/app/chrome_main_delegate.cc
 +++ b/chrome/app/chrome_main_delegate.cc
-@@ -1486,6 +1486,18 @@ void ChromeMainDelegate::PreSandboxStartup() {
+@@ -1558,6 +1558,18 @@ void ChromeMainDelegate::PreSandboxStartup() {
  #endif
  
  #if BUILDFLAG(IS_MAC)
@@ -162,10 +162,10 @@ index 9340e989771f1..460fcf266e191 100644
    }
  
 diff --git a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
-index 2e836cf6b192b..73948c8d039bf 100644
+index 401eb08374a94..cc083ed865f63 100644
 --- a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
 +++ b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
-@@ -1286,10 +1286,12 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+@@ -1335,10 +1335,12 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
    EXPECT_TRUE(state->IsHttpAllowedForHost(
        "example.com", profile()->GetDefaultStoragePartition()));
  
@@ -181,10 +181,10 @@ index 2e836cf6b192b..73948c8d039bf 100644
  
    // 3. Enable ESB. Balanced Mode should now be enabled by default.
 diff --git a/chrome/browser/ssl/https_upgrades_util.cc b/chrome/browser/ssl/https_upgrades_util.cc
-index fee0ab1c7d486..4ba9ad4eda5e2 100644
+index e2722638ba073..6c1126c87e4bc 100644
 --- a/chrome/browser/ssl/https_upgrades_util.cc
 +++ b/chrome/browser/ssl/https_upgrades_util.cc
-@@ -150,8 +150,15 @@ bool IsBalancedModeEnabled(PrefService* prefs) {
+@@ -153,8 +153,15 @@ bool IsBalancedModeEnabled(PrefService* prefs) {
          safe_browsing::IsEnhancedProtectionEnabled(*prefs)) {
        return true;
      }
@@ -653,7 +653,7 @@ index f9ad62f0c9105..a6ce97b09c683 100644
    // Last written path per tab, so unchanged tabs are not rewritten on every
    // model notification.
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 4a37d546398cf..70be02dacf426 100644
+index c07ae8309067e..ad6350bfabf35 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -55,6 +55,7 @@
@@ -664,7 +664,7 @@ index 4a37d546398cf..70be02dacf426 100644
  #include "chrome/browser/ui/tab_ui_helper.h"
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
-@@ -2618,6 +2619,15 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -2689,6 +2690,15 @@ bool TabStripModel::IsContextMenuCommandEnabled(
      return false;
    }
  
@@ -680,7 +680,7 @@ index 4a37d546398cf..70be02dacf426 100644
    switch (command_id) {
      // Enabled state for the per-Space pin pair comes from the collection
      // controller; from the model alone they are disabled.
-@@ -2749,6 +2759,12 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -2840,6 +2850,12 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
    if (!ContainsIndex(context_index)) {
      return;
    }
@@ -694,16 +694,16 @@ index 4a37d546398cf..70be02dacf426 100644
      // Stedding's per-Space pin pair is handled by the tab strip collection
      // controller, which owns the SpaceModel; nothing to do here.
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 725a1cc7fb623..b440c97e9e0ea 100644
+index 4af8c5a89ea62..5a86fca0bdd4c 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -1241,6 +1241,12 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTarget(
- }
+@@ -1404,6 +1404,12 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTarget(
  
- void VerticalTabStripRegionView::OnTabStripViewWillClear() {
+ std::unique_ptr<views::View> VerticalTabStripRegionView::RemoveTabStripView(
+     views::View* view) {
 +  // The strip view is about to be freed (switching to horizontal tabs, or
 +  // the region rebuilding it). These two still point at it; the next tab
-+  // insert or Space switch would use the freed view. OnTabStripViewSet
++  // insert or Space switch would use the freed view. AddTabStripView
 +  // builds them again with the new strip.
 +  space_tab_visibility_.reset();
 +  folder_drag_target_.reset();
@@ -794,10 +794,10 @@ index 77bc7c93051b5..f1a39137d84f8 100644
    const raw_ref<TabStripModel> tab_strip_model_;
  };
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 4e527e819df7f..28ce3e0dce7fa 100644
+index c891e5b4329a1..2d6e34a30bbc5 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -722,28 +722,34 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
+@@ -754,28 +754,34 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
  
    auto* controller = collection_node_->GetController();
    base::WeakPtr<TabView> self = weak_ptr_factory_.GetWeakPtr();
@@ -840,7 +840,7 @@ index 4e527e819df7f..28ce3e0dce7fa 100644
      const bool on_reset_badge =
          reset_badge_ && reset_badge_->GetVisible() &&
          reset_badge_->bounds().Contains(event.location());
-@@ -761,14 +767,6 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
+@@ -793,14 +799,6 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
      }
      controller->SelectTab(GetTabInterface(), GetGestureDetail(event));
    }
@@ -855,7 +855,7 @@ index 4e527e819df7f..28ce3e0dce7fa 100644
  }
  
  void TabView::OnMouseMoved(const ui::MouseEvent& event) {
-@@ -1263,7 +1261,7 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1297,7 +1295,7 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    // row; a row with a title shows the slash instead, placed by the layout.
    stedding::TabRowState drift_row;
    drift_row.pinned = pinned_;
@@ -864,7 +864,7 @@ index 4e527e819df7f..28ce3e0dce7fa 100644
    const bool drifted = HasDriftedFromHome();
    icon_->SetAttention(TabIcon::AttentionType::kNavigatedAwayFromHome,
                        stedding::ShowsDriftDot(drift_row, drifted));
-@@ -1304,7 +1302,8 @@ void TabView::UpdateResetBadge() {
+@@ -1338,7 +1336,8 @@ void TabView::UpdateResetBadge() {
    if (!reset_badge_) {
      return;
    }
@@ -874,7 +874,7 @@ index 4e527e819df7f..28ce3e0dce7fa 100644
                      base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
    if (show != reset_badge_->GetVisible()) {
      reset_badge_->SetVisible(show);
-@@ -1546,6 +1545,10 @@ bool TabView::IsInExpandOnHover(int width) const {
+@@ -1580,6 +1579,10 @@ bool TabView::IsInExpandOnHover(int width) const {
    return collapsed_ && width > CollapsedWidth();
  }
  

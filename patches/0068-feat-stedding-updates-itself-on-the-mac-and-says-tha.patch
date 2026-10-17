@@ -42,7 +42,7 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  chrome/browser/chrome_browser_main_mac.mm     |  35 +
  .../api/settings_private/prefs_util.cc        |   5 +
  .../settings/about_page/about_page.ts         |  10 +-
- .../stedding_page/stedding_page.html.ts       |  23 +-
+ .../stedding_page/stedding_page.html.ts       |  27 +-
  chrome/browser/ui/BUILD.gn                    |   5 +
  chrome/browser/ui/cocoa/main_menu_builder.mm  |  18 +
  chrome/browser/ui/stedding/BUILD.gn           |  52 ++
@@ -64,9 +64,9 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  chrome/browser/ui/views/commandbar/BUILD.gn   |   1 +
  .../ui/views/commandbar/command_bar_view.cc   |  26 +
  chrome/browser/ui/views/frame/browser_view.cc |   5 +-
- .../frame/vertical_tab_strip_region_view.cc   |  15 +
+ .../frame/vertical_tab_strip_region_view.cc   |  17 +
  chrome/browser/ui/views/stedding/BUILD.gn     |  26 +
- .../browser/ui/views/stedding/update_pill.cc  | 160 ++++
+ .../browser/ui/views/stedding/update_pill.cc  | 164 ++++
  .../browser/ui/views/stedding/update_pill.h   |  62 ++
  .../ui/views/stedding/update_pill_unittest.cc | 124 +++
  .../stedding_welcome/welcome_dialog_view.cc   |  10 +
@@ -79,7 +79,7 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  chrome/test/stedding/BUILD.gn                 |   5 +
  chrome/test/stedding/updates_browsertest.cc   | 352 +++++++++
  third_party/.gitignore                        |   2 +
- 45 files changed, 2725 insertions(+), 20 deletions(-)
+ 45 files changed, 2733 insertions(+), 22 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/app_updater.cc
  create mode 100644 chrome/browser/ui/stedding/app_updater.h
  create mode 100644 chrome/browser/ui/stedding/app_updater_mac.mm
@@ -163,7 +163,7 @@ index 23d3c4d244596..71a9fcdf623f5 100755
      if options.use_breakpad:
          if options.branding is None:
 diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
-index 8a60d7061bbfb..5abc25981dbca 100644
+index d98c86e5dace9..9836a4f0f821a 100644
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
 @@ -16,6 +16,8 @@ import("//build/config/win/manifest.gni")
@@ -175,7 +175,7 @@ index 8a60d7061bbfb..5abc25981dbca 100644
  import("//chrome/chrome_paks.gni")
  import("//chrome/common/features.gni")
  import("//chrome/process_version_rc_template.gni")
-@@ -515,6 +517,11 @@ if (is_win) {
+@@ -520,6 +522,11 @@ if (is_win) {
        "--scm=1",
        "--bundle_id=$chrome_mac_bundle_id",
      ]
@@ -187,8 +187,8 @@ index 8a60d7061bbfb..5abc25981dbca 100644
      if (enable_updater) {
        args += [ "--privileged_helper_id=$privileged_helper_name" ]
        if (is_chrome_branded) {
-@@ -564,6 +571,11 @@ if (is_win) {
-       deps += [ ":chromium_updater_privileged_helper" ]
+@@ -572,6 +579,11 @@ if (is_win) {
+       bundle_deps += [ ":chromium_updater_privileged_helper" ]
      }
  
 +    # Stedding's updater (ADR 0022).
@@ -199,7 +199,7 @@ index 8a60d7061bbfb..5abc25981dbca 100644
      if (enable_stripping) {
        # At link time, preserve the global symbols specified in the .exports
        # file. All other global symbols will be marked as private. The default
-@@ -685,6 +697,15 @@ if (is_win) {
+@@ -693,6 +705,15 @@ if (is_win) {
      ]
    }
  
@@ -247,10 +247,10 @@ index 6fada0a2b1a1f..7f1942bcd47dd 100644
  </dict>
  </plist>
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 77c5f599da4b8..8b3139dbc3657 100644
+index 801ec541b12ae..f5d35d7cfd7b1 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1535,6 +1535,7 @@ source_set("core") {
+@@ -1553,6 +1553,7 @@ source_set("core") {
        "//chrome/browser/ui:browser_mac",
        "//chrome/browser/ui/browser_window:create_browser_window",
        "//chrome/browser/ui/cocoa",
@@ -259,7 +259,7 @@ index 77c5f599da4b8..8b3139dbc3657 100644
        "//chrome/browser/web_applications/os_integration/mac:web_app_shortcut_copier_lib",
        "//chrome/browser/webshare",
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
-index b3cb6a8a8252b..dac495dc8d9e3 100644
+index 872a92c6f2307..92a220dc7741f 100644
 --- a/chrome/browser/app_controller_mac.mm
 +++ b/chrome/browser/app_controller_mac.mm
 @@ -106,6 +106,7 @@
@@ -280,7 +280,7 @@ index b3cb6a8a8252b..dac495dc8d9e3 100644
    } else if (action == @selector(toggleConfirmToQuit:)) {
      [self updateConfirmToQuitPrefMenuItem:static_cast<NSMenuItem*>(item)];
      enable = [self shouldEnableConfirmToQuitPrefMenuItem];
-@@ -2204,6 +2208,16 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -2206,6 +2210,16 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
    }
  }
  
@@ -363,10 +363,10 @@ index b269f1610a55d..6f3171837b4d8 100644
  
  void ChromeBrowserMainPartsMac::DidEndMainMessageLoop() {
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 80b7a9a768c0b..19a247cdeb482 100644
+index 561c302ccfa64..64ab713cbdf03 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -332,6 +332,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -325,6 +325,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kNumber;
    (*s_allowlist)[stedding::prefs::kSidebarTextSize] =
        settings_api::PrefType::kNumber;
@@ -404,7 +404,7 @@ index aaaf8c6e7e535..ec24e08ec25e2 100644
  
    protected getUpdateStatusMessage_(): TrustedHTML {
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
-index 26a4ad66b0f8d..302f3b1589347 100644
+index 26a4ad66b0f8d..1dd7bbeb7c093 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 @@ -3,7 +3,7 @@
@@ -416,6 +416,23 @@ index 26a4ad66b0f8d..302f3b1589347 100644
  
  import type {SettingsSteddingPageElement} from './stedding_page.js';
  
+@@ -225,14 +225,14 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingLinkAddressLabel}"
+       sub-label="$i18n{steddingLinkAddressSubLabel}">
+   </settings-toggle-button>
+-  ${isWindows ? '' : html`
++  ${!isWindows ? html`
+   <settings-toggle-button
+       id="littleWindow"
+       class="hr"
+       pref-key="stedding.little.enabled"
+       label="$i18n{steddingLittleLabel}"
+       sub-label="$i18n{steddingLittleSubLabel}">
+-  </settings-toggle-button>`}
++  </settings-toggle-button>` : ''}
+   <settings-toggle-button
+       id="newTabHint"
+       class="hr"
 @@ -317,6 +317,27 @@ export function getHtml(this: SettingsSteddingPageElement) {
        label="$i18n{steddingSuggestLabel}"
        sub-label="$i18n{steddingSuggestSubLabel}">
@@ -445,10 +462,10 @@ index 26a4ad66b0f8d..302f3b1589347 100644
      <div class="flex">
        <h2 class="cr-title-text">$i18n{steddingSpacesTitle}</h2>
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 1de07f59c2fb9..4d18316efa1db 100644
+index 7586ae41a0741..4d264ea867c3d 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1567,6 +1567,11 @@ static_library("ui") {
+@@ -2329,6 +2329,11 @@ static_library("ui") {
      if (is_win) {
        deps += [ "//chrome/browser/ui/views/stedding:altgr_chords" ]
      }
@@ -461,12 +478,12 @@ index 1de07f59c2fb9..4d18316efa1db 100644
        ":accelerator_table",
        ":browser_actions",
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
-index da0fb8f085836..6e611f449a623 100644
+index a438c231cbe6f..34e2f9ddc5baf 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
 +++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
-@@ -46,6 +46,12 @@ typedef NS_ENUM(NSInteger, NSMenuItemImageVisibility) {
- 
- #endif
+@@ -30,6 +30,12 @@
+ #import "ui/base/l10n/l10n_util_mac.h"
+ #include "ui/strings/grit/ui_strings.h"
  
 +// Stedding (updates Up8): the app controller's action for Check for
 +// Updates…, declared for the selector below.
@@ -477,7 +494,7 @@ index da0fb8f085836..6e611f449a623 100644
  namespace chrome {
  namespace {
  
-@@ -119,6 +125,18 @@ NSMenuItem* BuildAppMenu(NSApplication* nsapp,
+@@ -103,6 +109,18 @@ NSMenuItem* BuildAppMenu(NSApplication* nsapp,
            .Build();
    // clang-format on
  
@@ -2251,7 +2268,7 @@ index a1951187b8071..a1973941c440e 100644
      "//chrome/browser/ui/stedding:sidebar_density",
      "//components/sessions",
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index f42c6074f6c97..4eb8dfd1f54a3 100644
+index 71882207ed482..61c5e67a64363 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -43,6 +43,7 @@
@@ -2295,7 +2312,7 @@ index f42c6074f6c97..4eb8dfd1f54a3 100644
      // each opening the service's own new-document address in a new tab of
      // the active Space. Normal windows only (K15).
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 553acd0021583..70ddf9bc40acb 100644
+index 6f156fed0a0b9..73bcc4803f083 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -122,6 +122,7 @@
@@ -2306,7 +2323,7 @@ index 553acd0021583..70ddf9bc40acb 100644
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/views/frame/stedding_fullscreen_sidebar_toggle.h"
  #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
-@@ -1670,8 +1671,10 @@ void BrowserView::Show() {
+@@ -1691,8 +1692,10 @@ void BrowserView::Show() {
    }
  
    OnWindowDidShow();
@@ -2319,37 +2336,39 @@ index 553acd0021583..70ddf9bc40acb 100644
    // The fullscreen transition clears out focus, but there are some cases (for
    // example, new window in Mac fullscreen with toolbar showing) where we need
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 97f1a5f6ef977..177606fe49c34 100644
+index 74d3411c37090..8bc9b9467146d 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -78,6 +78,7 @@
- #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+@@ -82,6 +82,7 @@
+ #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_utils.h"
  #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
  #include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
 +#include "chrome/browser/ui/views/stedding/update_pill.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
-@@ -355,6 +356,12 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -387,6 +388,13 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
          views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
                                   views::MaximumFlexSizeRule::kPreferred));
-     archived_row_ = AddChildView(std::move(archived_row));
+     archived_row_ = content_area_view_->AddChildView(std::move(archived_row));
 +    // updates Up3: "New Stedding Version Available", between the Archived
 +    // row and the Space row, as Arc puts its own above the Spaces; hidden
-+    // until a later version is ready.
-+    if (stedding::UpdatePill* const pill = stedding::AddUpdatePill(*this)) {
++    // until a later version is ready. A row of the content area, as they are.
++    if (stedding::UpdatePill* const pill =
++            stedding::AddUpdatePill(*content_area_view_)) {
 +      pill->SetRailForm(rail_form_);
 +    }
  
-     auto* const bottom_row = AddChildView(std::make_unique<views::View>());
-     bottom_row_ = bottom_row;
-@@ -2340,6 +2347,14 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+     auto* const bottom_row =
+         content_area_view_->AddChildView(std::make_unique<views::View>());
+@@ -2508,6 +2516,15 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
              vector_icons::kHistoryIcon, kColorTabForegroundInactiveFrameActive,
              stedding::SidebarFaviconSize() + (rail ? 4 : 0)));
    }
 +  // The update pill sits on the rows' column too, a little apart from the
 +  // rows above and below it (updates Up3, sidebar Y25).
-+  if (stedding::UpdatePill* const pill = stedding::FindUpdatePill(*this)) {
++  if (stedding::UpdatePill* const pill =
++          stedding::FindUpdatePill(*content_area_view_)) {
 +    pill->SetRailForm(rail);
 +    pill->SetProperty(views::kMarginsKey,
 +                      gfx::Insets::TLBR(6, padding + rail_left_, 6,
@@ -2406,10 +2425,10 @@ index 5df75849e0dcb..34464a72510cb 100644
      "//testing/gtest",
 diff --git a/chrome/browser/ui/views/stedding/update_pill.cc b/chrome/browser/ui/views/stedding/update_pill.cc
 new file mode 100644
-index 0000000000000..f25e2114589fb
+index 0000000000000..53d19d35f10f2
 --- /dev/null
 +++ b/chrome/browser/ui/views/stedding/update_pill.cc
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,164 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -2466,6 +2485,10 @@ index 0000000000000..f25e2114589fb
 +  SetTextColor(views::Button::STATE_DISABLED,
 +               kColorTabForegroundInactiveFrameActive);
 +  label()->SetElideBehavior(gfx::ELIDE_TAIL);
++  // A row of the sidebar's content area, a layer that is not opaque: no
++  // subpixel text, which Label DCHECKs must be painted onto an opaque region.
++  label()->SetSkipSubpixelRenderingOpacityCheck(true);
++  label()->SetSubpixelRenderingEnabled(false);
 +  SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
 +  SetProperty(views::kMarginsKey, gfx::Insets::VH(kVerticalMargin, 0));
 +  SetProperty(views::kFlexBehaviorKey,
@@ -2977,7 +3000,7 @@ index d283426af1757..807ea85399397 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index 8f7ad640db85f..77f9c176435e2 100644
+index 76e7d1bb22c28..5be9e7c0d9e23 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
 @@ -189,6 +189,7 @@ source_set("impl") {
@@ -3017,10 +3040,10 @@ index c36737ae91c45..f4bcdbec34f34 100644
  }
  
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 3a251ea7fc706..a4aa7096174f6 100644
+index d80e88774f7c3..46b1ec0b05ebc 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -842,6 +842,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -843,6 +843,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "Send what you type to the search engine for suggestions");
    html_source->AddString("steddingSuggestSubLabel",
                           "Off keeps every keystroke local until Enter.");

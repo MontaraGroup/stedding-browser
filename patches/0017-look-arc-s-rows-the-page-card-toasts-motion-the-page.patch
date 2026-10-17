@@ -48,7 +48,7 @@ take these shapes upstream.
  chrome/browser/ui/toasts/toast_view.cc        |  4 +-
  chrome/browser/ui/toasts/toast_view.h         |  4 +
  chrome/browser/ui/views/frame/browser_view.cc |  9 ++
- .../browser/ui/views/frame/browser_widget.cc  | 10 +++
+ .../browser/ui/views/frame/browser_widget.cc  |  8 ++
  .../layout/stedding_browser_view_layout.cc    | 35 +++++---
  .../ui/views/frame/multi_contents_view.cc     | 26 +++---
  .../views/frame/stedding_window_background.cc | 26 ++++--
@@ -63,7 +63,7 @@ take these shapes upstream.
  .../tabs/common/tab_view_vertical_layout.cc   | 65 ++++++++++++++
  .../tabs/common/tab_view_vertical_layout.h    |  4 +
  .../hovercard/tab_hover_card_controller.cc    |  8 +-
- 40 files changed, 840 insertions(+), 96 deletions(-)
+ 40 files changed, 838 insertions(+), 96 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/motion.cc
  create mode 100644 chrome/browser/ui/stedding/motion.h
  create mode 100644 chrome/browser/ui/stedding/motion_unittest.cc
@@ -756,26 +756,26 @@ index f934c495713d1..4deed16d987f9 100644
  
  #endif  // CHROME_BROWSER_UI_STEDDING_UI_METRICS_H_
 diff --git a/chrome/browser/ui/toasts/BUILD.gn b/chrome/browser/ui/toasts/BUILD.gn
-index e45c27af4a301..ff06a7400e836 100644
+index 9879f682e771b..295067cf8391c 100644
 --- a/chrome/browser/ui/toasts/BUILD.gn
 +++ b/chrome/browser/ui/toasts/BUILD.gn
-@@ -59,6 +59,8 @@ source_set("impl") {
+@@ -60,6 +60,8 @@ source_set("impl") {
      "//chrome/browser/profiles:profile",
      "//chrome/browser/send_tab_to_self",
      "//chrome/browser/skills:public",
 +    "//chrome/browser/ui/stedding:motion",
 +    "//chrome/browser/ui/stedding/screenshot",
      "//chrome/browser/translate",
+     "//chrome/browser/ui:browser_commands",
      "//chrome/browser/ui:browser_element_identifiers",
-     "//chrome/browser/ui:chrome_pages",
 diff --git a/chrome/browser/ui/toasts/api/toast_id.cc b/chrome/browser/ui/toasts/api/toast_id.cc
-index 06603d62ef855..56ac9dea98dbb 100644
+index 695b2e9c08d37..b8ce68a80aa20 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.cc
 +++ b/chrome/browser/ui/toasts/api/toast_id.cc
-@@ -123,6 +123,10 @@ std::string_view GetToastName(ToastId toast_id) {
-       return "EmailVerificationLoading";
-     case ToastId::kScheduledRestartOnIdle:
-       return "ScheduledRestartOnIdle";
+@@ -127,6 +127,10 @@ std::string_view GetToastName(ToastId toast_id) {
+       return "EmailVerificationError";
+     case ToastId::kAutofillAiSuggestionRemoved:
+       return "AutofillAiSuggestionRemoved";
 +    case ToastId::kSteddingLinkCopiedClean:
 +      return "SteddingLinkCopiedClean";
 +    case ToastId::kSteddingCaptureSaved:
@@ -784,25 +784,25 @@ index 06603d62ef855..56ac9dea98dbb 100644
  
    NOTREACHED();
 diff --git a/chrome/browser/ui/toasts/api/toast_id.h b/chrome/browser/ui/toasts/api/toast_id.h
-index 25d0875be3732..b92651b1e5241 100644
+index c2002a8499dff..313d89b813e53 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.h
 +++ b/chrome/browser/ui/toasts/api/toast_id.h
-@@ -79,7 +79,12 @@ enum class ToastId {
-   kDictationNoMicrophoneError = 56,
-   kEmailVerificationLoading = 57,
+@@ -81,7 +81,12 @@ enum class ToastId {
    kScheduledRestartOnIdle = 58,
--  kMaxValue = kScheduledRestartOnIdle,
+   kEmailVerificationError = 59,
+   kAutofillAiSuggestionRemoved = 60,
+-  kMaxValue = kAutofillAiSuggestionRemoved,
 +  // Stedding: a link copied with its tracking parameters removed
 +  // (docs/features/copy-link.md L5) and a screenshot delivered
 +  // (docs/features/screenshot.md C5).
-+  kSteddingLinkCopiedClean = 59,
-+  kSteddingCaptureSaved = 60,
++  kSteddingLinkCopiedClean = 61,
++  kSteddingCaptureSaved = 62,
 +  kMaxValue = kSteddingCaptureSaved,
  };
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
  
 diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
-index fe034ae01f3d7..f097684bfd61f 100644
+index 4b17a935547ff..ea9ccdf3108b1 100644
 --- a/chrome/browser/ui/toasts/toast_controller.cc
 +++ b/chrome/browser/ui/toasts/toast_controller.cc
 @@ -4,6 +4,10 @@
@@ -816,7 +816,7 @@ index fe034ae01f3d7..f097684bfd61f 100644
  #include <memory>
  #include <optional>
  #include <string>
-@@ -351,6 +355,11 @@ void ToastController::CreateToast(ToastParams params,
+@@ -353,6 +357,11 @@ void ToastController::CreateToast(ToastParams params,
    if (spec->has_throbber()) {
      toast_view->AddThrobber();
    }
@@ -829,7 +829,7 @@ index fe034ae01f3d7..f097684bfd61f 100644
    if (spec->has_close_button()) {
      toast_view->AddCloseButton(
 diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
-index 1173165e84d87..842fa8911fc28 100644
+index 9b2b675d3188c..5ff5f0f408d83 100644
 --- a/chrome/browser/ui/toasts/toast_service.cc
 +++ b/chrome/browser/ui/toasts/toast_service.cc
 @@ -4,6 +4,9 @@
@@ -842,7 +842,7 @@ index 1173165e84d87..842fa8911fc28 100644
  #include <memory>
  
  #include "base/feature_list.h"
-@@ -391,6 +394,33 @@ void ToastService::RegisterToasts(
+@@ -394,6 +397,33 @@ void ToastService::RegisterToasts(
            .AddGlobalScoped()
            .Build());
  
@@ -921,10 +921,10 @@ index 114ce4245a3e8..457daeba5ffa1 100644
    bool has_action_button_ = false;
    bool has_throbber_ = false;
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 1101c17b3aa28..cc721981cc686 100644
+index dcfb69696b040..3ac8a15da8aa7 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -1212,6 +1212,15 @@ gfx::Rect BrowserView::GetFindBarBoundingBox() const {
+@@ -1229,6 +1229,15 @@ gfx::Rect BrowserView::GetFindBarBoundingBox() const {
    gfx::Rect contents_bounds = multi_contents_view_->ConvertRectToWidget(
        multi_contents_view_->GetLocalBounds());
  
@@ -941,7 +941,7 @@ index 1101c17b3aa28..cc721981cc686 100644
    // otherwise use the contents container.
    auto* const immersive_mode_controller =
 diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
-index a335e2d5ccd0e..641f3af72afa8 100644
+index 6a221594b09f0..3daf9d542af37 100644
 --- a/chrome/browser/ui/views/frame/browser_widget.cc
 +++ b/chrome/browser/ui/views/frame/browser_widget.cc
 @@ -4,6 +4,8 @@
@@ -953,21 +953,19 @@ index a335e2d5ccd0e..641f3af72afa8 100644
  #include <memory>
  #include <utility>
  
-@@ -507,6 +509,14 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
-   // Apply BrowserWidget overrides:
-   key.app_controller =
-       web_app::AppBrowserController::From(browser_view_->browser());
-+  // Stedding: in a normal window the address row takes the page's colour,
-+  // and the toolbar's icons and text flip for contrast with it (toolbar T7).
-+  if (!key.app_controller) {
-+    if (const auto* page_color = stedding::PageThemeColorController::From(
-+            browser_view_->browser())) {
-+      key.app_controller = page_color->bar_supplier();
-+    }
-+  }
+@@ -509,6 +511,12 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
+           web_app::AppBrowserController::From(browser_view_->browser())) {
+     key.app_controller = app_controller;
+     key.app_background_color = app_controller->GetBackgroundColor();
++  } else if (const auto* page_color =
++                 stedding::PageThemeColorController::From(
++                     browser_view_->browser())) {
++    // Stedding: in a normal window the address row takes the page's colour,
++    // and the toolbar's icons and text flip for contrast with it (toolbar T7).
++    key.app_controller = page_color->bar_supplier();
+   }
  
  #if BUILDFLAG(IS_CHROMEOS)
-   // ChromeOS SystemWebApps use the OS theme all the time.
 diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
 index 3572f0ea60d58..63c3ccafd0eda 100644
 --- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
@@ -1048,7 +1046,7 @@ index 3572f0ea60d58..63c3ccafd0eda 100644
      contents->SetBackgroundRadii(merged);
    }
 diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
-index 61e6c8b92d9cd..b75665cbc93f4 100644
+index 192e307f4650c..233db10dd69ec 100644
 --- a/chrome/browser/ui/views/frame/multi_contents_view.cc
 +++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
 @@ -4,8 +4,6 @@
@@ -1068,7 +1066,7 @@ index 61e6c8b92d9cd..b75665cbc93f4 100644
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/view_ids.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
-@@ -525,9 +524,7 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+@@ -526,9 +525,7 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
    available_space =
        CalculateSeparatorLayouts(available_space, layouts.child_layouts);
  
@@ -1079,7 +1077,7 @@ index 61e6c8b92d9cd..b75665cbc93f4 100644
      // The gutter between the sidebar and the page, and along the right and
      // bottom window edges. Going through this layout rather than moving the
      // view's bounds keeps the web contents' native layer in step -- moving the
-@@ -535,7 +532,10 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+@@ -536,7 +533,10 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
      // No gap under the address row: the row is the top of the card (the
      // window background paints them as one surface, see
      // SteddingWindowBackground).
@@ -1091,7 +1089,7 @@ index 61e6c8b92d9cd..b75665cbc93f4 100644
    }
    ViewSizes sizes = GetViewSizes(available_space);
  
-@@ -687,13 +687,17 @@ gfx::Rect MultiContentsView::CalculateSeparatorLayouts(
+@@ -688,13 +688,17 @@ gfx::Rect MultiContentsView::CalculateSeparatorLayouts(
    const int width = available_space.width();
    const int height = available_space.height();
  
@@ -1404,10 +1402,10 @@ index e85542cf2aec2..052e5cbc23326 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
-index 8c62e489669ee..67008abc683f6 100644
+index 192c546fe7c91..9bc9ca98919e5 100644
 --- a/chrome/browser/ui/views/tabs/common/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
-@@ -84,6 +84,8 @@ source_set("impl") {
+@@ -85,6 +85,8 @@ source_set("impl") {
      "tab_view.h",
      "tab_view_horizontal_layout.cc",
      "tab_view_horizontal_layout.h",
@@ -1416,7 +1414,7 @@ index 8c62e489669ee..67008abc683f6 100644
      "tab_view_vertical_layout.cc",
      "tab_view_vertical_layout.h",
      "unpinned_tab_container_view.cc",
-@@ -99,6 +101,7 @@ source_set("impl") {
+@@ -100,6 +102,7 @@ source_set("impl") {
      "//chrome/browser:primitives",
      "//chrome/browser/dictation",
      "//chrome/browser/glic",
@@ -1424,7 +1422,7 @@ index 8c62e489669ee..67008abc683f6 100644
      "//chrome/browser/glic/browser_ui:glow",
      "//chrome/browser/glic/browser_ui:glow_controller",
      "//chrome/browser/tab_group_sync:factories",
-@@ -225,6 +228,7 @@ source_set("unit_tests") {
+@@ -235,6 +238,7 @@ source_set("unit_tests") {
    testonly = true
    sources = [
      "folder_drag_target_unittest.cc",
@@ -1609,7 +1607,7 @@ index 0000000000000..1a58f9bd0376a
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index e56260e1f9b15..94d202bde63be 100644
+index 93734af34c6d0..fb2514157758b 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 @@ -4,10 +4,6 @@
@@ -1623,7 +1621,7 @@ index e56260e1f9b15..94d202bde63be 100644
  #include "base/callback_list.h"
  #include "base/functional/bind.h"
  #include "base/memory/raw_ptr.h"
-@@ -18,11 +14,13 @@
+@@ -18,12 +14,14 @@
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
  #include "chrome/browser/ui/color/chrome_color_id.h"
  #include "chrome/browser/ui/layout_constants.h"
@@ -1632,12 +1630,13 @@ index e56260e1f9b15..94d202bde63be 100644
  #include "chrome/browser/ui/tabs/tab_group_model.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/frame_separator.h"
  #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 +#include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
  #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
-@@ -38,10 +36,14 @@
+@@ -39,10 +37,14 @@
  #include "components/prefs/pref_service.h"
  #include "components/tabs/public/tab_collection_types.h"
  #include "components/tabs/public/tab_group.h"
@@ -1650,9 +1649,9 @@ index e56260e1f9b15..94d202bde63be 100644
 +#include "ui/views/border.h"
 +#include "ui/views/controls/button/label_button.h"
  #include "ui/views/controls/scroll_view.h"
- #include "ui/views/controls/separator.h"
  #include "ui/views/layout/layout_types.h"
-@@ -286,20 +288,28 @@ void TabStripView::SetUpSpaceBoundary(
+ #include "ui/views/layout/proposed_layout.h"
+@@ -289,20 +291,28 @@ void TabStripView::SetUpSpaceBoundary(
    }
    auto clear_line = std::make_unique<ClearTabsSeparator>();
    clear_line_ = clear_line.get();
