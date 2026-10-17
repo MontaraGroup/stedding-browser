@@ -81,6 +81,16 @@ main() {
   esac
   [ -n "$prefix" ] || die "--out <prefix> is required"
   [ -n "$url" ] && set -- "$@" "$url"
+  # Chromium opens no chrome:// page named on its command line
+  # (chrome/browser/ui/startup/url_util.cc): the window shows the new tab page
+  # instead, and the capture would pass for the page asked for.
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      chrome://*|chrome-untrusted://*)
+        die "Chromium does not open $arg from the command line; drive the address bar to it (tooling/drive)" ;;
+    esac
+  done
 
   case "$seed" in
     ""|collapsed|grey-dark|light|dark) ;;
