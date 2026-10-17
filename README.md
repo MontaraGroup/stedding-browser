@@ -129,7 +129,7 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 
 ## Features
 
-New in beta 16: on the Mac, Stedding updates itself (Settings › Stedding › Updates turns
+New in beta 16: on the Mac, Stedding updates itself (Settings → Stedding → Updates turns
 it off) and opens a thank-you page on stedding.dev after the install and after each update;
 a Space with its own cookies keeps a page's session storage over a restart and can show
 notifications; and Restore after a crash puts each window back with its own Spaces. Beta 15
@@ -219,6 +219,9 @@ release notes in [docs/release-notes/](docs/release-notes/) list every change.
 - A **Stedding** section first in Settings, one switch per feature, the window's
   Spaces to rename or delete, and the full shortcut reference.
 - Chromium's Google and AI sections are gone; what remains is what the browser does.
+- On the Mac, Stedding updates itself: once a day it looks for a new version, and **New
+  Stedding Version Available** at the bottom of the sidebar restarts into it (Settings →
+  Stedding → Updates turns it off).
 
 **Extensions**
 - It is Chromium: extensions install from the Chrome Web Store and work as they do in
@@ -307,7 +310,7 @@ and what comes next:
 | | State |
 |---|---|
 | macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 16's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
-| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and the dangling-pointer detector (beta 14's series) and under AddressSanitizer (the series of 2026-09-30) |
+| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites ran clean with DCHECKs and the dangling-pointer detector on beta 14's series (beta 16's shows two older faults, `S-213`, `S-214`) and under AddressSanitizer on the series of 2026-09-30 |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | The Mac from beta 16 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022); Windows and Linux are planned (ADR 0023: `S-215`, `S-216`) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
@@ -315,11 +318,12 @@ and what comes next:
 | Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (the Features section of [BACKLOG.md](BACKLOG.md)). Undo after closing tabs and several smaller items are in since beta 14 |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
-Known limits in the current builds: no automatic updates on the Mac before the release after 0.2.0
-beta 15, and none yet on Windows, and the Windows installer is unsigned; ⌃1–⌃9 collide with macOS Mission Control once you have a second desktop (the Spaces
-menu keeps the commands reachable); a clipboard manager that owns ⇧⌘C system-wide
-takes it before the browser does; while Arc runs it takes ⌥⌘N from every app (`S-79`);
-on Windows, close Stedding before installing a release on the same Chromium number
+Known limits in the current builds: beta 16 is built on Chromium 155.0.8059.12, without the
+security fixes of the later 155 builds; no automatic updates on Windows yet, and the Windows
+installer is unsigned; ⌃1–⌃9 collide with macOS Mission Control once you have a second
+desktop (the Spaces menu keeps the commands reachable); a clipboard manager that owns ⇧⌘C
+system-wide takes it before the browser does; while Arc runs it takes ⌥⌘N from every app
+(`S-79`); on Windows, close Stedding before installing a release on the same Chromium number
 (`S-72`).
 
 The full list of open work is [BACKLOG.md](BACKLOG.md); each feature's specification
