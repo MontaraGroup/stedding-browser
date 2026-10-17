@@ -474,9 +474,8 @@ features that users expect from a real product just to make a purity claim.
   stock Chromium; which ones to mirror, proxy or remove is decided before 1.0.
 - **Default search, suggestions, spellcheck, translate, DNS/preconnect defaults:**
   privacy-preserving defaults per `PRIVACY.md`. Up to beta 14 a fresh profile also
-  checked Google's account list and registered with Google's push service unasked; the
-  series has stopped both since 2026-10-12, and the next release carries it (`PRIVACY.md`,
-  the recorded runs; privacy Q11, Q12).
+  checked Google's account list and registered with Google's push service unasked; beta 15
+  stopped both (`PRIVACY.md`, the recorded runs; privacy Q11, Q12).
 
 Ungoogled-Chromium is prior art we learn from, but our bar is different: it optimizes
 for maximal removal and accepts breakage; we optimize for a polished product with

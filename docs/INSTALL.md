@@ -8,9 +8,8 @@ each. Not every release has both: take the newest one with a file for your platf
 The macOS image is signed with the project's Developer ID and notarized by Apple from
 beta 10 on, so it opens like any other app. The Windows installer is **not code-signed
 yet**, which means one SmartScreen prompt (`S-56` in [BACKLOG.md](../BACKLOG.md)). The Mac
-version updates itself from the first release after 0.2.0 beta 15, the first built with
-its updater;
-Windows has no automatic updates yet (`S-74`).
+version updates itself from beta 16 on, the first release built with its updater; Windows
+has no automatic updates yet (`S-215`).
 
 ## macOS (Apple silicon)
 
@@ -51,7 +50,7 @@ across.
 
 ### Updating
 
-From the release after 0.2.0 beta 15 on, the Mac version updates itself: once a day it looks for a new
+From beta 16 on, the Mac version updates itself: once a day it looks for a new
 version on GitHub, downloads it in the background, and shows **New Stedding Version
 Available** at the bottom of the sidebar; click it to restart into the new version, or just
 quit, and it installs then. **Stedding › Check for Updates…** looks at once. To stop it, turn

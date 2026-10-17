@@ -67,11 +67,11 @@ window followed on 2026-10-12, below):
 | `update.googleapis.com`, `edgedl.me.gvt1.com` | Component updates and their downloads: the first check at about one minute, then roughly every five hours, the certificate CRLSet among them | Yes |
 | `safebrowsing.googleapis.com` | One Safe Browsing list update, refused (HTTP 400: no API key) | Yes |
 | `clients2.google.com/time/1/current` | Chromium's network time | Yes |
-| `android.clients.google.com/checkin`, `/c2dm/register3` | Google's push service: a device check-in and registrations | **No**; stopped in the series since 2026-10-12 (`BACKLOG.md` S-54) |
-| `accounts.google.com/ListAccounts` | The Google account check, with no account signed in | **No**; stopped in the series since 2026-10-12 (`BACKLOG.md` S-67) |
+| `android.clients.google.com/checkin`, `/c2dm/register3` | Google's push service: a device check-in and registrations | **No**; stopped since beta 15 (`BACKLOG.md` S-54) |
+| `accounts.google.com/ListAccounts` | The Google account check, with no account signed in | **No**; stopped since beta 15 (`BACKLOG.md` S-67) |
 
-The last two broke principle 2, and the series has stopped both since 2026-10-12; the
-next release carries it (`docs/features/privacy.md` Q11, Q12).
+The last two broke principle 2; the series stopped both on 2026-10-12, and beta 15 was the
+first release without them (`docs/features/privacy.md` Q11, Q12).
 
 2026-10-12, the release build of the series with that fix, a new profile in a temporary
 folder, nothing opened, from the same log: five minutes headless and ten with a window,

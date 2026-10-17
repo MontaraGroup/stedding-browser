@@ -45,12 +45,12 @@ repository's patch series, and its SHA-256 checksum is published beside the file
 can check what you downloaded.
 
 **Will it update itself?**
-On the Mac, from the release after 0.2.0 beta 15 on: it checks once a day, downloads a new version in the
+On the Mac, from beta 16 on: it checks once a day, downloads a new version in the
 background and shows "New Stedding Version Available" at the bottom of the sidebar; a click
 restarts into it. Every update is signed with the project's key and checked before it
 installs, and the check sends nothing that identifies you
 ([PRIVACY.md](PRIVACY.md)). Settings › Stedding › Updates turns it off. Windows has no
-updater yet; new versions there appear on the Releases page (`S-74`).
+updater yet; new versions there appear on the Releases page (`S-215`).
 
 **What is planned after that?**
 The rest of the Windows port (little windows, signing, updates), then Linux. Alongside
@@ -153,9 +153,8 @@ Independent Session**; deleting the Space clears it too.
 No telemetry, no crash reports, no experiment downloads, no identifiers. Google's
 sign-in and services are removed from the interface. Google is still contacted for what
 Chromium itself does: component updates, Safe Browsing list requests and network time.
-Two more calls at start, Google's push service and its account check, are gone from the
-series since 2026-10-12 and leave with the next release (`S-54`, `S-67`); beta 14 and
-earlier still make them. The Safe Browsing requests carry no API
+Two more calls at start, Google's push service and its account check, stopped with beta 15
+(`S-54`, `S-67`); beta 14 and earlier still make them. The Safe Browsing requests carry no API
 key and are refused, so Safe Browsing does not protect you in these builds (`S-75`). The Chrome Web Store is contacted only when you
 install or update an extension. [PRIVACY.md](PRIVACY.md) lists the connections and
 records what a fresh profile actually contacted; anything else is a bug.

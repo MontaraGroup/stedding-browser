@@ -61,7 +61,7 @@ behind each behaviour, is in [docs/features/](docs/features/).
 
 ## Download
 
-The current release is **0.2.0 beta 14**, built on Chromium 155.0.8059.12 (stable): a macOS
+The current release is **0.2.0 beta 16**, built on Chromium 155.0.8059.12 (stable): a macOS
 image for Apple silicon, signed and notarized, and a Windows preview. Get them from
 [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases):
@@ -129,12 +129,14 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 
 ## Features
 
-New in beta 14: Undo after closing tabs, auto-archive off by default, a welcome step for
-how Stedding behaves, the folder and pin verbs, ⌃M and ⌥⇧⌘P, the sidebar edge's bar, and
-the command bar's completion, Site Search, New Documents, Close Duplicate Tabs and Clear
-Site Cookies and Reload. On the Mac, beta 14 also brings beta 13's changes, which had no
-macOS image of their own: the sidebar can hide completely, new pins go to the bottom, the
-sidebar resizes from its edge, and the settings read in sections.
+New in beta 16: on the Mac, Stedding updates itself (Settings › Stedding › Updates turns
+it off) and opens a thank-you page on stedding.dev after the install and after each update;
+a Space with its own cookies keeps a page's session storage over a restart and can show
+notifications; and Restore after a crash puts each window back with its own Spaces. Beta 15
+fixed two ways to close the browser by accident (closing one pane of a split, grouping a tab
+that sits in a folder), stopped two calls to Google at startup and Autofill's questions to
+Google about the forms you see, and brings a closed folder back as one, in order. The
+release notes in [docs/release-notes/](docs/release-notes/) list every change.
 
 **Sidebar and tabs**
 - Vertical tabs at Arc's proportions: an essentials row above every Space, the Space's
@@ -291,10 +293,9 @@ Privacy here is a set of defaults, not a mode. Out of the box:
 
 [docs/PRIVACY.md](docs/PRIVACY.md) lists the network connections the browser makes and
 records what a fresh profile actually contacted; two Google calls on the earlier
-record are gone from the series since 2026-10-12 and leave with the next release
-(`S-54`, `S-67`), and anything else not on the list is a bug we want to hear about. On the
-Mac, from the release after 0.2.0 beta 15 on, Stedding updates itself from GitHub once a day (off in Settings);
-on Windows new versions appear on the Releases page.
+record stopped with beta 15 (`S-54`, `S-67`), and anything else not on the list is a bug we
+want to hear about. On the Mac, from beta 16 on, Stedding updates itself from GitHub once a
+day (off in Settings); on Windows new versions appear on the Releases page.
 
 ## Status and roadmap
 
@@ -305,10 +306,10 @@ and what comes next:
 
 | | State |
 |---|---|
-| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 14's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
+| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 16's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
 | Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites have also run clean with DCHECKs and the dangling-pointer detector (beta 14's series) and under AddressSanitizer (the series of 2026-09-30) |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
-| Automatic updates | The Mac from the release after 0.2.0 beta 15 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022); Windows next (`S-74`) |
+| Automatic updates | The Mac from beta 16 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022); Windows and Linux are planned (ADR 0023: `S-215`, `S-216`) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
 | Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (the Features section of [BACKLOG.md](BACKLOG.md)). Undo after closing tabs and several smaller items are in since beta 14 |
@@ -341,8 +342,8 @@ the Chrome Web Store as usual.
 
 **Does it talk to Google?** For what Chromium itself does: component updates, Safe
 Browsing list requests (refused without a key, so Safe Browsing does not work) and
-network time; two calls at start, Google's push service and its account check, are
-gone from the series and leave with the next release (`S-54`, `S-67`).
+network time; two calls at start, Google's push service and its account check, stopped
+with beta 15 (`S-54`, `S-67`).
 There is no telemetry, no sign-in and no experiment downloads; the Web Store is
 contacted only when you install or update an extension. The connections are listed in
 [docs/PRIVACY.md](docs/PRIVACY.md).
@@ -351,9 +352,9 @@ contacted only when you install or update an extension. The connections are list
 `~/Library/Application Support/Stedding`, on Windows under `%LOCALAPPDATA%\Stedding`.
 You can also export a Space as a file.
 
-**Will it update itself?** On the Mac, from the release after 0.2.0 beta 15 on: once a day, in the background,
+**Will it update itself?** On the Mac, from beta 16 on: once a day, in the background,
 with "New Stedding Version Available" at the bottom of the sidebar when it is ready, and a
-switch in Settings to turn it off. Windows has no updater yet (`S-74`).
+switch in Settings to turn it off. Windows has no updater yet (`S-215`).
 
 **Intel Mac? Linux?** Neither yet. Apple silicon and Windows x64 today; Linux is the
 next platform after the Windows port is complete.

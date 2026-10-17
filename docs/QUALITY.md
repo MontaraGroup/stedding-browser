@@ -167,8 +167,8 @@ How it works on the Mac (ADR 0022, `docs/features/updates.md`):
   (`docs/HANDOFF.md`, "The updater"). For a release, the same with the previous release
   and the real feed.
 - **Skipping versions.** The feed keeps the newest five releases and Sparkle takes the
-  newest one the Mac's system can run, so any earlier version with the updater (every release
-  after 0.2.0 beta 15) goes straight to the latest.
+  newest one the Mac's system can run, so any earlier version with the updater (beta 16 and
+  every release after it) goes straight to the latest.
 - **Rolling back.** Sparkle never installs an older version over a newer one. To take a
   bad release back: take it out of the feed at once (`git revert` of its "offer" commit,
   pushed), so nobody else is offered it, then release the fix as a later version and offer
