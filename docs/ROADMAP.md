@@ -23,8 +23,8 @@ what is left of it; this page keeps no table of open ids, because one went stale
 
 ## M0 — Reproduce a vanilla Chromium build (macOS arm64)
 
-> **Done.** The pin moves by `tooling/sync-chromium` (ADR 0007); the Windows PC
-> builds the same series since 2026-09-08 (M8).
+> **Done.** The pin moves by `tooling/update-pin --apply`, which syncs the checkout to it
+> (ADR 0007); the Windows PC builds the same series since 2026-09-08 (M8).
 
 **Goal:** prove we can build stock Chromium from source on macOS arm64, and document it
 so any machine or agent can repeat it without tribal knowledge.
@@ -299,10 +299,14 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-12):** the preview ships with beta 14 on 155.0.8059.12. Both
-suites passed with DCHECKs and the dangling-pointer detector on and under AddressSanitizer
-on 2026-09-30, and with DCHECKs and the detector again on the series through patch 0061 on
-2026-10-11, after one fix; ASan has not run on 0058 to 0063 (`S-106`). A second release
+**Where this stands (2026-10-18):** an unsigned preview ships with each beta beside the
+Mac's image, beta 17's on the current pin. Both suites passed with DCHECKs and the
+dangling-pointer detector on and under AddressSanitizer on 2026-09-30; with DCHECKs and the
+detector again on the series through patch 0061 on 2026-10-11, after one fix, and on the
+current pin on 2026-10-17, after one more, but for `S-214`, fixed since. Under
+AddressSanitizer, on the series through 0070 on 2026-10-18, the unit suite was clean and
+the browser suite had one report, a test's own, fixed in 0071, and one failure still open
+(`S-226`; `S-106`). A second release
 on one Chromium number installs as a repair that needs Stedding closed (`S-72`). Built so
 far: the series and the Stedding window on Windows (round 8, patch 0039); branding -- the
 name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM classes and

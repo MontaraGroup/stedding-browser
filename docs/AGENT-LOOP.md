@@ -38,9 +38,12 @@ otherwise meet later:
   a running browser (trap 62); your installed build is your daily browser and is never
   mine to close. Waiting for it cost 2.5 hours on 2026-09-30, with a watcher on "no
   Stedding process" so that nothing else waited.
+- Will you quit Arc and any clipboard manager before the keyboard checks? While they run,
+  Arc takes ⌥⌘N and a clipboard manager such as Maccy takes ⇧⌘C from every app, so the
+  chord never reaches the browser and its check fails (traps 64, 94).
 
-One message at the start costs a minute. The same six answers found out one by one cost
-the session most of a night.
+One message at the start costs a minute. On 2026-09-30 six of these answers, found out one
+by one, cost the session most of a night.
 
 ## Order of evidence
 
@@ -97,8 +100,11 @@ before it found one thing. Use the product before any of them.
 ## Real use, safely
 
 The product is used for real with `tooling\win\drive.ps1` (the pointer and keyboard) when the
-operator has said yes, and with `capture.ps1`, `cdp.ps1`, `hit-test.ps1` (no input) when not.
-What to do and what to look for:
+operator has said yes, and with `capture.ps1`, `cdp.ps1`, `hit-test.ps1` (no input) when not;
+on the Mac with `tooling/drive`, and `tooling/capture-state` when input is not allowed. Before
+a release, and for the core-loop gate, the script in `docs/features/acceptance.md` is run
+with its kit (`tooling/acceptance/mac/run-mac.sh`, `tooling/acceptance/win/s173-live.ps1`)
+and each run is recorded in that file. What to do and what to look for:
 
 - A fresh profile, no seed, no start URL: the first launch is what a user has. Click through
   the welcome flow. Then the same in light and dark (`browser.theme.color_scheme2` in the
@@ -155,8 +161,8 @@ research  →  spec  →  failing test  →  implement  →  build  →  test  �
    runs the feature's filter; on Windows build with `tooling\win\build-until-done.ps1
    -Targets unit_tests,stedding_browser_tests` and pass `--no-build`. `tooling/dev test
    all` before a commit. On a sanitizer output
-   directory (`STEDDING_TEST_OUT=win-checks` or `win-asan`) the same command runs with the
-   detector on and prints the digest.
+   directory (`STEDDING_TEST_OUT=win-checks`, `mac-checks` or `win-asan`) the same command
+   runs with the detector on and prints the digest.
 6. **Use it, and capture if it is visual.** Launch the build and do the thing (above). For
    pixels on the Mac, `tooling/dev capture --assert tooling/probes/window.json` checks every
    probe in the spec, and `tooling/capture-state` photographs any state a feature param can
@@ -232,5 +238,5 @@ a subagent; the critical path is not (a subagent needs the context you already h
 tooling/dev test all        # every Stedding test (--no-build on Windows)
 tooling/dev check           # check-repo, check-shell
 tooling/dev status          # what the repo actually contains, for docs
-tooling/check-repo          # 12 checks, 3 seconds
+tooling/check-repo          # every hygiene check, in seconds
 ```

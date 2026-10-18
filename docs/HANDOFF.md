@@ -37,17 +37,17 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Ninety-three traps follow. Read the one for the topic in front of you, not the list.
+A hundred and one traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101 |
 | Release and signing | 44, 47, 49, 62, 85 |
-| Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92 |
+| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98 |
 
 ## Where things live
 
@@ -60,7 +60,9 @@ Ninety-three traps follow. Read the one for the topic in front of you, not the l
   patch series in `patches/` is generated FROM that branch by `tooling/update-patches` —
   the branch is the source of truth while working; the patches are the durable
   artifact. A series exported on one machine is applied on the other with
-  `tooling/apply-patches`, and built there before the release that carries it (trap 44).
+  `tooling/apply-patches` (on a checkout that already holds an older series, trap 89's
+  route, which rewrites only the files that differ), and built there before the release
+  that carries it (trap 44).
 - Build output on the Mac: `out/release` (proprietary codecs on). `out/official` is
   built only for a performance baseline (`tooling/dev build official chrome`) and is
   not there now (never quote numbers from `release`; `docs/QUALITY.md`). On the PC:
@@ -96,8 +98,8 @@ tooling/dev status                    # the numbers for any doc you touch
 # commit + push this repo
 ```
 
-`tooling/verify-build --app .../Stedding.app` checks rendering, codecs (H.264
-decodes real frames), and navigation.
+`tooling/verify-build --app .../Stedding.app` checks rendering, WebGL 1 and 2, codecs
+(H.264 decodes real frames), navigation and full screen (`--no-fullscreen` skips it).
 
 On the Mac the capture step has two tools (Windows has its own, "The Windows build",
 step 5). `tooling/capture-state --out <prefix> --features
@@ -106,15 +108,16 @@ the params describe, photographs every window the process owns by window id (a
 dialog is `<prefix>-2.png`), quits through the AppleEvent and reports an abort: no
 synthetic input, no focus change, safe while someone is at the machine, and the way
 round 7 was verified. `tooling/drive <profile> <steps>` clicks, drags and types; it
-is the only way to reach a context menu or a typed URL, and it waits for an empty
-chair (trap 27). Measure the PNG (PIL, a luma scan) rather than eyeballing it.
+is the only way to reach a context menu or a typed URL, and it runs only when nobody is
+at the machine (trap 27): unlike `drive.ps1`, it does not watch for the operator's
+input. Measure the PNG (PIL, a luma scan) rather than eyeballing it.
 
 ## What needs which machine
 
 The Windows PC is the development machine: it builds the series, runs both suites and
 drives the window ("The Windows build"). The Mac is needed for the macOS image: its
-build (13 Objective-C++ files against AppKit, and full Xcode), its suites and the
-Mac-only checks, and signing and notarizing. Three checks need no build at all, and
+build (the Objective-C++ files the series changes, against AppKit, and full Xcode), its
+suites and the Mac-only checks, and signing and notarizing. Three checks need no build at all, and
 they are worth knowing about before assuming a check has to wait for one:
 
 - **The series applies.** `tooling/apply-patches --check` reads the pinned tree into a
@@ -149,7 +152,8 @@ No CI runner can build, run the suites, drive a window or sign: that is `S-49`.
 their URL as home; `drift_tabs/N` — then send the first N of those to the next
 tab's page (a drifted pin, for pins H4 and H12). `folder_tabs/N` — wrap first N tabs in a folder and nest
 one (exercises the whole folder pipeline). `open_command_bar/true` — open ⌘T
-overlay at startup. `drag_tabs_to_spaces` — on by default.
+overlay at startup. `drag_tabs_to_spaces` — on by default. `reduce_motion/true` — no
+Stedding animation, as with the system's reduced motion (`docs/features/motion.md`).
 
 All exist because pinning/folders/⌘T are UI gestures a headless harness cannot
 perform; a param that recreates the state IS the test surface. Two switches do the
@@ -159,7 +163,8 @@ patch 0060), and `tooling/capture-state
 --seed collapsed` writes the collapsed-rail preference (`vertical_tabs.collapsed_state`)
 into the fresh profile; `--seed grey-dark` writes dark mode with Customize Chrome's Grey
 (`browser.theme.color_scheme2` 2, `browser.theme.is_grayscale2`), the colour key a
-private window has.
+private window has; `--seed light` and `--seed dark` set the window's scheme whatever
+macOS is set to.
 
 ## Traps this project already paid for (do not rediscover)
 
@@ -235,10 +240,10 @@ private window has.
     `--window-position` on a fresh profile (a restored session keeps its old
     bounds).
 
-12. **`tooling/drive`'s `shot` photographs the browser window's rectangle, not
-    every window Stedding owns.** Menus, bubbles and sheets are in it; the
-    welcome dialog (a separate child window) is not, so a check of it needs a
-    full-screen `screencapture -x` while the run is parked on a `wait`, or a
+12. **`tooling/drive`'s `shot` photographs the browser's largest window, not
+    every window Stedding owns.** Since 2026-09-28 it captures that one window by
+    its id; the welcome dialog (a separate child window) is not in it, so a check of
+    it needs the `screen` step (the whole display, since 2026-10-18), or a
     `CGWindowListCopyWindowInfo` listing to prove the window exists and where.
 
 13. **A fold that stashes the branding and then fails leaves the stash
@@ -503,9 +508,11 @@ private window has.
     Tests of an installer, or of anything under AppData, run through a
     scheduled task as the user (`schtasks /Create ... /Run`) with a log in a
     real path; the captures come from outside the sandbox as usual (trap 36).
-    The cycle ends in `setup.exe --uninstall --delete-profile`, so it must refuse
+    The cycle ended in `setup.exe --uninstall --delete-profile`, so it had to refuse
     to start over an existing install: on 2026-09-10 it ran over the beta 5
-    installed for the operator and took that install and its profile with it.
+    installed for the operator and took that install and its profile with it. It
+    never deletes a profile now: `-Mode uninstall-keep` keeps it, and the upgrade and the
+    uninstall need `-Mode backup` first.
     The tasks themselves do not survive: `/SC ONCE` tasks were gone the next
     day and had to be created again.
 41. **A non-official build runs Chromium's field-trial testing config** unless
@@ -846,7 +853,8 @@ private window has.
     seconds it lives, and a slow build (ASan) keeps it up longer. Seen again on 2026-10-14:
     disconnected, 104 of 107 browser tests passed, four at a time and one at a time alike,
     and the three that failed were the drags (`TabDropTest` and `SidebarClickTest`'s row drag:
-    no window is under the pointer). `tooling/dev` warns and runs the rest. On the checked
+    no window is under the pointer). `tooling/dev` warns, and runs every test: the drags
+    then fail. On the checked
     build (`win-checks`) two more things went wrong while disconnected: three `SpaceJarTest`
     cases passed and then failed at exit with a dangling `Profile` (freed by
     `ProfileDestroyer::Timeout`, the renderers not gone in time; the same with the day's
@@ -890,7 +898,7 @@ private window has.
     belongs, with a browser process, a GPU process and renderers all idle and nothing for UI
     Automation to find; DevTools calls answered for the first browser. It read as a
     regression for ten minutes. Stop the first browser (by profile path, trap 40), or give
-    each its own port; `Drive-Launch` takes the port from its parameter.
+    each its own port (`. tooling\win\drive.ps1 -DebugPort <n>`; `Drive-Launch` uses it).
 
 62. **A second Windows release on the same Chromium pin has the same file version as the
     first, and the installer reads it as a repair.** The installer's version is
@@ -925,8 +933,8 @@ private window has.
     Since 2026-10-18 the menu's split chord is ⌃⌘N, which Arc leaves alone: drive the split
     with it on a build that has it.
     In the same run `drive-window.py` refused a second click at the point of the first, "covered
-    by Window Server's window": the pointer's own window is the topmost one there. Hover away
-    before clicking the same spot twice.
+    by Window Server's window": the pointer's own window is the topmost one there. Since
+    2026-10-18 the guard passes over that window (trap 95).
 
 65. **A stall is measured, not guessed.** A Space switch on the owner's profile (hundreds of
     tabs, dozens of folders) showed nothing for 450 to 700 ms. One `sample <pid> 3 1 -file <out>` started in the
@@ -1020,7 +1028,8 @@ private window has.
     limit free at idle. A rerun at `-Jobs 16` finished it in five minutes. A compiler killed
     on a signal in several unrelated files is memory, not the code: read the commit charge
     at idle and in the progress line before choosing `-Jobs`, and give `win-checks` 16 or
-    fewer when most of the limit is taken before the build starts.
+    fewer when most of the limit is taken before the build starts. The supervisor's default
+    is 12 since.
 
 75. **A row container that lays out in view order draws a reorder only if it reorders its
     views.** `TabCollectionNode` adds each child's view at the end and, on a move, reorders
@@ -1072,8 +1081,10 @@ private window has.
     other.** The screenshot filter named `SteddingStringsTest.*`, whose one case was built
     off the Mac only; the Mac's `unit_tests` had no such test, and the guard that refuses a
     filter part matching nothing stopped the whole sweep before it ran (2026-10-12). Give
-    such a class a case on every platform (here the Mac's "Show in Finder"), and build a new
-    filter on both machines before the release that needs it.
+    such a class a case on every platform (here the Mac's "Show in Finder"), or put a suite
+    only one platform builds in that platform's own table (`MAC_FEATURE_FILTERS`,
+    `WIN_FEATURE_FILTERS` in `tooling/dev`), and build a new filter on both machines before
+    the release that needs it.
 
 81. **A bubble placed while a Mac test window is still moving keeps the old place.**
     `AddressBandTest` moves its window in `SetUpOnMainThread`; the undo toast that showed
@@ -1148,7 +1159,8 @@ private window has.
     held open across a wait (the bar closes when its window loses focus, so another test's
     window taking the focus left a pointer to a closed bar). A failure there looks like a
     30 s timeout. They are `SERIAL_BROWSER_TESTS` in `tooling/dev`, run one at a time after
-    the rest run four at a time; eight jobs also slowed every test by contention. One more
+    the rest run four at a time on Windows (one at a time on the Mac, until it is measured
+    there); eight jobs also slowed every test by contention. One more
     cause took an hour to see: a tab drag asks Windows which window is under each point
     (`WindowFinder`), and a new test window does not always get the foreground, so it can
     open behind the agent's own window, which covers the screen; the drag then finds that
@@ -1249,12 +1261,12 @@ private window has.
     Then the window's states were captured beside the previous release
     (`tooling/capture-state --build b16ref` against a copy of the released app in
     `out/b16ref`). The captures show a row laid out in the wrong container; the suites do
-    not. `capture-state` cannot open a chrome:// page, because Chromium opens none named on
-    its command line and shows the new tab page instead; the first comparison's Settings,
+    not. A chrome:// page cannot be named on the command line, because Chromium opens none
+    named there and shows the new tab page instead; the first comparison's Settings,
     About and Archived captures were five pictures of the new tab page, identical in both
-    builds. `capture-state` now refuses such an address. Drive the address bar to those
-    pages instead (`tooling/drive`: `key l+cmd`, `type chrome://settings/stedding`,
-    `key enter`).
+    builds. `capture-state` now refuses such an address as a URL, and since 2026-10-18
+    opens it with `--page chrome://settings/stedding`, through the browser's local DevTools
+    endpoint (`tooling/devtools-page`), with no input (`S-47`).
 
 93. **A synthetic arrow key without `KEYEVENTF_EXTENDEDKEY` is the numeric keypad's.** The
     arrows, Home, End, PgUp, PgDn, Insert and Delete of the cluster are extended keys;
@@ -1267,6 +1279,89 @@ private window has.
     chord of Alt with one of those keys from a text field (Ctrl+Alt+←/→, Ctrl+Alt+↑/↓,
     Ctrl+Alt+Shift+←/→, Alt+←/→ in the address bar or the command bar) is suspect: drive it
     again before trusting it.
+
+94. **A clipboard manager takes ⇧⌘C from every app while it runs, as Arc takes ⌥⌘N
+    (trap 64).** Maccy, the clipboard manager on the Mac, owns ⇧⌘C system-wide by default, so the chord
+    never reaches the browser: the live checks of 2026-09-05 went through the File menu's Copy
+    Link row for that reason, and on 2026-10-18 the first driven run of TST-9's keys pressed
+    ⇧⌘C and its capture showed no "Link copied" toast, where a later run showed it. A live
+    keyboard check of Copy Link fails until the clipboard manager is closed. Ask the operator
+    to quit it, and Arc, before the run (`docs/AGENT-LOOP.md`, "Ask once"), and when a chord
+    does nothing, look at what else is running before blaming the build.
+
+95. **On macOS 27 the pointer is a window, and a guard that asks what is on top finds it.**
+    `drive-window.py` refuses a click unless the launched browser's window is the topmost one
+    at the point. macOS 27 draws the pointer as a window of its own, owned by the Window
+    Server and named "Cursor"; where the pointer already rests, as for a second click on the
+    same spot or a click after a `hover` there, that window was the topmost one, and the click
+    was refused as covered (seen on 2026-10-02 as "covered by Window Server's window", trap
+    64, when hovering away was the way round it; seen again on 2026-10-18). The guard now
+    passes over that one window, which never takes a click. Any check of what lies under a
+    point needs the same exception.
+
+96. **In macOS full screen a window point is not a screen point.** In the full-screen run of
+    `S-154` on 2026-10-18, on the Mac's built-in display (1728×1117 points, with a notch), a
+    `click 140 143` in `tooling/drive`'s window points selected the sidebar's second row, whose
+    centre the run's `screen` capture shows about 215 points below the screen's top: there the
+    window points started about 71 points below the top of the screen. That is measured once,
+    from that run; what the offset is made of (the title bar macOS hides in full screen, the
+    notch's band, or both) was not established. Move a point measured on a `screen` capture
+    up by that much, and confirm the click with a capture after it.
+
+97. **macOS 26's full-screen title bar draws a line of its own, and only a private switch
+    turns it off.** The owner saw a one-pixel line across the whole window under the address
+    row in full screen (`S-223`, 2026-10-18, on macOS 27.0.1). It is the hard edge of the
+    scroll pocket (`NSScrollPocket`) that backs the full-screen title bar from macOS 26 on: a
+    test's dump of the title bar's views showed a 0.5-point `Separator` layer in the pocket,
+    and the pocket's `allowsSeparator` on. Setting the accessory's private
+    `allowsAutomaticSeparator` off and the full-screen window's `titlebarSeparatorStyle` to
+    none left the line in eight test runs; only the pocket's own private `allowsSeparator`,
+    set off, removed it (`HideTitlebarPocketSeparators` in `immersive_mode_controller_cocoa.mm`,
+    asked again whenever the title bar may lay its pocket out anew, and guarded, so a macOS
+    without the pocket is untouched). For a line under a title bar on macOS 26 or later, look
+    for a pocket before a separator view.
+
+98. **On Windows `ui::test::EventGenerator` types the letter of every key it presses, Ctrl
+    held or not.** It follows each key down with the plain letter's `WM_CHAR`
+    (`DomCodeToUsLayoutCharacter`, which reads only Shift and Caps Lock), where Windows
+    itself sends a control character for a Ctrl chord, which a text field ignores;
+    `views::Textfield` takes the plain letter as text.
+    `SpaceSwitchTest.TheCoreChordsAsKeysThroughTheWindow` pressed Ctrl+L, which opens the command bar with its field focused, and then Enter, and the
+    tab went to a search for "l" (2026-10-18, the PC's first run of the round, in all three
+    builds). A test that presses a Ctrl chord into a focused field on Windows dispatches the
+    key events itself (a `ui::KeyEvent` down and up through the generator's `Dispatch`), as
+    that test now does.
+
+99. **On the PC, unit tests on mock time time out when their leg runs from the hidden
+    scheduled task, and pass over SSH.** Trap 67's scheduled task, which the browser tests
+    need, ran the unit leg 32 jobs at a time, and the same three tests timed out in each of
+    four runs on `win-release` and `win-checks` (2026-10-18):
+    `SidebarNoBackupTest.AnHourOfAWindowWritesNoBackup`, which fast-forwards an hour,
+    `SleepTabsTest.SpaceTimerLeavesTabsInUseAwake` and `TabArchiverTest.TimerSweeps`. The
+    same leg run over SSH passed every test, in seconds. Why the task's run starves them is
+    not known. Run the unit legs over SSH and the browser legs from the task.
+
+100. **A test binary still running from an output directory makes the next link into it
+    fail.** On 2026-10-18 the PC's `win-asan` build of the round's code stopped with
+    `lld-link: error: failed to write output './stedding_browser_tests.exe': permission
+    denied`: the previous ASan build's browser suite was still running from `out\win-asan`,
+    its serial leg alone a quarter of an hour, and Windows does not let a running executable
+    be overwritten. `tooling\win\build.ps1` refuses to start only while a `chrome.exe` of that
+    directory runs; it does not look for a test binary. Wait for the suite's last line before
+    building into the same directory; the rerun after the suite ended linked in under a
+    minute.
+
+101. **A theme change rebuilds the Space chips, so a test cannot hold them across one.**
+    `SpaceSwitchTest.TheChipsStayTheSameViewsWhileTheSidebarAnimates` kept raw pointers to
+    the chips through a collapse, to check that the change of form reuses them. On the PC's
+    ASan build (2026-10-18, `S-106`) it read a freed chip, and its first expectation said the
+    chip "was made again". The free came from a theme change in the middle of the collapse:
+    the page-colour controller's notification, posted a turn after a colour change, reached
+    `BrowserView::UserChangedTheme`, which rebuilds the switcher, as it should. The product was
+    right, and only ASan saw the fault; unlike trap 87's lost drop it was the test's own. A
+    test that holds views across a wait tracks them (`views::ViewTracker`) and takes them
+    again after a theme change (a `views::ViewObserver`'s `OnViewThemeChanged`), as that test
+    now does.
 
 ## The Windows build
 
@@ -1307,21 +1402,24 @@ path (`/c/...`). Then:
    repacks `resources.pak` and the locale paks; before, a checks build of the tests alone
    ran them against the WebUI pages of the last `chrome` built in that directory, a welcome
    page without its test hook among them (BACKLOG S-213). A build is refused while a browser from
-   that output directory runs (the link fails with "permission denied" otherwise).
+   that output directory runs (the link fails with "permission denied" otherwise); a test
+   binary still running from it is not looked for, and its link fails the same way (trap 100).
 4. `tooling/dev test all --no-build` (or one feature) runs the same filters against
    `out/win-release/*.exe`; `tooling/dev test browser --no-build` runs
    `stedding_browser_tests` in two legs, most of it four at a time and the tests that need
    the desktop to themselves one at a time (both through `timeout`, traps 56, 88). On a
    sanitizer build the same commands with `STEDDING_TEST_OUT=win-checks` or `win-asan`:
    the run-time flags and options are set for you and a finding is printed as a digest
-   (`STEDDING_TEST_LOG=<path>` keeps the raw output). A browser-suite run under ASan takes
-   20 minutes: `STEDDING_TEST_BUDGET_S=2400`. The session must be connected (trap 59).
+   (`STEDDING_TEST_LOG=<path>` keeps the raw output, one file per binary,
+   `<path>.unit_tests` and so on, emptied when a run starts). A browser-suite run under
+   ASan takes 20 minutes: `STEDDING_TEST_BUDGET_S=2400`. The session must be connected (trap 59).
 5. `tooling\win\capture.ps1` for captures that need neither focus nor input (trap
    36); `tooling\win\cdp.ps1` for what a capture cannot reach -- JavaScript in a
    page over the DevTools websocket (the welcome flow's buttons pressed by name,
    a settings page scrolled to its Shortcuts block) and a screenshot of the page;
    `tooling\win\uia-dump.ps1` for a layout question -- every view of the window
    with its name and bounds through UI Automation, no build needed (trap 37);
+   `tooling\win\hit-test.ps1` for what the frame answers at each row, with no input;
    `tooling\win\drive.ps1` to use the window for real -- the pointer, the keyboard,
    a window-only screenshot, rows and buttons by UI Automation, the visible page by
    DevTools, with the guards of trap 27 (ask the operator once first);
@@ -1350,9 +1448,9 @@ Sparkle 2 (ADR 0022, `docs/features/updates.md`). What lives where:
   (ad hoc) never replaces itself. Tests never start it (`--test-type`); they use
   `stedding::FakeAppUpdater`.
 - **The private key** is in the release Mac's login keychain under the account
-  `stedding` (Sparkle's `generate_keys --account stedding`, made 2026-10-16), and nowhere
-  else unless the operator has exported it (`generate_keys --account stedding -x <file>`,
-  into the password manager, then the file deleted). Without it no installed copy can be
+  `stedding` (Sparkle's `generate_keys --account stedding`, made 2026-10-16), and in the
+  owner's backup (ADR 0022; exported with `generate_keys --account stedding -x <file>`,
+  the file deleted after), never in this repository. Without it no installed copy can be
   offered an update: a new key ships only in a release people install by hand.
 - Offering a release: `tooling/publish-appcast` after `tooling/publish-release` (below).
 
@@ -1397,7 +1495,8 @@ Version` read 156. The relaunched build can then show the welcome flow or Chromi
 engine chooser. That is the test profile, not the update: the older copy ran with
 `--no-first-run`, so the profile never finished the welcome or chose an engine. Seeding
 `Default/Preferences` with `{"stedding":{"welcome":{"shown":true}}}` skips the welcome.
-The chooser then opens as it does for a beta 16 user who never chose an engine (trap 51).
+The chooser then opens as it does for a beta 16 user who never chose an engine (trap 76,
+`S-134`).
 
 ## Release channel
 
@@ -1422,7 +1521,8 @@ pass on it, and the image downloaded from the release should verify against the 
 `xattr` command in their notes. The Windows
 image joins the same release from the Windows PC: `tooling\win\build-until-done.ps1`
 (then both suites on that exact build), `tooling\win\package-installer.ps1`,
-`tooling\win\test-installer.ps1` (upgrade, uninstall, install) and a real launch of
+`tooling\win\test-installer.ps1` (`-Mode backup`, then `upgrade`, `uninstall-keep`,
+`install`) and a real launch of
 the installed build (docs/QUALITY.md, release checklist 13), the checksum pasted under
 *Windows* in the notes, commit, push, `tooling/publish-release` from Git for Windows -- whichever
 platform publishes first creates the release, the other uploads into it and the

@@ -221,6 +221,7 @@ consequences we will not hide:
 | Search engine | User chooses at first run; DuckDuckGo until then | Change any time |
 | Cookies per Space | Off: every Space shares the profile's jar | Independent session on a Space keeps its own cookies, cache and site data on this disk; Clear Independent Session empties it; deleting the Space deletes it; Delete browsing data reaches it from beta 9 on (Mac: beta 10) (`features/sessions.md`) |
 | Search suggestions | Off | Opt in |
+| Navigation error suggestions (asking a web service what to show when a page does not load) | Off | Turn on |
 | Third-party cookies | Blocked | Allow per site |
 | HTTPS-First | On | Turn off |
 | Quiet permission prompts | On | Turn off |

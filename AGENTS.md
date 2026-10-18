@@ -14,7 +14,7 @@ Arc-style interface: sidebar with vertical tabs, workspaces, split view, and a c
 bar. Built for technical users who want privacy, control, and a modern, productive UI —
 without trusting a VC-funded company's roadmap or telemetry.
 
-- Site: **https://stedding.dev** — live since 2026-09-16 from its own private repository
+- Site: **https://stedding.dev** — live, from its own private repository
   (`ysalitrynskyi/stedding.dev`: Astro, static, Cloudflare Pages; it reads the latest
   release from the GitHub Releases API at build time and is not on the update path,
   ADR 0014). The website's own rules and deployment steps are in that repository
@@ -77,20 +77,22 @@ Concretely (full detail in `docs/QUALITY.md`):
 ## How to work here
 
 The short form. `docs/AGENT-LOOP.md` has the detail and the numbers behind each rule; they
-come from the long run of 2026-09-29 to 30, in which the slowest parts were not the builds.
+come from a long run in which the slowest parts were not the builds.
 
-1. **Cheapest evidence first.** Launch the build and use it. Half an hour of that, with the
-   real pointer and keyboard, found five faults (Mac wording on Windows, unreadable light-mode
-   text, a clipped command bar, an infobar left in full screen, doubled hover names) that
-   thousands of passing test runs had not, because the tests asked other questions. Then the
-   suites on the shipping configuration; then a build with DCHECKs and the dangling-pointer
-   detector (release speed; found twelve defects, eight in the product); then ASan (slow; found
-   one, in a test, and a hazard in `RemoveSpace`); a debug build only if a check needs one.
+1. **Cheapest evidence first.** Launch the build and use it, with the real pointer and
+   keyboard: that found faults (Mac wording on Windows, unreadable light-mode text, a clipped
+   command bar, an infobar left in full screen, doubled hover names) that every passing test
+   run had missed, because the tests asked other questions. Then the suites on the shipping
+   configuration; then a build with DCHECKs and the dangling-pointer detector (release speed,
+   and the most defects found, most of them in the product); then ASan (slow, and the fewest
+   findings per hour); a debug build only if a check needs one.
 2. **Ask once, up front.** May you drive the screen and keyboard. May you push, and release
    when done (neither happens without a yes in chat, ever). Which output directories may you
    delete. Is the machine yours for the night. Is there a setting only the operator may flip
    (Windows clipboard history, for the Win+V check). Will they close their own Stedding for
-   the installer test (a release on the same Chromium number installs as a repair, trap 62).
+   the installer test (a release on the same Chromium number installs as a repair, trap 62),
+   and quit Arc and any clipboard manager for the keyboard checks (each takes a chord from
+   every app while it runs, trap 94).
    A list asked at the start costs one message; asked when blocked it cost hours.
 3. **Supervise long jobs; do not poll them.** A build or run past a few minutes is one
    detached job that writes a status file and a last line (`tooling\win\build-until-done.ps1`,
@@ -99,16 +101,15 @@ come from the long run of 2026-09-29 to 30, in which the slowest parts were not 
    chunks in a row are stuck, not slow: time one by hand (trap 57).
 4. **One pass should find everything.** A check that aborts at its first failure hides the
    rest; every fix then costs a rebuild and a rerun to find the next. Collect every distinct
-   failure per run, read them through `tooling/digest-sanitizer` (five lines where the raw
-   output is sixty frames times the number of tests), fix in batches.
+   failure per run, read them through `tooling/digest-sanitizer` (a few lines where the raw
+   output is pages of frames for every test), fix in batches.
 5. **Every finding gets a test, and its fix goes into the patch that owns the code**
    (`tooling/fold-fix`). Then use the product again: a fix is done when the thing you saw
    has stopped happening on the real build.
-6. **Read and search cheaply.** `git grep` in the checkout (7 s for `chrome/`, 32 s for the
-   whole tree, where `grep -r` timed out four times); cap the output of any command you have
-   not run before; a script of more than three lines goes in a file, not a heredoc (seven round
-   trips lost to backslash quoting); crop screenshots to the window and look at text, not
-   pictures, where UI Automation or DevTools can give it.
+6. **Read and search cheaply.** `git grep` in the checkout (seconds, where `grep -r` timed
+   out); cap the output of any command you have not run before; a script of more than three
+   lines goes in a file, not a heredoc (backslash quoting cost round trips); crop screenshots
+   to the window and look at text, not pictures, where UI Automation or DevTools can give it.
 7. **Say what was and was not verified,** result first, in plain sentences, in the register
    the operator's own agent instructions set (their "Response contract").
 
@@ -130,8 +131,8 @@ come from the long run of 2026-09-29 to 30, in which the slowest parts were not 
 Kept short on purpose: a paragraph that restates the state goes stale within a day, and
 `docs/PROJECT-LOG.md` exists for the record.
 
-- The pin and the series: `tooling/dev status`. The Windows PC is the development machine
-  since 2026-09-29; the Mac holds the Mac-only checks (`BACKLOG.md` rows say which wait on it).
+- The pin and the series: `tooling/dev status`. The Windows PC is the development machine;
+  the Mac holds the Mac-only checks (`BACKLOG.md` rows say which wait on it).
 - The work order: `BACKLOG.md`, in priority order; its first "Checks still owed" row is the
   core-loop gate that new features wait for (`PLAN.md`).
 - What is released: `docs/release-notes/` has one file per release; `gh release list` is
@@ -145,7 +146,7 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 | `docs/README.md` | The index of everything under `docs/`, grouped by who it is for |
 | `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | The user-facing pages the README links: installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
 | `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch |
-| `docs/features/` | One spec per feature; numbered behaviours, each with its test id |
+| `docs/features/` | One spec per feature; numbered behaviours, each with its test id; `acceptance.md` holds the scripts run on a real build before a release, with every run |
 | `PLAN.md` | The owner's standing decisions and when an item counts as done |
 | `docs/history/` | Finished plans and ledgers still cited by id: the 2026-09-26 audit (TAB-1, SPC-4, ...), round 6, the operator's rounds 2 to 11 |
 | `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids |

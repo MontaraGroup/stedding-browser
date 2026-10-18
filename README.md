@@ -1,38 +1,22 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="branding/public/svg/logo-horizontal-dark.svg">
-    <img src="branding/public/svg/logo-horizontal-light.svg" alt="Stedding" width="360">
-  </picture>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="branding/public/svg/logo-horizontal-dark.svg">
+  <img src="branding/public/svg/logo-horizontal-light.svg" alt="Stedding" width="200">
+</picture>
 
-<h1 align="center">Stedding Browser</h1>
+# Stedding Browser
 
-<p align="center">
-  <b>An open-source, Arc-style web browser built on Chromium.</b><br>
-  A sidebar with vertical tabs, Spaces, folders and pinned tabs, a command bar,
-  and one-click import from Arc on the Mac.<br>
-  macOS (Apple silicon) and Windows. No telemetry. BSD-3-Clause.
-</p>
+**An open-source, Arc-style web browser built on Chromium.** A sidebar with vertical tabs,
+Spaces, folders and pinned tabs, a command bar, and one-click import from Arc on the Mac.
+macOS (Apple silicon) and Windows. No telemetry. BSD-3-Clause.
 
-<p align="center">
-  <a href="https://github.com/ysalitrynskyi/stedding-browser/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/ysalitrynskyi/stedding-browser?include_prereleases&label=download&color=2F4858"></a>
-  <a href="LICENSE"><img alt="License: BSD-3-Clause" src="https://img.shields.io/badge/license-BSD--3--Clause-E8B04B"></a>
-  <img alt="Platforms: macOS and Windows" src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-1C2B33">
-  <img alt="Chromium 156" src="https://img.shields.io/badge/Chromium-156%20stable-2F4858">
-</p>
+[![Latest release](https://img.shields.io/github/v/release/ysalitrynskyi/stedding-browser?include_prereleases&label=download&color=2F4858)](https://github.com/ysalitrynskyi/stedding-browser/releases)
+[![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-E8B04B)](LICENSE)
+![Platforms: macOS and Windows](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-1C2B33)
+![Chromium 156](https://img.shields.io/badge/Chromium-156%20stable-2F4858)
 
-<p align="center">
-  <a href="https://stedding.dev">stedding.dev</a> ·
-  <a href="#download">Download</a> ·
-  <a href="#a-tour">Tour</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#keyboard-shortcuts">Shortcuts</a> ·
-  <a href="#moving-from-arc">Moving from Arc</a> ·
-  <a href="#privacy">Privacy</a> ·
-  <a href="#faq">FAQ</a> ·
-  <a href="#building-from-source">Build</a> ·
-  <a href="#documentation">Docs</a>
-</p>
+[stedding.dev](https://stedding.dev) · [Download](#download) · [Tour](#a-tour) ·
+[Features](#features) · [Shortcuts](#keyboard-shortcuts) · [Moving from Arc](#moving-from-arc) ·
+[Privacy](#privacy) · [FAQ](#faq) · [Build](#building-from-source) · [Docs](#documentation)
 
 ![The Stedding window: a sidebar with an essentials row, pinned tabs, folders and tabs on the left; the page on a floating card with its address centred on the top row](docs/images/readme/hero.png)
 

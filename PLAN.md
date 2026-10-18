@@ -53,5 +53,6 @@ A green unit test does not close anything. An item is closed when all of these h
   reproduced first: a failing test, or the failure on a real build. If an honest attempt does
   not reproduce it, record the attempt and close it as not reproduced. Nothing is fixed blind.
 - **Defects before features.** New features wait until the core-loop gate in `BACKLOG.md`
-  ("Checks still owed", its first row) passes, unless the operator asks for one in chat. A
+  ("Checks still owed", its first row, `S-173`) passes, unless the operator asks for one in
+  chat; its script and the record of each run are `docs/features/acceptance.md`. A
   crash, data loss or a broken privacy promise is built at once.

@@ -42,14 +42,14 @@ The measurement harness is `tooling/measure/harness.py` and the ten-site list is
 `tooling/measure/sites.txt`, so anyone can reproduce the numbers:
 
 ```bash
-tooling/measure/harness.py all --app ~/chromium/src/out/official/Chromium.app --out vanilla.json
-tooling/measure/harness.py all --app /Applications/Stedding.app            --out stedding.json
+tooling/measure/harness.py all --sites local --app ~/chromium/src/out/vanilla/Chromium.app --out vanilla.json
+tooling/measure/harness.py all --sites local --app ~/chromium/src/out/official/Stedding.app --out stedding.json
 ```
 
 Two practical notes before running it. Measure the **`official`** build, not `release`:
 the release configuration skips PGO and LTO. Published images so far come from
 `release` (`tooling/publish-release` packages it), so these numbers are not the shipped
-build's; which configuration should ship is TBD. And a full run with `--sites live`
+build's; which configuration should ship is TBD (`BACKLOG.md` S-168). And a full run with `--sites live`
 takes tens of minutes and needs working network — ten cold launches, ten warm, and five
 memory runs that each load the ten live sites in `tooling/measure/sites.txt` and idle
 for a minute; without network the memory and warm legs fail, and the harness will tell
@@ -230,8 +230,12 @@ public 1.0 release, the codec licence terms are recorded per
     row, the gestures the specs name, with the real pointer and keyboard
     (`docs/AGENT-LOOP.md`, "Real use, safely"). Every suite passed the build that first had
     this done to it and five faults were on screen (`docs/HANDOFF.md`, trap 58).
+    The core-loop script in `docs/features/acceptance.md` passes on that build, on each
+    platform released, and the run is recorded in that file's table; a failed step gets a
+    BACKLOG row and a failing test before the release goes out.
 14. Both suites clean with DCHECKs and the dangling-pointer detector on
-    (`STEDDING_TEST_OUT=win-checks tooling/dev test all --no-build` on Windows), and the
+    (`STEDDING_TEST_OUT=win-checks tooling/dev test all --no-build` on Windows,
+    `STEDDING_TEST_OUT=mac-checks` on the Mac), and the
     lifetime suites clean under ASan. A build that stops at its first window on a DCHECK has
     a defect whatever the release build does with it (trap 60).
 

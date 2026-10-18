@@ -38,6 +38,7 @@ Everything under `docs/`, grouped by who it is for.
 | [PROJECT-LOG.md](PROJECT-LOG.md) | What was built, round by round, with the evidence: history, not instructions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Fork strategy, the build, patch management, branding, updater, signing, measured numbers |
 | [features/](features/) | One specification per feature: each behaviour, its test and whether it is built, partial or planned |
+| [features/acceptance.md](features/acceptance.md) | The acceptance scripts run by hand or with the drivers on a real build before a release, the core loop first, with a table of every run |
 | [decisions/](decisions/) | Architecture decision records |
 | [history/](history/) | Finished plans and ledgers that specs, patches and release notes still cite: the 2026-09-26 audit and its item ids (TAB-1, SPC-4, ...), round 6's plan (R6-nn), the operator's rounds 2 to 11 |
 | [perf/](perf/) | How to measure the performance budgets, and the one comparison so far (2026-09-02, Chromium 153; nothing current) |

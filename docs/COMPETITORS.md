@@ -205,12 +205,12 @@ copyleft conditions). No other project on this list offers all three.
 
 ## Why users would not pick us today
 
-Honesty section. As of 2026-10-05:
+Honesty section. As of 2026-10-18:
 
-- **A beta, with no automatic updates.** The macOS image (Apple silicon only) is signed
-  and notarized; the Windows x64 preview is not code-signed; on both, a new version is a
-  new download. Every browser above ships an updating build on more platforms than we
-  do; Zen and Brave ship polished products today.
+- **A beta.** The macOS image (Apple silicon only) is signed and notarized and updates
+  itself from beta 16 on; the Windows x64 preview is not code-signed and has no updater, so
+  a new version there is a new download. Every browser above ships an updating build on
+  more platforms than we do; Zen and Brave ship polished products today.
 - **No track record.** Keeping a Chromium fork current with security updates is a
   treadmill that has broken larger teams. Until we demonstrate months of on-time
   stable rebases, trusting us with your daily browsing is a leap.

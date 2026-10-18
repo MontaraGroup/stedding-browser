@@ -187,7 +187,8 @@ tooling/sync-chromium
 tooling/apply-patches
 tooling/apply-branding
 
-# 4. Build. Config is one of release (default), debug, official.
+# 4. Build. The config names a file in tooling/args/ (release by default; see
+#    "Build configurations").
 tooling/build-chromium release
 
 # 5. Check that what you built actually works. This is M0's acceptance criterion,
@@ -244,7 +245,7 @@ pin, upstream commits mixed in — is refused.
 |---|---|---|
 | `release` | Day-to-day development, and every published image so far | Optimised, no symbols, single binary, no PGO or LTO. **Never quote performance numbers from this config.** |
 | `debug` | Debugging Chromium and our patches | Component build: one target relinks a small library, not the browser. |
-| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet: every image so far is `release` on the Mac or `win-release` on Windows. Which configuration should ship is TBD (`docs/history/plan-2026-09-26.md` PLT-9, REPO-13). |
+| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet: every image so far is `release` on the Mac or `win-release` on Windows. Which configuration should ship is TBD (`BACKLOG.md` S-168). |
 | `vanilla` | The vanilla half of a performance comparison | Identical to `official`, built from the checkout detached at the pin with the branding reverted, so the patch series is the only difference (`docs/perf/README.md`). |
 | `win-release` | The Windows build and its installer | The Mac's `release` on the other platform: non-component, no symbols, no PGO (ADR 0018). |
 | `win-asan` | AddressSanitizer runs of the lifetime tests (docs/history/plan-2026-09-26.md TAB-7, TAB-8, TAB-9, SPC-1 to SPC-3, WIN-1, WEB-2) | `is_asan`, line-table symbols so a report names functions. Test targets only; the Mac has no counterpart. |
@@ -504,9 +505,8 @@ we do not advertise a novel UA token by default.
 
 ### Surfaces, as they actually are at the pin
 
-Surveyed against the checkout at M0 and spot-verified file by file. Paths are relative
-to the Chromium source root. This is a survey, not a decision — the branding itself
-lands at M1.
+Surveyed against the checkout at M0, before the branding landed at M1, and
+spot-verified file by file. Paths are relative to the Chromium source root.
 
 | Surface | Where | How |
 |---|---|---|
@@ -524,7 +524,7 @@ lands at M1.
 the macOS bundle. Replacing it is the single highest-leverage branding change available,
 and it costs no patches.
 
-Three findings worth knowing before M1 is planned:
+Three findings that shaped the branding:
 
 - **There is no third-brand path.** Upstream's branding switch is boolean
   (`is_chrome_branded`), selecting `chrome/app/theme/chromium/` or
@@ -541,7 +541,7 @@ Three findings worth knowing before M1 is planned:
   |---|---|---|
   | `build/apple/tweak_info_plist.py:299` | matches the literal `org.chromium.Chromium` to decide the direct-launch URL scheme | change the bundle id and the scheme silently vanishes from `Info.plist`, while `chrome/browser/shell_integration_mac.mm` still returns `"chromium"` — the plist and the code disagree |
   | `net/device_bound_sessions/unexportable_key_service_factory.cc:30` | hardcodes `.org.chromium.Chromium` for the keychain group | its own comment says it cannot depend on `//chrome`, so it cannot derive the value |
-  | `content/browser/media/capture/desktop_capture_util_mac.mm:77` | lists `org.chromium.Chromium` among known browser prefixes | our own helpers and PWAs stop being recognised as this browser for audio capture |
+  | `content/browser/media/capture/desktop_capture_util_mac.mm:78` | lists `org.chromium.Chromium` among known browser prefixes | our own helpers and PWAs stop being recognised as this browser for audio capture |
 
   Two more surfaces hardcode ids — `chrome/updater/branding.gni` and
   `chrome/enterprise_companion/branding.gni` — but neither ships for us:
@@ -585,15 +585,16 @@ The signer waits two hours for Apple at most; a team's first submission can take
 longer, and a timed-out run loses its signed copy with the signer's work directory,
 so the rerun signs again.
 
-**Update checks go to the GitHub Releases API** — `decisions/0014-github-releases-as-update-channel.md`.
-The browser will compare its version against the latest release of the repository and
-say when a newer one exists; no build does yet. No account, no identifier, no telemetry; GitHub sees an IP and
-a timing pattern, and `PRIVACY.md` names that endpoint rather than glossing it. The
-check is off until it has a settings entry, per the UX completeness rule in
-`QUALITY.md`.
+**Update checks go to GitHub, never to a server of ours** —
+`decisions/0014-github-releases-as-update-channel.md`, partly superseded by
+`decisions/0022-sparkle-updates-the-mac.md`. On the Mac the browser reads a signed feed kept
+in this repository, `updates/appcast.xml`, once a day, and downloads the release's own image;
+it is on by default, with a switch in Settings › Stedding › Updates. No account, no
+identifier, no telemetry; GitHub sees an IP and a timing pattern, and `PRIVACY.md` names
+both endpoints rather than glossing them.
 
-That decision removes the update *server* from the project: the release artifacts and
-the update metadata are the same objects, so there is nothing extra to run, secure or
+That decision removes the update *server* from the project: the feed is a file in this
+repository and the image is the release's own, so there is nothing extra to run, secure or
 pay for. The Mac updates itself from beta 16 on (ADR 0022, `docs/features/updates.md`):
 Sparkle reads the signed feed once a day, checks the image's EdDSA signature and the app's
 Developer ID, and installs at the quit or at a click on the sidebar's pill. Windows and

@@ -126,8 +126,9 @@ yet, `docs/features/library.md`) and a `+`.
   bottom.
 - **Create, rename, reorder, delete** **[1.0]** — `+` creates; the Space's title row opens
   its menu (rename, colour, icon, delete); drag a Space icon, or Move Left / Move Right, to
-  reorder. Deleting a Space moves its tabs into the Space the window shows, and only the
-  last Space cannot be deleted (`PLAN.md` decision 7; B5, B16, B27).
+  reorder. Deleting a Space asks first, naming the Space, its tabs and where they go, then
+  moves its tabs into the Space the window shows; only the last Space cannot be deleted
+  (`PLAN.md` decision 7; B5, B16, B27).
 - **Theme and icon** **[1.0]** — a colour from five swatches and an icon from a fixed set,
   tinting the sidebar; light, dark or automatic for the whole browser
   (`features/welcome.md` W4, W7; `features/spaces.md` B31). Any colour, a gradient and any
@@ -183,7 +184,8 @@ yet, `docs/features/library.md`) and a `+`.
   results page. No spec row yet. The "Folder of …" variant is AI and **[never]** (§8).
 - **Ranking** **[1.0]** — Arc never documented its ranking, so ours is specified rather
   than inherited: the typed text's own row first, and a site search it names, then
-  up to four open tabs in the strip's order, up to three archived tabs, blank documents
+  up to four open tabs, the active Space's first and then the other Spaces', each in the
+  strip's order, up to three archived tabs, blank documents
   for text that starts with "new", then the omnibox's suggestions as they arrive.
   Nothing is scored (`features/commandbar.md` K2, K4, K5, K7, K27, K28).
 

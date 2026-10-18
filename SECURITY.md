@@ -35,7 +35,8 @@ Anything in one of those builds is in scope:
 - The Stedding patch series on top of Chromium (`patches/`) and the branding applied to
   the build — our code, our bugs.
 - The release and supply-chain setup: CI, the release scripts in `tooling/`, the
-  checksums published beside each image, and the update mechanism as it lands.
+  checksums published beside each image, and the update mechanism (the Mac's signed feed,
+  `updates/appcast.xml`, and `tooling/publish-appcast`).
 - The contents of this repository, including documentation that would lead a user into
   an unsafe configuration.
 
@@ -45,8 +46,9 @@ documented properties of a beta:
 - **The Windows installer is not code-signed** (`BACKLOG.md` S-56). SmartScreen asks
   once, and the release notes give the step: **More info → Run anyway**. The macOS
   image is signed with the project's Developer ID and notarized from beta 10 on.
-- **There is no auto-updater yet.** A build does not update itself, so an installed
-  beta stays on the Chromium version it was cut from until it is replaced by hand. The
+- **Windows does not update itself yet** (`BACKLOG.md` S-215). An installed Windows
+  preview stays on the Chromium version it was cut from until it is replaced by hand; the
+  Mac updates itself from beta 16 on, from a signed feed (ADR 0022). The
   pin is watched daily (`.github/workflows/upstream.yml`, `tooling/check-pin`) and the
   rebase timetable is in `docs/QUALITY.md`.
 - **Safe Browsing does not protect.** The builds carry no Google API key, so the list
