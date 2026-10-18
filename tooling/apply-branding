@@ -116,7 +116,8 @@ win/SmallLogo.png|$THEME_DIR/win/tiles/SmallLogo.png
                       components/components_chromium_strings.grd \
                       extensions/strings/extensions_chromium_strings.grdp \
                       'chrome/app/resources/chromium_strings_*.xtb' \
-                      'components/strings/components_chromium_strings_*.xtb' 2>/dev/null || true
+                      'components/strings/components_chromium_strings_*.xtb' \
+                      'extensions/strings/extensions_strings_*.xtb' 2>/dev/null || true
       log "reverted; $THEME_DIR now matches $CHROMIUM_TAG"
       exit 0
     fi
@@ -214,12 +215,21 @@ EOF
     # every locale's translations beside them, since the name is a proper noun in
     # every language and a Windows shortcut or a German dialog read "Chromium"
     # otherwise (it was a perl one-liner over three English tables until
-    # 2026-09-09).
+    # 2026-09-09). It moves each translation to its message's rewritten text:
+    # grit matches them by a fingerprint of the English, and every language read
+    # English for a rewritten message until 2026-10-18 (windows N4).
     py=python3
     command -v python3 >/dev/null 2>&1 || py=python
     if [ "$MODE" = check ]; then
+      # 3: a table or a translation would change.
+      rc=0
       "$py" "$STEDDING_ROOT/tooling/brand/product_name.py" "$CHROMIUM_SRC" --check >&2 \
-        || die "product_name.py failed"
+        || rc=$?
+      case "$rc" in
+        0) ;;
+        3) changed=$(( changed + 1 )) ;;
+        *) die "product_name.py failed" ;;
+      esac
     else
       "$py" "$STEDDING_ROOT/tooling/brand/product_name.py" "$CHROMIUM_SRC" >&2 \
         || die "product_name.py failed"

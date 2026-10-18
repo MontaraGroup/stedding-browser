@@ -138,7 +138,7 @@ yet, `docs/features/library.md`) and a `+`.
   Extensions, settings, history and saved passwords stay on the profile. A Chromium
   `StoragePartition`, not a profile (ADR 0019; `features/sessions.md`). Binding two Spaces
   to one jar, or giving a Space its own extensions, needs a later ADR.
-- **Move tabs between Spaces** **[1.0]** — the command bar's "Move to [Space]", the tab
+- **Move tabs between Spaces** **[1.0]** — the command bar's "Move Tab to [Space]", the tab
   menu, `⌥⇧⌘←/→`, or a drag onto a Space icon (`features/spaces.md` B12, B22).
 - **Air Traffic Control** **[1.0]** — Stedding's routing: rules sending a site, a part of
   an address or an exact address to a Space, plus a default Space for links from other
@@ -165,9 +165,12 @@ yet, `docs/features/library.md`) and a `+`.
   with the page's address in it (`features/commandbar.md`). Arc has no always-visible URL
   bar. Stedding keeps an address row on top of the page that shows the whole address,
   because real use asked for it (`ROADMAP.md` M4; `features/toolbar.md` T28–T30).
-- **Actions mode** **[1.0]** — `⇥` in an empty bar, a leading `>`, or `⇧⌘P`. Every
-  Stedding feature must be reachable here; that is a `QUALITY.md` gate
-  (`features/commandbar.md` K8–K17).
+- **Actions mode** **[1.0]** — `⇥` in an empty bar, a leading `>`, or `⇧⌘P`. It lists
+  Stedding's verbs, an allow-list of the window's commands and rows for most of
+  Stedding's settings (`features/commandbar.md` K8–K17, K22, K28, K29). `QUALITY.md`
+  asks for every setting a user would change to be found here too; not every one is
+  (the sidebar's width, `features/sidebar.md` Y22, and Undo after closing tabs,
+  `features/tabs.md` R30, have no row; one table for both is `S-158`).
 - **Site Search** **[1.0]** — a search engine's keyword, then the query, searches that site
   directly, from Chromium's own keywords and their `%s` templates (K18). `@Space` narrows
   the list to a Space (K19). Tab after a site's name turns it into a search chip, the
@@ -179,15 +182,17 @@ yet, `docs/features/library.md`) and a `+`.
 - **Instant Links** **[needs decision]** — `⇧↵` opens the top result instead of the
   results page. No spec row yet. The "Folder of …" variant is AI and **[never]** (§8).
 - **Ranking** **[1.0]** — Arc never documented its ranking, so ours is specified rather
-  than inherited: open tabs first, then the omnibox's suggestions as they arrive
-  (`features/commandbar.md` K2, K4, K5).
+  than inherited: the typed text's own row first, and a site search it names, then
+  up to four open tabs in the strip's order, up to three archived tabs, blank documents
+  for text that starts with "new", then the omnibox's suggestions as they arrive.
+  Nothing is scored (`features/commandbar.md` K2, K4, K5, K7, K27, K28).
 
 ## 4. Split View
 
 - **Split View** **[1.0]** — two pages side by side in one window, on Chromium's own split
   view. Made with `⌃⌘N` on the Mac (the current tab and a new one; Chromium's `⌥⌘N`
-  too, except while Arc runs and takes it, `S-79`), from a tab's menu, or from the
-  command bar. Making one by dragging a row onto the page: `S-113`. More than two
+  too, except while Arc runs and takes it, `S-79`) or from a tab's menu; the command
+  bar has no row for it. Making one by dragging a row onto the page: `S-113`. More than two
   panes, or panes stacked vertically, are **[post-1.0]** (`ROADMAP.md` M5).
 - **A split is a tab** **[1.0]** — one sidebar row and one unit for every verb: pin,
   sleep, move to a Space, rename. This is the part most clones miss

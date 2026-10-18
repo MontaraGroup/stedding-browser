@@ -59,7 +59,12 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   layout;
 - 0070, the defect round of 2026-10-18: the BACKLOG's defects of that day (S-212, S-145,
   S-146, S-219, S-142, S-138, S-139, S-140, S-143, S-144, S-214, S-213, S-134, S-79), each
-  with its test, across the Spaces, pins, folders, the sidebar's views and the welcome flow.
+  with its test, across the Spaces, pins, folders, the sidebar's views and the welcome flow;
+- 0071, the checks round of 2026-10-18: the tests the BACKLOG's "Checks still owed" asked
+  for (S-173, S-147, S-174, S-128, S-129, S-141, S-148, S-149, S-150, S-154, S-172) and the
+  faults they found, fixed, with S-222, S-223, S-224 and S-225 of that day, across the Spaces and
+  their jars, the sidebar's views, the toolbar, the archive, the importers, the settings page
+  and the Mac's full screen.
 
 0069 is not a round: it is the one hunk in `base/check.cc` that lets soft checks report
 instead of crash in a build without DCHECKs (ADR 0024), kept apart so it can go on its own

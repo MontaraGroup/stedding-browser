@@ -93,8 +93,8 @@ Independent Session** on the chip menu signs that Space out of everything at onc
 
 **The command bar.** ⌘T opens one bar for everything: type a URL, a search, or the name
 of any open tab in any Space and jump to it. It completes a site from your history as you
-type, and ⇥ after a site's name searches that site. Type `>` (or ⇧⌘P) for every command
-with its shortcut.
+type, and ⇥ after a site's name searches that site. Type `>` (or ⇧⌘P) for the commands,
+each with its shortcut.
 
 ![The command bar over the page, listing open tabs across Spaces](docs/images/readme/command-bar.png)
 
@@ -175,11 +175,13 @@ puts each window back with its own Spaces. The release notes in
 
 **The command bar**
 - Open tabs from every Space, archived tabs and the address bar's own suggestions in one
-  list; `@Work rust` looks only in the Spaces whose name starts with "Work".
+  list; `@Work rust` lists only the open and archived tabs of the Spaces whose name
+  starts with "Work".
 - Typing completes a site from your history; ⇥ after the start of a search engine's name
   or keyword makes a chip, and the search goes to that site (the engines are those in
   Chromium's search engine settings).
-- Actions mode (⇧⌘P) lists every command with its shortcut, among them Close Duplicate
+- Actions mode (⇧⌘P) lists Stedding's commands and the browser's common ones, each with
+  its shortcut, among them Close Duplicate
   Tabs, Clear Site Cookies and Reload (⌥⇧⌘R: only that site's cookies, in the Space's own
   jar when it has one) and on/off rows for most of Stedding's switches.
 - New Documents: type "new" for a blank Google Doc, Sheet, Slides or Form, Notion page,
@@ -208,7 +210,7 @@ puts each window back with its own Spaces. The release notes in
 - Chromium's importer for the other browsers it knows: on macOS, Safari's bookmarks
   and Firefox's bookmarks and history; on Windows, Firefox (with passwords),
   Internet Explorer and the old Edge. Chrome, Brave and the new Edge are not
-  supported yet. Imported bookmarks stay bookmarks; ⌘T → Turn Bookmarks into
+  supported yet. Imported bookmarks stay bookmarks; ⇧⌘P → Turn Bookmarks into
   Pinned Tabs makes them pins.
 - Export a Space as a file, and import a sidebar file. There is no automatic backup.
 
@@ -236,7 +238,7 @@ The most used ones. The complete list, for both platforms, is in
 | Action | macOS | Windows |
 |---|---|---|
 | Command bar: search, a URL, any open tab | ⌘T | Ctrl+T |
-| Every command with its shortcut | ⇧⌘P (or ⇥ in the empty bar) | Ctrl+Shift+P |
+| The commands, each with its shortcut | ⇧⌘P (or ⇥ in the empty bar) | Ctrl+Shift+P |
 | Collapse or expand the sidebar | ⌘S | Ctrl+S |
 | Show or hide the address row | ⇧⌘D | Ctrl+Shift+D |
 | Pin the tab in its Space | ⌘D | Ctrl+D |

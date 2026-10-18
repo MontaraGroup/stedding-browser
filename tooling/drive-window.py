@@ -19,7 +19,7 @@ See tooling/drive for the step grammar.
 #   dragstart X Y | dragmove X Y | dragend      a drag in steps, so a shot can land mid-drag
 #   key <name>[+cmd][+shift][+ctrl][+alt]      (names: KEYS below)
 #   keydown <name> | keyup <name>              a modifier (or key) held across steps
-#   type <text> | wait <sec> | shot <file.png> | activate
+#   type <text> | wait <sec> | shot <file.png> | screen <file.png> | activate
 
 import math
 import os
@@ -36,14 +36,16 @@ KEYS = {'a': 0, 's': 1, 'd': 2, 'f': 3, 'h': 4, 'g': 5, 'z': 6, 'x': 7, 'c': 8, 
         '6': 22, '5': 23, '9': 25, '7': 26, '8': 28, '0': 29, 'o': 31, 'u': 32, 'i': 34, 'p': 35,
         'l': 37, 'j': 38, 'k': 40, 'n': 45, 'm': 46, 'enter': 36, 'tab': 48, 'space': 49,
         'esc': 53, 'left': 123, 'right': 124, 'down': 125, 'up': 126, 'backspace': 51,
-        'delete': 117, 'home': 115, 'end': 119, 'pageup': 116, 'pagedown': 121}
+        'delete': 117, 'home': 115, 'end': 119, 'pageup': 116, 'pagedown': 121,
+        # Shift-Cmd-[ and ] go to the previous and next tab (docs/SHORTCUTS.md).
+        '[': 33, ']': 30}
 MOD_KEYS = {'cmd': 55, 'shift': 56, 'alt': 58, 'ctrl': 59}
 PUNCT = {'.': 47, '/': 44, '-': 27, ' ': 49}
 KEY_MODS = ('cmd', 'shift', 'ctrl', 'alt')
 # Ctrl is not here on purpose: macOS reads a Ctrl-click as a right-click.
 MOUSE_MODS = ('cmd', 'shift', 'alt')
 # Steps allowed while a stepwise drag holds the button down.
-DURING_DRAG = ('dragmove', 'dragend', 'wait', 'shot', 'key', 'keydown', 'keyup')
+DURING_DRAG = ('dragmove', 'dragend', 'wait', 'shot', 'screen', 'key', 'keydown', 'keyup')
 
 
 class StepsError(Exception):
@@ -151,9 +153,9 @@ def parse_steps(path):
                 if len(words) != 1 or _number(words[0]) < 0:
                     raise ValueError("wait takes a number of seconds")
                 args = (_number(words[0]),)
-            elif op == 'shot':
+            elif op in ('shot', 'screen'):
                 if not rest.strip():
-                    raise ValueError("shot takes the file to write")
+                    raise ValueError("%s takes the file to write" % op)
                 args = (rest.strip(),)
             elif op == 'activate':
                 if words:
@@ -213,6 +215,10 @@ class Driver:
     # -- where input may go ---------------------------------------------------
 
     def origin(self):
+        bounds = self.bounds()
+        return bounds["X"], bounds["Y"]
+
+    def bounds(self):
         best, area = None, 0
         for window in self.windows_for_pid(self.pid):
             if not window.get("kCGWindowIsOnscreen"):
@@ -223,7 +229,7 @@ class Driver:
                 best, area = bounds, size
         if not best:
             sys.exit("no window owned by pid %s; not sending input" % self.pid)
-        return best["X"], best["Y"]
+        return best
 
     def to_screen(self, x, y):
         ox, oy = self.origin()
@@ -257,6 +263,12 @@ class Driver:
                     bounds.get("Y", 0) <= y < bounds.get("Y", 0) + bounds.get("Height", 0)):
                 if int(window.get("kCGWindowOwnerPID", -1)) in owners:
                     return
+                if (window.get("kCGWindowOwnerName") == "Window Server" and
+                        window.get("kCGWindowName") == "Cursor"):
+                    # The pointer's own image, drawn as a window of its own on
+                    # macOS 27; it never takes a click, and a click where the
+                    # pointer already rests found it on top (2026-10-18).
+                    continue
                 if window.get("kCGWindowOwnerName") == "Dock" and self.in_visible_frame(x, y):
                     # From macOS 26 the Dock is one transparent window over the whole
                     # screen; it takes the pointer only on its own strip, which is what
@@ -466,6 +478,35 @@ class Driver:
         if result.returncode != 0:
             sys.exit(result.returncode or 1)
 
+    def screen_rect(self):
+        """The display the window's centre is on, in the top-left screen
+        coordinates Quartz's window bounds use."""
+        bounds = self.bounds()
+        cx = bounds["X"] + bounds["Width"] / 2
+        cy = bounds["Y"] + bounds["Height"] / 2
+        screens = self.screens.screens()
+        main_height = screens[0].frame().size.height
+        for screen in screens:
+            frame = screen.frame()
+            x = frame.origin.x
+            y = main_height - (frame.origin.y + frame.size.height)
+            if x <= cx < x + frame.size.width and y <= cy < y + frame.size.height:
+                return x, y, frame.size.width, frame.size.height
+        return bounds["X"], bounds["Y"], bounds["Width"], bounds["Height"]
+
+    def screen(self, path):
+        # The display rather than the window: in macOS full screen the address
+        # row is drawn in windows of their own above the browser's (the
+        # overlay, a child of NSToolbarFullScreenWindow; toolbar T24, T32),
+        # which `shot` leaves out. There the display shows the browser alone;
+        # in a window it shows whatever else is on it, which a driven run,
+        # with nobody at the machine, allows.
+        time.sleep(0.6)
+        rect = "%d,%d,%d,%d" % self.screen_rect()
+        result = subprocess.run(["screencapture", "-x", "-R" + rect, path])
+        if result.returncode != 0:
+            sys.exit(result.returncode or 1)
+
     def activate(self):
         app = self.running_app.runningApplicationWithProcessIdentifier_(self.pid)
         if app is None or not app.activateWithOptions_(self.activate_option):
@@ -503,6 +544,8 @@ class Driver:
             time.sleep(args[0])
         elif op == 'shot':
             self.shot(args[0])
+        elif op == 'screen':
+            self.screen(args[0])
         elif op == 'activate':
             self.activate()
         else:  # parse_steps lets no other op through

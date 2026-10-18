@@ -7,6 +7,108 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-18, evening -- the checks still owed (patch 0071)
+
+The operator asked to finish every row of the BACKLOG's "Checks still owed". Each row was split
+into its checks; where a check could be a test, the test goes through the user's path, and where
+it found a fault, the fix came with it. What needs a real build, the PC or the owner is said in
+each row. The round's code and tests are patch 0071, at the end of the series.
+
+- The core loop (`S-173`): TST-6's script is `docs/features/acceptance.md`, thirteen steps and a
+  table for the runs; TST-7's drags are browser tests in the open sidebar and in the rail; TST-8
+  found a row selected before its folder collapsed still in the selection the verbs took, and ⇧⌘C
+  on a split alone copying both panes; TST-9 found a window that stops being active leaving the
+  ⌃⇥ run open, and the core chords go through the window as keys (shortcuts Z7).
+- Spaces and their jars: a session cookie in a Space's jar comes back after a restart (sessions
+  S31), a Space pin taken to another window keeps its pin and home, replaced contents come back
+  from the crash bubble's Restore (`S-147`); every deletion of a Space asks first and names its
+  tabs, each Settings bin is named for its Space, and another window's new or deleted Space
+  reaches the title row (`S-148`); Rename Space edits in the title row, and in a small dialog on
+  the rail (`S-149`); a Space's last tab leaving for another window wakes no other Space's tab
+  (`S-150`).
+- Restored tabs and the product path (`S-174`): the verbs on restored tabs; tests through the
+  window for the command bar, isolation, archive, import, toolbar and page colour, settings,
+  welcome and privacy, which found Escape leaving nothing focused, a Blank Window's isolation
+  rows doing nothing, a tab archived the moment it was left and an idle time that restarted at
+  every launch and stood still in a sleep, a second Arc import adding history visits again and
+  missing a tab added to a known folder, the bookmark bar staying after the conversion, a loading
+  tab keeping the last tab's row colour, and the width slider snapping a dragged width to a tick;
+  the cut list's tests deleted with their citations; three tests that pinned a bug inverted with
+  their fixes (the archive's idle time, a Markdown link's brackets, an unnamed Space's export).
+- Rows seen only live (`S-128`) have their tests. They found a folder's rows touching in the
+  rail, a white page's focused field and dropdown drawn #F0F0F0, the end of a reload dropping a
+  white row to the window's ground, and every string that names the product reading English in
+  every language: the product-name rewrite changed the English and left each translation under
+  its old fingerprint, where grit no longer found it. `tooling/brand/product_name.py` moves them.
+- Partial rows (`S-129`, `S-141`): tests for A8's Stay case, F17's restarts, R6's full-screen
+  video, I13, B33's splits and groups (a shared group drew another Space's row again), T11 (its
+  first choice read `Chromium&#39;s timing`), T27 (the sidebar's downloads button is bound to the
+  action and hands a download over at once) and M9; the rail's favicons follow the density, the
+  hover-expanded rail draws the essentials grid, Tab reaches Clear, and a short window cuts no row
+  off.
+- Full screen on the Mac (`S-154`): a tab switch re-themes the row, and a hovered rail no longer
+  moves the back button. The owner reported two more, both fixed: a one-pixel line under the
+  address row, macOS 26's title-bar scroll pocket (`S-223`), and the Clear line under the
+  traffic lights with the row sliding in on demand (`S-224`).
+- Found and fixed: `S-222`, deleting a Space that another window was showing stopped the
+  browser, release builds too; `S-225`, a split whose contents a Space's own session replaced
+  came back as two tabs after the crash bubble's Restore (Chromium's session helper writes
+  replaced contents with no split or group); and a Space rename left open when the sidebar
+  collapsed stayed open in the rail, one chip wide, which the owner saw on the screen during a
+  test run (`S-149`).
+- The cuts (`S-172`) are confirmed in unit tests on a mock clock; their runs on a real build are
+  owed. `S-163` waits on the owner's administrator write, with its steps written.
+- The owner's choices of the day: every deletion of a Space asks first; the archive's idle time
+  is wall-clock time, so a night asleep counts; a deleted Space's jar is wiped at once and its
+  directory goes at the next start; the command bar lists the active Space's tabs first; ⌘W on a
+  pin shows a row of its Space, never an essential; the tab menu keeps its shipped order.
+- Tooling: `tooling/capture-state --page` opens a chrome:// page with no input (`S-47`, closed
+  earlier the same day); `tooling/drive` gains a `screen` step, the display rather than the
+  window, and the bracket keys; `tooling/check-repo tests` checks partial rows and backticked
+  citations of any suite the series defines; `tooling/dev`'s filters follow the deleted and new
+  unit tests, and the two real full-screen tests run one at a time on the Mac.
+
+Tests: on the Mac's release build of 156.0.8078.36 with patch 0071, 855 unit tests, 20
+component tests and 248 browser tests (188 in the parallel leg, then 60 one at a time), all
+passing, and the 115 tests of Chromium's tab suites. `TabStripViewLayoutTest` was in no
+`tooling/dev` filter, so the round added it to `sidebar`. Seen failing against the code
+without its fix: the two full-screen tests (`S-223`, `S-224`), the rename left open through a
+collapse, `S-222`'s crash and `S-225`'s split; the drafted tests' predicted red runs were not
+made. The Mac's full browser suite last ran before the round's last two fixes below; the
+tests they touch ran again and passed.
+
+On the PC, from the same tree, `win-release`, `win-checks` and `win-asan`: 843 unit tests on
+each of the first two, all passing (run over SSH: from the PC's hidden scheduled task three
+tests on mock time timed out, trap 99), and 293 browser tests on each of the three, passing
+but for `SidebarFormsTest.FullScreenIsEdgeToEdge`, whose infobar container keeps its height
+after its last bar goes in most Windows runs (`S-227`), and one `NumberBadgeTest` case that
+failed once on `win-release` and passed alone twice. The PC found three faults the Mac had
+not: a read of the page's top edge before the page painted came back transparent and the row
+showed it as black, at every reload and, on the ASan build, for good in a private window
+(`S-226`, fixed); the row of a pin dropped back from another window stayed under the Clear line
+because the view drew it before the model filed the pin, and nothing told it after (fixed:
+the model announces a pin it files from what a tab carried); and the test of the core chords
+typed an "l" into the bar, the event generator's own character (trap 98). ASan (`S-106`), the series through 0070 on the PC: the unit suite clean;
+in the browser suite one AddressSanitizer report, a test's own (it held the Space chips across
+a theme change the page's colour brought mid-collapse; fixed in 0071), and one test that never sees a
+private window's row take the page's colour on that build alone (`S-226`). A second run, on
+0071's code, had no sanitizer report at all.
+
+Checked on the Mac's release build, with the real pointer and keys: the core-loop script
+three times (13 of 13), the drags of TST-7 in the open sidebar and the rail, the keys of
+TST-9; the kill, the crash bubble's Restore and a relaunch; the half-typed form across a move,
+an isolation change and an essential; every delete question and every rename; ⌘W on pins with
+an essential in the window; the command bar's order; the tab menus of the three kinds of row;
+the About page in German, French and Japanese; both full-screen looks and both full-screen
+defects; S-129's looks; a sleeping tab left asleep (`S-150`). Three faults found that way:
+a rename left open when the sidebar collapsed (the owner saw it on the screen during a test
+run), an unnamed Space's rename field showing nothing of its name, and Settings' shortcut notes
+speaking of "this round". Not done: the core loop on an installed build and on Windows, the
+density, grid and short-window captures of `S-141` (tests cover them), the timed runs of
+`S-172`, and the owner's items (`S-65`, `S-48`, `S-51`, `S-50`, `S-163`, the owner's day of
+`S-173`, VoiceOver, Win+V). A clipboard manager (Maccy) takes ⇧⌘C from every app while it
+runs, as Arc takes ⌥⌘N.
+
 ## 2026-10-18, later -- defect round
 
 The open defects after beta 17 were researched one by one, each root cause read on the 156

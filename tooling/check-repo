@@ -11,8 +11,9 @@ into something a machine can fail on:
   patches  the patch series is contiguous, numbered, and each patch has a header
   version  the Chromium pin is well formed and referenced from exactly one place
   traps    HANDOFF's traps are numbered contiguously and every citation resolves
-  tests    every test a 'built' behaviour row names exists in the patch series, and
-           every test a spec row or BACKLOG cites is in a tooling/dev filter
+  tests    every test a 'built' or 'partial' behaviour row names exists in the patch
+           series or is a Chromium test named here, and every test a spec row or
+           BACKLOG cites is in a tooling/dev filter
   wiring   every source the series adds is in a GN sources list, so it compiles
   args     every build configuration keeps the settings every Stedding build shares
   truth    docs carry no known-stale phrases, feature specs are well formed, and
@@ -456,6 +457,31 @@ TEST_DECL = re.compile(r"^[ \t]*" + TEST_MACRO + r"\(\s*([A-Za-z_]\w*)\s*,\s*([A
                        re.MULTILINE)
 # gtest's own filter syntax, which is what these citations are meant to be pasted into.
 TEST_REF = re.compile(r"\b([A-Z][A-Za-z0-9_]*(?:Test|Tests))\.([A-Za-z_*][\w*]*)")
+# The same in backticks, whatever the suite is called: the series' own suites do not all
+# end in Test (`ChromePaths.MovesASteddingProfileOutOfChromiumsFolder`), and a row that
+# cited one was never checked. Only a suite the series defines counts, so a backticked
+# `Space.name()` or `TabStripModel.count` is not taken for a test.
+BACKTICK_TEST_REF = re.compile(r"`([A-Z][A-Za-z0-9_]*)\.([A-Za-z_*][\w*]*)`")
+
+# Chromium's own tests a spec row may cite as they are named at the pin. The series does
+# not define them, so nothing here can see that they exist; each is named exactly, with
+# the row that cites it and why no sweep runs it, so a typo or a test Chromium renamed
+# shows up as a failure instead of passing quietly. A Chromium test a tooling/dev filter
+# names exactly needs no entry: `tooling/dev test` lists every filter part before it runs
+# and stops on one that matches nothing.
+UPSTREAM_CITED = {
+    # menus M9: in browser_tests, which no sweep builds (BACKLOG S-129).
+    "SystemMenuModelBuilderVerticalTabsTest.VerticalTabsSystemMenu",
+}
+
+
+def cited_tests(text: str, suites: dict[str, set[str]]) -> set[tuple[str, str]]:
+    """Every (suite, name) `text` cites: gtest's Suite.Name for a suite ending in Test,
+    and a backticked Suite.Name for any suite the series defines."""
+    found = set(TEST_REF.findall(text))
+    found |= {(suite, name) for suite, name in BACKTICK_TEST_REF.findall(text)
+              if suite in suites}
+    return found
 
 
 def test_definitions() -> dict[tuple[str, str], tuple[str, str]]:
@@ -570,8 +596,8 @@ def dev_filter_parts() -> list[str] | None:
 
 
 def check_tests() -> None:
-    """A 'built' row must name a test that exists, and every test a spec row or
-    BACKLOG cites must be one a sweep runs.
+    """A 'built' or 'partial' row must name tests that exist, and every test a spec
+    row or BACKLOG cites must be one a sweep runs.
 
     AGENTS.md: a behaviour is shipped when its test in docs/features/<feature>.md is
     green. A row that names a test which is not in the series reads as shipped and
@@ -580,9 +606,14 @@ def check_tests() -> None:
     right test under the wrong suite after it moved, the rest naming a test that was
     renamed or never written.
 
-    Only 'built' is checked for existence. A 'planned' row names the test that will
-    prove it, which is the point of the state, and check_truth already requires it
-    to name one.
+    'built' and 'partial' rows are checked for existence: a partial row's test proves
+    the part the row says is done, and a name in it that matches no test reads as that
+    proof (docs/history/plan-2026-09-26.md SPC-50, TST-13). A row whose test column
+    starts with "none" says it has no test yet and is left alone. A 'planned' row names
+    the test that will prove it, which is the point of the state, and check_truth
+    already requires it to name one. A test the series does not define passes only
+    when it is one of Chromium's: named in UPSTREAM_CITED, or named exactly by a
+    tooling/dev filter part.
 
     Existing is not enough: six tests that 'built' rows cite as proof were in no
     tooling/dev filter, so no sweep ever ran them (docs/history/plan-2026-09-26.md REPO-2). So every test
@@ -601,6 +632,12 @@ def check_tests() -> None:
         fail("patches", "no tests found in the series; the spec check cannot mean anything")
         return
 
+    parts = dev_filter_parts()
+    if parts is None:
+        fail("tooling/dev", "no FEATURE_FILTERS table found; cannot check that cited tests run")
+        return
+    named_by_a_filter = set(parts)
+
     citations: list[tuple[str, int, str, str, str]] = []  # (file, line, id, suite, name)
     for spec in specs:
         rel = spec.relative_to(ROOT).as_posix()
@@ -609,31 +646,32 @@ def check_tests() -> None:
             if not m:
                 continue
             bid, _, test_column, state = m.groups()
-            for suite, name in sorted(set(TEST_REF.findall(test_column))):
+            checked = (state in ("built", "partial")
+                       and not test_column.strip().lower().startswith("none"))
+            for suite, name in sorted(cited_tests(test_column, suites)):
                 citations.append((rel, line_no, bid, suite, name))
-                if state != "built":
+                if not checked:
                     continue
                 known = suites.get(suite, set())
                 if any(fnmatch.fnmatchcase(n, name) for n in known):
+                    continue
+                full = f"{suite}.{name}"
+                if full in UPSTREAM_CITED or full in named_by_a_filter:
                     continue
                 bare = name.strip("*")
                 elsewhere = sorted(s for s, names in suites.items() if bare in names)
                 hint = f"; it is {elsewhere[0]}.{bare}" if elsewhere else ""
                 fail(f"{rel}:{line_no}",
-                     f"{bid} is 'built' and names {suite}.{name}, "
-                     f"which the series does not define{hint}")
+                     f"{bid} is '{state}' and names {full}, which the series does not "
+                     f"define and is not a Chromium test named in UPSTREAM_CITED or by a "
+                     f"tooling/dev filter{hint}")
     backlog = ROOT / "BACKLOG.md"
     if backlog.is_file():
         for line_no, line in enumerate(backlog.read_text(encoding="utf-8").splitlines(), 1):
             row = re.match(r"^\| (S-\d+) \|", line)
-            for suite, name in sorted(set(TEST_REF.findall(line))):
+            for suite, name in sorted(cited_tests(line, suites)):
                 citations.append(("BACKLOG.md", line_no, row.group(1) if row else "this line",
                                   suite, name))
-
-    parts = dev_filter_parts()
-    if parts is None:
-        fail("tooling/dev", "no FEATURE_FILTERS table found; cannot check that cited tests run")
-        return
     selectors = [gtest_pattern(p) for p in dict.fromkeys(parts)]
     definitions = sorted(test_definitions().items())
     reported: set[tuple[str, int, str]] = set()

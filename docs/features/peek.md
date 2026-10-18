@@ -25,8 +25,8 @@ and hands it to the tab strip on promotion.
 | Id | Behaviour | Test | State |
 |---|---|---|---|
 | P1 | A link click from a pinned tab to a different site (eTLD+1) opens a peek instead of navigating the tab. | `ShouldPeekTest.Decisions` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
-| P2 | Links that stay on the pinned site (other paths, subdomains, http→https) navigate the tab as always. | `ShouldPeekTest.Decisions`, `PeekThrottleTest.PinnedTabStaysOnItsSite` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
-| P3 | Unpinned tabs are never throttled; the throttle is not even registered for them. | `ShouldPeekTest.Decisions`, `PeekThrottleTest.UnpinnedTabIsNotThrottled` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
+| P2 | Links that stay on the pinned site (other paths, subdomains, http→https) navigate the tab as always. | `ShouldPeekTest.Decisions` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
+| P3 | Unpinned tabs are never throttled; the throttle is not even registered for them. | `ShouldPeekTest.Decisions` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
 | P4 | Typed URLs, script redirects (sign-in bounces) and form posts navigate the pinned tab; only a user's link click peeks. | `ShouldPeekTest.Decisions`, `PeekThrottleTest.ScriptRedirectFromPinnedTabProceeds` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
 | P5 | Only http(s) pages peek; chrome://, file: and blank pages never do. | `ShouldPeekTest.Decisions` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |
 | P6 | A peek owns a page of its own at the link's URL; the window's tabs are untouched while it is open. | `PeekViewTest.PeekLoadsItsOwnPage` | partial · off until rebuilt (S-93); the peek shows no page (docs/history/plan-2026-09-26.md CMD-9) |

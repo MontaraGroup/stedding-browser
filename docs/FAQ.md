@@ -90,8 +90,8 @@ away the margin and rounded corners around the page while the sidebar shows.
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Bookmarks you import stay bookmarks, in the bookmark
 manager, and Chromium's bookmark bar still opens with ⇧⌘B (Ctrl+Shift+B). The command
-bar's "Turn Bookmarks into Pinned Tabs" makes them pinned tabs and folders in your first
-Space whenever you want; after that the bookmark bar no longer shows.
+bar's "Turn Bookmarks into Pinned Tabs" makes them pinned tabs and folders in the Space
+you are in whenever you want; after that the bookmark bar no longer shows.
 
 **Where is Peek?**
 Switched off. It opened a link from a pinned tab over the window, but its page came out
