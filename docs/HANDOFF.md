@@ -37,15 +37,15 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-Ninety-two traps follow. Read the one for the topic in front of you, not the list.
+Ninety-three traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 55, 58, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93 |
 | Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92 |
 
@@ -922,6 +922,8 @@ private window has.
     and brought Arc to the front, and the rest of that run's keys went nowhere, Stedding no
     longer being frontmost (2026-10-02). Quit Arc before a drive that uses the chord, or reach a
     split from the tab menu ("New Split View with Current Tab"); `S-79` is the product side.
+    Since 2026-10-18 the menu's split chord is ⌃⌘N, which Arc leaves alone: drive the split
+    with it on a build that has it.
     In the same run `drive-window.py` refused a second click at the point of the first, "covered
     by Window Server's window": the pointer's own window is the topmost one there. Hover away
     before clicking the same spot twice.
@@ -1035,7 +1037,8 @@ private window has.
     screen" and UI Automation failed on a dead handle (2026-10-11). Launch with
     `--no-first-run` unless the flow is the subject, and call `Drive-Find` again after a
     dialog closes. Chromium's own search engine chooser (S-134) takes the window the same way
-    after a skipped engine step.
+    after a skipped engine step in beta 17 and earlier, and on a profile that finished the
+    flow before 2026-10-18 with no engine recorded.
 
 77. **A test that starts failing between two runs may be the machine: rebuild the last good
     code before bisecting the new.** On 2026-10-11 three drag tests (`TabDropTest.*`) passed
@@ -1232,6 +1235,12 @@ private window has.
       release build (beta 16's Archived row had them). Stedding's rows there turn subpixel
       text off, as `tab_strip_view.cc`'s rows already did:
       `SetSubpixelRenderingEnabled(false)` and `SetSkipSubpixelRenderingOpacityCheck(true)`.
+      So does a Chromium tab group's header, which Stedding draws as a row with no fill
+      (patch 0066), and the Clear line's word, canvas text drawn with
+      `gfx::Canvas::NO_SUBPIXEL_RENDERING` (2026-10-18, BACKLOG S-214).
+      `FolderTabsTest.EveryLabelInTheSidebarSuitsItsGround` runs the DCHECK's own test over
+      every label of the window without painting, so it finds a label left out in a release
+      build too; canvas text it cannot see.
 
     What worked: `git rebase --onto <new pin> <old pin> stedding-work` with `rerere` and
     `zdiff3`; the compiler's whole error list in one pass (trap 50); the port's fixes
@@ -1246,6 +1255,18 @@ private window has.
     builds. `capture-state` now refuses such an address. Drive the address bar to those
     pages instead (`tooling/drive`: `key l+cmd`, `type chrome://settings/stedding`,
     `key enter`).
+
+93. **A synthetic arrow key without `KEYEVENTF_EXTENDEDKEY` is the numeric keypad's.** The
+    arrows, Home, End, PgUp, PgDn, Insert and Delete of the cluster are extended keys;
+    `keybd_event` without that flag sends the keypad's key with NumLock off. With Alt held, a
+    text field takes the keypad's arrow for the start of an Alt code
+    (`ui::KeyEvent::IsUnicodeKeyCode`), the focus manager skips the window's accelerators for
+    it, and nothing happens: `tooling\win\drive.ps1` sent every key that way, and Ctrl+Alt+→
+    from the address bar "did not change Space" (`S-218`), where the arrow key itself does.
+    The driver sends the flag since 2026-10-18 (`Drive-Key`). Any earlier driven result for a
+    chord of Alt with one of those keys from a text field (Ctrl+Alt+←/→, Ctrl+Alt+↑/↓,
+    Ctrl+Alt+Shift+←/→, Alt+←/→ in the address bar or the command bar) is suspect: drive it
+    again before trusting it.
 
 ## The Windows build
 
@@ -1281,7 +1302,11 @@ path (`/c/...`). Then:
    supervisor's default is 12). `build.ps1` alone builds `win-release`'s `chrome` and
    `mini_installer` by default; the supervisor builds those and both test binaries. The other three are test-target builds only:
    `win-checks` (DCHECKs and the dangling-pointer detector), `win-asan` and `win-debug`
-   (docs/ARCHITECTURE.md, "Build configurations"). A build is refused while a browser from
+   (docs/ARCHITECTURE.md, "Build configurations"). `stedding_browser_tests` depends on
+   `//chrome:packed_resources` off the Mac since 2026-10-18, so a build of the test targets
+   repacks `resources.pak` and the locale paks; before, a checks build of the tests alone
+   ran them against the WebUI pages of the last `chrome` built in that directory, a welcome
+   page without its test hook among them (BACKLOG S-213). A build is refused while a browser from
    that output directory runs (the link fails with "permission denied" otherwise).
 4. `tooling/dev test all --no-build` (or one feature) runs the same filters against
    `out/win-release/*.exe`; `tooling/dev test browser --no-build` runs

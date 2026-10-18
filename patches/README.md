@@ -56,7 +56,14 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   cases, the welcome flow's late answer, bookmarks file and swatch, sleep and the archive
   sparing drafts, PDFs and DevTools, the archive page's closed windows and splits, WebUI
   handlers that drop a malformed message, and on Windows the Ctrl+Alt chords on an AltGr
-  layout.
+  layout;
+- 0070, the defect round of 2026-10-18: the BACKLOG's defects of that day (S-212, S-145,
+  S-146, S-219, S-142, S-138, S-139, S-140, S-143, S-144, S-214, S-213, S-134, S-79), each
+  with its test, across the Spaces, pins, folders, the sidebar's views and the welcome flow.
+
+0069 is not a round: it is the one hunk in `base/check.cc` that lets soft checks report
+instead of crash in a build without DCHECKs (ADR 0024), kept apart so it can go on its own
+when the releases are official builds.
 
 Patch messages cite the docs as they were when each was written: `PLAN.md`'s item ids
 (TAB-1, SPC-4, ...), `docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` now live under

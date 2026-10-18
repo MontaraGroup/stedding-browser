@@ -256,6 +256,12 @@ The full args, with the reasoning for each, are in `tooling/args/`. The four san
 and check configurations are throwaway: build the test targets, run the tests, delete
 the output directory (trap 54 has the memory and disk costs of a build on this machine).
 
+In every configuration without DCHECKs, `release` and `win-release` among them, a soft
+`CHECK` (`CHECK(..., base::NotFatalUntil::M<n>)`, `DUMP_WILL_BE_CHECK`,
+`DUMP_WILL_BE_NOTREACHED`) logs and writes a dump without crashing, as in an official build;
+the checks configurations still stop on one, and one whose milestone has passed is fatal
+everywhere, as upstream (ADR 0024, since 2026-10-18).
+
 `autoninja` selects Chromium's build executor, which at this pin is siso on both platforms
 (`docs/HANDOFF.md`, traps 1 and 54). Whether `cc_wrapper=ccache` measurably helps on macOS
 has not been measured (TBD).

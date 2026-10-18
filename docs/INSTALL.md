@@ -121,8 +121,10 @@ The first window opens the welcome flow, six steps, each one skippable (five bef
 5. Set Stedding as the default browser if you want.
 6. See the keys worth knowing.
 
-Each choice can be changed later in Settings. If you skip the search engine step,
-Chromium's own "Choose your search engine" dialog opens on the first page (`S-134`).
+Each choice can be changed later in Settings. If you skip the search engine step, or
+finish without picking one, searches go to DuckDuckGo and that is recorded as your
+choice, from the first release after beta 17. In beta 17 and earlier, Chromium's own
+"Choose your search engine" dialog then opens on the first page (`S-134`).
 
 ## Linux
 

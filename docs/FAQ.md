@@ -128,8 +128,10 @@ command reachable. Full list of collisions: [SHORTCUTS.md](SHORTCUTS.md).
 
 **Why does ⌥⌘N open Arc?**
 While Arc is running it takes ⌥⌘N from every app to open its Little Arc window, so the key
-never reaches Stedding. Quit Arc once you have moved over, or split from a tab's
-right-click menu (**New Split View with Current Tab**).
+never reaches Stedding. Use ⌃⌘N, the split's own chord from the first release after
+beta 17, which Arc leaves alone; ⌥⌘N splits again once Arc is quit. In beta 17 and
+earlier, quit Arc or split from a tab's right-click menu (**New Split View with Current
+Tab**).
 
 **How do I get the old Chromium tab menu back?**
 Settings → Stedding → Pages and menus: turn off **Short context menus**. Stedding's short

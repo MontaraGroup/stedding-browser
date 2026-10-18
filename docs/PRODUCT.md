@@ -185,7 +185,8 @@ yet, `docs/features/library.md`) and a `+`.
 ## 4. Split View
 
 - **Split View** **[1.0]** — two pages side by side in one window, on Chromium's own split
-  view. Made with `⌥⌘N` (the current tab and a new one), from a tab's menu, or from the
+  view. Made with `⌃⌘N` on the Mac (the current tab and a new one; Chromium's `⌥⌘N`
+  too, except while Arc runs and takes it, `S-79`), from a tab's menu, or from the
   command bar. Making one by dragging a row onto the page: `S-113`. More than two
   panes, or panes stacked vertically, are **[post-1.0]** (`ROADMAP.md` M5).
 - **A split is a tab** **[1.0]** — one sidebar row and one unit for every verb: pin,
@@ -206,9 +207,9 @@ yet, `docs/features/library.md`) and a `+`.
   a small window of its own, to read and dismiss; `⌘O` moves the page into the main
   window and `⇧⌘O` into a split (`features/little.md`). It has no Space commands
   (`PLAN.md` decision 9). The Mac only: on Windows such links open as tabs (`S-56`).
-  Diverging from Arc: no global `⌥⌘N` to open one (`⌥⌘N` is the split, little E5), and a
-  little window is never closed for being idle, where Arc archives it after 6 hours (the
-  idle close is **[cut]**; little E3).
+  Diverging from Arc: no global `⌥⌘N` to open one (`⌥⌘N` splits, as `⌃⌘N` does,
+  little E5), and a little window is never closed for being idle, where Arc archives it
+  after 6 hours (the idle close is **[cut]**; little E3).
 - **Folder peek** **[post-1.0]** — hover a closed folder, search or scroll it, and open one
   tab without expanding it. No spec row yet.
 - **Blank Window** **[1.0]** — a window that does not share the Spaces, `⌥⇧⌘N`

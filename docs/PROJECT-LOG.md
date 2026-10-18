@@ -7,6 +7,81 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-18, later -- defect round
+
+The open defects after beta 17 were researched one by one, each root cause read on the 156
+tree, and fixed together in patch 0070, a round patch at the end of the series, each with its
+test; the soft checks' change (ADR 0024) is patch 0069.
+
+- Spaces and windows (`S-145`, all seven parts): an essential taken out of the essentials
+  joins the Space on screen, and a Space pin made an essential stops being one (SPC-15); a
+  switch from an essential lands on the Space's own tab (SPC-16); going to a tab from the
+  command bar shows and wakes no other tab on the way, and going to an essential keeps the
+  Space (CMD-14); a tab made active from outside the sidebar brings its Space on screen and
+  so ends Focus (SPC-17); a tab dragged out, or moved to a new window, opens that window on
+  its Space and keeps its jar (SPC-22; ⌘N unchanged, open for the owner, windows G6); a Space
+  the session saved comes back by its id, an unnamed one included (SPC-25); the switcher
+  changes form without rebuilding its chips (SPC-28). An essential matches every "@Space"
+  filter in the command bar, and a tab chosen inside a collapsed folder leaves it collapsed.
+- Motion: the Space being left slides out as the new one comes in, after a swipe too
+  (`S-146`; the owner's own look is still owed); the rail no longer opens over the page two
+  seconds after a collapse with the toggle (`S-219`).
+- Pins (`S-142`): a loose tab never splits the pinned run, and another Space's rows never
+  push this Space's pins under the Clear line (TAB-24); ⌘W, a row's close button and a middle
+  click share one rule, and outside a normal window with Spaces ⌘W closes a pinned tab
+  (TAB-25, CMD-24); a home taken before the first load is settled, once, on the page of the
+  same host it landed on (TAB-26); the bookmark conversion hides the bar only when it made
+  something (WEB-11). WIN-15's one-time default and a cap on the ⌘T conversion wait on the
+  owner. A tab pinned while selected comes back selected after a restart, a fix in
+  Chromium's own session code, so Chromium's pin had it too (`S-212`).
+- The owner's choices: the Clear line shows wherever rows follow it, with no pins and in a
+  private window too (`S-138`); Move to Space takes a tab out of every folder it is in
+  (`S-139`, folders F37); a skipped engine step records DuckDuckGo as the choice, so
+  Chromium's chooser no longer follows the welcome flow, and a second pick no longer reaches
+  Chromium's choice check, which would have stopped the browser (`S-134`); on the Mac the
+  split is ⌃⌘N, with Chromium's ⌥⌘N kept beside it (`S-79`); a soft check logs and writes a
+  dump without crashing in a build without DCHECKs, as in an official build (ADR 0024).
+- Folders and rows: Move Up and Down pass rows the user cannot see, the folder header is a
+  named button that answers the left button and the keyboard, its drop highlight takes the
+  sidebar's colours, and Alphabetize's order has a restart test (`S-140`); a sleeping
+  favicon stays dimmed, and a hover draws nothing of its folder (`S-143`); the ⌘ numbers go
+  when the window stops being active, ⌘1–9 read the badges' list, and the badges follow the
+  Animate preference (`S-144`); a tab group's title and the Clear line's word draw grayscale
+  text (`S-214`).
+- Explained: `S-213` was the test binary's build graph, not the page: off the Mac it did not
+  depend on the packed resources, so a checks build of the tests alone served a stale
+  welcome page, and a `data_deps` line fixes it (not reproduced at the 156 pin: the four
+  welcome tests passed three runs in three on `win-checks`). `S-218` was the Windows
+  driver's arrow keys, sent without the extended-key flag (HANDOFF trap 93); with the flag,
+  Ctrl+Alt+→ and ← change Space from the address bar on the release build, driven on the PC,
+  and the item is closed. `S-66`: this Mac holds no report of the browser process, and macOS
+  had kept nothing from before 2026-10-10; the PC's reports and the owner's machine are still
+  to read. `S-55`, `S-71` and `S-72` gained notes and drafts and wait as before.
+- Filed: `S-220`, an upstream unit test run on 2026-10-15 that left a profile's folders in
+  the real data folder.
+
+Tests: on the Mac's release build of 156.0.8078.36, 863 unit tests, 20 component tests and 164
+browser tests (125 in the parallel leg, then 39 one at a time), all passing, and the 115 tests
+of Chromium's tab suites. Each new test was run against the product code from before the round,
+the tests kept: the 8 unit tests and 25 browser test runs (one test in two countries) that test
+a fix failed, and the two coverage tests (S-139's keys, S-140's Alphabetize) passed, as they
+should. Five tests that call what the fixes add could not be built against the old code and
+were not run that way (S-139's unit test, SPC-22's, TAB-26's unit test, S-143's hover test and
+S-144's badge test). With the old welcome code, a second engine pick logged Chromium's `Check
+failed: choice_location != ChoiceMadeLocation::kChoiceScreen` and went on, because of patch
+0069; without it that line stops the browser. On the PC the same day, with the series synced:
+`win-release` 850 unit tests (three timed out in the leg and passed when run again) and the
+browser suite, all passing but `SidebarFormsRtlTest.TheRightHandEdge`, flaky there (`S-221`);
+`win-checks` 850 unit tests and the whole browser suite, 154 tests then 40 one at a time, with
+no DCHECK, which closes `S-214`'s question. The round's hover re-check (`S-219`) stopped two
+hover tests there that play the pointer, since it asks where the real pointer is; it is the
+Mac's alone now, where the toggle sits past the rail, and the tests let the collapse's last
+layout land first. On the Mac's release build, checked by hand with the real pointer and
+keyboard: `S-219`, `S-212`, `S-79`, `S-134`, `S-138`. The Windows step of
+`SpaceSwitchTest.CommandsChordsAndTheLastTab` (Ctrl+Alt+arrows from the address bar) passed on
+both. Not done: the by-hand check of the other items on a real build (`S-218`'s drive on the PC
+is done), VoiceOver and Narrator on the folder header, the owner's look at the slide, ASan.
+
 ## 2026-10-18 -- beta 17 released from both platforms, the first update through the feed
 
 Google had paused Chrome 156's early rollout on 16 October, and the operator first chose to

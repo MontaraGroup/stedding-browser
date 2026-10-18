@@ -112,8 +112,11 @@ preselects nothing, and no engine has paid for placement — no search deal exis
 if that ever changes it will be disclosed in this document and in release notes
 before shipping. Until the user chooses, the default is DuckDuckGo, in every region:
 a query typed before a choice -- the welcome's search step skipped, say -- goes to
-DuckDuckGo and nowhere else. A skipped step also brings Chromium's own "Choose your
-search engine" dialog over the first page (`BACKLOG.md` S-134). Search suggestions
+DuckDuckGo and nowhere else. Skipping the step, or finishing the welcome flow without a
+pick, keeps DuckDuckGo and records it as the choice, so no second chooser follows;
+Settings changes it any time. In beta 17 and earlier a skipped step also brought
+Chromium's own "Choose your search engine" dialog over the first page (`BACKLOG.md`
+S-134). Search suggestions
 (sending keystrokes to the chosen engine) are off by default and can be turned on in
 Settings → Stedding → Privacy.
 

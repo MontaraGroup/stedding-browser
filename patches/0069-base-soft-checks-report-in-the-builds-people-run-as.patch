@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 18 Oct 2026 06:06:15 -0400
+Subject: base: soft checks report in the builds people run, as in Chrome
+
+Chromium's soft checks (CHECK with base::NotFatalUntil, DUMP_WILL_BE_CHECK,
+DUMP_WILL_BE_NOTREACHED) log and write a dump without crashing in an official
+build, and stop the process in every other build. Stedding's releases are
+optimised builds that are not official ones, so a check Chrome only reports
+stopped Stedding for the people using it: picking a second engine in the
+welcome flow reached one (BACKLOG S-134).
+
+GetDumpSeverity() now reports in a build without DCHECKs, the one people
+run, as an official build does. A build with DCHECKs, which the checks suites
+run on, still stops on them, and a soft check whose milestone has passed is
+fatal everywhere, as upstream (docs/decisions/0024).
+
+Why: a check Chrome reports without crashing stopped Stedding's browser for
+the people using it.
+Removable when: the releases are official builds (BACKLOG S-168).
+---
+ base/check.cc | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/base/check.cc b/base/check.cc
+index a91851e30eee2..90e586711db0d 100644
+--- a/base/check.cc
++++ b/base/check.cc
+@@ -58,6 +58,15 @@ constexpr char kCheckFailureMessageSeparator[] =
+ LogSeverity GetDumpSeverity() {
+ #if defined(OFFICIAL_BUILD)
+   return DCHECK_IS_ON() ? LOGGING_DCHECK : LOGGING_ERROR;
++#elif !DCHECK_IS_ON()
++  // Stedding: its releases are optimised builds that are not official ones
++  // (tooling/args/release.gn), and upstream stops the browser on these
++  // checks outside official builds, so a check that Chrome only reports
++  // stopped Stedding for the people using it. A build without DCHECKs is the
++  // one people run: it logs and writes a dump without crashing, as Chrome
++  // does. A build with DCHECKs, which the checks suites run on, still stops
++  // (docs/decisions/0024-soft-checks-report-in-releases.md).
++  return LOGGING_ERROR;
+ #else
+   // Crash outside official builds (outside user-facing builds) to detect
+   // invariant violations early in release-build testing like fuzzing, etc.

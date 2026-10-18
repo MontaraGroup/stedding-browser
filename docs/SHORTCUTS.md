@@ -6,7 +6,10 @@ the browser itself uses, so its keys are those of the version you run.
 
 Four keys are new since beta 14: muting a tab (⌃M / Ctrl+M), all folders at once
 (⇧⌘E / Ctrl+Shift+E), clearing a site's cookies (⌥⇧⌘R / Ctrl+Alt+Shift+R) and picture in
-picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). An earlier build does nothing with them.
+picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). An earlier build does nothing with them. On the Mac,
+splitting the current tab with a new one is ⌃⌘N from the first release after beta 17;
+beta 17 and earlier have only ⌥⌘N for it, which still splits after that, except while Arc
+runs.
 
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
@@ -40,7 +43,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Most recent tabs, the other way round | ⌃⇧⇥ | Ctrl+Shift+Tab |
 | Move the row down / up (a folder beside it is one row) | ⌥⇧⌘↓ / ⌥⇧⌘↑ | Ctrl+Alt+Shift+↓ / ↑ |
 | Collapse the Space's folders, or expand them all when none is open | ⇧⌘E | Ctrl+Shift+E |
-| Split the current tab with a new one | ⌥⌘N | Alt+Shift+N |
+| Split the current tab with a new one | ⌃⌘N (⌥⌘N too, except while Arc runs) | Alt+Shift+N |
 | Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
 | Reopen closed tabs, one at a time, each in its Space and folder (the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
 | Put a pinned tab to sleep (instead of closing it) | ⌘W | Ctrl+W |
@@ -97,8 +100,9 @@ Session** row in the command bar (⇧⌘P). Off by default.
 - **macOS:** a clipboard manager that owns ⇧⌘C system-wide (Maccy does by default)
   takes it before the browser does; the File menu row always works.
 - **macOS:** while Arc is running it takes ⌥⌘N from every app for its Little Arc window,
-  so ⌥⌘N opens Arc instead of a split here. Quit Arc, or use **New Split View with Current
-  Tab** on a tab's right-click menu.
+  so ⌥⌘N, Chromium's chord for the split, opens Arc instead of a split here. ⌃⌘N, the
+  menu's chord, always splits; so does **New Split View with Current Tab** on a tab's
+  right-click menu.
 - **Windows:** a tap of Alt on its own still focuses the app menu, as in Chromium; the
   digit goes with the key held.
 - **Windows:** Ctrl+Alt with an arrow is also the display-rotation hotkey some Intel
