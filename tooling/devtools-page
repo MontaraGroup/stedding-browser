@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Open a page in a browser tooling launched, through its DevTools endpoint.
+
+  tooling/devtools-page [--close-new-tab] [--timeout SECONDS] PROFILE_DIR URL
+
+Chromium opens no chrome:// page named on its command line
+(chrome/browser/ui/startup/url_util.cc): the window shows the new tab page
+instead. DevTools opens any page, with no input and no change of focus. The
+browser was launched with --remote-debugging-port=0 and
+--user-data-dir=PROFILE_DIR, so it wrote the port it chose to
+PROFILE_DIR/DevToolsActivePort; a PUT to /json/new opens URL in a new
+foreground tab of the last-used window (ChromeDevToolsManagerDelegate::
+CreateNewTarget), which shows no window and activates none. Nothing here
+calls /json/activate, which would bring the browser to the front.
+
+--close-new-tab then closes the new tab pages the launch opened, so the
+window holds the one page, as a typed address would have left it.
+
+The run fails unless the new tab reports URL as its address and has a title:
+a capture must never pass for the page asked for while the window shows
+another one (docs/HANDOFF.md, trap 92). Only the endpoint on 127.0.0.1 is
+used; nothing leaves the machine. Python's standard library only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+# What the window's first tab shows on a fresh profile: the new tab page, under
+# whichever of its names DevTools reports, or a blank page.
+NEW_TAB_PREFIXES = ("chrome://newtab", "chrome://new-tab-page", "about:blank")
+
+
+def read_port(profile: Path, timeout: float) -> int:
+    port_file = profile / "DevToolsActivePort"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            first = port_file.read_text(encoding="utf-8").splitlines()[0].strip()
+            if first.isdigit() and int(first) > 0:
+                return int(first)
+        except (OSError, IndexError):
+            pass
+        time.sleep(0.25)
+    raise SystemExit(
+        f"no DevTools port in {port_file} after {timeout:g} s "
+        "(was the browser launched with --remote-debugging-port=0?)")
+
+
+def call(port: int, path: str, method: str = "GET"):
+    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method)
+    with urllib.request.urlopen(request, timeout=10) as response:
+        body = response.read().decode("utf-8")
+    try:
+        return json.loads(body)
+    except ValueError:
+        return body
+
+
+def same_address(seen: str, asked: str) -> bool:
+    return seen.rstrip("/") == asked.rstrip("/")
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("profile", type=Path, help="the --user-data-dir the browser runs on")
+    parser.add_argument("url", help="the page to open, e.g. chrome://settings/stedding")
+    parser.add_argument("--close-new-tab", action="store_true",
+                        help="close the new tab pages the launch opened")
+    parser.add_argument("--timeout", type=float, default=20.0,
+                        help="seconds to wait for the port and for the page (default 20)")
+    args = parser.parse_args(argv[1:])
+
+    port = read_port(args.profile, args.timeout)
+    try:
+        opened = call(port, "/json/new?" + urllib.parse.quote(args.url, safe=""), "PUT")
+    except urllib.error.URLError as error:
+        raise SystemExit(f"DevTools on port {port} refused /json/new: {error}")
+    if not isinstance(opened, dict) or "id" not in opened:
+        raise SystemExit(f"DevTools answered /json/new with {opened!r}")
+    target = opened["id"]
+
+    if args.close_new_tab:
+        for page in call(port, "/json/list"):
+            if (page.get("type") == "page" and page.get("id") != target and
+                    page.get("url", "").startswith(NEW_TAB_PREFIXES)):
+                call(port, f"/json/close/{page['id']}")
+
+    deadline = time.monotonic() + args.timeout
+    seen = None
+    while time.monotonic() < deadline:
+        seen = next((page for page in call(port, "/json/list") if page.get("id") == target), None)
+        if seen and same_address(seen.get("url", ""), args.url) and seen.get("title"):
+            print(f"opened {seen['url']} ({seen['title']}) on DevTools port {port}")
+            return 0
+        time.sleep(0.25)
+    shown = f"{seen.get('url')!r} titled {seen.get('title')!r}" if seen else "no such tab"
+    raise SystemExit(f"asked for {args.url}, the new tab shows {shown}")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

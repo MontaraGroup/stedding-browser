@@ -4,7 +4,7 @@
 # Usage:
 #   tooling/capture-state --out <prefix> [--seed collapsed|grey-dark|light|dark] [--settle <seconds>]
 #                         [--features <list>] [--disable-features <list>]
-#                         [--size WxH] [--url URL] [--build DIR]
+#                         [--size WxH] [--url URL] [--page URL] [--build DIR]
 #                         [chromium args and URLs...]
 #
 # Refuses to start while any other process with the app's bundle id runs
@@ -22,6 +22,16 @@
 # --out path.png is the image file. Any other --out is a prefix, and the
 # image is <prefix>.png. --size accepts 1400x880 or 1400,880. --build is
 # the directory under out/ (default release).
+#
+# --page opens a page Chromium will not open from its command line, such as
+# chrome://settings/stedding (chrome/browser/ui/startup/url_util.cc shows the
+# new tab page instead). The browser is launched with
+# --remote-debugging-port=0; once it has painted, tooling/devtools-page opens
+# the page through the local DevTools endpoint in a new tab, closes the new
+# tab page the launch opened, and fails unless the tab reports that address
+# and a title. The capture follows after --page-settle seconds (default 5).
+# No input and no focus change: the endpoint is on 127.0.0.1, and nothing
+# activates a window.
 #
 # The state comes from feature params on SteddingArcStyleWindow and switches:
 #   --features 'SteddingArcStyleWindow:extra_spaces/2/pin_tabs/1/folder_tabs/3'
@@ -52,10 +62,10 @@ capture_cleanup() {
 
 main() {
   local out="" seed="" settle=18 features="" disable_features="" size="1400,880"
-  local build="release" url=""
+  local build="release" url="" page="" page_settle=5
   while [ $# -gt 0 ]; do
     case "$1" in
-      --out=*|--seed=*|--settle=*|--features=*|--size=*|--url=*|--disable-features=*|--build=*)
+      --out=*|--seed=*|--settle=*|--features=*|--size=*|--url=*|--disable-features=*|--build=*|--page=*|--page-settle=*)
         set -- "${1%%=*}" "${1#*=}" "${@:2}"
         ;;
     esac
@@ -67,8 +77,10 @@ main() {
       --disable-features) disable_features="$2"; shift 2 ;;
       --size)     size="$(printf '%s' "$2" | tr 'xX' ',,')"; shift 2 ;;
       --url)      url="$2"; shift 2 ;;
+      --page)     page="$2"; shift 2 ;;
+      --page-settle) page_settle="$2"; shift 2 ;;
       --build)    build="$2"; shift 2 ;;
-      -h|--help)  sed -n '2,34p' "$0"; exit 0 ;;
+      -h|--help)  sed -n '2,45p' "$0"; exit 0 ;;
       *)          break ;;
     esac
   done
@@ -88,7 +100,7 @@ main() {
   for arg in "$@"; do
     case "$arg" in
       chrome://*|chrome-untrusted://*)
-        die "Chromium does not open $arg from the command line; drive the address bar to it (tooling/drive)" ;;
+        die "Chromium does not open $arg from the command line; pass it as --page $arg" ;;
     esac
   done
 
@@ -136,6 +148,9 @@ main() {
          --stedding-stay-in-background \
          --disable-backgrounding-occluded-windows \
          --window-size="$size" --window-position=0,0 --enable-logging=stderr "$@"
+  # Port 0: the browser picks a free one and writes it to
+  # <profile>/DevToolsActivePort, so two runs never share a port (trap 61).
+  [ -n "$page" ] && set -- --remote-debugging-port=0 "$@"
   [ -n "$disable_features" ] && set -- --disable-features="$disable_features" "$@"
   [ -n "$features" ] && set -- --enable-features="$features" "$@"
 
@@ -148,6 +163,11 @@ main() {
   # watching that the browser never takes the focus from whoever is at the machine.
   local stolen="the launched browser (pid $pid) made itself the frontmost app in place of pid ${front_before:-unknown}, so keys typed meanwhile went to it"
   wait_unfocused "$pid" "$settle" stop || die "$stolen; nothing was captured"
+  if [ -n "$page" ]; then
+    python3 "$STEDDING_ROOT/tooling/devtools-page" --close-new-tab "$profile" "$page" ||
+      die "DevTools did not open $page; nothing was captured (see $log_file)"
+    wait_unfocused "$pid" "$page_settle" stop || die "$stolen; nothing was captured"
+  fi
 
   local cap_status=0
   python3 "$STEDDING_ROOT/tooling/capture-windows" "$pid" "$prefix" || cap_status=$?
