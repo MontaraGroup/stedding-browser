@@ -7,6 +7,42 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-18 -- beta 17 released from both platforms, the first update through the feed
+
+Google had paused Chrome 156's early rollout on 16 October, and the operator first chose to
+wait for it, then, with Google's full release of 156 planned for 20 October, to release now
+on 156.0.8078.36. `v0.2.0-beta.17` went out from tag commit `afdd047` (series of 68 patches):
+the Mac's signed and notarized DMG first, then the Windows installer from the PC into the
+same release, then `updates/appcast.xml` (`ce31bdf`), which offers it to installed beta 16
+copies: the first update anyone receives through the feed (`S-74`, closed).
+
+- **The Mac:** the release build with the version set: 855 unit, 20 component, 132 browser
+  and 115 rebase tests, green with no retries; signed and notarized; `verify-build`
+  (offline) passed, full screen included, and so did `syspolicy_check distribution`.
+- **The PC, driven from the Mac over SSH:** the same tree. On the exact build, in the
+  operator's desktop session, 842 unit tests and 124 browser tests passed, one browser test
+  only on its own: a folder test that presses Ctrl+Shift+E missed the active window while
+  four ran at once, and now runs one at a time (`tooling/dev`). An earlier run, with the
+  session disconnected, had three Space tests out of time and three pointer tests failing;
+  they passed again, the pointer tests once the operator had connected the session. The
+  installer was run as the user: over the build installed for testing (a repair), an
+  uninstall that kept the profile, a fresh install, the installed `chrome.dll` the build's
+  each time; one launch of the installed build drew the window and opened the thank-you
+  page for 0.2.0 beta 17.
+- **Tried as a user gets it:** both images downloaded from the release match their
+  checksums; the quarantined DMG mounts and Gatekeeper accepts its app as notarized
+  Developer ID, the ticket stapled. The feed served by raw.githubusercontent.com is the
+  commit's byte for byte, its signature verifies, and the downloaded image verifies against
+  the feed's `edSignature`. Then a copy of the released beta 16, pointed at a test profile,
+  updated itself from the real feed: the pill after about 50 seconds, the release's image
+  installed at the quit, and the new version ran, notarized, with the profile's `Last
+  Version` 156. The site's rebuild was triggered.
+- **The browser test counts in the notes of betas 15 to 17 were the leg's two counts added
+  up** ("N tests for all" and the serial ones among them): 132 on the Mac and 124 on the PC
+  this time, not 165 and 158. The notes and this log say so now (trap 88).
+- Not done: ASan (`S-106`), `components_unittests` on Windows, the rollback path tried for
+  real (ROADMAP M7).
+
 ## 2026-10-16, evening -- the pin moves to 156.0.8078.36
 
 The operator asked for Chromium's latest stable, `npm audit` fixed, and updates that will
@@ -26,9 +62,9 @@ Mac too and checked until nothing was broken.
   rollout.
 - **The suites, on the exact builds:** the Mac 855 unit tests (Stedding's suites count what
   they counted on 155; Chromium's own cases in the legs went from 394 to 383), 20 component,
-  165 browser and 115 rebase tests; the PC 842 unit, 158 browser and 114 rebase tests. All
+  132 browser and 115 rebase tests; the PC 842 unit, 124 browser and 114 rebase tests. All
   passed. On the PC's checks build (DCHECKs and the dangling-pointer detector) the unit
-  tests passed, and 110 of the 158 browser tests stopped at a window's first paint on one
+  tests passed, and 110 of the 124 browser tests stopped at a window's first paint on one
   DCHECK: three of Stedding's sidebar labels drew subpixel text onto M156's new content-area
   layer, which is not opaque (trap 92). With subpixel text off there, as on the sidebar's
   other rows, the run stopped only on `S-214`'s two older DCHECKs and reported no dangling
@@ -85,13 +121,13 @@ it (`S-74`).
 - **The PC, driven from the Mac over SSH:** its checkout holds the same tree as the Mac's.
   The release build's suites ran in the operator's desktop session through temporary
   scheduled tasks, deleted after: 852 unit tests (the first run had two Space tests time out;
-  each passed three runs in three alone, and the whole run passed again) and 158 browser
+  each passed three runs in three alone, and the whole run passed again) and 124 browser
   tests. The installer was run in its upgrade mode over the beta 15 install, after a backup:
   the installed `chrome.dll` is the build's, the profile is where it was, and one launch of
   the installed build drew the window, the sidebar and the address row. The uninstall and
   clean-install modes were not run for this release.
 - **The Mac:** the release build with the version set, signed and notarized; 865 unit, 20
-  component and 165 browser tests on the exact build; `verify-build` (offline, without its
+  component and 132 browser tests on the exact build; `verify-build` (offline, without its
   full-screen check) and `syspolicy_check distribution` passed. After publishing, both
   images were downloaded from the release and matched their checksums; the DMG, marked as
   quarantined the way a browser marks a download, mounted, and Gatekeeper accepted the app in
@@ -137,8 +173,8 @@ they chose Sparkle 2, on by default, and both pages. Patch 0068 and ADR 0022 hol
 - Sparkle's helpers come signed ad hoc, which `codesign` replaces only with `--force`; the
   signer now takes those signatures off before signing them (`parts.py`).
 
-Tests: on the Mac's release build 865 unit tests, 20 component tests and 165 browser tests;
-on the PC's, from the same tree, 852 unit tests and 158 browser tests; all passing. On the
+Tests: on the Mac's release build 865 unit tests, 20 component tests and 132 browser tests;
+on the PC's, from the same tree, 852 unit tests and 124 browser tests; all passing. On the
 PC's checks build only the two filed failures (four tests).
 
 ## 2026-10-15, night -- the review's remaining items, and a new default favicon (patch 0067)
@@ -168,9 +204,9 @@ the favicon is branding.
 - The first draft added to headers much of the tree includes and cost about 11,800 build
   steps on each machine; the fixes moved into narrow headers and `.cc` files (trap 90).
 
-Tests: on the Mac's release build, 852 unit tests, 20 component tests and 158 browser tests
-(125 in the main leg, 33 one at a time); on the PC's, from the same sources and in the
-operator's desktop session, 839 unit tests and 152 browser tests (118 four at a time, 34 one
+Tests: on the Mac's release build, 852 unit tests, 20 component tests and 125 browser tests
+(33 of them one at a time after the rest); on the PC's, from the same sources and in the
+operator's desktop session, 839 unit tests and 118 browser tests (84 four at a time, then 34 one
 at a time); all passing. Every new test failed with its fix taken out: two passes on the Mac,
 since the crash restore's two halves and the worker's can only fail one at a time, and the
 Windows chord and note tests on the PC; the AltGr digit test is a guard, which passes either
@@ -194,7 +230,7 @@ then the Windows installer from the PC into the same release.
   passed. The installer was tested over the beta 14 install after a backup: the installed
   `chrome.dll` is the build's, the profile kept; one launch of the installed build captured.
 - **The Mac:** the release build with the version set, signed and notarized, `verify-build`
-  (offline) and `syspolicy_check distribution` passed; 845 unit, 20 component and 151 browser
+  (offline) and `syspolicy_check distribution` passed; 845 unit, 20 component and 118 browser
   tests on the exact build. After publishing, both images were downloaded from the release and
   matched their checksums, and Gatekeeper accepted the app in the downloaded DMG as notarized.
 - Not done for this release: use by hand with the real pointer and keyboard on either platform,
@@ -222,7 +258,7 @@ The operator asked for the review's filed items, `S-201` to `S-209`, to be fixed
   the title, or the tab count when unnamed (`S-210`, folders F36).
 
 Tests, the Mac's release build: 845 unit tests (Chromium's tab group header tests among them),
-20 component tests, 118 browser tests four at a time and 33 one at a time, all passing. Every
+20 component tests, 118 browser tests (33 of them one at a time after the rest), all passing. Every
 new test failed with its fix taken out. No release.
 
 ## 2026-10-15 -- a code review of the whole series (patch 0065)

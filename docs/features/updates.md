@@ -3,8 +3,10 @@
 Status: **Up1–Up13 built** in patch `0068` (2026-10-16): both platforms' suites pass, and
 the Mac's n-1 check passed on two Developer-ID-signed builds, and from the released beta 16
 to the 156 build (docs/HANDOFF.md, "The updater"). The first update through the real feed
-waits for the release after the first one built with the updater (BACKLOG S-74). On
-Windows only Up9–Up11 apply (no updater there yet).
+went out with beta 17 (2026-10-18): a copy of the released beta 16, pointed at a test
+profile, found it on the real feed in about 50 seconds, downloaded the release's image,
+installed it at the quit, and the new version ran, notarized. On Windows only Up9–Up11
+apply (no updater there yet).
 Owner docs: `docs/decisions/0022-sparkle-updates-the-mac.md`, `docs/decisions/0023-updates-on-windows-and-linux.md`
 (Windows and Linux, planned), `docs/PRIVACY.md` (the update check), `docs/QUALITY.md` (rollback).
 Patch: `0068`.

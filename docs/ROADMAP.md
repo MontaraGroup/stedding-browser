@@ -261,9 +261,12 @@ Acceptance criteria:
 
 ## M7 — Signed, notarized, auto-updating; site live
 
-> **Half done.** stedding.dev is live (2026-09-16) and the macOS image is signed and
-> notarized from beta 10 (`S-17`). Automatic updates are next, the Mac first (`S-74`), with
-> the n-1 and rollback gates below.
+> **Mostly done on the Mac.** stedding.dev is live (2026-09-16), the macOS image is signed
+> and notarized from beta 10 (`S-17`), and the Mac updates itself from beta 16 (`S-74`):
+> beta 17 was the first release offered through the feed (2026-10-18), and a copy of the
+> released beta 16 took it from the real feed, while the n-1 rehearsal showed the relaunch
+> keeping the profile. Left: the rollback path tried for real, and updates on Windows and
+> Linux (ADR 0023: `S-215`, `S-216`).
 
 **Goal:** distribution is production-grade: install with no warnings, update without
 thinking, learn about it at stedding.dev.

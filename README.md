@@ -18,7 +18,7 @@
   <a href="https://github.com/ysalitrynskyi/stedding-browser/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/ysalitrynskyi/stedding-browser?include_prereleases&label=download&color=2F4858"></a>
   <a href="LICENSE"><img alt="License: BSD-3-Clause" src="https://img.shields.io/badge/license-BSD--3--Clause-E8B04B"></a>
   <img alt="Platforms: macOS and Windows" src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-1C2B33">
-  <img alt="Chromium 155" src="https://img.shields.io/badge/Chromium-155%20stable-2F4858">
+  <img alt="Chromium 156" src="https://img.shields.io/badge/Chromium-156%20stable-2F4858">
 </p>
 
 <p align="center">
@@ -61,7 +61,7 @@ behind each behaviour, is in [docs/features/](docs/features/).
 
 ## Download
 
-The current release is **0.2.0 beta 16**, built on Chromium 155.0.8059.12 (stable): a macOS
+The current release is **0.2.0 beta 17**, built on Chromium 156.0.8078.36 (stable): a macOS
 image for Apple silicon, signed and notarized, and a Windows preview. Get them from
 [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases):
@@ -129,14 +129,14 @@ buttons and Arc's keyboard mapped to Ctrl and Alt.
 
 ## Features
 
-New in beta 16: on the Mac, Stedding updates itself (Settings → Stedding → Updates turns
-it off) and opens a thank-you page on stedding.dev after the install and after each update;
-a Space with its own cookies keeps a page's session storage over a restart and can show
-notifications; and Restore after a crash puts each window back with its own Spaces. Beta 15
-fixed two ways to close the browser by accident (closing one pane of a split, grouping a tab
-that sits in a folder), stopped two calls to Google at startup and Autofill's questions to
-Google about the forms you see, and brings a closed folder back as one, in order. The
-release notes in [docs/release-notes/](docs/release-notes/) list every change.
+New in beta 17: Stedding moves to Chromium 156, and it is the first release that reaches
+Macs by itself: beta 16 finds it within a day and offers it at the bottom of the sidebar. On
+Windows the Archived row's text loses the colour fringes it had. Beta 16 brought automatic
+updates on the Mac (Settings → Stedding → Updates turns them off) and a thank-you page on
+stedding.dev after the install and after each update; a Space with its own cookies keeps a
+page's session storage over a restart and can show notifications; and Restore after a crash
+puts each window back with its own Spaces. The release notes in
+[docs/release-notes/](docs/release-notes/) list every change.
 
 **Sidebar and tabs**
 - Vertical tabs at Arc's proportions: an essentials row above every Space, the Space's
@@ -309,8 +309,8 @@ and what comes next:
 
 | | State |
 |---|---|
-| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 16's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
-| Windows x64 | Preview installer since beta 5, on Chromium 155 from beta 9: the full interface, Arc's keys for Windows, a per-user install; both test suites ran clean with DCHECKs and the dangling-pointer detector on beta 14's series (beta 16's shows two older faults, `S-213`, `S-214`) and under AddressSanitizer on the series of 2026-09-30 |
+| macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 17's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
+| Windows x64 | Preview installer since beta 5, on Chromium 156 from beta 17: the full interface, Arc's keys for Windows, a per-user install; both test suites ran clean with DCHECKs and the dangling-pointer detector on beta 14's series (beta 17's stops on one older fault, `S-214`) and under AddressSanitizer on the series of 2026-09-30 |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
 | Automatic updates | The Mac from beta 16 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022); Windows and Linux are planned (ADR 0023: `S-215`, `S-216`) |
 | Windows: little windows, signing, updates | Open (`S-56`) |
@@ -318,8 +318,9 @@ and what comes next:
 | Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, dark mode for pages, import from Dia, the site's controls in one panel (the Features section of [BACKLOG.md](BACKLOG.md)). Undo after closing tabs and several smaller items are in since beta 14 |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
-Known limits in the current builds: beta 16 is built on Chromium 155.0.8059.12, without the
-security fixes of the later 155 builds; no automatic updates on Windows yet, and the Windows
+Known limits in the current builds: beta 17 is built on Chromium 156.0.8078.36, the build
+of Chrome 156 whose early rollout Google paused on 16 October, before Chrome 156's full
+release planned for 20 October; no automatic updates on Windows yet, and the Windows
 installer is unsigned; ⌃1–⌃9 collide with macOS Mission Control once you have a second
 desktop (the Spaces menu keeps the commands reachable); a clipboard manager that owns ⇧⌘C
 system-wide takes it before the browser does; while Arc runs it takes ⌥⌘N from every app

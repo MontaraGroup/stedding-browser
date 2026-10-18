@@ -588,10 +588,11 @@ check is off until it has a settings entry, per the UX completeness rule in
 
 That decision removes the update *server* from the project: the release artifacts and
 the update metadata are the same objects, so there is nothing extra to run, secure or
-pay for. Automatic updates come next, the Mac first (`BACKLOG.md` S-74): a Sparkle-style
-check, the download verified against the Developer ID and the published sha256, applied
-on the next quit. The signing this needs is in place for the Mac. Full-size updates
-before deltas; correctness and signature verification before either.
+pay for. The Mac updates itself from beta 16 on (ADR 0022, `docs/features/updates.md`):
+Sparkle reads the signed feed once a day, checks the image's EdDSA signature and the app's
+Developer ID, and installs at the quit or at a click on the sidebar's pill. Windows and
+Linux are planned in ADR 0023 (`BACKLOG.md` S-215, S-216). Full-size updates before
+deltas; correctness and signature verification before either.
 
 **stedding.dev is a website, not infrastructure.** Separate repository (`ysalitrynskyi/stedding.dev`, live since 2026-09-16), Astro, static, Cloudflare Pages.
 Download link, release notes, security policy, source link. Deliberately not on the path

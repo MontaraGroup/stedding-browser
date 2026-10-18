@@ -1152,7 +1152,10 @@ private window has.
     window and drops nothing. A screen capture every three seconds during the run showed it.
     Drag fixtures call `stedding::test::KeepAboveOtherWindows` on their widget (z-order needs
     no foreground right). A new fixture that drags, hovers, types or needs its window in
-    front goes on the serial list.
+    front goes on the serial list. The leg prints two counts that overlap: "N tests for
+    all" (or "for browser") is every test, and "M tests for serial" the ones among them it
+    runs one at a time at the end, so the leg runs N tests, not N + M. Betas 15 to 17 were
+    first reported with the two added up (2026-10-18, corrected in the notes).
 
 89. **`tooling/apply-patches` rewrites every file the series touches, and the build then
     recompiles for hours.** On 2026-10-15 the Mac's checkout held an older 0062 and neither
@@ -1225,7 +1228,7 @@ private window has.
       `//chrome/browser/ui/views/frame:stedding_browser_view_layout`.
     - The content area is a layer that is not opaque. A label in it that draws subpixel
       text trips `Label::PaintText`'s DCHECK at a window's first paint (on 2026-10-17, 110
-      of the 158 browser tests on `win-checks`), and on Windows it draws colour fringes in a
+      of the 124 browser tests on `win-checks`), and on Windows it draws colour fringes in a
       release build (beta 16's Archived row had them). Stedding's rows there turn subpixel
       text off, as `tab_strip_view.cc`'s rows already did:
       `SetSubpixelRenderingEnabled(false)` and `SetSkipSubpixelRenderingOpacityCheck(true)`.
