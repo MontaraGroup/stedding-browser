@@ -206,6 +206,17 @@ function Drive-VkOf([string]$k) {
   if ($k.Length -eq 1) { $s = [StedDrive]::VkKeyScan($k[0]); return [byte]($s -band 0xFF) }
   throw "unknown key '$k'"
 }
+# The keys a keyboard sends with the extended flag: PgUp, PgDn, End, Home, the arrows, Insert,
+# Delete and Win. Without it an arrow is the numeric keypad's with NumLock off, which a text
+# field takes for an Alt code while Alt is held: Ctrl+Alt+Right in the address bar did nothing
+# (BACKLOG S-218), where the arrow key itself changes Space.
+$script:ExtendedVks = @(0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E, 0x5B)
+function Drive-Key([byte]$Vk, [switch]$Up) {
+  $flags = 0
+  if ($script:ExtendedVks -contains [int]$Vk) { $flags = $flags -bor 0x0001 }  # KEYEVENTF_EXTENDEDKEY
+  if ($Up) { $flags = $flags -bor 0x0002 }  # KEYEVENTF_KEYUP
+  [StedDrive]::keybd_event($Vk, 0, [uint32]$flags, [UIntPtr]::Zero)
+}
 
 # Button 'left' or 'right'; $Mods is a chord of modifiers held through the click ('ctrl', 'shift+ctrl').
 function Drive-Click([int]$x, [int]$y, [string]$Button = 'left', [string]$Mods = '') {
@@ -214,10 +225,10 @@ function Drive-Click([int]$x, [int]$y, [string]$Button = 'left', [string]$Mods =
   $down = if ($Button -eq 'right') { 0x0008 } else { 0x0002 }
   $up = if ($Button -eq 'right') { 0x0010 } else { 0x0004 }
   $vks = Drive-ModVks $Mods
-  foreach ($v in $vks) { [StedDrive]::keybd_event($v, 0, 0, [UIntPtr]::Zero) }
+  foreach ($v in $vks) { Drive-Key $v }
   [StedDrive]::mouse_event($down, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 70
   [StedDrive]::mouse_event($up, 0, 0, 0, [UIntPtr]::Zero)
-  [array]::Reverse($vks); foreach ($v in $vks) { [StedDrive]::keybd_event($v, 0, 2, [UIntPtr]::Zero) }
+  [array]::Reverse($vks); foreach ($v in $vks) { Drive-Key $v -Up }
   Start-Sleep -Milliseconds 350
   Drive-Mark
   return $true
@@ -255,10 +266,10 @@ function Drive-Keys([string]$Chord) {
   $parts = $Chord -split '\+'
   $mods = @(); for ($i = 0; $i -lt $parts.Count - 1; $i++) { $mods += Drive-VkOf $parts[$i] }
   $key = Drive-VkOf $parts[-1]
-  foreach ($m in $mods) { [StedDrive]::keybd_event([byte]$m, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 30 }
-  [StedDrive]::keybd_event([byte]$key, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 50
-  [StedDrive]::keybd_event([byte]$key, 0, 2, [UIntPtr]::Zero); Start-Sleep -Milliseconds 30
-  for ($i = $mods.Count - 1; $i -ge 0; $i--) { [StedDrive]::keybd_event([byte]$mods[$i], 0, 2, [UIntPtr]::Zero); Start-Sleep -Milliseconds 20 }
+  foreach ($m in $mods) { Drive-Key ([byte]$m); Start-Sleep -Milliseconds 30 }
+  Drive-Key ([byte]$key); Start-Sleep -Milliseconds 50
+  Drive-Key ([byte]$key) -Up; Start-Sleep -Milliseconds 30
+  for ($i = $mods.Count - 1; $i -ge 0; $i--) { Drive-Key ([byte]$mods[$i]) -Up; Start-Sleep -Milliseconds 20 }
   Start-Sleep -Milliseconds 300
   Drive-Mark
   return $true
