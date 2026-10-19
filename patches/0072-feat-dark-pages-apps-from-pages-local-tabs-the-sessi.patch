@@ -32,6 +32,9 @@ tables, the preferences, Settings' Stedding page, the tab row):
 - The sidebar's quiet controls (sidebar Y27): the Archived row and the Clear
   line sit back in a softer shade until hovered, pressed or focused.
 - Windows: the network service runs in its own sandbox (windows N15).
+- The essentials card is a frosted tile with no edge, as Arc draws its
+  favourites (tabs R32); its 1 DIP edge was Chromium's outline, whose
+  Material colour took the Space's hue.
 - Defects: a restored row lost its page's title (S-229: the session now writes
   a title change); an open tab was listed as archived too after a relaunch,
   and Shift-Cmd-T reopened the quit's window as a second copy (S-230); a real
@@ -41,6 +44,11 @@ tables, the preferences, Settings' Stedding page, the tab row):
   went (S-227); the right-hand sidebar's test lost a real pointer on Windows
   (S-221); unit tests wrote into the person's data folder (S-220); the pin
   notice raced a queued move; a toast was lost on navigation.
+- Tests that failed on Windows alone (S-242): pixel reads there need the
+  browser test to ask for drawing; Windows labels Chromium's menu row with
+  its mnemonic; a test of the quiet install now allows no browser sign-in,
+  as a Stedding build; the elision test's Space name overflows Segoe UI too;
+  the restore test's restarted mock client keeps addresses, as the first.
 
 Why: each item is the owner's request of 2026-10-18 or a defect a user meets.
 Removable when: never as a whole; the next rebase splits the features into
@@ -66,7 +74,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../resources/stedding_archive/app.css        |   17 +
  .../browser/resources/stedding_archive/app.ts |   50 +-
  chrome/browser/sessions/session_restore.cc    |   18 +-
- .../sessions/tab_restore_service_unittest.cc  |   65 +
+ .../sessions/tab_restore_service_unittest.cc  |   75 ++
  chrome/browser/ui/BUILD.gn                    |   13 +
  chrome/browser/ui/accelerator_table.cc        |    4 +
  chrome/browser/ui/archive/BUILD.gn            |   15 +-
@@ -89,7 +97,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../ui/cocoa/main_menu_builder_unittest.mm    |   54 +
  .../browser/ui/navigator/browser_navigator.cc |   16 +
  chrome/browser/ui/spaces/BUILD.gn             |   24 +
- chrome/browser/ui/spaces/app_jar.cc           |  208 ++++
+ chrome/browser/ui/spaces/app_jar.cc           |  208 +++
  chrome/browser/ui/spaces/app_jar.h            |   94 ++
  chrome/browser/ui/spaces/app_jars_unittest.cc |  126 ++
  chrome/browser/ui/spaces/isolation_mark.cc    |   40 +
@@ -97,7 +105,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/browser/ui/spaces/new_tab_space.cc     |    9 +
  chrome/browser/ui/spaces/space_model.cc       |  122 ++
  chrome/browser/ui/spaces/space_model.h        |   36 +
- .../ui/spaces/space_model_window_unittest.cc  |  137 +++
+ .../ui/spaces/space_model_window_unittest.cc  |  137 ++
  .../ui/spaces/space_storage_partition.cc      |   13 +-
  .../ui/spaces/space_storage_partition.h       |   11 +-
  .../space_storage_partition_unittest.cc       |   29 +-
@@ -110,12 +118,12 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/browser/ui/stedding/app_dock_mac.mm    |  159 +++
  .../browser/ui/stedding/app_records_keeper.cc |   73 ++
  .../browser/ui/stedding/app_records_keeper.h  |   52 +
- chrome/browser/ui/stedding/dark_pages.cc      |  475 ++++++++
+ chrome/browser/ui/stedding/dark_pages.cc      |  475 +++++++
  chrome/browser/ui/stedding/dark_pages.h       |  241 ++++
- .../ui/stedding/dark_pages_unittest.cc        |  274 +++++
+ .../ui/stedding/dark_pages_unittest.cc        |  274 ++++
  chrome/browser/ui/stedding/local_pages.cc     |   50 +
  chrome/browser/ui/stedding/local_pages.h      |   37 +
- .../ui/stedding/local_pages_unittest.cc       |  134 +++
+ .../ui/stedding/local_pages_unittest.cc       |  134 ++
  chrome/browser/ui/stedding/make_app.cc        |   79 ++
  chrome/browser/ui/stedding/make_app.h         |   40 +
  chrome/browser/ui/stedding/make_app_rules.cc  |   54 +
@@ -143,7 +151,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/browser/ui/unload_controller.cc        |    8 +
  chrome/browser/ui/views/BUILD.gn              |    2 +
  chrome/browser/ui/views/commandbar/BUILD.gn   |    4 +
- .../ui/views/commandbar/command_bar_view.cc   |  201 +++-
+ .../ui/views/commandbar/command_bar_view.cc   |  201 ++-
  .../ui/views/commandbar/command_bar_view.h    |   17 +
  .../commandbar/command_bar_view_unittest.cc   |  296 ++++-
  chrome/browser/ui/views/frame/BUILD.gn        |    9 +
@@ -153,7 +161,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../ui/views/frame/contents_web_view.h        |   19 +
  .../layout/browser_view_tabbed_layout_impl.cc |   10 +
  .../views/frame/system_menu_model_delegate.cc |   15 +-
- .../frame/vertical_tab_strip_region_view.cc   |  138 ++-
+ .../frame/vertical_tab_strip_region_view.cc   |  138 +-
  .../frame/vertical_tab_strip_region_view.h    |   30 +
  .../views/infobars/infobar_container_view.cc  |   10 +
  .../ui/views/session_crashed_bubble_view.cc   |    8 +
@@ -175,12 +183,13 @@ patches of their own and folds each fix into the patch that owns its code
  .../views/tabs/common/folder_drag_target.cc   |   15 +-
  .../ui/views/tabs/common/folder_drag_target.h |    7 +
  .../common/folder_drag_target_unittest.cc     |   23 +
- .../tabs/common/stedding_tab_row_rules.cc     |   67 ++
- .../tabs/common/stedding_tab_row_rules.h      |   69 ++
- .../common/stedding_tab_row_rules_unittest.cc |  362 ++++++
+ .../ui/views/tabs/common/split_tab_view.cc    |   24 +-
+ .../tabs/common/stedding_tab_row_rules.cc     |   75 ++
+ .../tabs/common/stedding_tab_row_rules.h      |   79 ++
+ .../common/stedding_tab_row_rules_unittest.cc |  388 ++++++
  .../ui/views/tabs/common/tab_strip_view.cc    |   91 ++
  .../ui/views/tabs/common/tab_strip_view.h     |    6 +
- .../browser/ui/views/tabs/common/tab_view.cc  |  190 +++
+ .../browser/ui/views/tabs/common/tab_view.cc  |  202 +++
  .../browser/ui/views/tabs/common/tab_view.h   |   31 +
  .../tabs/common/tab_view_vertical_layout.cc   |   46 +
  chrome/browser/ui/views/toolbar/BUILD.gn      |    5 +
@@ -203,7 +212,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/browser/ui/webui/settings/BUILD.gn     |    3 +
  .../browser/ui/webui/settings/settings_ui.cc  |   48 +
  .../settings/stedding_dark_pages_handler.cc   |  149 +++
- .../settings/stedding_dark_pages_handler.h    |   66 ++
+ .../settings/stedding_dark_pages_handler.h    |   66 +
  .../settings/stedding_shortcuts_handler.cc    |    3 +
  .../stedding_shortcuts_handler_unittest.cc    |   27 +
  .../webui/settings/stedding_spaces_handler.cc |   15 +
@@ -233,28 +242,28 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/test/base/chrome_unit_test_suite.cc    |   75 ++
  chrome/test/base/chrome_unit_test_suite.h     |    9 +
  chrome/test/stedding/BUILD.gn                 |   38 +
- .../test/stedding/address_band_browsertest.cc |  147 ++-
- chrome/test/stedding/app_jar_browsertest.cc   |  802 +++++++++++++
+ .../test/stedding/address_band_browsertest.cc |  174 ++-
+ chrome/test/stedding/app_jar_browsertest.cc   |  802 ++++++++++++
  .../test/stedding/clear_space_browsertest.cc  |   61 +
  .../test/stedding/command_bar_browsertest.cc  |   24 +
  .../stedding/dark_pages_app_browsertest.cc    |  245 ++++
- .../test/stedding/dark_pages_browsertest.cc   | 1053 ++++++++++++++++
+ .../test/stedding/dark_pages_browsertest.cc   | 1072 ++++++++++++++++
  .../dark_pages_menu_mac_browsertest.mm        |   92 ++
  chrome/test/stedding/defaults_browsertest.cc  |   37 +
- .../stedding/isolation_mark_browsertest.cc    |  935 +++++++++++++++
- .../test/stedding/local_tabs_browsertest.cc   | 1055 +++++++++++++++++
- chrome/test/stedding/make_app_browsertest.cc  |  422 +++++++
+ .../stedding/isolation_mark_browsertest.cc    |  938 ++++++++++++++
+ .../test/stedding/local_tabs_browsertest.cc   | 1116 +++++++++++++++++
+ chrome/test/stedding/make_app_browsertest.cc  |  423 +++++++
  .../test/stedding/make_app_mac_browsertest.mm |  328 +++++
- .../stedding/make_app_quiet_browsertest.cc    |  137 +++
- chrome/test/stedding/restore_browsertest.cc   |  529 +++++++++
+ .../stedding/make_app_quiet_browsertest.cc    |  148 +++
+ chrome/test/stedding/restore_browsertest.cc   |  529 ++++++++
  .../stedding/restored_title_browsertest.cc    |  311 +++++
- .../test/stedding/screenshot_browsertest.cc   |   52 +
+ .../test/stedding/screenshot_browsertest.cc   |   62 +
  .../stedding/settings_spaces_browsertest.cc   |  181 +++
  .../stedding/sidebar_forms_browsertest.cc     |  130 +-
  chrome/test/stedding/sidebar_test_util.cc     |   10 +
  chrome/test/stedding/sidebar_test_util.h      |   22 +
  .../test/stedding/space_switch_browsertest.cc |   69 +-
- chrome/test/stedding/tab_drop_browsertest.cc  |  408 ++++++-
+ chrome/test/stedding/tab_drop_browsertest.cc  |  408 +++++-
  chrome/test/stedding/web_app_test_base.h      |   48 +
  .../core/browser/content_settings_registry.cc |    6 +-
  components/infobars/core/infobar_container.cc |   12 +-
@@ -268,7 +277,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 221 files changed, 16797 insertions(+), 304 deletions(-)
+ 222 files changed, 17008 insertions(+), 315 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -1494,10 +1503,10 @@ index 561062c17ebb4..c9c7caa6ae250 100644
            profile_->GetStoragePartition(partition)
                ->GetDOMStorageContext()
 diff --git a/chrome/browser/sessions/tab_restore_service_unittest.cc b/chrome/browser/sessions/tab_restore_service_unittest.cc
-index 47e7d78aafaca..7a220ff1b6d9e 100644
+index 47e7d78aafaca..1544a6f876ce3 100644
 --- a/chrome/browser/sessions/tab_restore_service_unittest.cc
 +++ b/chrome/browser/sessions/tab_restore_service_unittest.cc
-@@ -593,6 +593,71 @@ TEST_F(TabRestoreServiceImplWithMockClientTest, WindowRestore) {
+@@ -593,6 +593,81 @@ TEST_F(TabRestoreServiceImplWithMockClientTest, WindowRestore) {
    validate();
  }
  
@@ -1546,6 +1555,16 @@ index 47e7d78aafaca..7a220ff1b6d9e 100644
 +    }
 +  };
 +
++  // A restart makes a new client: it keeps every address, as the first one
++  // does and as the browser's does for a web page. A client left to the
++  // mock's default keeps none, so the window read back after the first
++  // restart was never written again, and the second read nothing.
++  const auto restart = [&]() {
++    RecreateService();
++    ON_CALL(*mock_tab_restore_service_client_, ShouldTrackURLForRestore(_))
++        .WillByDefault(Return(true));
++  };
++
 +  // Written first, as the save timer writes a new entry.
 +  service_->command_storage_manager_for_testing()->Save();
 +  service_->SetWindowTabsExtraData(SessionID::NewUnique(), "stedding.test",
@@ -1554,7 +1573,7 @@ index 47e7d78aafaca..7a220ff1b6d9e 100644
 +  service_->SetWindowTabsExtraData(service_->entries().front()->id,
 +                                   "stedding.test", "1");
 +  expect_tabs("1");
-+  RecreateService();
++  restart();
 +  expect_tabs("1");
 +
 +  // The entries read back are written out again; the erase comes after.
@@ -1562,7 +1581,7 @@ index 47e7d78aafaca..7a220ff1b6d9e 100644
 +  service_->SetWindowTabsExtraData(service_->entries().front()->id,
 +                                   "stedding.test", std::nullopt);
 +  expect_tabs(std::nullopt);
-+  RecreateService();
++  restart();
 +  expect_tabs(std::nullopt);
 +}
 +
@@ -10471,11 +10490,67 @@ index 84329bf4d95ca..0f66ab7f901a8 100644
  // F7: the folder's only tab dropped on its own header stays in its folder.
  TEST_F(FolderDragTargetTest, DroppingAFoldersOnlyTabOnItselfKeepsIt) {
    AddTab(browser(), GURL("https://example.com/"));
+diff --git a/chrome/browser/ui/views/tabs/common/split_tab_view.cc b/chrome/browser/ui/views/tabs/common/split_tab_view.cc
+index a0df4945deef7..d8e6c1e573075 100644
+--- a/chrome/browser/ui/views/tabs/common/split_tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/split_tab_view.cc
+@@ -6,9 +6,11 @@
+ 
+ #include <vector>
+ 
++#include "base/feature_list.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
++#include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_drag_handler.h"
+@@ -102,13 +104,22 @@ void SplitTabView::OnPaint(gfx::Canvas* canvas) {
+         !children.empty()
+             ? views::AsViewClass<TabView>(children[0])->GetBackgroundColor()
+             : std::nullopt;
++    const float corner_radius =
++        GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius) -
++        GetInsets().top() / 2.0;
++    // Stedding (tabs R32): the merged card is a frosted tile, as a single
++    // essentials card is, under the fill an active or hovered split paints.
++    if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++      cc::PaintFlags flags;
++      flags.setAntiAlias(true);
++      flags.setColor(stedding::EssentialCardFill(GetColorProvider()->GetColor(
++          kColorTabForegroundInactiveFrameActive)));
++      canvas->DrawRoundRect(GetContentsBounds(), corner_radius, flags);
++    }
+     if (background_color.has_value()) {
+       cc::PaintFlags flags;
+       flags.setAntiAlias(true);
+       flags.setColor(background_color.value());
+-      const float corner_radius =
+-          GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius) -
+-          GetInsets().top() / 2.0;
+       canvas->DrawRoundRect(GetContentsBounds(), corner_radius, flags);
+     }
+   }
+@@ -201,7 +212,12 @@ void SplitTabView::OnDataChanged() {
+ }
+ 
+ void SplitTabView::UpdateBorder() {
+-  if (pinned_) {
++  if (pinned_ && base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    // Stedding (tabs R32): no edge round the merged card, as round a single
++    // essentials card; the panes keep the edge's insets.
++    SetBorder(views::CreateEmptyBorder(gfx::Insets(GetLayoutConstant(
++        LayoutConstant::kVerticalTabPinnedBorderThickness))));
++  } else if (pinned_) {
+     const bool is_frame_active =
+         GetWidget() ? GetWidget()->ShouldPaintAsActive() : true;
+     SetBorder(views::CreateRoundedRectBorder(
 diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc
-index c04b599f62ca4..e44d97b690cf4 100644
+index c04b599f62ca4..a4e33f5412621 100644
 --- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc
 +++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.cc
-@@ -4,6 +4,10 @@
+@@ -4,6 +4,12 @@
  
  #include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
  
@@ -10483,10 +10558,12 @@ index c04b599f62ca4..e44d97b690cf4 100644
 +#include <cmath>
 +#include <numbers>
 +
++#include "ui/gfx/color_utils.h"
++
  namespace stedding {
  
  bool ShowsCloseGlyph(const TabRowState& row) {
-@@ -47,6 +51,53 @@ bool ShowsDriftDot(const TabRowState& row, bool drifted) {
+@@ -47,6 +53,59 @@ bool ShowsDriftDot(const TabRowState& row, bool drifted) {
    return drifted && (row.pinned || row.narrow);
  }
  
@@ -10537,10 +10614,16 @@ index c04b599f62ca4..e44d97b690cf4 100644
 +  return SkColorSetA(title, SkColorGetA(title) * 0xD9 / 0xFF);
 +}
 +
++SkColor EssentialCardFill(SkColor text) {
++  return SkColorSetA(SK_ColorWHITE, color_utils::IsDark(text)
++                                        ? kEssentialCardFrostLight
++                                        : kEssentialCardFrostDark);
++}
++
  bool ShowsClearLine(int pinned_rows_shown,
                      bool pinned_run_collapsed,
                      int rows_below) {
-@@ -56,4 +107,20 @@ bool ShowsClearLine(int pinned_rows_shown,
+@@ -56,4 +115,20 @@ bool ShowsClearLine(int pinned_rows_shown,
    return rows_below > 0;
  }
  
@@ -10562,7 +10645,7 @@ index c04b599f62ca4..e44d97b690cf4 100644
 +
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h
-index f2803c6fe3758..b27010783dd0f 100644
+index f2803c6fe3758..7fb812e9826c3 100644
 --- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h
 +++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h
 @@ -5,7 +5,9 @@
@@ -10585,7 +10668,7 @@ index f2803c6fe3758..b27010783dd0f 100644
  };
  
  // R1, R3: the close glyph is laid out only while the row is hovered or its
-@@ -55,6 +60,57 @@ SkColor SleptTitleColor(SkColor text);
+@@ -55,6 +60,67 @@ SkColor SleptTitleColor(SkColor text);
  bool ShowsDriftSlash(const TabRowState& row, bool drifted);
  bool ShowsDriftDot(const TabRowState& row, bool drifted);
  
@@ -10640,10 +10723,20 @@ index f2803c6fe3758..b27010783dd0f 100644
 +// sleeping row's dimmed title colour (R4), it dims with the title.
 +SkColor HostLineColor(SkColor title);
 +
++// tabs R32: an essentials card is a tile with no edge, as Arc draws its
++// favourites: a frost of white over the ground, stronger in light, where the
++// ground is pale, than in dark. The 1 DIP edge it had was Chromium's outline,
++// whose Material colour took the Space's hue (green under a green Space).
++// `text` is the colour of a row's title in the background, which says which
++// colour mode the window is in.
++inline constexpr SkAlpha kEssentialCardFrostLight = 0x59;  // 35%
++inline constexpr SkAlpha kEssentialCardFrostDark = 0x17;   // 9%
++SkColor EssentialCardFill(SkColor text);
++
  // spaces B17, pins H17: the Clear line sits above the rows Clear closes, under
  // the Space's pinned run when it has one, so it shows while rows follow it:
  // with the run on screen, collapsed (collapsing the run hides its pins, not
-@@ -63,6 +119,19 @@ bool ShowsClearLine(int pinned_rows_shown,
+@@ -63,6 +129,19 @@ bool ShowsClearLine(int pinned_rows_shown,
                      bool pinned_run_collapsed,
                      int rows_below);
  
@@ -10664,7 +10757,7 @@ index f2803c6fe3758..b27010783dd0f 100644
  
  #endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_STEDDING_TAB_ROW_RULES_H_
 diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
-index 699d1156feae1..742314046aada 100644
+index 699d1156feae1..b2fe54f849e0c 100644
 --- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
 @@ -4,23 +4,39 @@
@@ -10707,7 +10800,7 @@ index 699d1156feae1..742314046aada 100644
  #include "ui/gfx/geometry/point.h"
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
-@@ -132,6 +148,308 @@ TEST(TabRowRulesTest, DriftShowsASlashOnRowsAndADotOnCards) {
+@@ -132,6 +148,334 @@ TEST(TabRowRulesTest, DriftShowsASlashOnRowsAndADotOnCards) {
    EXPECT_TRUE(ShowsDriftDot(rail, true));
  }
  
@@ -10842,6 +10935,8 @@ index 699d1156feae1..742314046aada 100644
 +  SkColor active;
 +  SkColor text;
 +  SkColor active_text;
++  // The active row's fill itself, before it is laid over anything.
++  SkColor active_fill;
 +};
 +
 +// Every ground: dark and light, each with no Space colour and with each of
@@ -10888,7 +10983,8 @@ index 699d1156feae1..742314046aada 100644
 +         color_utils::GetResultingPaintColor(
 +             provider.GetColor(kColorTabBackgroundActiveFrameActive), ground),
 +         provider.GetColor(kColorTabForegroundInactiveFrameActive),
-+         provider.GetColor(kColorTabForegroundActiveFrameActive)});
++         provider.GetColor(kColorTabForegroundActiveFrameActive),
++         provider.GetColor(kColorTabBackgroundActiveFrameActive)});
 +  }
 +  return grounds;
 +}
@@ -10927,6 +11023,29 @@ index 699d1156feae1..742314046aada 100644
 +        HostLineColor(each.active_text), each.active);
 +    EXPECT_GE(color_utils::GetContrastRatio(on_active, each.active), 4.5f)
 +        << "the active row";
++  }
++}
++
++// R32: an essentials card is a frosted tile: on every ground it is lighter
++// than the ground and stands off it, and the active card, the active row's
++// fill laid over the frost, stands off a card in the background.
++TEST(TabRowRulesTest, AnEssentialCardStandsOffEveryGround) {
++  base::test::ScopedFeatureList features(kArcStyleWindow);
++  for (const RowGround& each : EveryRowGround()) {
++    SCOPED_TRACE(each.trace);
++    const SkColor card = color_utils::GetResultingPaintColor(
++        EssentialCardFill(each.text), each.ground);
++    const SkColor active_card =
++        color_utils::GetResultingPaintColor(each.active_fill, card);
++    EXPECT_GT(color_utils::GetRelativeLuminance(card),
++              color_utils::GetRelativeLuminance(each.ground))
++        << "a frost lightens";
++    EXPECT_GE(color_utils::GetContrastRatio(card, each.ground), 1.1f)
++        << color_utils::SkColorToRgbaString(card) << " on "
++        << color_utils::SkColorToRgbaString(each.ground);
++    EXPECT_GE(color_utils::GetContrastRatio(active_card, card), 1.1f)
++        << "the active card " << color_utils::SkColorToRgbaString(active_card)
++        << " beside " << color_utils::SkColorToRgbaString(card);
 +  }
 +}
 +
@@ -11016,7 +11135,7 @@ index 699d1156feae1..742314046aada 100644
  // spaces B17, pins H17: the Clear line shows above the rows below a pinned
  // run. A collapsed run keeps it, with no pin row on screen; a Space with no
  // run has it over its tabs (BACKLOG S-138); with no row below there is no
-@@ -151,6 +469,50 @@ TEST(TabRowRulesTest, ACollapsedPinnedRunKeepsTheClearLine) {
+@@ -151,6 +495,50 @@ TEST(TabRowRulesTest, ACollapsedPinnedRunKeepsTheClearLine) {
        << "no row below the line";
  }
  
@@ -11225,7 +11344,7 @@ index a78554be3214f..a09eacf4dad7e 100644
    void ApplySpaceTitleForm();
    // The title row's rename (BeginSpaceTitleRename): the field over the row,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index ca605d234e93a..dc226e846773a 100644
+index ca605d234e93a..93ba085438297 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -4,6 +4,7 @@
@@ -11308,7 +11427,7 @@ index ca605d234e93a..dc226e846773a 100644
  }  // namespace
  
  class TabStyleViewDelegateImpl : public TabStyleViewDelegate {
-@@ -969,12 +998,79 @@ void TabView::OnPaint(gfx::Canvas* canvas) {
+@@ -969,12 +998,89 @@ void TabView::OnPaint(gfx::Canvas* canvas) {
    // Split pinned tabs have a merged background that is rendered in
    // `SplitTabView`.
    if (pinned_ && split_) {
@@ -11320,6 +11439,17 @@ index ca605d234e93a..dc226e846773a 100644
      return;
    }
  
++  // Stedding (tabs R32): an essentials card is a frosted tile, under the
++  // fill an active, hovered or selected card paints over it.
++  if (pinned_ && orientation_ == TabStripOrientation::kVertical &&
++      base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(stedding::EssentialCardFill(GetColorProvider()->GetColor(
++        kColorTabForegroundInactiveFrameActive)));
++    canvas->DrawPath(GetPath(), flags);
++  }
++
    tab_styling()->PaintTab(canvas);
  
    views::View::OnPaint(canvas);
@@ -11361,10 +11491,9 @@ index ca605d234e93a..dc226e846773a 100644
 +  gfx::RectF bounds(GetLocalBounds());
 +  float radius = GetCornerRadius();
 +  if (pinned_ && split_) {
-+    // Lt9: an essentials split's pane lies over the merged card's 1 DIP edge
-+    // with insets of the edge's width (UpdateBorder). Its tape goes inside
-+    // them, so the card keeps its edge, round the pane's own shape drawn that
-+    // much smaller.
++    // Lt9: an essentials split's pane lies inside the merged card's insets,
++    // the width of the edge the card no longer draws (tabs R32). Its tape
++    // goes inside them, round the pane's own shape drawn that much smaller.
 +    const gfx::Insets insets = GetInsets();
 +    bounds.Inset(gfx::InsetsF(insets));
 +    radius -= insets.top();
@@ -11388,7 +11517,7 @@ index ca605d234e93a..dc226e846773a 100644
  }
  
  void TabView::AddedToWidget() {
-@@ -1105,6 +1201,11 @@ void TabView::OnThemeChanged() {
+@@ -1105,6 +1211,11 @@ void TabView::OnThemeChanged() {
    if (drift_slash_ && !stedding::SameFont(drift_slash_->font_list(), font)) {
      drift_slash_->SetFontList(font);
    }
@@ -11400,7 +11529,7 @@ index ca605d234e93a..dc226e846773a 100644
    UpdateColors();
  }
  
-@@ -1370,6 +1471,14 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1370,6 +1481,14 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    if (old_data.last_committed_url != tab_data_.last_committed_url) {
      // The slash's visibility is decided at layout time.
      InvalidateLayout();
@@ -11415,7 +11544,7 @@ index ca605d234e93a..dc226e846773a 100644
    }
    UpdateResetBadge();
    UpdateTitle(tab_data_.title, tab_data_.should_render_loading_title);
-@@ -1417,6 +1526,76 @@ void TabView::UpdateResetBadge() {
+@@ -1417,6 +1536,76 @@ void TabView::UpdateResetBadge() {
    }
  }
  
@@ -11492,19 +11621,21 @@ index ca605d234e93a..dc226e846773a 100644
  bool TabView::HasDriftedFromHome() const {
    if (!collection_node_) {
      return false;
-@@ -1458,6 +1637,11 @@ void TabView::UpdateBorder() {
+@@ -1458,6 +1647,13 @@ void TabView::UpdateBorder() {
        // Insets for border handled by the `SplitTabView`.
        SetBorder(views::CreateEmptyBorder(gfx::Insets(GetLayoutConstant(
            LayoutConstant::kVerticalTabPinnedBorderThickness))));
-+    } else if (WearsLocalTape()) {
-+      // Stedding (local tabs Lt7): the tape takes the card's edge, and the
-+      // card keeps the edge's insets so nothing in it moves.
++    } else if (WearsLocalTape() ||
++               base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++      // Stedding (tabs R32): an essentials card has no edge, as Arc's
++      // favourites have none; the tape goes round it when it wears one
++      // (local tabs Lt7). It keeps the edge's insets so nothing in it moves.
 +      SetBorder(views::CreateEmptyBorder(gfx::Insets(GetLayoutConstant(
 +          LayoutConstant::kVerticalTabPinnedBorderThickness))));
      } else {
        SetBorder(views::CreateRoundedRectBorder(
            GetLayoutConstant(LayoutConstant::kVerticalTabPinnedBorderThickness),
-@@ -1507,6 +1691,12 @@ void TabView::UpdateColors() {
+@@ -1507,6 +1703,12 @@ void TabView::UpdateColors() {
      // pins H12: muted, as Arc draws it.
      drift_slash_->SetEnabledColor(SkColorSetA(colors.foreground_color, 0x99));
    }
@@ -14421,7 +14552,7 @@ index 204af319e74da..dbb782a82db74 100644
        "//ui/gfx:test_support",
      ]
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index f979524b0bb67..85cb5742266af 100644
+index f979524b0bb67..cb61c436db261 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -13,8 +13,9 @@
@@ -14490,7 +14621,48 @@ index f979524b0bb67..85cb5742266af 100644
  #include "ui/views/view_utils.h"
  #include "ui/views/widget/native_widget.h"
  #include "ui/views/widget/widget.h"
-@@ -461,6 +470,61 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
+@@ -166,6 +175,10 @@ class AddressBandTest : public InProcessBrowserTest {
+ // (tooling/dev, SERIAL_BROWSER_TESTS).
+ class PageColourRowTest : public AddressBandTest {
+  protected:
++  // The row reads the page's top edge. Off the Mac, a browser test draws
++  // nothing unless it asks: every edge read back transparent there.
++  PageColourRowTest() { EnablePixelOutput(); }
++
+   void SetUpOnMainThread() override {
+     AddressBandTest::SetUpOnMainThread();
+     stedding::test::KeepAboveOtherWindows(view()->GetWidget());
+@@ -180,13 +193,22 @@ class PageColourRowTest : public AddressBandTest {
+ 
+   // Until the row is `colour` and the window's colours are the row's: its
+   // text in the colour with most contrast against it.
+-  [[nodiscard]] bool WaitForTheRow(SkColor colour) {
+-    return base::test::RunUntil([&]() {
+-      return row() && row()->color() &&
+-             stedding::PageColorsMatch(*row()->color(), colour) &&
+-             bar()->GetColorProvider()->GetColor(kColorOmniboxText) ==
+-                 color_utils::GetColorWithMaxContrast(colour);
+-    });
++  // A wait that ends without it says what the row was last.
++  [[nodiscard]] testing::AssertionResult WaitForTheRow(SkColor colour) {
++    if (base::test::RunUntil([&]() {
++          return row() && row()->color() &&
++                 stedding::PageColorsMatch(*row()->color(), colour) &&
++                 bar()->GetColorProvider()->GetColor(kColorOmniboxText) ==
++                     color_utils::GetColorWithMaxContrast(colour);
++        })) {
++      return testing::AssertionSuccess();
++    }
++    return testing::AssertionFailure()
++           << "the row is "
++           << (row() && row()->color()
++                   ? color_utils::SkColorToRgbaString(*row()->color())
++                   : std::string("no colour"))
++           << ", not " << color_utils::SkColorToRgbaString(colour);
+   }
+ };
+ 
+@@ -461,6 +483,61 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
  }
  #endif  // BUILDFLAG(IS_WIN)
  
@@ -14552,7 +14724,7 @@ index f979524b0bb67..85cb5742266af 100644
  // The omnibox's results dropdown, its own window, while it shows.
  views::Widget* Dropdown() {
    for (views::Widget* const widget : views::test::WidgetTest::GetAllWidgets()) {
-@@ -591,6 +655,85 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheAddressAndTheRowFollowThePage) {
+@@ -591,6 +668,85 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheAddressAndTheRowFollowThePage) {
    }
  }
  
@@ -15833,10 +16005,10 @@ index 0000000000000..8c0a94f7a1926
 +}  // namespace
 diff --git a/chrome/test/stedding/dark_pages_browsertest.cc b/chrome/test/stedding/dark_pages_browsertest.cc
 new file mode 100644
-index 0000000000000..075297f3a2990
+index 0000000000000..9c408447cc565
 --- /dev/null
 +++ b/chrome/test/stedding/dark_pages_browsertest.cc
-@@ -0,0 +1,1053 @@
+@@ -0,0 +1,1072 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -16050,6 +16222,10 @@ index 0000000000000..075297f3a2990
 +
 +class DarkPagesTest : public InProcessBrowserTest {
 + protected:
++  // The tests read the page's pixels. Off the Mac, a browser test draws
++  // nothing unless it asks: every pixel read back transparent there.
++  DarkPagesTest() { EnablePixelOutput(); }
++
 +  void SetUpOnMainThread() override {
 +    InProcessBrowserTest::SetUpOnMainThread();
 +    host_resolver()->AddRule("*", "127.0.0.1");
@@ -16161,14 +16337,29 @@ index 0000000000000..075297f3a2990
 +    return colour;
 +  }
 +
-+  // Until `contents` paints a colour near `expected` at `point`.
-+  [[nodiscard]] static bool WaitForPixel(content::WebContents* contents,
-+                                         const gfx::Point& point,
-+                                         SkColor expected) {
-+    return base::test::RunUntil([&]() {
-+      const std::optional<SkColor> colour = PixelAt(contents, point);
-+      return colour && Near(*colour, expected);
-+    });
++  // Until `contents` paints a colour near `expected` at `point`. A wait that
++  // ends without it says what was read last, and the size of the view read.
++  [[nodiscard]] static testing::AssertionResult WaitForPixel(
++      content::WebContents* contents,
++      const gfx::Point& point,
++      SkColor expected) {
++    std::optional<SkColor> last;
++    if (base::test::RunUntil([&]() {
++          last = PixelAt(contents, point);
++          return last && Near(*last, expected);
++        })) {
++      return testing::AssertionSuccess();
++    }
++    content::RenderWidgetHostView* const view =
++        contents->GetRenderWidgetHostView();
++    return testing::AssertionFailure()
++           << "at " << point.ToString() << " the last read was "
++           << (last ? color_utils::SkColorToRgbaString(*last)
++                    : std::string("nothing"))
++           << ", not " << color_utils::SkColorToRgbaString(expected)
++           << ", in a view of "
++           << (view ? view->GetViewBounds().size().ToString()
++                    : std::string("none"));
 +  }
 +
 +  static bool ForcedDark(content::WebContents* contents) {
@@ -17054,10 +17245,10 @@ index 92b95c4c544db..bd998ac4c3023 100644
  }  // namespace
 diff --git a/chrome/test/stedding/isolation_mark_browsertest.cc b/chrome/test/stedding/isolation_mark_browsertest.cc
 new file mode 100644
-index 0000000000000..b887a6576bf2a
+index 0000000000000..2ef4268337f5e
 --- /dev/null
 +++ b/chrome/test/stedding/isolation_mark_browsertest.cc
-@@ -0,0 +1,935 @@
+@@ -0,0 +1,938 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -17889,7 +18080,10 @@ index 0000000000000..b887a6576bf2a
 +IN_PROC_BROWSER_TEST_F(IsolationMarkTest,
 +                       TheFloatingNameIsElidedInsideTheSidebar) {
 +  model()->SetSpaceIsolated(work_, true);
-+  model()->SetSpaceName(work_, "Quarterly planning and the long review");
++  // Long enough to overflow the sidebar in any platform's font: Windows'
++  // Segoe UI drew the first name of this test, 38 letters, inside it.
++  model()->SetSpaceName(
++      work_, "Quarterly planning, the long review and every team's budget");
 +  views::View* const chip = Chip(work_);
 +  views::Label* const pill = region()->space_hover_pill_for_testing();
 +  ASSERT_TRUE(chip && pill);
@@ -17995,10 +18189,10 @@ index 0000000000000..b887a6576bf2a
 +}  // namespace
 diff --git a/chrome/test/stedding/local_tabs_browsertest.cc b/chrome/test/stedding/local_tabs_browsertest.cc
 new file mode 100644
-index 0000000000000..313fb16b06cd6
+index 0000000000000..a635601569ef7
 --- /dev/null
 +++ b/chrome/test/stedding/local_tabs_browsertest.cc
-@@ -0,0 +1,1055 @@
+@@ -0,0 +1,1116 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -18018,6 +18212,8 @@ index 0000000000000..313fb16b06cd6
 +#include <memory>
 +#include <optional>
 +#include <string>
++#include <tuple>
++#include <utility>
 +#include <vector>
 +
 +#include "base/strings/strcat.h"
@@ -18028,10 +18224,13 @@ index 0000000000000..313fb16b06cd6
 +#include "base/time/time.h"
 +#include "chrome/browser/browser_process.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/themes/theme_service.h"
++#include "chrome/browser/themes/theme_service_factory.h"
 +#include "chrome/browser/ui/animation/browser_animation_controller.h"
 +#include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/browser_tabrestore.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/layout_constants.h"
 +#include "chrome/browser/ui/spaces/space_model.h"
 +#include "chrome/browser/ui/stedding/sleep_tabs.h"
 +#include "chrome/browser/ui/stedding/stedding_prefs.h"
@@ -18078,6 +18277,7 @@ index 0000000000000..313fb16b06cd6
 +#include "ui/events/event.h"
 +#include "ui/events/keycodes/keyboard_codes.h"
 +#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
 +#include "ui/gfx/geometry/insets.h"
 +#include "ui/gfx/geometry/point.h"
 +#include "ui/gfx/geometry/rect.h"
@@ -18087,6 +18287,7 @@ index 0000000000000..313fb16b06cd6
 +#include "ui/views/border.h"
 +#include "ui/views/controls/label.h"
 +#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/test/views_drawing_test_utils.h"
 +#include "ui/views/test/views_test_utils.h"
 +#include "ui/views/view.h"
 +#include "ui/views/view_utils.h"
@@ -18107,8 +18308,8 @@ index 0000000000000..313fb16b06cd6
 +}
 +
 +// Whether `row`'s border paints anything: an essentials card's 1 DIP edge
-+// does, the empty border the tape leaves in its place does not.
-+bool BorderPaints(TabView* row) {
++// did, until the card became a tile with no edge (tabs R32).
++bool BorderPaints(views::View* row) {
 +  if (!row->GetBorder()) {
 +    return false;
 +  }
@@ -18571,14 +18772,18 @@ index 0000000000000..313fb16b06cd6
 +  TabView* row = Row(card);
 +  ASSERT_TRUE(row);
 +  EXPECT_FALSE(row->WearsLocalTapeForTesting());
-+  EXPECT_TRUE(BorderPaints(row)) << "the card's edge";
++  EXPECT_FALSE(BorderPaints(row)) << "a card has no edge (tabs R32)";
 +  const gfx::Insets insets = row->GetInsets();
++  EXPECT_EQ(gfx::Insets(GetLayoutConstant(
++                LayoutConstant::kVerticalTabPinnedBorderThickness)),
++            insets)
++      << "the card keeps the insets of the edge it had";
 +
 +  tab_strip_model()->ActivateTabAt(IndexOf(card));
 +  row = Row(card);
 +  ASSERT_TRUE(row);
 +  EXPECT_TRUE(row->WearsLocalTapeForTesting());
-+  EXPECT_FALSE(BorderPaints(row)) << "the tape takes the edge";
++  EXPECT_FALSE(BorderPaints(row)) << "the tape is drawn, not a border";
 +  EXPECT_EQ(insets, row->GetInsets()) << "nothing in the card moves";
 +  EXPECT_EQ(u"", HostLineOf(card)) << "a card has no title";
 +
@@ -18586,7 +18791,54 @@ index 0000000000000..313fb16b06cd6
 +  row = Row(card);
 +  ASSERT_TRUE(row);
 +  EXPECT_FALSE(row->WearsLocalTapeForTesting());
-+  EXPECT_TRUE(BorderPaints(row)) << "the edge comes back";
++  EXPECT_FALSE(BorderPaints(row)) << "no edge comes back";
++  EXPECT_EQ(insets, row->GetInsets()) << "nothing in the card moves back";
++}
++
++// tabs R32: an essentials card is a frosted tile with no edge, as Arc draws
++// its favourites: white over the ground, 35% in light and 9% in dark; a
++// plain row in the background has no fill (R23). Its 1 DIP edge was
++// Chromium's outline, whose Material colour took the Space's hue.
++using EssentialCardTest = LocalTabsTest;
++IN_PROC_BROWSER_TEST_F(EssentialCardTest, ACardIsAFrostedTileWithNoEdge) {
++  tabs::TabInterface* const card = Open(Site());
++  tab_strip_model()->SetTabPinned(IndexOf(card), true);
++  tabs::TabInterface* const plain = Open(Site("/title3.html"));
++  std::ignore = Open(Site("/title1.html"));
++  ThemeService* const theme =
++      ThemeServiceFactory::GetForProfile(browser()->GetProfile());
++  for (const auto& [scheme, frost] :
++       {std::pair(ThemeService::BrowserColorScheme::kLight,
++                  stedding::kEssentialCardFrostLight),
++        std::pair(ThemeService::BrowserColorScheme::kDark,
++                  stedding::kEssentialCardFrostDark)}) {
++    SCOPED_TRACE(scheme == ThemeService::BrowserColorScheme::kLight ? "light"
++                                                                     : "dark");
++    theme->SetBrowserColorScheme(scheme);
++    TabView* const row = Row(card);
++    ASSERT_TRUE(row);
++    EXPECT_FALSE(BorderPaints(row)) << "no edge";
++    // Painted over the helper's red: a point on the card's left side, inside
++    // its insets and clear of the favicon, is the frost over red.
++    const SkBitmap drawn = views::test::PaintViewToBitmap(row);
++    const int x = row->GetInsets().left() + 2;
++    const SkColor tile = drawn.getColor(x, drawn.height() / 2);
++    const SkColor expected =
++        color_utils::AlphaBlend(SK_ColorWHITE, SK_ColorRED, frost);
++    for (const auto& [got, want] :
++         {std::pair(SkColorGetR(tile), SkColorGetR(expected)),
++          std::pair(SkColorGetG(tile), SkColorGetG(expected)),
++          std::pair(SkColorGetB(tile), SkColorGetB(expected))}) {
++      EXPECT_NEAR(static_cast<int>(want), static_cast<int>(got), 3)
++          << color_utils::SkColorToRgbaString(tile) << ", not "
++          << color_utils::SkColorToRgbaString(expected);
++    }
++    TabView* const plain_row = Row(plain);
++    ASSERT_TRUE(plain_row);
++    const SkBitmap bare = views::test::PaintViewToBitmap(plain_row);
++    EXPECT_EQ(SK_ColorRED, bare.getColor(x, bare.height() / 2))
++        << "a plain row in the background has no fill";
++  }
 +}
 +
 +// Lt8: in the rail the active local row's square wears the tape and shows no
@@ -18691,11 +18943,14 @@ index 0000000000000..313fb16b06cd6
 +  EXPECT_EQ(1, TapedRows());
 +  EXPECT_EQ(u"", HostLineOf(local)) << "a card has no title";
 +  // Upstream lays an essentials split's panes over the card's 1 DIP edge
-+  // and gives each pane insets of the edge's width (TabView::UpdateBorder),
-+  // so it is the pane's inside, and with it the tape, that lies inside the
-+  // card's edge.
++  // and gives each pane insets of the edge's width (TabView::UpdateBorder).
++  // The card draws no edge now (tabs R32) and keeps its insets, so it is
++  // the pane's inside, and with it the tape, that lies inside the card's
++  // insets.
++  EXPECT_FALSE(BorderPaints(const_cast<views::View*>(card)))
++      << "the merged card has no edge (tabs R32)";
 +  const gfx::Insets insets = pane->GetInsets();
-+  ASSERT_GT(insets.top(), 0) << "the pane's insets keep the card's edge";
++  ASSERT_GT(insets.top(), 0) << "the pane's insets keep the card's";
 +  gfx::Rect inside = pane->bounds();
 +  inside.Inset(insets);
 +  EXPECT_TRUE(card->GetContentsBounds().Contains(inside))
@@ -19056,10 +19311,10 @@ index 0000000000000..313fb16b06cd6
 +}  // namespace
 diff --git a/chrome/test/stedding/make_app_browsertest.cc b/chrome/test/stedding/make_app_browsertest.cc
 new file mode 100644
-index 0000000000000..70b274a1a1836
+index 0000000000000..d208081f3b852
 --- /dev/null
 +++ b/chrome/test/stedding/make_app_browsertest.cc
-@@ -0,0 +1,422 @@
+@@ -0,0 +1,423 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -19237,7 +19492,8 @@ index 0000000000000..70b274a1a1836
 +#if BUILDFLAG(IS_MAC)
 +  EXPECT_EQ(u"Add to Dock…", AppMenuLabel(browser(), IDC_INSTALL_PWA));
 +#else
-+  EXPECT_EQ(u"Install page as app…", AppMenuLabel(browser(), IDC_INSTALL_PWA));
++  // Chromium's own label; its "&" marks the I as the menu's mnemonic.
++  EXPECT_EQ(u"&Install page as app…", AppMenuLabel(browser(), IDC_INSTALL_PWA));
 +#endif
 +
 +  auto accept = web_app::SetPwaInstallationAutoRespondForTesting(
@@ -19818,10 +20074,10 @@ index 0000000000000..fb8d945e16768
 +}  // namespace
 diff --git a/chrome/test/stedding/make_app_quiet_browsertest.cc b/chrome/test/stedding/make_app_quiet_browsertest.cc
 new file mode 100644
-index 0000000000000..b36c76276de22
+index 0000000000000..c585a69889d26
 --- /dev/null
 +++ b/chrome/test/stedding/make_app_quiet_browsertest.cc
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,148 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -19835,6 +20091,7 @@ index 0000000000000..b36c76276de22
 +#include <string>
 +#include <vector>
 +
++#include "base/command_line.h"
 +#include "base/functional/callback.h"
 +#include "base/synchronization/lock.h"
 +#include "base/test/bind.h"
@@ -19862,6 +20119,16 @@ index 0000000000000..b36c76276de22
 +
 +class MakeAppQuietTest : public stedding::WebAppBrowserTest {
 + protected:
++  // Browser sign-in is not allowed, as in a Stedding build: the build carries
++  // no OAuth client, and the test suite pretends one exists (ChromeTestSuite),
++  // which the switch takes back. Where sign-in is allowed, Chromium's Google
++  // account check (accounts.google.com/ListAccounts) may run at any moment,
++  // and on Windows it ran while the app was being made.
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    stedding::WebAppBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII("allow-browser-signin", "false");
++  }
++
 +  // The watch is on before the test opens any page. URLLoaderInterceptor
 +  // hooks the loader factories made after it: a page's frame gets its own at
 +  // commit, and the banner page's service worker, which answers that page's
@@ -20883,7 +21150,7 @@ index 0000000000000..5d3f8279e5e19
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/screenshot_browsertest.cc b/chrome/test/stedding/screenshot_browsertest.cc
-index 6212359f49ea0..302b5b4250c5e 100644
+index 6212359f49ea0..622ec099303f8 100644
 --- a/chrome/test/stedding/screenshot_browsertest.cc
 +++ b/chrome/test/stedding/screenshot_browsertest.cc
 @@ -7,8 +7,12 @@
@@ -20907,7 +21174,7 @@ index 6212359f49ea0..302b5b4250c5e 100644
  #include "chrome/browser/ui/stedding/screenshot/screenshot_capture.h"
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
-@@ -28,11 +33,16 @@
+@@ -28,17 +33,27 @@
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "components/prefs/pref_service.h"
@@ -20921,10 +21188,21 @@ index 6212359f49ea0..302b5b4250c5e 100644
  #include "ui/base/clipboard/test/test_clipboard.h"
  #include "ui/base/window_open_disposition.h"
 +#include "ui/gfx/codec/png_codec.h"
++#include "ui/gfx/color_utils.h"
  #include "url/gurl.h"
  
  namespace {
-@@ -146,4 +156,46 @@ IN_PROC_BROWSER_TEST_F(ScreenshotCaptureTest,
+ 
+ class ScreenshotCaptureTest : public InProcessBrowserTest {
+  protected:
++  // A capture's pixels are read. Off the Mac, a browser test draws nothing
++  // unless it asks: the PNG came back transparent there.
++  ScreenshotCaptureTest() { EnablePixelOutput(); }
++
+   void SetUpOnMainThread() override {
+     InProcessBrowserTest::SetUpOnMainThread();
+     ASSERT_TRUE(embedded_test_server()->Start());
+@@ -146,4 +161,51 @@ IN_PROC_BROWSER_TEST_F(ScreenshotCaptureTest,
    }
  }
  
@@ -20965,6 +21243,11 @@ index 6212359f49ea0..302b5b4250c5e 100644
 +  ASSERT_FALSE(capture.drawsNothing()) << "the PNG did not decode";
 +  const SkColor middle =
 +      capture.getColor(capture.width() / 2, capture.height() / 2);
++  SCOPED_TRACE(testing::Message()
++               << "the middle of a " << capture.width() << "x"
++               << capture.height() << " capture is "
++               << color_utils::SkColorToRgbaString(middle));
++  EXPECT_EQ(SK_AlphaOPAQUE, SkColorGetA(middle));
 +  EXPECT_NEAR(0x12, static_cast<int>(SkColorGetR(middle)), 3);
 +  EXPECT_NEAR(0x12, static_cast<int>(SkColorGetG(middle)), 3);
 +  EXPECT_NEAR(0x12, static_cast<int>(SkColorGetB(middle)), 3);

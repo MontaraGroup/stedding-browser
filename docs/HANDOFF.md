@@ -37,17 +37,17 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and twelve traps follow. Read the one for the topic in front of you, not the list.
+A hundred and fifteen traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115 |
 | Release and signing | 44, 47, 49, 62, 85 |
-| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111 |
+| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113 |
 
 ## Where things live
 
@@ -1502,6 +1502,39 @@ macOS is set to.
     `GetURL("a.test", ...)` with `host_resolver()->AddRule("*", "127.0.0.1")`. Found writing
     local tabs; the tabs, density, sidebar, pins and addressrow suites have not yet run with
     it.
+
+113. **Off the Mac a browser test draws nothing unless it asks.** On Aura (Windows,
+    Linux) `BrowserTestBase` adds `--disable-gl-drawing-for-tests` unless the fixture calls
+    `EnablePixelOutput()`, so every pixel read back through `CopyFromSurface` (a test's own
+    read, a screenshot, the row's edge sampler) comes back `rgba(0,0,0,0)`. The Mac draws
+    regardless, so a pixel test passes there and waits out its 30 s on the PC; worse, a
+    check that transparent black satisfies passes without testing anything
+    (`DarkPagesTest.AnErrorPageIsDark` asked `IsDark` of it). A fixture that reads a page's
+    pixels calls `EnablePixelOutput()` in its constructor (it also forces a scale factor of
+    1). Found in BACKLOG S-242 (2026-10-19): six dark-page, page-colour and capture tests.
+
+114. **Unit tests run over SSH on the PC read the system font half as large again.**
+    `LocalRowLinesTest.TheComfortableRowAloneShowsTheHostLine` read a 24 DIP title and a 22
+    DIP host line in two runs over SSH (2026-10-19) and passes in the desktop session, the
+    same build and code. `unit_tests.exe` does not make itself DPI-aware (the browser tests'
+    `main` calls `base::win::EnableHighDPISupport()`, the unit tests' does not), and outside
+    the desktop session the system font and the screen's DPI, which `gfx::SystemFonts`
+    divides by, did not agree; the operator's setting is 150% (`LogPixels` 144). The
+    browser, DPI-aware, is not affected. Run font-measuring unit tests in the desktop
+    session; read a failure over SSH as this first. Not reproduced on purpose: SSH to the
+    PC from itself is not set up.
+
+115. **Keys dispatched to a test window go nowhere once another test takes the
+    foreground.** A browser test that sends `ui::KeyEvent`s through the window's dispatcher
+    reaches its handlers only while the window holds the keyboard focus. In the parallel
+    leg another test process's window took the foreground; the window under test was no
+    longer active and nothing in it had the focus (`widget()->IsActive()` false, the focus
+    client's focused window null, both logged), so a Ctrl press or release was lost.
+    `NumberBadgeTest.TheNumbersAreTheKeysAndLeaveWithTheWindow` failed in 12 of 13 runs
+    among its neighbours four at a time and in none of ten alone (S-242, 2026-10-19). A
+    fake activation (`OnNativeWidgetActivationChanged(true)`) does not give the focus back,
+    and a real `Activate()` from a process in the background is refused by Windows. Such
+    tests run in `SERIAL_BROWSER_TESTS` (`tooling/dev`).
 
 ## The Windows build
 

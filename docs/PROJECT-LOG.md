@@ -7,6 +7,33 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-19, morning -- patch 0072 on the PC: the Windows-only failures, the essentials card
+
+The operator asked for patch 0072 to be built and tested on the PC, this round's Windows-only
+failures (S-242) found product or test with evidence, the installed-build checks of S-228,
+S-231, S-233 and S-234 run with real input, and, mid-way, for the essentials cards to lose the
+green-ish edge they wore ("must be like Arc").
+
+- **S-242: every failure a test fault.** Pixel reads came back transparent because on Aura a
+  browser test draws nothing unless it asks (trap 113); with `EnablePixelOutput()` Windows
+  draws a darkened page #121212 and captures it so. Windows labels Chromium's menu row with its
+  mnemonic. The quiet install test allowed browser sign-in, which no Stedding build does, and
+  Chromium's account check reached accounts.google.com there. The elision test's Space name
+  fitted Segoe UI. `NumberBadgeTest` lost its keys to other tests' windows in the parallel leg
+  (trap 115): it and three more run one at a time on Windows. `LocalRowLinesTest` failed only
+  over SSH (trap 114); the browser keeps the host line. The S-230 unit test failed on both
+  machines because its restarted mock client kept no address. The pixel waits now say the
+  colour they last read.
+- **The essentials card (S-243, tabs R32).** A frosted tile with no edge, white at 35% in light
+  and 9% in dark; the edge had been Chromium's Material outline, which took the Space's hue.
+- **Installed build.** Patch 0072 installed over beta 17 as a repair, `chrome.dll` matching the
+  build. `s173-live.ps1 -Part tst9` passed every step in two minutes (S-228, S-231 and S-233
+  closed). The network service runs in its sandbox, and a local development server, ws:// and
+  wss:// to 127.0.0.1, a Tailscale peer by address and by name and the internet all connect
+  (S-234; the PC has no Hyper-V or WSL adapter). Found: a toast covers an infobar's text (S-244).
+- **Evidence.** The PC's release build of the final tree: unit 939 of 939, browser 339 of 339
+  (250 four at a time, 89 one at a time). The Mac has not run the changed tests.
+
 ## 2026-10-18 night to 2026-10-19 -- installed builds, four features and the defects (patch 0072)
 
 The operator asked for S-173's runs on installed builds, every open defect fixed, dark pages,
