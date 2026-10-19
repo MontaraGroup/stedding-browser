@@ -93,7 +93,9 @@ Acceptance criteria:
 
 > **Done**, on Chromium's own vertical tabs (ADR 0010), and well past this scope since:
 > folders (ADR 0013), Arc's pins, the rail, density and text size, and from beta 13 a sidebar
-> that hides completely with the page edge to edge (`docs/features/sidebar.md` Y19).
+> that hides completely with the page edge to edge (`docs/features/sidebar.md` Y19). Written
+> on 2026-10-18 and not yet run or released: a tab on this computer's own server marked as
+> Arc's Developer Mode marks it (`docs/features/local-tabs.md`, `S-117`).
 
 **Goal:** the Arc-style sidebar replaces the horizontal tab strip. First build we
 publish for strangers to try.
@@ -136,7 +138,11 @@ Acceptance criteria:
 ## M3 — Workspaces
 
 > **Done** as Spaces (`docs/features/spaces.md`, ADR 0015, ADR 0016), each optionally with
-> cookies of its own (ADR 0019).
+> cookies of its own (ADR 0019). Written on 2026-10-18 and not yet run or released: the mark
+> of a Space with cookies of its own wherever Stedding names it (`docs/features/sessions.md`
+> S32–S34, `S-164`), and apps made from pages, which keep the session of the Space they were
+> made in (`docs/features/web-apps.md`, ADR 0025, proposed; `docs/PRODUCT.md` §12 gives
+> apps no tier yet, so they sit under no milestone).
 
 **Goal:** separate contexts (work, personal, projects) with their own tab sets.
 
@@ -365,7 +371,8 @@ Scope, by area (`BACKLOG.md` ids):
 - **Privacy:** ad and tracker blocking built in, with a switch per site (`S-88`; its own ADR
   first: the engine, and filter lists fetched at run time, never built in); tracking
   parameters stripped from every link opened, not only from a copied one (`S-89`); dark mode
-  for web pages on Chromium's own (`S-100`).
+  for web pages on Chromium's own (`S-100`; specified in `features/dark-pages.md`, written
+  and not yet run).
 - **Keyboard:** a web app that binds the same chord gets the first press and Stedding the
   second (`S-90`); shortcuts the user can change, with a conflict check (`S-91`, the 1.0 item
   `docs/PRODUCT.md` §12 names).

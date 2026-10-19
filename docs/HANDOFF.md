@@ -37,17 +37,17 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and one traps follow. Read the one for the topic in front of you, not the list.
+A hundred and twelve traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111 |
 | Release and signing | 44, 47, 49, 62, 85 |
-| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98 |
+| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111 |
 
 ## Where things live
 
@@ -1362,6 +1362,146 @@ macOS is set to.
     test that holds views across a wait tracks them (`views::ViewTracker`) and takes them
     again after a theme change (a `views::ViewObserver`'s `OnViewThemeChanged`), as that test
     now does.
+
+102. **A drag test that sends every move before any layout passes where a person's drag
+    fails.** The sidebar's reorder moves rows while a drag goes on. `TabDropTest`'s `Drag` and
+    `PressAndMove` send their twelve moves and only then let the window lay out, so every row
+    is still drawn where the press found it. A row dragged from above onto a folder's header
+    (in the rail, its glyph) made the reorder slide the folder up into the row's place at the
+    first move: a person's
+    pointer then arrived where the header had been, and the drop landed after the folder,
+    while the test's pointer met the header still drawn under it and passed. Found by the
+    installed builds' runs of 2026-10-18 (`tooling/acceptance/win/s173-live.ps1` tst7-3 on
+    the PC, the same drop in the Mac's capture; `S-232`), with every header-drop test green.
+    `TabDropTest::PointerPressAndMove` drags the pointer's way: thirty moves, the rows left to
+    settle between two (`stedding::test::WaitForRowsToSettle`), as the live check's driver
+    moves. Use it for any drop onto something the drag itself can move, and first assert that
+    the rows are on screen whole (`ShownWhole`): in a short window or a scrolled list the drag
+    aims at stale coordinates. The tests rewritten that way have not yet run.
+
+103. **A page put to sleep may never answer DevTools, so every wait a driver makes needs a
+    clock of its own.** Three runs of `tooling/acceptance/win/s173-live.ps1` on the installed
+    build (2026-10-18, `S-233`) stopped for good at tst9-11, the first step with a tab asleep
+    (Ctrl+W on a pin), where the runner reads the rows through UI Automation and the visible
+    page through DevTools. That DevTools call had no time limit, and `Invoke-RestMethod`'s
+    `-TimeoutSec` does not bound reading the answer (the driver's own notes). Since then
+    `tooling\win\drive.ps1` gives each call a clock: `Drive-Eval` waits three seconds for a
+    page and counts one that has not answered as not visible, `Drive-Pages` five for the page
+    list, UI Automation and the clipboard run through `Drive-Bounded` (30 and 10 seconds,
+    and a call left behind is logged as a TIMEOUT), and WMI queries take
+    `-OperationTimeoutSec`. That the sleeping tab was the cause is not proven until a run
+    passes tst9-11. A new wait on the browser, in a driver on either machine, gets a bound
+    of its own and a log line before it.
+
+104. **A page's title reaches the session file only when something else rewrites its
+    entry.** Chromium writes a tab's navigation entry into the session at its commit, before
+    the page has a title, and again only through `NavigationEntryChanged`: when the renderer
+    sends the page's state (after a scroll, a form change, a history call, or as the page is
+    left) or when the whole session is rebuilt. A title change alone fires only `TitleWasSet`
+    (`WebContentsImpl::NotifyTitleUpdateForEntry`), which no session code heard. So a static
+    page never scrolled was saved with an empty title, and after a relaunch its row, not yet
+    loaded, read its file name ("d.html"). Found on 2026-10-18 re-reading the acceptance
+    captures of step 1 and decoding the profile's `Sessions/Tabs_*` and `Session_*` files
+    (`S-229`, tabs R31); `SessionTabHelper` now writes a first title at once and later ones
+    at most every 5 seconds. A row the restore went on to load shows the page's own title and
+    hides the fault: to see what a session holds, decode its files.
+
+105. **A quit leaves every window it closed in Chromium's recently-closed list, though the
+    next launch opens them again.** `UnloadController::OnWindowClosing` records each closing
+    window as one WINDOW entry (`TabRestoreService::BrowserClosing`), a quit's windows too;
+    "Continue where you left off" then restores the same windows, and the entry stays: ⇧⌘T
+    straight after a relaunch opens the window a second time, in Chrome as well. Since a
+    closed window's tabs became archive rows (`S-187`), every tab of the last session was
+    listed as closed beside itself: the command bar showed "Page F — Archived · Play" under
+    "Page F — Play" in the acceptance captures of 2026-10-18, and the profile's `Tabs_*` file
+    held one WINDOW of six tabs from the quit before (`S-230`, archive A13). Anything that
+    reads the recently-closed list passes over what the next launch reopened. A profile used
+    before that fix keeps unmarked records of its earlier quits for the retention (30 days by
+    default), so captures and checks start from a freshly seeded profile
+    (`tooling/acceptance/mac/seed-profile.py` refuses a folder that already holds one).
+
+106. **Expand-on-hover asks the machine's real pointer, so a test's played events alone do
+    not decide it.** `VerticalTabStripRegionView::UpdateExpandOnHoverState` reads
+    `IsMouseHovered()`, where the real pointer is, besides the event it was given, and asks
+    whether the frame paints active, which is the real window's activation; on the PC's
+    release build `SidebarFormsTest`'s reveal and the right-to-left edge's stray exit were
+    flaky (`S-221`, 2026-10-18; the cause not proven). A test that plays a hover sets the
+    stand-in, `SetHoveredForTesting(true)` before its enter and move events, `false` before
+    the exit and `std::nullopt` after the last wait, as `SidebarFormsTest` and
+    `LocalTabsTest.TheRailShowsTheTapeAndNoText` do. The stand-in replaces the event's word,
+    `IsMouseHovered()` and the activation check, and the Windows exit debounce's read; the
+    velocity heuristic and the collapse button's hover still read the real pointer, and focus
+    inside the strip still holds the reveal open. A slow drag that rests on the rail (folders
+    F7 with expand-on-hover on) is beyond it and is checked live. A PC run with the stand-in:
+    TBD.
+
+107. **`--enable-automation` changes the browser under test.** With it,
+    `ContentInfoBarManager` turns every infobar's slide off, so bars come and go at once;
+    Chromium shows its own "controlled by automated test software" bar and skips the other
+    startup bars (`chrome/browser/ui/startup/infobar_utils.cc`), and pages are told they are
+    automated (`navigator.webdriver`). The band an unanimated removal left over the page
+    (`S-227`, toolbar T33) is one a person never met and a script driving Stedding through
+    the switch always would. In-process browser tests do not pass it
+    (`test_launcher_utils::PrepareBrowserCommandLineForTests`), so a test that wants the
+    unanimated path asks for it (`RemoveAllInfoBars(/*animate=*/false)` in
+    `SidebarFormsTest.FullScreenIsEdgeToEdge`, which timed out in most Windows runs of
+    2026-10-18 while the Mac passed). The Windows acceptance runner launches without the
+    switch for the same reason, though under it every tab would have a bar for tst9-9 to
+    measure against.
+
+108. **The Mac's context menus show neither a row's minor text nor its accessible name, and
+    a vector icon only on macOS 26 with the new icon scheme.** `ui/menus/cocoa/menu_controller.mm`
+    reads a row's label and its icon alone, and `SetMenuItemIcon` draws a context menu's
+    vector icon only under `features::IsMenuSimplificationEnabled()`
+    (`initializeWithNewMenuIconScheme`, `app_controller_mac.mm`) on macOS 26 or later. Found
+    writing the session mark (2026-10-18, sessions S32): the views menus carry it in a Space
+    row's minor text and icon, and on the Mac the words go into the title instead ("Work ·
+    Independent session"). What a Mac menu row must say goes in its label, and a test that
+    compares a Space row's label to the bare name fails there.
+
+109. **Replacing the active tab's contents closes a tab-scoped toast.**
+    `Browser::OnTabReplacedAt` runs the active-tab-changed callbacks, and
+    `ToastController::OnActiveTabChanged` then clears every tab-scoped toast, as a navigation
+    of the primary page does. A jar rebind and a sleep both replace a tab's contents (sessions
+    S23), so a tab-scoped toast shown just before one is gone at once. Found by reading the
+    code while writing S33's notice (2026-10-18): the pin's rebind reloads the page under it,
+    so that toast is window-wide (`ToastId::kSteddingPinLeftSession`). A toast that must
+    outlive a rebind is registered window-wide.
+
+110. **The desktop brings app windows back at start only after a restart, so an app-restore
+    test ends its `PRE_` step with one.** Off ChromeOS, `ShouldRestoreApps` in
+    `startup_browser_creator_impl.cc` is `is_post_restart`: a plain start with "Continue where
+    you left off" restores the browser's windows and no app's. A `PRE_` step that just ends
+    also records the app window's close (`AppSessionService::WindowClosed`), so setting the
+    restart preference alone is not enough. `AppJarTest.PRE_ARestoredAppWindowKeepsTheJar`
+    ends with `chrome::AttemptRestart()` under an `upgrade_util::ScopedRelaunchChromeBrowserOverride`
+    that starts nothing, as upstream's `SessionRestoreRestartMetricTest.PRE_RecordTabWindowDiff`
+    does: the restart sets `prefs::kWasRestarted` and stops the session services before the
+    windows close. Found in the review of apps made from pages (2026-10-18), whose first
+    version of the test could not pass; upstream's in-process app-restore tests are off on
+    the Mac (crbug.com/40758309), and this one has not yet run.
+
+111. **On Windows a new page's view reports the old page's background colour.** Aura's
+    (Windows' and Linux's) `RenderWidgetHostViewAura::TakeFallbackContentFrom` copies the
+    previous view's colour
+    (`CopyBackgroundColorIfPresentFrom`), so `RenderWidgetHostView::GetBackgroundColor()` on
+    the view a navigation has just made answers the new tab page's colour, not the coming
+    page's. Found in the review of dark pages (2026-10-18, Dk7):
+    `DarkPagesTest.TheContentAreaIsDarkBeforeTheFirstFrame` read it and could not have passed
+    on Windows; it reads the content area's own solid-colour layer instead, which has not yet
+    run.
+
+112. **Test pages on `127.0.0.1` are local tabs.** A bare
+    `embedded_test_server()->GetURL("/x")` is `127.0.0.1`, which `stedding::IsLocalPage`
+    counts as this computer's own server (`net::IsLocalhost`). Since local tabs (2026-10-18)
+    the active row of most sidebar browser tests wears the tape, and their Comfortable rows
+    show a host line under the title, the title moved up within the row. Heights, the title's
+    x and width, the favicon, the close slot and the number badge stay; a test that reads a
+    title's vertical centre, a pixel at a row's edge, an essentials card's edge colour or a
+    row's accessible description sees the change. Serve a page that must be plain from
+    `GetURL("a.test", ...)` with `host_resolver()->AddRule("*", "127.0.0.1")`. Found writing
+    local tabs; the tabs, density, sidebar, pins and addressrow suites have not yet run with
+    it.
 
 ## The Windows build
 

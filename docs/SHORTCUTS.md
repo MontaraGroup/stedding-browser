@@ -59,8 +59,13 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Screenshot a region you drag out | ⌥⇧⌘2 | Ctrl+Alt+Shift+2 |
 | Screenshot the whole document | ⇧⌘1 | Ctrl+Shift+1 |
 | Play the page's video in picture in picture, or bring it back (once the video has played with sound) | ⌥⇧⌘P | Ctrl+Alt+Shift+P |
+| Turn dark pages on or off: every website drawn dark, in every window | ⌥⇧⌘D | Ctrl+Alt+Shift+D |
 
-Screenshots go to Downloads as PNG and to the clipboard.
+Screenshots go to Downloads as PNG and to the clipboard. Dark pages is also the moon
+button at the right end of the address row, the **Dark Pages** row of the command bar
+and, on the Mac, of the View menu (with its chord beside it), and a switch in Settings →
+Stedding → Pages and menus. ⌥⇧⌘D takes no key of Chromium's
+or Stedding's: ⇧⌘D stays the address row's, and ⌥⌘D the Dock's.
 
 ## Where Stedding differs from Chromium
 
@@ -107,6 +112,13 @@ Session** row in the command bar (⇧⌘P). Off by default.
   digit goes with the key held.
 - **Windows:** Ctrl+Alt with an arrow is also the display-rotation hotkey some Intel
   graphics drivers install; turn that off in the driver if the two collide.
+- **Windows:** Ctrl+Esc opens the Start menu, and Windows takes it before any app sees
+  it, so Escape does not cancel a Ctrl+Tab walk on Windows: the Start menu opens and the
+  walk stops on the tab it had reached. To back out of a walk, keep Ctrl held and press
+  Shift+Tab until the tab you started from is highlighted again, then let go: you are back
+  where you began, and the order of recent tabs is as it was. Or let go and press Ctrl+Tab
+  once: that takes you back too, but the tab you had reached moves up the recent tabs, right
+  behind the one you are on. After Ctrl+Esc, close the Start menu with Escape first.
 - **Windows:** on a keyboard with AltGr, Windows treats Ctrl+Alt as AltGr. Where AltGr
   types a character with one of the Ctrl+Alt chords (Polish (Programmers) gives Ctrl+Alt+Shift+C
   as Ć and Ctrl+Alt+Shift+N as Ń), press the chord with Ctrl and the **left** Alt: that runs

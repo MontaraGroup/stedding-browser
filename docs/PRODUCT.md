@@ -138,7 +138,12 @@ yet, `docs/features/library.md`) and a `+`.
   Spaces of one window. Opt-in per Space; off, Spaces share the profile's jar.
   Extensions, settings, history and saved passwords stay on the profile. A Chromium
   `StoragePartition`, not a profile (ADR 0019; `features/sessions.md`). Binding two Spaces
-  to one jar, or giving a Space its own extensions, needs a later ADR.
+  to one jar, or giving a Space its own extensions, needs a later ADR. A Space with its own
+  session is marked wherever Stedding names it as a place to go -- a cookie on its chip and
+  after its name in the title row, the tab menu's Space rows, the command bar, the archive
+  and Settings -- and pinning one of its tabs to the essentials, which use the shared
+  session, says so with an Undo (`features/sessions.md` S32–S34, `features/spaces.md` B38;
+  written, not yet run or released).
 - **Move tabs between Spaces** **[1.0]** — the command bar's "Move Tab to [Space]", the tab
   menu, `⌥⇧⌘←/→`, or a drag onto a Space icon (`features/spaces.md` B12, B22).
 - **Air Traffic Control** **[1.0]** — Stedding's routing: rules sending a site, a part of
@@ -325,7 +330,11 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   area. Chromium's page info serves it today; one panel of Stedding's own, with the
   blocker's switch, is `S-118` (M10). Its entry to Boosts waits on Boosts.
 - **Developer Mode** **[1.0]** — a localhost page always shows the address row
-  (`features/toolbar.md` T11). Arc's other developer affordances: `S-117`.
+  (`features/toolbar.md` T11), and its tab is marked in the sidebar as Arc marks it:
+  a yellow and black tape round the row while it is on screen, and at the
+  Comfortable density its host and port under the title, with a setting to turn
+  it off (`features/local-tabs.md`; written, not yet run or released). Arc's other
+  developer affordances: `S-117`.
 - **Extensions** **[1.0]** — full Chrome Web Store compatibility, a hard requirement
   (`AGENTS.md`). `⌘E` to cycle extension actions is planned (`features/toolbar.md` T13;
   `S-104`).
@@ -336,7 +345,13 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   (`PLAN.md` decision 8), and Dia and Safari's export file with it (**[M10]**, `S-101`).
 - **Progressive Web Apps** — Arc does not install them and points users to Favorites.
   Supporting them anyway is this document's position, since parity is the floor; no tier
-  is decided and there is no spec row yet.
+  is decided. Any page can become an app of its own, on Chromium's web apps: "Add to
+  Dock…" on the Mac, as Safari has it (the File menu, the app menu, the command bar), with
+  a Dock tile and a launcher in Stedding's own Applications folder, and Chromium's "Install
+  page as app…" on Windows, with its Start menu entry. The app's window is drawn edge to
+  edge, with no sidebar or card; the app keeps the session of the Space it was made in
+  (ADR 0025, proposed), and takes no links from the browser until the user turns that on
+  for it (`features/web-apps.md`; written, not yet run or released).
 - **Arc Search (iOS/Android)** **[not applicable]** — mobile is out of scope
   (`ROADMAP.md`).
 
@@ -350,7 +365,11 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
 - **Clean links on every page opened**, not only on a copied link (`S-89`).
 - **Web apps keep their own keys**: the first press goes to the page, a second to
   Stedding (`S-90`).
-- **Dark mode for web pages**, on Chromium's own (`S-100`).
+- **Dark mode for web pages**, on Chromium's own (`S-100`): one switch, a moon at the
+  address row's right end, ⌥⇧⌘D, a command bar row, a page-menu row and, on the Mac, a
+  View menu row, with sites kept light or the only ones darkened, and an app's title bar
+  darkened with its page (`features/dark-pages.md`; written, not yet run or
+  released).
 - **Smaller things seen in Nook**: the site's controls in one panel (`S-118`) and the rest
   of the small conveniences (`S-125`). Built in beta 14: clear a site's cookies and
   reload (`features/commandbar.md` K24, `features/sessions.md` S27), folder verbs

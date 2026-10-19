@@ -97,6 +97,19 @@ budget is changed by ADR with the reasoning on record.
   is no script or record of it yet. Restarts and restores are covered by browser tests
   with `PRE_` steps and by real use (`docs/features/spaces.md` B9).
 - **No data loss on upgrade:** covered under update safety below.
+- **Unit tests keep out of the user's data folder:** `unit_tests` run on a user-data
+  folder of their own in the system's temporary folder (`chrome::DIR_USER_DATA`), which
+  the test process deletes when it ends, and the processes a test starts (a death test's
+  child) use the same folder, only if it is one a test process made
+  (`ChromeUnitTestSuite`; `ChromePaths.UnitTestsKeepOutOfThePersonsDataFolder`,
+  `ChromePaths.UnitTestsTakeOnlyATestFolderFromTheEnvironment`). Before, a test's profile
+  lived in the real data folder while it ran and stayed there when the test crashed
+  (BACKLOG S-220). The other test binaries are not changed. `tooling/dev test` fails a
+  run that leaves a test's folder at the top level of Stedding's or Chromium's data
+  folder, and names, without deleting, what an earlier run left there; it does not look
+  inside the profiles. A test process that is killed or crashes still leaves its own
+  folder in the system's temporary folder: on Windows the test launcher deletes it with
+  the process's temporary folder, and on the Mac nothing reports or deletes it.
 - Chromium's own recovery surfaces ("Restore pages?") must work, not be patched into
   a broken state.
 

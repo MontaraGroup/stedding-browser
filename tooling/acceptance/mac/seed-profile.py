@@ -5,7 +5,10 @@
 
 Writes <profile-dir>/Default/Preferences with three Spaces -- Home, Work and
 Play -- and the welcome flow marked as shown, so the first launch opens on
-the window and not on the welcome pages. Refuses a directory that already
+the window and not on the welcome pages; and <profile-dir>/Local State with
+this repository's VERSION as the version that last ran, so a build that
+carries a version (an installed one) does not open the update's thank-you
+page as an extra tab (docs/features/updates.md Up10). Refuses a directory that already
 holds a profile: the run starts from nothing every time.
 
 The Spaces are the profile's registry (stedding.spaces.registry), the list a
@@ -56,6 +59,11 @@ def main(argv):
     }
     with open(prefs, "w", encoding="utf-8") as handle:
         json.dump(seed, handle)
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    with open(os.path.join(repo, "VERSION"), encoding="utf-8") as handle:
+        version = handle.read().strip()
+    with open(os.path.join(profile, "Local State"), "w", encoding="utf-8") as handle:
+        json.dump({"stedding": {"updates": {"last_run_version": version}}}, handle)
     print("seeded %s: %s" % (profile, ", ".join(name for _, name in SPACES)))
     return 0
 

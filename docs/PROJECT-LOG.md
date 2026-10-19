@@ -7,6 +7,40 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-18 night to 2026-10-19 -- installed builds, four features and the defects (patch 0072)
+
+The operator asked for S-173's runs on installed builds, every open defect fixed, dark pages,
+apps from pages, local development tabs marked as in Arc, a mark on Spaces with their own
+session, a quieter Archived row and Clear line, the network service sandbox on Windows, and a
+README with a feature list at the top, new pictures and an animation; then went to sleep with
+"finish all".
+
+- **Installed builds (S-173).** The Mac's signed, notarized image was dragged to /Applications
+  in Finder and opened through Gatekeeper's prompt; the Windows installer repaired beta 17 in
+  place (`chrome.dll` matching the build). The core loop passed every step but the first on
+  both; the first found S-229 (a restored row's title lost), and a re-read of the three earlier
+  dev-build runs found it there too. The runs also found S-228, S-230 to S-233, and harness faults
+  fixed the same night (`docs/features/acceptance.md` Runs).
+- **Defects.** S-55 closed (three launches on the PC, none restarting the network service);
+  S-66 read in full on both machines (every crash of a real build ties to a fixed item); S-220,
+  S-221, S-227, S-229, S-230, S-231 and S-232 fixed; S-228 decided (Windows keeps Ctrl+Esc).
+- **Features (patch 0072).** Dark pages (`docs/features/dark-pages.md`), apps made from pages
+  (`web-apps.md`), local development tabs (`local-tabs.md`), the session mark (`sessions.md`
+  S32 to S34, `spaces.md` B38), the sidebar's quiet controls (`sidebar.md` Y27), and the Windows
+  network service sandbox (`windows.md` N15). The research behind each is in the specs' notes.
+- **Evidence.** On the Mac's release build of the final tree: unit 952 of 952 and Stedding's
+  browser suite 442 of 442 (358 and the 84 serial) pass; one unit test added later,
+  `TabRestoreServiceImplWithMockClientTest.SetWindowTabsExtraDataOutlivesTheRun`, fails (S-230).
+  On the PC's release build: unit 932 of 933 and browser 412 of 422; the failures are S-242,
+  and `DefaultsTest.TheNetworkServiceRunsInItsSandbox` passed. Not run this round: the checks
+  and ASan builds.
+- **What Chrome does that Stedding does not.** A comparison of Chrome 156's code, Chrome's
+  field-trial configuration of the day and both installed browsers found, among others, that
+  Chrome Stable most likely runs the Windows network sandbox off (S-234 corrected), and filed
+  the rest as the next round's rows S-236 to S-241.
+- **Media.** Every README still was taken again from the signed build, with stills for this
+  round's features, and the animation recorded with `tooling/readme/`.
+
 ## 2026-10-18, evening -- the checks still owed (patch 0071)
 
 The operator asked to finish every row of the BACKLOG's "Checks still owed". Each row was split

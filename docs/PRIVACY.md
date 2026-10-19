@@ -172,6 +172,32 @@ delete the Space.
 reloads it; site storage, cache, history and passwords stay (`features/commandbar.md`
 K24).
 
+### Dark pages — local only, off by default
+
+**Dark pages** (`features/dark-pages.md`, not yet released) makes no network request and
+sends nothing. What it stores stays in the profile's `Preferences` file on this disk: the
+switch, the button's setting, and the mode and the two lists of sites, Chromium's content
+setting `AUTO_DARK_WEB_CONTENT`, which Stedding registers on desktop. The lists name sites
+the user chose, as bookmarks do. Delete browsing data with "Site settings" ticked, and
+Reset settings, clear them (read in the code, not yet run). A site chosen from a private
+window is kept in memory for that session only. A page can learn that the reader prefers
+dark, the signal a dark window already gives, and, through a trick Chrome documents, that
+automatic darkening is on; it cannot read the lists.
+
+### Apps made from pages — the page's own server only
+
+Making an app of a page (**Add to Dock…** on the Mac, **Install page as app…** on Windows;
+`features/web-apps.md`, not yet released) is part of the user's own browsing: it fetches
+only what the page names, in the page's own session -- its manifest (which may sit on
+another host), the icons the manifest lists, its favicons, and the manifest's screenshots
+for the larger dialog -- and later re-reads the manifest when a page of the app shows it.
+No Google service is in the path: no install model, no web-app sync, no preinstalled Google
+apps. The launcher, its signature, its icon and the Windows shortcuts are made on this
+machine. What Stedding keeps about the app stays in the profile's `Preferences` file: the
+cookie jar of the Space the app was made in (`stedding.apps.jars`) and, on the Mac, the
+launcher its Dock tile points at (`stedding.apps.dock_tiles`); both go when the app is
+removed.
+
 ### Google account sync — not available
 
 Google shut off access to its private Sync APIs for third-party Chromium builds in

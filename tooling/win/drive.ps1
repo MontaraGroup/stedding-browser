@@ -42,6 +42,12 @@ Things learned driving it:
   * A first launch shows the welcome flow over the window; seed Preferences
     (-Seed @{ stedding = @{ welcome = @{ shown = $true } } }) to skip it, or click through
     it, which is a test in itself.
+  * Nothing here may wait for ever: a call that waits on the browser or the system has a
+    clock of its own (Drive-Bounded for UI Automation and the clipboard, Drive-Eval and
+    Drive-Pages for DevTools, -OperationTimeoutSec for WMI). A tab put to sleep never
+    answers DevTools, and the S-173 run stopped for good at the first step that had one.
+    Set $script:Drive.LogFile and $script:Drive.Trace for a log that says, line by line,
+    what the run was about to do.
 #>
 param(
   [string]$Exe = $(if ($env:STEDDING_WIN_EXE) { $env:STEDDING_WIN_EXE }
@@ -96,15 +102,68 @@ public static class StedDrive {
 $script:Drive = @{
   Exe = $Exe; Port = $DebugPort; Pid = 0; Hwnd = [IntPtr]::Zero; Profile = $null
   Shots = (Join-Path $env:TEMP 'stedding-drive'); LastMine = 0; ShotOrigin = @(0, 0)
+  # LogFile: every Drive-Log line is appended there at once, so a run that stops leaves its last
+  # line on disk (a scheduled task's console output reaches its file late). Trace: each key,
+  # click and typed text, and each call that waits on the browser, is logged before it happens.
+  LogFile = $null; Trace = $false
+  # The runspace UI Automation calls run on (Drive-Bounded), and how many calls were left behind.
+  Runspace = $null; Timeouts = 0
 }
 
-function Drive-Log([string]$m) { Write-Host $m }
+function Drive-Log([string]$m) {
+  $line = '{0} {1}' -f (Get-Date -Format 'HH:mm:ss'), $m
+  Write-Host $line
+  if ($script:Drive.LogFile) { try { Add-Content -Path $script:Drive.LogFile -Value $line -Encoding UTF8 } catch {} }
+}
+
+# A call that waits on another process -- UI Automation, the clipboard -- run on a runspace of its
+# own and waited for at most $Seconds. One the other side never answers is left behind, its thread
+# blocked, and the answer is $null: the run goes on, and the log says what did not answer. A run
+# had stopped for good at its step tst9-11 (a DevTools call to a tab just put to sleep, Drive-Eval).
+# UI Automation calls share one runspace, replaced only after a call is left behind on it; -Sta
+# gives the call a single-threaded apartment of its own (the clipboard needs one).
+function Drive-Bounded([string]$What, [scriptblock]$Body, [object[]]$Arguments = @(), [int]$Seconds = 30, [switch]$Sta) {
+  if ($script:Drive.Trace) { Drive-Log "  wait: $What" }
+  $rs = $null
+  if (-not $Sta) { $rs = $script:Drive.Runspace }
+  if (-not $rs) {
+    $rs = [runspacefactory]::CreateRunspace()
+    if ($Sta) { $rs.ApartmentState = [Threading.ApartmentState]::STA }
+    $rs.Open()
+    if (-not $Sta) { $script:Drive.Runspace = $rs }
+  }
+  $ps = [PowerShell]::Create()
+  $ps.Runspace = $rs
+  [void]$ps.AddScript($Body.ToString())
+  foreach ($a in $Arguments) { [void]$ps.AddArgument($a) }
+  $started = Get-Date
+  $async = $ps.BeginInvoke()
+  if (-not $async.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds($Seconds))) {
+    Drive-Log "TIMEOUT: $What gave no answer in $Seconds s; left behind"
+    $script:Drive.Timeouts += 1
+    if (-not $Sta) { $script:Drive.Runspace = $null }
+    [void]$ps.BeginStop($null, $null)
+    return $null
+  }
+  try {
+    $out = $ps.EndInvoke($async)
+    $took = ((Get-Date) - $started).TotalSeconds
+    if ($took -gt 5) { Drive-Log ('  slow: {0} took {1:N1} s' -f $What, $took) }
+    return $out
+  } catch {
+    Drive-Log "failed: $What -- $($_.Exception.Message)"
+    return $null
+  } finally {
+    $ps.Dispose()
+    if ($Sta) { $rs.Dispose() }
+  }
+}
 
 # ---- the browser under test ------------------------------------------------------------------
 
 # The main window of the browser this script's Exe started with $Profile in its command line.
 function Drive-Find([string]$Profile) {
-  $procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
+  $procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -OperationTimeoutSec 15 |
     Where-Object { $_.ExecutablePath -eq $script:Drive.Exe -and $_.CommandLine -notmatch '--type=' -and $_.CommandLine -like "*$Profile*" }
   foreach ($p in $procs) {
     foreach ($h in [StedDrive]::WindowsOf([uint32]$p.ProcessId)) {
@@ -122,13 +181,17 @@ function Drive-Find([string]$Profile) {
 }
 
 # A fresh profile (under the temp folder unless -Profile is a path) and a browser on it, waited for.
-# -Seed is a hashtable written as Preferences; -Urls open as tabs; -Extra are more switches.
-function Drive-Launch([string]$Profile = 'scratch', [string[]]$Urls = @(), [hashtable]$Seed = $null, [string[]]$Extra = @()) {
+# -Seed is a hashtable written as Preferences, -LocalState one written as Local State; -Urls open as
+# tabs; -Extra are more switches.
+function Drive-Launch([string]$Profile = 'scratch', [string[]]$Urls = @(), [hashtable]$Seed = $null, [string[]]$Extra = @(), [hashtable]$LocalState = $null) {
   $dir = if ([IO.Path]::IsPathRooted($Profile)) { $Profile } else { Join-Path (Join-Path $script:Drive.Shots 'profiles') $Profile }
   if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
   New-Item -ItemType Directory -Force (Join-Path $dir 'Default') | Out-Null
   if ($Seed) {
     [IO.File]::WriteAllText((Join-Path $dir 'Default\Preferences'), ($Seed | ConvertTo-Json -Compress -Depth 8), (New-Object Text.UTF8Encoding $false))
+  }
+  if ($LocalState) {
+    [IO.File]::WriteAllText((Join-Path $dir 'Local State'), ($LocalState | ConvertTo-Json -Compress -Depth 8), (New-Object Text.UTF8Encoding $false))
   }
   $argv = @("--user-data-dir=$dir", "--remote-debugging-port=$($script:Drive.Port)") + $Extra + $Urls
   $null = Start-Process -FilePath $script:Drive.Exe -ArgumentList $argv -PassThru
@@ -141,9 +204,10 @@ function Drive-Launch([string]$Profile = 'scratch', [string[]]$Urls = @(), [hash
 # Stops the browser this script launched (found by profile path), and only that one.
 function Drive-Stop {
   if (-not $script:Drive.Profile) { return }
-  Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
+  Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -OperationTimeoutSec 15 |
     Where-Object { $_.CommandLine -like "*$($script:Drive.Profile)*" -and $_.CommandLine -notmatch '--type=' } |
     ForEach-Object { & taskkill /F /T /PID $_.ProcessId | Out-Null }
+  if ($script:Drive.Runspace) { try { $script:Drive.Runspace.Dispose() } catch {}; $script:Drive.Runspace = $null }
 }
 
 # ---- the guards ------------------------------------------------------------------------------
@@ -220,6 +284,7 @@ function Drive-Key([byte]$Vk, [switch]$Up) {
 
 # Button 'left' or 'right'; $Mods is a chord of modifiers held through the click ('ctrl', 'shift+ctrl').
 function Drive-Click([int]$x, [int]$y, [string]$Button = 'left', [string]$Mods = '') {
+  if ($script:Drive.Trace) { Drive-Log "  click $Button at $x,$y $Mods" }
   if (-not (Drive-Guard)) { return $false }
   Drive-Move $x $y; Start-Sleep -Milliseconds 120
   $down = if ($Button -eq 'right') { 0x0008 } else { 0x0002 }
@@ -236,6 +301,7 @@ function Drive-Click([int]$x, [int]$y, [string]$Button = 'left', [string]$Mods =
 
 # A person's drag: press, small steps to pass the threshold and on to the target, a hold, release.
 function Drive-Drag([int]$x1, [int]$y1, [int]$x2, [int]$y2, [int]$Steps = 25, [int]$HoldMs = 350) {
+  if ($script:Drive.Trace) { Drive-Log "  drag $x1,$y1 to $x2,$y2" }
   if (-not (Drive-Guard)) { return $false }
   Drive-Move $x1 $y1; Start-Sleep -Milliseconds 150
   [StedDrive]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 120
@@ -262,6 +328,7 @@ function Drive-Scroll([int]$x, [int]$y, [int]$Clicks) {
 
 # "ctrl+shift+c", "alt+1", "enter", "f11": modifiers down in order, the key, modifiers up in reverse.
 function Drive-Keys([string]$Chord) {
+  if ($script:Drive.Trace) { Drive-Log "  keys $Chord" }
   if (-not (Drive-Guard)) { return $false }
   $parts = $Chord -split '\+'
   $mods = @(); for ($i = 0; $i -lt $parts.Count - 1; $i++) { $mods += Drive-VkOf $parts[$i] }
@@ -277,6 +344,7 @@ function Drive-Keys([string]$Chord) {
 
 # Text typed as characters (each through VkKeyScan, shifted ones with Shift).
 function Drive-Type([string]$Text) {
+  if ($script:Drive.Trace) { Drive-Log "  type '$Text'" }
   if (-not (Drive-Guard)) { return $false }
   foreach ($c in $Text.ToCharArray()) {
     $s = [StedDrive]::VkKeyScan($c)
@@ -328,41 +396,98 @@ function Drive-Shot([string]$Name, [switch]$Wide) {
 }
 
 # UI Automation elements of the window by control type, bounds in screen pixels (DPI aware), one per
-# place on screen. Types: TabItem (sidebar rows), Button, MenuItem, Edit, ...
-function Drive-Rows([string]$Type = 'TabItem') {
-  $root = [Windows.Automation.AutomationElement]::FromHandle($script:Drive.Hwnd)
+# place on screen. Types: TabItem (sidebar rows), Button, MenuItem, Edit, Document (the page), ...
+# X, Y are the centre, L, T the top left corner. Focusable is UI Automation's IsKeyboardFocusable:
+# a control of a hidden view stays in Chromium's tree with its last bounds, and only this tells it
+# from a shown one (the address field of a hidden address row, toolbar T36). FindAll waits on the
+# browser's UI thread: it runs through Drive-Bounded, and a window that does not answer in 30 s
+# reads as one with no such elements.
+$script:UiaFindAll = {
+  param([IntPtr]$Hwnd, [string]$Type)
+  $root = [Windows.Automation.AutomationElement]::FromHandle($Hwnd)
   $ct = [Windows.Automation.ControlType]::($Type)
   $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, $ct)
-  $out = @()
   foreach ($e in $root.FindAll([Windows.Automation.TreeScope]::Descendants, $cond)) {
-    $r = $e.Current.BoundingRectangle
+    $c = $e.Current
+    $r = $c.BoundingRectangle
     if ([double]::IsInfinity($r.X) -or $r.Width -lt 1) { continue }
-    $out += [pscustomobject]@{ Name = $e.Current.Name; X = [int]($r.X + $r.Width / 2); Y = [int]($r.Y + $r.Height / 2); W = [int]$r.Width; H = [int]$r.Height; Class = $e.Current.ClassName }
+    [pscustomobject]@{ Name = $c.Name; X = [int]($r.X + $r.Width / 2); Y = [int]($r.Y + $r.Height / 2); W = [int]$r.Width; H = [int]$r.Height
+      L = [int]$r.X; T = [int]$r.Y; Class = $c.ClassName; Focusable = [bool]$c.IsKeyboardFocusable }
   }
-  return @($out | Sort-Object Name, X, Y -Unique)
+}
+function Drive-Rows([string]$Type = 'TabItem') {
+  $found = Drive-Bounded "UI Automation $Type" $script:UiaFindAll @($script:Drive.Hwnd, $Type) 30
+  return @($found | Where-Object { $_ } | Sort-Object Name, X, Y -Unique)
 }
 
 # DevTools (the browser is started with --remote-debugging-port): the titles of the pages that say they
 # are visible, which is how a click on a row is proved to have selected its tab.
-function Drive-Eval([string]$WsUrl, [string]$Expr) {
+# Every wait is bounded by a clock of its own, not by a cancellation the socket may not honour. A
+# page that cannot answer -- a tab put to sleep, a frozen or discarded one -- held the run for ever
+# at tst9-11, the first step with a tab asleep (Ctrl+W on a pin): each page now has three seconds,
+# and one that has not answered by then is not visible.
+function Drive-MsLeft([datetime]$Until) { return [int][math]::Max(1, ($Until - (Get-Date)).TotalMilliseconds) }
+function Drive-Eval([string]$WsUrl, [string]$Expr, [int]$TimeoutMs = 3000) {
+  $until = (Get-Date).AddMilliseconds($TimeoutMs)
   $ws = New-Object System.Net.WebSockets.ClientWebSocket
-  $ws.ConnectAsync([Uri]$WsUrl, [Threading.CancellationToken]::None).Wait()
+  $cts = New-Object Threading.CancellationTokenSource
   try {
+    if (-not $ws.ConnectAsync([Uri]$WsUrl, $cts.Token).Wait((Drive-MsLeft $until))) { return $null }
     $msg = @{ id = 1; method = 'Runtime.evaluate'; params = @{ expression = $Expr; returnByValue = $true } } | ConvertTo-Json -Compress -Depth 4
     $bytes = [Text.Encoding]::UTF8.GetBytes($msg)
-    $ws.SendAsync((New-Object ArraySegment[byte] -ArgumentList @(,$bytes)), [Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).Wait()
+    $send = $ws.SendAsync((New-Object ArraySegment[byte] -ArgumentList @(,$bytes)), [Net.WebSockets.WebSocketMessageType]::Text, $true, $cts.Token)
+    if (-not $send.Wait((Drive-MsLeft $until))) { return $null }
     $buf = New-Object byte[] (1024 * 1024)
     for ($n = 0; $n -lt 50; $n++) {
       $ms = New-Object IO.MemoryStream
-      do { $r = $ws.ReceiveAsync((New-Object ArraySegment[byte] -ArgumentList @(,$buf)), [Threading.CancellationToken]::None).Result; $ms.Write($buf, 0, $r.Count) } while (-not $r.EndOfMessage)
+      do {
+        $receive = $ws.ReceiveAsync((New-Object ArraySegment[byte] -ArgumentList @(,$buf)), $cts.Token)
+        if (-not $receive.Wait((Drive-MsLeft $until))) { return $null }
+        $r = $receive.Result
+        $ms.Write($buf, 0, $r.Count)
+      } while (-not $r.EndOfMessage)
       $o = [Text.Encoding]::UTF8.GetString($ms.ToArray()) | ConvertFrom-Json
       if ($o.id -eq 1) { return $o.result.result.value }
     }
-  } finally { $ws.Dispose() }
+    return $null
+  } catch {
+    return $null
+  } finally {
+    try { $cts.Cancel(); $ws.Abort() } catch {}
+    $ws.Dispose(); $cts.Dispose()
+  }
+}
+# The pages DevTools lists, each with its debugger's address; none when DevTools has not answered in
+# five seconds. Invoke-RestMethod's -TimeoutSec does not bound reading the answer; these timeouts do.
+function Drive-Pages {
+  if ($script:Drive.Trace) { Drive-Log '  wait: DevTools page list' }
+  try {
+    $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:$($script:Drive.Port)/json/list")
+    $request.Timeout = 5000
+    $request.ReadWriteTimeout = 5000
+    $request.Proxy = $null
+    $response = $request.GetResponse()
+    try {
+      $reader = New-Object IO.StreamReader($response.GetResponseStream())
+      $text = $reader.ReadToEnd()
+    } finally { $response.Close() }
+    # Into a variable first: Windows PowerShell's ConvertFrom-Json sends an array down a pipe as one object.
+    $all = ConvertFrom-Json -InputObject $text
+    return @($all | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl })
+  } catch {
+    Drive-Log "DevTools gave no page list: $($_.Exception.Message)"
+    return @()
+  }
 }
 function Drive-Visible {
-  $pages = try { Invoke-RestMethod -Uri "http://127.0.0.1:$($script:Drive.Port)/json/list" -TimeoutSec 5 | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl } } catch { @() }
   $vis = @()
-  foreach ($t in $pages) { if ((Drive-Eval $t.webSocketDebuggerUrl 'document.visibilityState') -eq 'visible') { $vis += $t.title } }
+  foreach ($t in (Drive-Pages)) { if ((Drive-Eval $t.webSocketDebuggerUrl 'document.visibilityState') -eq 'visible') { $vis += $t.title } }
   return ($vis -join ' | ')
+}
+
+# The clipboard's text, read on a thread of its own: a clipboard another program holds open would
+# hold the run. Empty when it does not answer in ten seconds.
+function Drive-Clipboard {
+  $text = Drive-Bounded 'the clipboard' { [Windows.Forms.Clipboard]::GetText() } @() 10 -Sta
+  return [string]($text | Select-Object -First 1)
 }
