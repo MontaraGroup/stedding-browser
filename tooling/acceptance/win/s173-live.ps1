@@ -247,6 +247,13 @@ function Fixture([string]$Name, [switch]$NoHoverExpand) {
   if ($NoHoverExpand) { $s['vertical_tabs'] = @{ expand_on_hover = $false } }
   $null = Drive-Launch -Profile $dir -Urls (@('a', 'b', 'c', 'd', 'e', 'f') | ForEach-Object { Url $_ }) -Seed $s -Extra $extra -LocalState $localState
   Start-Sleep -Seconds 4
+  # The keys below go to a browser that answers them only once its first page is on screen.
+  # On a busy machine the window stood for about twenty seconds with no page drawn and took no
+  # key, and the fixture's keys were lost (2026-10-19, after a multi-gigabyte link): wait for
+  # DevTools to call Page A visible, up to a minute.
+  $ready = (Get-Date).AddSeconds(60)
+  while ((Get-Date) -lt $ready -and (Drive-Visible) -notmatch 'Page A') { Start-Sleep -Seconds 1 }
+  Drive-Log "first page on screen: $(Drive-Visible)"
   ShellMenuAway
   if (-not (Drive-Focus)) { throw 'the browser did not come to the front' }
   $null = Drive-Keys 'ctrl+2'

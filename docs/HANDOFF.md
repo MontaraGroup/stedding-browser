@@ -37,15 +37,15 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and fifteen traps follow. Read the one for the topic in front of you, not the list.
+A hundred and sixteen traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116 |
 | Release and signing | 44, 47, 49, 62, 85 |
 | Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113 |
 
@@ -1538,6 +1538,14 @@ macOS is set to.
     takes accelerators only while its widget is active (`View::CanHandleAccelerators`;
     `SpaceSwitchTest.MoveUpAndDownPassAnotherSpacesRows`, found on `win-checks` before beta
     18). Such tests run in `SERIAL_BROWSER_TESTS` (`tooling/dev`).
+
+116. **On a busy machine a launched browser takes no key for its first minute.** The
+    acceptance runner filed its fixture four seconds after the launch; while an ASan build and
+    its multi-gigabyte link ran, the window stood with no page drawn, no DevTools answer and
+    no key taken for about a minute, the fixture's keys were lost, and every later step read
+    the wrong rows (2026-10-19, beta 18). `s173-live.ps1` now waits until DevTools calls the
+    first page visible. Run real-input checks on a quiet machine, and read a fixture that
+    failed as a too-early start first.
 
 ## The Windows build
 

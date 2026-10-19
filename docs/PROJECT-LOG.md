@@ -7,6 +7,29 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-19, late morning -- beta 18 from the PC
+
+The operator asked for S-244 to be fixed, everything pushed, and, when all was done and tested,
+a new version released.
+
+- **S-244.** A toast of the whole window sits under the infobars while any is up and follows
+  them (toolbar T38); seen on the installed build with the restore bar up.
+- **The checks build before the release** (`win-checks`, 33 minutes from 0071's objects) stopped
+  on two faults a release build does not check (S-245: dark pages forgot an edge reading that
+  was never made; S-246: with vertical tabs off the strip measured its spinner against a
+  transparent ground) and on a test that painted a view inside a widget; all fixed in patch
+  0072. A Space test missed an accelerator while another test held the foreground; it joins
+  the Windows serial list (trap 115).
+- **Beta 18.** Version 0.2.0-beta.18. Release build: unit 939 of 939, browser 340 of 340.
+  The installer as a user gets it: a repair over the installed build, an uninstall that kept
+  the profile, a fresh install, `chrome.dll` matching each time. From the installed copy: the
+  welcome flow on a new profile, light and dark windows, and the core-loop script, every step;
+  its keyboard and drag parts first failed at their setup while the ASan build linked (trap
+  116) and passed on a quiet machine. `win-checks` then 939 and 340 clean, and ASan 939 unit
+  and 340 browser tests with no report.
+- **Published** from the PC with the Windows installer; the macOS image, its notes and the
+  update feed are the Mac's to add.
+
 ## 2026-10-19, morning -- patch 0072 on the PC: the Windows-only failures, the essentials card
 
 The operator asked for patch 0072 to be built and tested on the PC, this round's Windows-only
