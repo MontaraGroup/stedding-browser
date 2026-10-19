@@ -1533,8 +1533,11 @@ macOS is set to.
     `NumberBadgeTest.TheNumbersAreTheKeysAndLeaveWithTheWindow` failed in 12 of 13 runs
     among its neighbours four at a time and in none of ten alone (S-242, 2026-10-19). A
     fake activation (`OnNativeWidgetActivationChanged(true)`) does not give the focus back,
-    and a real `Activate()` from a process in the background is refused by Windows. Such
-    tests run in `SERIAL_BROWSER_TESTS` (`tooling/dev`).
+    and a real `Activate()` from a process in the background is refused by Windows. An
+    accelerator handed to the focus manager is refused the same way: on desktop Aura a view
+    takes accelerators only while its widget is active (`View::CanHandleAccelerators`;
+    `SpaceSwitchTest.MoveUpAndDownPassAnotherSpacesRows`, found on `win-checks` before beta
+    18). Such tests run in `SERIAL_BROWSER_TESTS` (`tooling/dev`).
 
 ## The Windows build
 

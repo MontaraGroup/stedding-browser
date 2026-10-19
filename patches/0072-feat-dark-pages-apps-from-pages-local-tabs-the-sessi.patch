@@ -44,7 +44,10 @@ tables, the preferences, Settings' Stedding page, the tab row):
   went (S-227); the right-hand sidebar's test lost a real pointer on Windows
   (S-221); unit tests wrote into the person's data folder (S-220); the pin
   notice raced a queued move; a toast was lost on navigation; a toast of
-  the whole window covered the infobars' text (S-244: it sits under them).
+  the whole window covered the infobars' text (S-244: it sits under them);
+  turning dark pages on forgot a page's edge read it had never made, which
+  the checks build stops on; with vertical tabs off, the tab strip gave its
+  icons a transparent ground to measure their spinner's colour against.
 - Tests that failed on Windows alone (S-242): pixel reads there need the
   browser test to ask for drawing; Windows labels Chromium's menu row with
   its mnemonic; a test of the quiet install now allows no browser sign-in,
@@ -136,7 +139,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../ui/stedding/stedding_prefs_unittest.cc    |   10 +-
  .../ui/stedding/tab_menu_verbs_unittest.cc    |   86 ++
  chrome/browser/ui/stedding/theme/BUILD.gn     |    1 +
- .../theme/page_theme_color_controller.cc      |   52 +-
+ .../theme/page_theme_color_controller.cc      |   59 +-
  .../theme/page_theme_color_controller.h       |   14 +
  .../page_theme_color_controller_unittest.cc   |   73 ++
  chrome/browser/ui/tab_helpers.cc              |   10 +
@@ -162,6 +165,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/browser/ui/views/frame/browser_view.cc |    6 +-
  .../ui/views/frame/contents_web_view.cc       |   94 +-
  .../ui/views/frame/contents_web_view.h        |   19 +
+ .../frame/horizontal_tab_strip_region_view.cc |   20 +-
  .../layout/browser_view_tabbed_layout_impl.cc |   10 +
  .../views/frame/system_menu_model_delegate.cc |   15 +-
  .../frame/vertical_tab_strip_region_view.cc   |  138 +-
@@ -193,7 +197,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../ui/views/tabs/common/tab_strip_view.cc    |   91 ++
  .../ui/views/tabs/common/tab_strip_view.h     |    6 +
  .../browser/ui/views/tabs/common/tab_view.cc  |  202 +++
- .../browser/ui/views/tabs/common/tab_view.h   |   31 +
+ .../browser/ui/views/tabs/common/tab_view.h   |   34 +
  .../tabs/common/tab_view_vertical_layout.cc   |   46 +
  chrome/browser/ui/views/toolbar/BUILD.gn      |    5 +
  .../toolbar/stedding_dark_pages_button.cc     |  175 +++
@@ -254,7 +258,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../dark_pages_menu_mac_browsertest.mm        |   92 ++
  chrome/test/stedding/defaults_browsertest.cc  |   37 +
  .../stedding/isolation_mark_browsertest.cc    |  938 ++++++++++++++
- .../test/stedding/local_tabs_browsertest.cc   | 1116 +++++++++++++++++
+ .../test/stedding/local_tabs_browsertest.cc   | 1121 +++++++++++++++++
  chrome/test/stedding/make_app_browsertest.cc  |  423 +++++++
  .../test/stedding/make_app_mac_browsertest.mm |  328 +++++
  .../stedding/make_app_quiet_browsertest.cc    |  148 +++
@@ -272,7 +276,7 @@ patches of their own and folds each fix into the patch that owns its code
  components/infobars/core/infobar_container.cc |   12 +-
  .../core/infobar_container_unittest.cc        |   36 +
  components/sessions/BUILD.gn                  |    1 +
- .../sessions/content/session_tab_helper.cc    |   70 ++
+ .../sessions/content/session_tab_helper.cc    |   70 +
  .../sessions/content/session_tab_helper.h     |   29 +
  .../content/session_tab_helper_unittest.cc    |  221 ++++
  .../sessions/core/mock_tab_restore_service.h  |    8 +
@@ -280,7 +284,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 224 files changed, 17149 insertions(+), 315 deletions(-)
+ 225 files changed, 17182 insertions(+), 317 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -6940,7 +6944,7 @@ index 17fc7c4d916c3..c362069203af1 100644
      "//components/viz/common",
      "//ui/gfx",
 diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
-index bd095b631c06f..337f667c377c4 100644
+index bd095b631c06f..d5167a50b99d4 100644
 --- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
 +++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
 @@ -12,6 +12,7 @@
@@ -6970,7 +6974,7 @@ index bd095b631c06f..337f667c377c4 100644
    Refresh();
  }
  
-@@ -198,6 +204,46 @@ void PageThemeColorController::DidGetUserInteraction(
+@@ -198,6 +204,53 @@ void PageThemeColorController::DidGetUserInteraction(
    ScheduleTopSamples({kSampleScroll, kSampleScrollMid, kSampleScrollEnd});
  }
  
@@ -6983,6 +6987,13 @@ index bd095b631c06f..337f667c377c4 100644
 +}
 +
 +void PageThemeColorController::OnDarkPagesChanged() {
++  // A page whose edge was never read holds no sample, and DeleteForPage
++  // asks for one (a DCHECK on the checks build, 2026-10-19).
++  const auto forget_sample = [](content::Page& page) {
++    if (PageTopSample::GetForPage(page)) {
++      PageTopSample::DeleteForPage(page);
++    }
++  };
 +  // A page's web preferences still hold the decision it is drawn with: they
 +  // are recomputed in a task posted after this change. A change that leaves
 +  // a page's decision as it was (another site's entry, a mode that does not
@@ -7001,7 +7012,7 @@ index bd095b631c06f..337f667c377c4 100644
 +  for (int i = 0; model && i < model->count(); ++i) {
 +    content::WebContents* const tab = model->GetWebContentsAt(i);
 +    if (tab != web_contents() && decision_changes(tab)) {
-+      PageTopSample::DeleteForPage(tab->GetPrimaryPage());
++      forget_sample(tab->GetPrimaryPage());
 +    }
 +  }
 +  content::WebContents* const contents = web_contents();
@@ -7009,7 +7020,7 @@ index bd095b631c06f..337f667c377c4 100644
 +    return;
 +  }
 +  // The active page's edge is read again after its restyle.
-+  PageTopSample::DeleteForPage(contents->GetPrimaryPage());
++  forget_sample(contents->GetPrimaryPage());
 +  Refresh();
 +  ScheduleTopSamples({kSampleAfterStyle, kSampleAfterLoad});
 +}
@@ -7017,7 +7028,7 @@ index bd095b631c06f..337f667c377c4 100644
  void PageThemeColorController::WebContentsDestroyed() {
    Observe(nullptr);
    sample_due_.clear();
-@@ -220,7 +266,11 @@ void PageThemeColorController::Refresh() {
+@@ -220,7 +273,11 @@ void PageThemeColorController::Refresh() {
        color = sample->color;
      } else {
        std::optional<SkColor> page = contents->GetThemeColor();
@@ -8691,6 +8702,62 @@ index 0dc0d4b8d3d16..a6ba23f6116c2 100644
  };
  
  #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_CONTENTS_WEB_VIEW_H_
+diff --git a/chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.cc
+index d86ea93f7dd14..c297696406967 100644
+--- a/chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/frame/window_frame_util.h"
+ #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
+@@ -55,6 +56,7 @@
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/ui_base_features.h"
++#include "ui/color/color_id.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/gfx/geometry/insets.h"
+ #include "ui/gfx/geometry/point.h"
+@@ -159,9 +161,16 @@ HorizontalTabStripRegionViewOld::HorizontalTabStripRegionViewOld(
+     BrowserView* browser_view)
+     : browser_view_(browser_view),
+       action_view_controller_(std::make_unique<views::ActionViewController>()) {
++  // Stedding: the tabs' icons measure their accent against the ground the
++  // tabs sit on, which in the Stedding window is the frame's colour; the
++  // inactive tab's colour is transparent there (tabs R23), and an icon's
++  // spinner was measured against no colour (a DCHECK on the checks build,
++  // 2026-10-19).
+   views::SetCascadingColorProviderColor(
+       this, views::kCascadingBackgroundColor,
+-      kColorTabBackgroundInactiveFrameInactive);
++      base::FeatureList::IsEnabled(stedding::kArcStyleWindow)
++          ? ui::ColorId{ui::kColorFrameActive}
++          : ui::ColorId{kColorTabBackgroundInactiveFrameInactive});
+ 
+   SetLayoutManager(std::make_unique<views::FlexLayout>())
+       ->SetOrientation(views::LayoutOrientation::kHorizontal);
+@@ -766,9 +775,16 @@ HorizontalTabStripRegionViewNew::HorizontalTabStripRegionViewNew(
+           ui::TouchUiController::Get()->RegisterCallback(base::BindRepeating(
+               &HorizontalTabStripRegionViewNew::UpdateButtonBorders,
+               base::Unretained(this)))) {
++  // Stedding: the tabs' icons measure their accent against the ground the
++  // tabs sit on, which in the Stedding window is the frame's colour; the
++  // inactive tab's colour is transparent there (tabs R23), and an icon's
++  // spinner was measured against no colour (a DCHECK on the checks build,
++  // 2026-10-19).
+   views::SetCascadingColorProviderColor(
+       this, views::kCascadingBackgroundColor,
+-      kColorTabBackgroundInactiveFrameInactive);
++      base::FeatureList::IsEnabled(stedding::kArcStyleWindow)
++          ? ui::ColorId{ui::kColorFrameActive}
++          : ui::ColorId{kColorTabBackgroundInactiveFrameInactive});
+ 
+   SetLayoutManager(std::make_unique<views::FlexLayout>())
+       ->SetOrientation(views::LayoutOrientation::kHorizontal);
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 index ba3f88c6d2c7f..1ca1fcbba7337 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
@@ -11751,10 +11818,10 @@ index ca605d234e93a..93ba085438297 100644
      reset_badge_->SetEnabledColor(colors.foreground_color);
      reset_badge_->SetBackground(views::CreateRoundedRectBackground(
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.h b/chrome/browser/ui/views/tabs/common/tab_view.h
-index 7170e4ef5f338..84c14e83a6fa0 100644
+index 7170e4ef5f338..7e2ef93fe6108 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.h
-@@ -125,6 +125,15 @@ class TabView : public views::View,
+@@ -125,6 +125,18 @@ class TabView : public views::View,
    TabIcon* GetTabIconForTesting() { return icon_; }
    views::Textfield* rename_field_for_testing() { return rename_field_; }
    views::Label* number_badge_for_testing() { return number_badge_; }
@@ -11767,10 +11834,13 @@ index 7170e4ef5f338..84c14e83a6fa0 100644
 +      PaintLocalTape(canvas);
 +    }
 +  }
++  // The row's own paint, without its children: an essentials card's frost
++  // under its fill (tabs R32), for a test to read on a canvas of its own.
++  void PaintRowForTesting(gfx::Canvas* canvas) { OnPaint(canvas); }
    void SetDataForTesting(const tabs::TabData& data);
  
    // HoverCardAnchorTarget:
-@@ -149,6 +158,12 @@ class TabView : public views::View,
+@@ -149,6 +161,12 @@ class TabView : public views::View,
    // for the window's profile (motion O1).
    void SetNumberBadge(int number, bool animate);
  
@@ -11783,7 +11853,7 @@ index 7170e4ef5f338..84c14e83a6fa0 100644
   private:
    friend class TabViewVerticalLayout;
    friend class TabViewHorizontalLayout;
-@@ -245,6 +260,13 @@ class TabView : public views::View,
+@@ -245,6 +263,13 @@ class TabView : public views::View,
    bool IsRailRow(int width) const;
    // pins H4, H12: the drift dot follows the row's form (rail or row).
    void UpdateDriftDot();
@@ -11797,7 +11867,7 @@ index 7170e4ef5f338..84c14e83a6fa0 100644
  
    SkScalar GetCornerRadius() const;
  
-@@ -276,6 +298,10 @@ class TabView : public views::View,
+@@ -276,6 +301,10 @@ class TabView : public views::View,
    // Stedding (pins H12): Arc's slash between the favicon and the title of a
    // Space-pinned row away from its home; the vertical layout places it.
    raw_ptr<views::Label> drift_slash_ = nullptr;
@@ -11808,7 +11878,7 @@ index 7170e4ef5f338..84c14e83a6fa0 100644
  
    base::CallbackListSubscription node_destroyed_subscription_;
    base::CallbackListSubscription tab_state_changed_subscription_;
-@@ -296,6 +322,11 @@ class TabView : public views::View,
+@@ -296,6 +325,11 @@ class TabView : public views::View,
    // Stedding (tabs R4, R7): the row drawn as asleep, which the folders above
    // it were last told (UpdateColors).
    bool slept_look_ = false;
@@ -18388,10 +18458,10 @@ index 0000000000000..2ef4268337f5e
 +}  // namespace
 diff --git a/chrome/test/stedding/local_tabs_browsertest.cc b/chrome/test/stedding/local_tabs_browsertest.cc
 new file mode 100644
-index 0000000000000..a635601569ef7
+index 0000000000000..e21ca86924af3
 --- /dev/null
 +++ b/chrome/test/stedding/local_tabs_browsertest.cc
-@@ -0,0 +1,1116 @@
+@@ -0,0 +1,1121 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -18486,7 +18556,6 @@ index 0000000000000..a635601569ef7
 +#include "ui/views/border.h"
 +#include "ui/views/controls/label.h"
 +#include "ui/views/controls/textfield/textfield.h"
-+#include "ui/views/test/views_drawing_test_utils.h"
 +#include "ui/views/test/views_test_utils.h"
 +#include "ui/views/view.h"
 +#include "ui/views/view_utils.h"
@@ -19017,9 +19086,15 @@ index 0000000000000..a635601569ef7
 +    TabView* const row = Row(card);
 +    ASSERT_TRUE(row);
 +    EXPECT_FALSE(BorderPaints(row)) << "no edge";
-+    // Painted over the helper's red: a point on the card's left side, inside
++    // The row's own paint over red: a point on the card's left side, inside
 +    // its insets and clear of the favicon, is the frost over red.
-+    const SkBitmap drawn = views::test::PaintViewToBitmap(row);
++    const auto paint = [](TabView* view) {
++      gfx::Canvas canvas(view->size(), 1.0f, /*is_opaque=*/true);
++      canvas.DrawColor(SK_ColorRED);
++      view->PaintRowForTesting(&canvas);
++      return canvas.GetBitmap();
++    };
++    const SkBitmap drawn = paint(row);
 +    const int x = row->GetInsets().left() + 2;
 +    const SkColor tile = drawn.getColor(x, drawn.height() / 2);
 +    const SkColor expected =
@@ -19034,7 +19109,7 @@ index 0000000000000..a635601569ef7
 +    }
 +    TabView* const plain_row = Row(plain);
 +    ASSERT_TRUE(plain_row);
-+    const SkBitmap bare = views::test::PaintViewToBitmap(plain_row);
++    const SkBitmap bare = paint(plain_row);
 +    EXPECT_EQ(SK_ColorRED, bare.getColor(x, bare.height() / 2))
 +        << "a plain row in the background has no fill";
 +  }
