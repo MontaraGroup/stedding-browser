@@ -32,7 +32,14 @@ release as beta 19 once tested, and the update test on their own install with th
   gets it (a repair, uninstalls keeping the profile, beta 18 fresh, beta 19 over it, a fresh
   install), `chrome.dll` matching. The core-loop script passed every step, its parts run one
   per task: run after another part, a part's window came up with no page visible for a minute
-  (`S-248`; trap 116's busy-machine reading of beta 18 may be this).
+  (`S-248`; trap 116's busy-machine reading of beta 18 may be this). `win-checks`: 951 and 341
+  with no DCHECK or dangling pointer; ASan: 951 and 341 with no report.
+- **Published** from the PC (`v0.2.0-beta.19`, the Windows installer; the downloaded asset
+  matched its checksum), and offered through `updates/appcast-windows.xml`, which the
+  installed beta 19 then read from GitHub, verified, and answered "up to date". CI first
+  refused patch 0073 for spelling out the pin in code (check-repo's version check, which runs
+  on tracked files only, so it passed before the commit); fixed in comments and test values,
+  `chrome.dll` rebuilt byte for byte. The macOS image is the Mac's to add.
 
 ## 2026-10-19, late morning -- beta 18 from the PC
 
