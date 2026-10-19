@@ -45,15 +45,15 @@ repository's patch series, and its SHA-256 checksum is published beside the file
 can check what you downloaded.
 
 **Will it update itself?**
-On the Mac, from beta 16 on: it checks once a day, downloads a new version in the
+On the Mac from beta 16 on, and on Windows from beta 19 on: it checks once a day, downloads a new version in the
 background and shows "New Stedding Version Available" at the bottom of the sidebar; a click
 restarts into it. Every update is signed with the project's key and checked before it
 installs, and the check sends nothing that identifies you
-([PRIVACY.md](PRIVACY.md)). Settings › Stedding › Updates turns it off. Windows has no
-updater yet; new versions there appear on the Releases page (`S-215`).
+([PRIVACY.md](PRIVACY.md)). Settings › Stedding › Updates turns it off. A Windows copy
+older than beta 19 has no updater: install beta 19 from the Releases page once.
 
 **What is planned after that?**
-The rest of the Windows port (little windows, signing, updates), then Linux. Alongside
+The rest of the Windows port (little windows, signing), then Linux. Alongside
 them, things Arc never had: ad and tracker blocking built in, tracking parameters
 stripped from every link you open, web apps keeping their own shortcuts, shortcuts you
 can change, child tabs, the sidebar on the right, a mini player, Peek rebuilt, and import

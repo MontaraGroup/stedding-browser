@@ -8,8 +8,8 @@ each. Not every release has both: take the newest one with a file for your platf
 The macOS image is signed with the project's Developer ID and notarized by Apple from
 beta 10 on, so it opens like any other app. The Windows installer is **not code-signed
 yet**, which means one SmartScreen prompt (`S-56` in [BACKLOG.md](../BACKLOG.md)). The Mac
-version updates itself from beta 16 on, the first release built with its updater; Windows
-has no automatic updates yet (`S-215`).
+version updates itself from beta 16 on, the first release built with its updater, and the
+Windows version from beta 19 on.
 
 ## macOS (Apple silicon)
 
@@ -92,16 +92,25 @@ The profile is under `%LOCALAPPDATA%\Stedding\User Data`. Export works as on mac
 
 ### Updating and uninstalling
 
-Close Stedding, then run the new installer over the old version; the profile is kept. When
-the new release is on the same Chromium number as the one installed (the release notes
-name it) the installer repairs in place and cannot replace the files of a running
-Stedding, so it has to be closed. Uninstall from **Settings → Apps**, as with any app.
+From beta 19 on, the Windows version updates itself as the Mac's does: once a day it looks
+for a new version on GitHub, downloads the installer in the background, checks its
+signature, installs it beside the running copy, and shows **New Stedding Version
+Available** at the bottom of the sidebar; click it to restart into the new version, or just
+quit, and the next start is the new one. **Check for Updates** in the command bar looks at
+once, and **Update Stedding automatically** in Settings › Stedding › Updates turns it off
+([features/updates.md](features/updates.md), [PRIVACY.md](PRIVACY.md)).
+
+Beta 18 and earlier have no updater: install beta 19 by hand once. By hand, run the new
+installer over the old version; the profile is kept. From beta 19 on Stedding may stay
+open while it installs, and the new version takes over at its next start; an older
+release on the same Chromium number as the one installed had to be closed first.
+Uninstall from **Settings → Apps**, as with any app.
 
 ### What the Windows preview does not have yet
 
 The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctrl and
 Alt, the name and icon, and a per-user installer. Still open: little windows for links
-from other apps (they open as tabs), signing, and automatic updates (`S-56`); the
+from other apps (they open as tabs) and signing (`S-56`); the
 two-finger Space swipe (`docs/history/plan-2026-09-26.md` TAB-31); and importing from Arc, whose Windows files
 Stedding does not read yet (`S-81`).
 

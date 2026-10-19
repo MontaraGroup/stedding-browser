@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Writes Stedding's update feed, updates/appcast.xml (ADR 0022).
+"""Writes Stedding's update feeds: updates/appcast.xml for the Mac (ADR 0022) and
+updates/appcast-windows.xml for Windows (ADR 0023, ADR 0026).
 
 Sparkle reads the feed from the repository's main branch. tooling/publish-appcast
 calls this with the release it adds; the newest item comes first and the older
@@ -12,6 +13,12 @@ Usage:
       --bundle-version 10020.16 --minimum-system 12.0 --length 185000000 \
       --signature <base64> --date "Fri, 16 Oct 2026 12:00:00 +0000"
       [--url http://127.0.0.1:8765/Stedding.dmg]   # the n-1 check's own server
+  appcast.py write --platform windows --feed updates/appcast-windows.xml --repo owner/name \
+      --version 0.2.0-beta.19 --bundle-version 156.2.0.19 --length 176000000 \
+      --signature <base64> --date "..."     # the Windows installer's item
+  appcast.py attach-signature --feed f --signature <base64>
+      # appends the feed's own signature, over every byte written before it, as Sparkle's
+      # sign_update does; the Windows browser checks it (updates Up15)
   appcast.py check --feed updates/appcast.xml   # parses it and lists the items
   appcast.py selftest
 """
@@ -23,6 +30,8 @@ import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape, quoteattr
 
 SPARKLE = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
+WINDOWS_OS = 'windows-x64'
+SIGNATURE_MARK = '<!-- sparkle-signatures:'
 KEEP = 5
 VERSION_RE = re.compile(r'^\d+\.\d+\.\d+(-beta\.\d+)?$')
 
@@ -48,6 +57,7 @@ def read_items(text):
             'version': _text(item, '{%s}shortVersionString' % SPARKLE),
             'bundle_version': _text(item, '{%s}version' % SPARKLE),
             'minimum_system': _text(item, '{%s}minimumSystemVersion' % SPARKLE),
+            'os': enclosure.get('{%s}os' % SPARKLE, ''),
             'url': enclosure.get('url', ''),
             'length': enclosure.get('length', ''),
             'signature': enclosure.get('{%s}edSignature' % SPARKLE, ''),
@@ -60,6 +70,24 @@ def title_of(version):
 
 
 def item_xml(item):
+    if item.get('os') == WINDOWS_OS:
+        return '\n'.join([
+            '    <item>',
+            '      <title>%s</title>' % escape(item['title']),
+            '      <link>%s</link>' % escape(item['link']),
+            '      <pubDate>%s</pubDate>' % escape(item['date']),
+            '      <sparkle:version>%s</sparkle:version>'
+            % escape(item['bundle_version']),
+            '      <sparkle:shortVersionString>%s</sparkle:shortVersionString>'
+            % escape(item['version']),
+            '      <sparkle:minimumSystemVersion>%s</sparkle:minimumSystemVersion>'
+            % escape(item['minimum_system']),
+            '      <enclosure url=%s length=%s type="application/octet-stream" '
+            'sparkle:os=%s sparkle:edSignature=%s/>' % (
+                quoteattr(item['url']), quoteattr(item['length']),
+                quoteattr(WINDOWS_OS), quoteattr(item['signature'])),
+            '    </item>',
+        ])
     return '\n'.join([
         '    <item>',
         '      <title>%s</title>' % escape(item['title']),
@@ -79,16 +107,17 @@ def item_xml(item):
     ])
 
 
-def feed_xml(repo, items):
+def feed_xml(repo, items, platform='mac'):
     releases = 'https://github.com/%s/releases' % repo
+    where = 'Windows' if platform == 'windows' else 'the Mac'
     head = [
         '<?xml version="1.0" encoding="utf-8"?>',
         '<rss version="2.0" xmlns:sparkle="%s">' % SPARKLE,
         '  <channel>',
         '    <title>Stedding</title>',
         '    <link>%s</link>' % escape(releases),
-        '    <description>New versions of Stedding for the Mac, from the '
-        'project’s GitHub releases.</description>',
+        '    <description>New versions of Stedding for %s, from the '
+        'project’s GitHub releases.</description>' % where,
         '    <language>en</language>',
     ]
     body = [item_xml(item) for item in items]
@@ -96,15 +125,34 @@ def feed_xml(repo, items):
 
 
 def new_item(args):
+    windows = getattr(args, 'platform', 'mac') == 'windows'
     if not VERSION_RE.match(args.version):
         raise SystemExit('not a Stedding version: %s' % args.version)
-    if not re.match(r'^\d+\.\d+$', args.bundle_version):
+    # The Mac's CFBundleVersion (updates Up11) or the Windows installer's four-part version
+    # (updates Up14).
+    shape = r'^\d+\.\d+\.\d+\.\d+$' if windows else r'^\d+\.\d+$'
+    if not re.match(shape, args.bundle_version):
         raise SystemExit('not a bundle version: %s' % args.bundle_version)
     if not re.match(r'^\d+$', args.length):
         raise SystemExit('not a length: %s' % args.length)
     if not re.match(r'^[A-Za-z0-9+/]+={0,2}$', args.signature):
         raise SystemExit('not an EdDSA signature: %s' % args.signature)
     tag = 'v' + args.version
+    if windows:
+        return {
+            'title': title_of(args.version),
+            'link': 'https://github.com/%s/releases/tag/%s' % (args.repo, tag),
+            'date': args.date,
+            'version': args.version,
+            'bundle_version': args.bundle_version,
+            'minimum_system': getattr(args, 'minimum_system', None) or '10.0',
+            'os': WINDOWS_OS,
+            'url': getattr(args, 'url', None) or
+            'https://github.com/%s/releases/download/%s/Stedding-%s-win-x64.exe'
+            % (args.repo, tag, args.version),
+            'length': args.length,
+            'signature': args.signature,
+        }
     return {
         'title': title_of(args.version),
         'link': 'https://github.com/%s/releases/tag/%s' % (args.repo, tag),
@@ -117,19 +165,42 @@ def new_item(args):
         % (args.repo, tag, args.version),
         'length': args.length,
         'signature': args.signature,
+        'os': '',
     }
+
+
+def unsigned(text):
+    """The feed as written, without a signature comment a signing appended."""
+    at = text.find(SIGNATURE_MARK)
+    return text if at < 0 else text[:at]
 
 
 def write(args):
     try:
         with open(args.feed, encoding='utf-8') as f:
-            old = read_items(f.read())
+            old = read_items(unsigned(f.read()))
     except FileNotFoundError:
         old = []
     item = new_item(args)
     kept = [o for o in old if o['version'] != item['version']]
-    with open(args.feed, 'w', encoding='utf-8') as f:
-        f.write(feed_xml(args.repo, [item] + kept[:KEEP - 1]))
+    platform = getattr(args, 'platform', 'mac')
+    with open(args.feed, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(feed_xml(args.repo, [item] + kept[:KEEP - 1], platform))
+
+
+def attach_signature(args):
+    """Sparkle's signed-feed form: the signature over every byte before it, and that
+    length, in a comment at the end (updates Up15). The bytes signed are the file's as
+    it is on disk when this runs, which is what the signature was made over."""
+    if not re.match(r'^[A-Za-z0-9+/]+={0,2}$', args.signature):
+        raise SystemExit('not an EdDSA signature: %s' % args.signature)
+    with open(args.feed, 'rb') as f:
+        data = f.read()
+    if SIGNATURE_MARK.encode() in data:
+        raise SystemExit('%s is signed already' % args.feed)
+    with open(args.feed, 'ab') as f:
+        f.write(('%s\nedSignature: %s\nlength: %d\n-->\n'
+                 % (SIGNATURE_MARK, args.signature, len(data))).encode())
 
 
 def check(args):
@@ -165,6 +236,23 @@ def selftest():
         except SystemExit:
             continue
         raise AssertionError('accepted ' + bad)
+    # Windows items (updates Up14): their own version shape and enclosure.
+    a.platform, a.version, a.bundle_version = 'windows', '0.2.0-beta.19', '156.2.0.19'
+    win = new_item(a)
+    text = feed_xml('o/r', [win], 'windows')
+    items = read_items(text)
+    assert items[0]['os'] == WINDOWS_OS and items[0]['bundle_version'] == '156.2.0.19', items
+    assert items[0]['url'].endswith('/v0.2.0-beta.19/Stedding-0.2.0-beta.19-win-x64.exe')
+    assert 'for Windows' in text
+    a.bundle_version = '10020.19'
+    try:
+        new_item(a)
+        raise AssertionError('a Mac bundle version passed for Windows')
+    except SystemExit:
+        pass
+    signed = text + SIGNATURE_MARK + '\nedSignature: abc=\nlength: %d\n-->\n' % len(text.encode())
+    assert unsigned(signed) == text
+    assert read_items(signed)[0]['version'] == '0.2.0-beta.19'
     print('appcast.py: ok')
     return 0
 
@@ -179,6 +267,10 @@ def main(argv):
     # The n-1 check's local feed serves the image itself (docs/HANDOFF.md,
     # "The updater"); a release's comes from the release.
     w.add_argument('--url')
+    w.add_argument('--platform', choices=('mac', 'windows'), default='mac')
+    s = sub.add_parser('attach-signature')
+    s.add_argument('--feed', required=True)
+    s.add_argument('--signature', required=True)
     c = sub.add_parser('check')
     c.add_argument('--feed', required=True)
     sub.add_parser('selftest')
@@ -188,6 +280,9 @@ def main(argv):
         return 0
     if args.command == 'check':
         return check(args)
+    if args.command == 'attach-signature':
+        attach_signature(args)
+        return 0
     return selftest()
 
 

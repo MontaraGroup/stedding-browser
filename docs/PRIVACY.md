@@ -34,7 +34,7 @@ bug. Report it through SECURITY.md.
 
 | Connection | To | Contains | Why |
 |---|---|---|---|
-| Browser update check (Mac) | GitHub: the update feed on `raw.githubusercontent.com`, once a day, and a new version's image from `github.com` when there is one. Described under "The update check" below; off in Settings › Stedding › Updates. Windows has no updater yet (`BACKLOG.md` S-215). | A plain GET with Sparkle's user agent (the browser's name and version). Nothing about the machine. | Security updates are non-negotiable for a Chromium fork. |
+| Browser update check | GitHub: the update feed on `raw.githubusercontent.com`, once a day, and a new version's image (the Mac's DMG, the Windows installer) from `github.com` when there is one. Described under "The update check" below; off in Settings › Stedding › Updates. | On the Mac a plain GET with Sparkle's user agent (the browser's name and version); on Windows a plain GET with the browser's own user agent and no cookies. Nothing about the machine. | Security updates are non-negotiable for a Chromium fork. |
 | Thank-you pages | stedding.dev, twice in an installation's life and then once per update: `/thanks/` when the welcome flow ends, `/thanks/updated/` on the first launch of a later version. The second is off in Settings › Stedding › Updates. | A plain page request. The version is in the URL's fragment, which the browser never sends. The pages load nothing from another host and set no cookie. | The owner's thanks, and the project's sponsorship (ADR 0022). |
 | Security component updates | Google's component update service, as in stock Chromium; no patch in the series changes it yet. | Component name and version. | Chromium ships security-critical data as components (for example certificate revocation sets). Which ones to mirror, proxy or remove is decided before 1.0. |
 | Safe Browsing list updates | Google (`safebrowsing.googleapis.com`); refused in these builds, see the Safe Browsing section | Hashed URL prefixes, not URLs. | Phishing and malware protection. |
@@ -243,7 +243,7 @@ consequences we will not hide:
 |---|---|---|
 | Telemetry / metrics | None (does not exist) | — |
 | Crash reports | None uploaded | — |
-| Update checks | On, on the Mac from beta 16: the signed feed on GitHub once a day, with no identifiers ("The update check", below) | Settings → Stedding → Updates |
+| Update checks | On, on the Mac from beta 16 and on Windows from beta 19: the signed feed on GitHub once a day, with no identifiers ("The update check", below) | Settings → Stedding → Updates |
 | Search engine | User chooses at first run; DuckDuckGo until then | Change any time |
 | Cookies per Space | Off: every Space shares the profile's jar | Independent session on a Space keeps its own cookies, cache and site data on this disk; Clear Independent Session empties it; deleting the Space deletes it; Delete browsing data reaches it from beta 9 on (Mac: beta 10) (`features/sessions.md`) |
 | Search suggestions | Off | Opt in |
@@ -292,17 +292,19 @@ On the Mac, Stedding updates itself with Sparkle 2 from a signed feed in this
 repository (`decisions/0022-sparkle-updates-the-mac.md`, which partly supersedes
 `decisions/0014-github-releases-as-update-channel.md`; `docs/features/updates.md`). It is
 the one endpoint this project deliberately adds to Chromium, so it is described exactly.
-Windows has no updater yet (`BACKLOG.md` S-215).
+On Windows the browser itself reads a feed of its own the same way and runs the installer it
+downloads (`decisions/0023-updates-on-windows-and-linux.md`, `decisions/0026-a-windows-update-key.md`):
+the rows below say where the two differ.
 
 | | |
 |---|---|
-| Feed | `https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast.xml`, the file `tooling/publish-appcast` writes after a release. |
-| Download | the release's own image, `https://github.com/ysalitrynskyi/stedding-browser/releases/download/v<version>/Stedding-<version>-arm64.dmg`, only when the feed lists a later version. |
-| Sends | a plain HTTPS GET with Sparkle's user agent, which names the browser and its version. No account, no install id, no machine id, no system profile (`SUEnableSystemProfiling` is off and the browser adds no parameters), nothing in the query. |
-| Receives | the feed: each release's version, minimum macOS, size, and EdDSA signature. |
-| Frequency | ten seconds after launch when a day has passed since the last check, then once a day. A check the user asks for (Stedding › Check for Updates…, the command bar, the About page) runs when asked. |
+| Feed | Mac: `https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast.xml`, the file `tooling/publish-appcast` writes after a release. Windows: `.../updates/appcast-windows.xml`, written by `tooling/win/publish-appcast.ps1`. |
+| Download | the release's own image, `https://github.com/ysalitrynskyi/stedding-browser/releases/download/v<version>/Stedding-<version>-arm64.dmg` (Mac) or `Stedding-<version>-win-x64.exe` (Windows), only when the feed lists a later version. |
+| Sends | a plain HTTPS GET with Sparkle's user agent (Mac) or the browser's own (Windows), which names the browser and its version. No cookies, no account, no install id, no machine id, no system profile (`SUEnableSystemProfiling` is off and the browser adds no parameters), nothing in the query. |
+| Receives | the feed: each release's version, minimum system, size, and EdDSA signature. |
+| Frequency | ten seconds after launch when a day has passed since the last check, then once a day. A check the user asks for (Stedding › Check for Updates… on the Mac, the command bar, the About page) runs when asked. |
 | Default | **on** (the owner, 2026-10-16), with "Update Stedding automatically" in Settings › Stedding › Updates. |
-| Verified | the image against the project's EdDSA public key in the app, before it is unpacked, and the feed's own signature; then Sparkle checks the new app's code signature. A build made locally (signed ad hoc) never runs the updater. |
+| Verified | the image against the project's EdDSA public key in the app, before it is unpacked, and the feed's own signature; then Sparkle checks the new app's code signature. On Windows the feed and the installer are checked against the Windows update key the build carries (Ed25519) before either is used, and only a copy the installer put in place runs the updater. A build made locally never runs the updater. |
 
 **What GitHub can see.** An IP address, a user agent naming the version, and a
 timing pattern. Over time that is enough to infer roughly where an installation is,

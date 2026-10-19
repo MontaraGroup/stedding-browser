@@ -60,11 +60,13 @@ function Describe {
     $vi = (Get-Item $exe).VersionInfo
     Log "version resource: ProductName='$($vi.ProductName)' FileVersion='$($vi.FileVersion)' Company='$($vi.CompanyName)'"
     Log ('application dir: ' + ((Get-ChildItem $app | ForEach-Object { $_.Name }) -join ', '))
-    # The bits, not only the number: a release on the same Chromium pin has the same version
-    # resource as the one before it (docs/HANDOFF.md, trap 62), so the hash says which one this is.
-    $dll = Get-ChildItem $app -Directory -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'chrome.dll' } |
-      Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($dll) { Log "chrome.dll sha256: $((Get-FileHash $dll -Algorithm SHA256).Hash.ToLower())" }
+    # The bits, not only the number: a release on the same Chromium pin had the same version
+    # resource as the one before it until beta 19 (docs/HANDOFF.md, trap 62), so the hash says
+    # which one this is. After an update made while the browser ran, the old version's folder
+    # stays beside the new one until the next install: hash the folder chrome.exe names.
+    $dll = Join-Path (Join-Path $app $vi.FileVersion) 'chrome.dll'
+    if (Test-Path $dll) { Log "chrome.dll sha256: $((Get-FileHash $dll -Algorithm SHA256).Hash.ToLower()) ($($vi.FileVersion))" }
+    else { Log "chrome.dll: none in $($vi.FileVersion)\" }
   }
   Log "user data present: $(Test-Path $data)"
   $un = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |

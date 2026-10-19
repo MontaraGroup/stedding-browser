@@ -1545,7 +1545,10 @@ macOS is set to.
     no key taken for about a minute, the fixture's keys were lost, and every later step read
     the wrong rows (2026-10-19, beta 18). `s173-live.ps1` now waits until DevTools calls the
     first page visible. Run real-input checks on a quiet machine, and read a fixture that
-    failed as a too-early start first.
+    failed as a too-early start first. Beta 19's run (2026-10-19) showed the same minute on
+    a quiet machine for every part that was not the first of its task, with DevTools
+    answering and no page visible, so the build may not have been the cause: run each
+    part in a task of its own until `S-248` is found.
 
 ## The Windows build
 
@@ -1681,6 +1684,58 @@ engine chooser. That is the test profile, not the update: the older copy ran wit
 `Default/Preferences` with `{"stedding":{"welcome":{"shown":true}}}` skips the welcome.
 The chooser then opens as it does for a beta 16 user who never chose an engine (trap 76,
 `S-134`).
+
+## The updater (Windows)
+
+The browser's own updater (ADR 0023; its key, ADR 0026; `docs/features/updates.md`
+Up14-Up22). What lives where:
+
+- `chrome/browser/ui/stedding/app_updater_win.cc` is `stedding::AppUpdater` on Windows,
+  started from `ChromeBrowserMainPartsWin::PostProfileInit`; `update_feed.cc` checks the
+  feed's and the installer's Ed25519 signatures and picks the item, through the sandboxed XML
+  parser. The feed URL and the public key are constants in `update_feed.h`.
+- **The version.** `tooling/win/build.ps1` writes the product's version into the checkout's
+  `chrome/VERSION` before `gn gen` (`S-72`): `<milestone>.<100 x major + minor>.<patch>.<beta
+  n, 999 for a release>`, with Chromium's on a fifth line, `CHROMIUM_VERSION`, which
+  `version_info::GetChromiumVersionNumber()` returns for the user agent, the client hints,
+  the Web Store and component updaters and About. The file shows as changed in the checkout
+  like the branding; `git checkout chrome/VERSION` restores Chromium's, and
+  `tooling/sync-chromium` does it before a sync. A VERSION bump rewrites it and rebuilds what
+  includes the version headers (most of the tree once, about an hour on this PC).
+- Only a copy the installer put in place (`%LOCALAPPDATA%\Stedding\Application`) starts the
+  updater: `out\win-release\chrome.exe` never does, nor a test.
+- The installer runs hidden with `--do-not-launch-chrome --verbose-logging --log-file=...`;
+  Chromium's in-use update leaves `new_chrome.exe` and the rename command in
+  `HKCU\Software\Stedding`, and `chrome::AttemptRestart` (or any quit) swaps it in
+  (`chrome/browser/first_run/upgrade_util_win.cc`). Its exact status is the `InstallerError`
+  value in that key: 30 is an in-use update, 31 a same-version repair that failed.
+- **The private key** is on the Windows release PC under `%USERPROFILE%\.stedding\update-key`
+  (`tooling/win/update-key.ps1 -Create`, made 2026-10-19), encrypted, its passphrase under
+  DPAPI; the operator keeps a backup (`-Backup <folder>`). Without it no installed Windows copy
+  can be offered an update.
+- Offering a release: `tooling/win/publish-appcast.ps1` after `tooling/publish-release`.
+
+The local n-1 check, before a release that changes the updater or its feed: two builds of the
+same tree, A at one VERSION and B at the next (each a `build.ps1` run, so each carries its
+Windows version), each packaged with `tooling/win/package-installer.ps1`. Install A over the
+installed copy through a one-off task (trap 40). Write a local feed for B with
+`tooling\win\publish-appcast.ps1 -Installer <B> -Feed <dir>\appcast-windows.xml -Url
+http://127.0.0.1:<port>/<B's name>` and serve the folder with `python -m http.server`. Start
+the installed A on a scratch profile with `--stedding-update-feed=http://127.0.0.1:<port>/appcast-windows.xml`:
+ten seconds in it fetches the feed and B, runs B's installer hidden, and the sidebar shows the
+pill; a click restarts into B, which About and `HKCU\Software\Stedding`'s `pv` confirm, and
+`new_chrome.exe` is gone. Read the registry and the install from the task, not from a shell
+of the agent's app, which sees a virtualised copy without `pv` or the uninstall entry (trap 40).
+`--no-first-run` keeps the welcome away and the thank-you page with it.
+
+First run, 2026-10-19: a build of 156.2.0.18 installed over beta 18 as an upgrade, not a repair
+(the version folder replaced, the profile kept); on a scratch profile it fetched the feed and
+beta 19's installer nine seconds after launch, the installer ran (`InstallerError` 30, an
+in-use update, `new_chrome.exe` beside both version folders), and the pill showed at 25
+seconds. A real click restarted into 156.2.0.19 in about two seconds, with `pv` 156.2.0.19,
+`new_chrome.exe` gone and the two tabs back; About read "Stedding 0.2.0-beta.19 · Chromium
+156.0.8078.36". Scripts: `n1-task.ps1` (through `tooling\win\drive.ps1`) and an `Up21` check
+that `out\win-release\chrome.exe` asks nothing.
 
 ## Release channel
 

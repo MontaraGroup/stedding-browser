@@ -7,6 +7,33 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-19, afternoon -- the Windows updater, beta 19
+
+The operator asked for automatic updates on Windows to be built while the Mac added its image
+to beta 18, chose the version shape drafted for `S-72`, a Windows update key on the PC, a
+release as beta 19 once tested, and the update test on their own install with the profile kept.
+
+- **A version of Stedding's own on Windows** (`S-72`, patch 0073): `tooling/win/build.ps1`
+  writes `<milestone>.<100 × major + minor>.<patch>.<beta n, 999 for a release>` into the
+  checkout's `chrome/VERSION` (beta 19 is 156.2.0.19), with Chromium's version on a
+  `CHROMIUM_VERSION` line for the user agent, the client hints, the Web Store, the component
+  updater, extensions' minimum version and About (`ChromiumVersionTest`).
+- **The updater** (`S-215`, patch 0073; updates Up14 to Up22): `stedding::AppUpdater` on
+  Windows reads `updates/appcast-windows.xml`, checks the feed's and the installer's Ed25519
+  signatures against a Windows key of its own (ADR 0026; `tooling/win/update-key.ps1`), runs
+  the installer hidden beside the running copy and offers the restart in the sidebar's pill.
+  `tooling/win/publish-appcast.ps1` signs and writes the feed; `tooling/win/update-n1.ps1` is
+  the n-1 check.
+- **The n-1 check on the installed copy:** a build of 156.2.0.18 installed over beta 18 as an
+  upgrade, found beta 19 on a local feed, installed it beside itself (`InstallerError` 30), and
+  showed the pill 25 seconds after launch; a real click restarted it into 156.2.0.19 in about
+  two seconds with its tabs. `out\win-release\chrome.exe` asked nothing (Up21).
+- **Beta 19's checks:** release unit 951 of 951, browser 341 of 341. The installer as a user
+  gets it (a repair, uninstalls keeping the profile, beta 18 fresh, beta 19 over it, a fresh
+  install), `chrome.dll` matching. The core-loop script passed every step, its parts run one
+  per task: run after another part, a part's window came up with no page visible for a minute
+  (`S-248`; trap 116's busy-machine reading of beta 18 may be this).
+
 ## 2026-10-19, late morning -- beta 18 from the PC
 
 The operator asked for S-244 to be fixed, everything pushed, and, when all was done and tested,

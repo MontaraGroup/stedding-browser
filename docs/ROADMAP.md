@@ -271,8 +271,8 @@ Acceptance criteria:
 > and notarized from beta 10 (`S-17`), and the Mac updates itself from beta 16 (`S-74`):
 > beta 17 was the first release offered through the feed (2026-10-18), and a copy of the
 > released beta 16 took it from the real feed, while the n-1 rehearsal showed the relaunch
-> keeping the profile. Left: the rollback path tried for real, and updates on Windows and
-> Linux (ADR 0023: `S-215`, `S-216`).
+> keeping the profile. Windows updates itself from beta 19 (ADR 0023, ADR 0026). Left: the rollback path
+> tried for real, and updates on Linux (`S-216`).
 
 **Goal:** distribution is production-grade: install with no warnings, update without
 thinking, learn about it at stedding.dev.
@@ -312,14 +312,14 @@ detector again on the series through patch 0061 on 2026-10-11, after one fix, an
 current pin on 2026-10-17, after one more, but for `S-214`, fixed since. Under
 AddressSanitizer, on the series through 0070 on 2026-10-18, the unit suite was clean and
 the browser suite had one report, a test's own, fixed in 0071, and one failure still open
-(`S-226`; `S-106`). A second release
-on one Chromium number installs as a repair that needs Stedding closed (`S-72`). Built so
+(`S-226`; `S-106`). From beta 19 each
+Windows release carries a version of its own and updates itself (`S-72`, `S-215`). Built so
 far: the series and the Stedding window on Windows (round 8, patch 0039); branding -- the
 name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM classes and
 sandbox prefix (N3–N4) -- and Chromium's `mini_installer` from the `win-release`
 configuration (ADR 0018), a preview since beta 5 (N6); Arc's keyboard for Windows (N7,
 patch 0043). Not done: little windows and links from other applications, signing and
-SmartScreen, updates (planned in ADR 0023: `S-72`, then `S-215`), CI, Windows performance budgets, and importing from Arc for Windows
+SmartScreen, CI, Windows performance budgets, and importing from Arc for Windows
 (`BACKLOG.md` S-81). `BACKLOG.md` S-56.
 
 Scope:

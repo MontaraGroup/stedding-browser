@@ -96,6 +96,32 @@ function Get-StepsDone([string]$dir, [datetime]$since) {
   return $n
 }
 
+# BACKLOG S-72 (ADR 0023, docs/features/updates.md Up14): the Windows build carries the
+# product's version in chrome/VERSION, so every release's installer is higher than the one
+# before it on one Chromium pin and installs as an update beside a running Stedding, not as a
+# repair: <milestone>.<100 x major + minor>.<patch>.<beta n, 999 for a release>, so
+# 0.2.0-beta.19 on Chromium 156 is 156.2.0.19. Chromium's own version is kept on the line
+# after (CHROMIUM_VERSION) for what the web and Google's services see. Written only when it
+# changes, so an unchanged version rebuilds nothing; `git checkout chrome/VERSION` puts
+# Chromium's back (tooling/sync-chromium does, before a sync).
+$pinLine = Get-Content (Join-Path $root "tooling\chromium-version") | Where-Object { $_ -match '^CHROMIUM_TAG=' }
+$chromiumVersion = ($pinLine -replace '^CHROMIUM_TAG=', '').Trim()
+if ($chromiumVersion -notmatch '^(\d+)\.\d+\.\d+\.\d+$') { throw "tooling/chromium-version has no CHROMIUM_TAG" }
+$milestone = [int]$Matches[1]
+if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)(-beta\.(\d+))?$') { throw "VERSION '$version' is not <major>.<minor>.<patch>[-beta.<n>]" }
+$productMajor = [int]$Matches[1]; $productMinor = [int]$Matches[2]; $productPatch = [int]$Matches[3]
+$beta = if ($Matches[5]) { [int]$Matches[5] } else { 999 }
+if ($productMinor -gt 99 -or ($Matches[5] -and $beta -ge 999) -or (100 * $productMajor + $productMinor) -gt 65535 -or $productPatch -gt 65535) {
+  throw "VERSION '$version' does not fit the Windows version's fields (minor under 100, beta under 999)"
+}
+$windowsVersion = "$milestone.$(100 * $productMajor + $productMinor).$productPatch.$beta"
+$versionText = "MAJOR=$milestone`nMINOR=$(100 * $productMajor + $productMinor)`nBUILD=$productPatch`nPATCH=$beta`nCHROMIUM_VERSION=$chromiumVersion`n"
+$versionPath = Join-Path $Src "chrome\VERSION"
+if (-not (Test-Path $versionPath) -or ([IO.File]::ReadAllText($versionPath) -ne $versionText)) {
+  [IO.File]::WriteAllText($versionPath, $versionText, (New-Object Text.UTF8Encoding $false))
+  Write-Host "chrome/VERSION: $windowsVersion (Chromium $chromiumVersion)"
+}
+
 Push-Location $Src
 try {
   New-Item -ItemType Directory -Force $out | Out-Null

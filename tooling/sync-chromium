@@ -103,6 +103,13 @@ main() {
     fi
     cd "$CHROMIUM_ROOT" || die "cannot enter $CHROMIUM_ROOT"
 
+    # BACKLOG S-72: on Windows tooling/win/build.ps1 writes the product's version into
+    # chrome/VERSION; Chromium's goes back before the checkout moves.
+    if is_windows && [ -d src/.git ] && ! git -C src diff --quiet -- chrome/VERSION 2>/dev/null; then
+      log "restoring Chromium's chrome/VERSION (tooling/win/build.ps1 wrote the product's)"
+      git -C src checkout -- chrome/VERSION
+    fi
+
     # 1. Populate the git cache for chromium/src.
     #
     #    --no-fetch-tags matters. chromium/src carries on the order of a hundred thousand

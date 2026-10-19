@@ -1,6 +1,6 @@
 # 0023 — Updates on Windows and Linux: the plan, and what keeps it open
 
-Status: Accepted (a plan; nothing in it is built yet)
+Status: Accepted; partly superseded by 0026 (its "one key" rule, for Windows)
 Date: 2026-10-16
 
 ## Context

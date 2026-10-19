@@ -304,20 +304,19 @@ and what comes next:
 | macOS (Apple silicon) | Beta releases since 2026-09-01; the current image is beta 17's, signed and notarized as every macOS image is from beta 10 on; the Mac adds its image of a newer beta after its own pass |
 | Windows x64 | Preview installer since beta 5, on Chromium 156 from beta 17: the full interface, Arc's keys for Windows, a per-user install; both test suites ran clean with DCHECKs and the dangling-pointer detector on beta 14's series (beta 17's stops on one older fault, `S-214`) and under AddressSanitizer on the series of 2026-09-30 |
 | Code signing and notarisation | The macOS image is signed with the Developer ID and notarized from beta 10 on; Windows is not signed yet (`S-56` in [BACKLOG.md](BACKLOG.md)) |
-| Automatic updates | The Mac from beta 16 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022); Windows and Linux are planned (ADR 0023: `S-215`, `S-216`) |
-| Windows: little windows, signing, updates | Open (`S-56`) |
+| Automatic updates | The Mac from beta 16 on: Sparkle, a signed feed on GitHub, no identifier, on by default with a switch in Settings (ADR 0022). Windows from beta 19 on: the browser's own updater, from a signed feed of its own (ADR 0023, ADR 0026). Linux is planned (`S-216`) |
+| Windows: little windows, signing | Open (`S-56`) |
 | Linux | After Windows (milestone M9 in [docs/ROADMAP.md](docs/ROADMAP.md)) |
 | Past Arc (milestone M10) | Planned, alongside the ports: ad and tracker blocking built in, tracking parameters stripped from every link opened, web apps keeping their own shortcuts, shortcuts you can change, child tabs, the sidebar on the right, a mini player in the sidebar, Peek rebuilt, Space colours and icons of your choice, import from Dia, the site's controls in one panel (the Features section of [BACKLOG.md](BACKLOG.md)). In already: undo after closing tabs and several smaller items since beta 14, and dark pages, built for the next release |
 | Sync between machines | Not planned as a service; export a Space as a file and import it on the other machine |
 
 Known limits in the current builds: beta 17 is built on Chromium 156.0.8078.36, the build
 of Chrome 156 whose early rollout Google paused on 16 October, before Chrome 156's full
-release planned for 20 October; no automatic updates on Windows yet, and the Windows
-installer is unsigned; ⌃1–⌃9 collide with macOS Mission Control once you have a second
+release planned for 20 October; the Windows installer is unsigned, and a Windows copy
+older than beta 19 has no updater, so install beta 19 by hand once; ⌃1–⌃9 collide with macOS Mission Control once you have a second
 desktop (the Spaces menu keeps the commands reachable); a clipboard manager that owns ⇧⌘C
 system-wide takes it before the browser does; while Arc runs it takes ⌥⌘N from every app,
-so split with ⌃⌘N then (`S-79`); on Windows, close Stedding before installing a release on
-the same Chromium number (`S-72`).
+so split with ⌃⌘N then (`S-79`).
 
 The full list of open work is [BACKLOG.md](BACKLOG.md); each feature's specification
 and its tests are in [docs/features/](docs/features/). Release notes for every release
@@ -351,7 +350,8 @@ You can also export a Space as a file.
 
 **Will it update itself?** On the Mac, from beta 16 on: once a day, in the background,
 with "New Stedding Version Available" at the bottom of the sidebar when it is ready, and a
-switch in Settings to turn it off. Windows has no updater yet (`S-215`).
+switch in Settings to turn it off. On Windows the same from beta 19 on; install beta 19 by
+hand once.
 
 **Intel Mac? Linux?** Neither yet. Apple silicon and Windows x64 today; Linux is the
 next platform after the Windows port is complete.
