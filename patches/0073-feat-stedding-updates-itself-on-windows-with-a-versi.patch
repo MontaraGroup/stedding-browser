@@ -129,7 +129,7 @@ index 4b76dfc87b55e..887149e20b78c 100644
 +
  }  // namespace version_info
 diff --git a/base/version_info/version_info.h b/base/version_info/version_info.h
-index 3d83451f3ac8a..089a5d4d8a95c 100644
+index 3d83451f3ac8a..4a4144f155cbc 100644
 --- a/base/version_info/version_info.h
 +++ b/base/version_info/version_info.h
 @@ -34,6 +34,23 @@ constexpr std::string_view GetVersionNumber() {
@@ -137,7 +137,7 @@ index 3d83451f3ac8a..089a5d4d8a95c 100644
  #endif
  
 +// Stedding (BACKLOG S-72, ADR 0023): Chromium's own version, e.g.
-+// "156.0.8078.36". On Windows GetVersionNumber() is the product's
++// "156.0.<build>.<patch>". On Windows GetVersionNumber() is the product's
 +// ("156.2.0.19"), which the installer, the version folder and the profile's
 +// last version compare; what the web and Google's services see -- the user
 +// agent, its client hints, the extension and component updaters -- is this.
@@ -1472,7 +1472,7 @@ index 0000000000000..576de63ee6559
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/update_feed.h b/chrome/browser/ui/stedding/update_feed.h
 new file mode 100644
-index 0000000000000..d103dc5fd3ab2
+index 0000000000000..706aedc1a6351
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed.h
 @@ -0,0 +1,84 @@
@@ -1554,7 +1554,7 @@ index 0000000000000..d103dc5fd3ab2
 +// updates Up14 (BACKLOG S-72): the release a Windows file version stands for,
 +// <milestone>.<100 x major + minor>.<patch>.<beta n, 999 for a release>:
 +// 156.2.0.19 is "0.2.0-beta.19", 156.2.0.999 is "0.2.0". Empty for a version
-+// of another shape, Chromium's own (156.0.8078.36) among them.
++// of another shape, Chromium's own (156.0.<build>.<patch>) among them.
 +std::string SteddingVersionOfWindowsVersion(const base::Version& version);
 +
 +}  // namespace stedding
@@ -1562,7 +1562,7 @@ index 0000000000000..d103dc5fd3ab2
 +#endif  // CHROME_BROWSER_UI_STEDDING_UPDATE_FEED_H_
 diff --git a/chrome/browser/ui/stedding/update_feed_unittest.cc b/chrome/browser/ui/stedding/update_feed_unittest.cc
 new file mode 100644
-index 0000000000000..9317388622db5
+index 0000000000000..97540401a7f3c
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed_unittest.cc
 @@ -0,0 +1,198 @@
@@ -1688,7 +1688,7 @@ index 0000000000000..9317388622db5
 +  EXPECT_EQ("0.2.0", SteddingVersionOfWindowsVersion(base::Version("156.2.0.999")));
 +  EXPECT_EQ("1.12.3-beta.4",
 +            SteddingVersionOfWindowsVersion(base::Version("157.112.3.4")));
-+  EXPECT_EQ("", SteddingVersionOfWindowsVersion(base::Version("156.0.8078.36")));
++  EXPECT_EQ("", SteddingVersionOfWindowsVersion(base::Version("156.0.8000.10")));
 +  EXPECT_EQ("", SteddingVersionOfWindowsVersion(base::Version("10020.17")));
 +  EXPECT_EQ("", SteddingVersionOfWindowsVersion(base::Version()));
 +}
@@ -1720,7 +1720,7 @@ index 0000000000000..9317388622db5
 +      "https://github.com/o/r/releases/download/v0.2.0-beta.19/"
 +      "Stedding-0.2.0-beta.19-win-x64.exe";
 +  const base::Value feed = Parse(base::StrCat(
-+      {Item("0.2.0-beta.17", "156.0.8078.36", kRelease),
++      {Item("0.2.0-beta.17", "156.0.8000.10", kRelease),
 +       Item("0.2.0-beta.19", "156.2.0.19", kRelease),
 +       Item("0.2.0-beta.18", "156.2.0.18", kRelease),
 +       // The Mac's item, in a feed that got one by mistake.
@@ -1735,7 +1735,7 @@ index 0000000000000..9317388622db5
 +  EXPECT_EQ(176000000, later->length);
 +  EXPECT_EQ("c2ln", later->signature);
 +
-+  later = LaterWindowsItem(feed, base::Version("156.0.8078.36"));
++  later = LaterWindowsItem(feed, base::Version("156.0.8000.10"));
 +  ASSERT_TRUE(later) << "beta 18 and earlier carried Chromium's number";
 +  EXPECT_EQ("0.2.0-beta.19", later->version);
 +
