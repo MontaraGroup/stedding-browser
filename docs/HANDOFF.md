@@ -1547,8 +1547,12 @@ macOS is set to.
     first page visible. Run real-input checks on a quiet machine, and read a fixture that
     failed as a too-early start first. Beta 19's run (2026-10-19) showed the same minute on
     a quiet machine for every part that was not the first of its task, with DevTools
-    answering and no page visible, so the build may not have been the cause: run each
-    part in a task of its own until `S-248` is found.
+    answering and no page visible. That one was Windows' foreground lock (`S-248`): a
+    window launched seconds after the script's own keys opens behind the operator's
+    window and stays there, its pages hidden, until something brings it forward. The
+    fixture now brings it to the front before it waits, and the parts run in one task
+    again. A first page that will not show is a busy machine only once the window is in
+    front.
 
 ## The Windows build
 

@@ -221,6 +221,10 @@ function Drive-ForegroundIsBrowser {
 
 # Brings the browser window forward: the plain call, then the Alt-key nudge Windows allows.
 # It closes an open menu: never call it between a menu opening and its row being clicked.
+# Windows keeps a new window behind the foreground one when its process did not get the last
+# input: a browser launched seconds after this script's own keys opens behind the operator's
+# window, its pages hidden, and takes no key (BACKLOG S-248). The nudge is input, so it waits
+# for the operator to be idle, and it is marked as this script's.
 function Drive-Focus {
   $h = $script:Drive.Hwnd
   if ([StedDrive]::IsIconic($h)) { [void][StedDrive]::ShowWindow($h, 9) }
@@ -228,7 +232,9 @@ function Drive-Focus {
     [void][StedDrive]::SetForegroundWindow($h)
     Start-Sleep -Milliseconds 250
     if (Drive-ForegroundIsBrowser) { return $true }
+    if (-not (Drive-WaitOwnerIdle 120)) { return $false }
     [StedDrive]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); [StedDrive]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+    Drive-Mark
   }
   return (Drive-ForegroundIsBrowser)
 }

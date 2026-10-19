@@ -250,9 +250,15 @@ function Fixture([string]$Name, [switch]$NoHoverExpand) {
   # The keys below go to a browser that answers them only once its first page is on screen.
   # On a busy machine the window stood for about twenty seconds with no page drawn and took no
   # key, and the fixture's keys were lost (2026-10-19, after a multi-gigabyte link): wait for
-  # DevTools to call Page A visible, up to a minute.
+  # DevTools to call Page A visible, up to a minute. A part that starts seconds after another
+  # part's keys opens behind the operator's window, where Windows keeps it, with Page A hidden
+  # for the whole minute (S-248): bring it to the front first, and again while it waits.
+  ShellMenuAway
   $ready = (Get-Date).AddSeconds(60)
-  while ((Get-Date) -lt $ready -and (Drive-Visible) -notmatch 'Page A') { Start-Sleep -Seconds 1 }
+  while ((Get-Date) -lt $ready -and (Drive-Visible) -notmatch 'Page A') {
+    Start-Sleep -Seconds 1
+    if (-not (Drive-ForegroundIsBrowser)) { $null = Drive-Focus }
+  }
   Drive-Log "first page on screen: $(Drive-Visible)"
   ShellMenuAway
   if (-not (Drive-Focus)) { throw 'the browser did not come to the front' }
