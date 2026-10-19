@@ -129,8 +129,8 @@ into the feature patches they belong to.
  .../test/stedding/space_switch_browsertest.cc | 194 ++++++++++++++++++
  chrome/test/stedding/welcome_browsertest.cc   | 110 ++++++++++
  .../stedding/window_buttons_browsertest.mm    |  36 ++++
- .../renderer_host/navigation_entry_impl.cc    |  37 +++-
- 54 files changed, 1985 insertions(+), 134 deletions(-)
+ .../renderer_host/navigation_entry_impl.cc    |  44 +++-
+ 54 files changed, 1995 insertions(+), 131 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color.cc
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color.h
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color_unittest.cc
@@ -3383,7 +3383,7 @@ index e0ce584eb8b3a..6e5a51dc678cf 100644
 +
  }  // namespace
 diff --git a/content/browser/renderer_host/navigation_entry_impl.cc b/content/browser/renderer_host/navigation_entry_impl.cc
-index 83b871f22c2fb..40937c75601f5 100644
+index 83b871f22c2fb..4e294cc86ba55 100644
 --- a/content/browser/renderer_host/navigation_entry_impl.cc
 +++ b/content/browser/renderer_host/navigation_entry_impl.cc
 @@ -8,6 +8,7 @@
@@ -3394,7 +3394,7 @@ index 83b871f22c2fb..40937c75601f5 100644
  #include <string>
  #include <utility>
  
-@@ -62,12 +63,38 @@ int CreateUniqueEntryID() {
+@@ -62,12 +63,34 @@ int CreateUniqueEntryID() {
    return ++unique_id_counter;
  }
  
@@ -3418,34 +3418,48 @@ index 83b871f22c2fb..40937c75601f5 100644
      const std::vector<std::optional<std::u16string>>& referenced_files,
      NavigationEntryImpl::TreeNode* node) {
    CHECK(context, base::NotFatalUntil::M152);
-+  // Stedding: a negative sequence number saved by an earlier build restores
-+  // as none (SequenceNumberForPageState).
-+  std::optional<blink::ExplodedFrameState> sanitized;
-+  if (restored_state.item_sequence_number < 0 ||
-+      restored_state.document_sequence_number < 0) {
-+    sanitized = restored_state;
-+    sanitized->item_sequence_number =
-+        SequenceNumberForPageState(restored_state.item_sequence_number);
-+    sanitized->document_sequence_number =
-+        SequenceNumberForPageState(restored_state.document_sequence_number);
-+  }
-+  const blink::ExplodedFrameState& state =
-+      sanitized ? *sanitized : restored_state;
++  // The saved numbers are the dedup key, including a negative one. A document
++  // that never got a sequence number is saved as -1, and two copies of it (a
++  // session written twice, or a replaceState from before the sequence was
++  // stored) share one FrameNavigationEntry only when the lookup uses that -1.
++  // Substituting 0 first disables the share: 0 means "not a sequence" and
++  // GetFrameNavigationEntry ignores it. The frame entry itself stores 0, set
++  // below after it has been registered under -1, because a commit of -1 is
++  // killed (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER).
++  const blink::ExplodedFrameState& state = restored_state;
    // Set a single-frame PageState on the entry.
    blink::ExplodedPageState page_state;
  
-@@ -188,9 +215,11 @@ void RecursivelyGenerateFrameState(
+@@ -125,6 +148,20 @@ void RecursivelyGenerateFrameEntries(
+         nullptr /* policy_container_policies */,
+         state.protect_url_in_navigation_api);
+     context->AddFrameNavigationEntry(entry.get());
++    // Register under the saved number first (Add keys on the entry's current
++    // number), then store 0 for a negative one so the commit check passes.
++    // set_item_sequence_number allows the write only while the entry is still
++    // the unassigned -1 it was created with.
++    if (SequenceNumberForPageState(state.item_sequence_number) !=
++        state.item_sequence_number) {
++      entry->set_item_sequence_number(
++          SequenceNumberForPageState(state.item_sequence_number));
++    }
++    if (SequenceNumberForPageState(state.document_sequence_number) !=
++        state.document_sequence_number) {
++      entry->set_document_sequence_number(
++          SequenceNumberForPageState(state.document_sequence_number));
++    }
+   }
+   node->frame_entry = std::move(entry);
+ 
+@@ -188,6 +225,11 @@ void RecursivelyGenerateFrameState(
    state->url_string = UrlToOptionalString16(node->frame_entry->url());
    state->referrer = UrlToOptionalString16(node->frame_entry->referrer().url);
    state->referrer_policy = node->frame_entry->referrer().policy;
--  state->item_sequence_number = node->frame_entry->item_sequence_number();
--  state->document_sequence_number =
--      node->frame_entry->document_sequence_number();
-+  // Stedding: never -1 (SequenceNumberForPageState).
-+  state->item_sequence_number =
-+      SequenceNumberForPageState(node->frame_entry->item_sequence_number());
-+  state->document_sequence_number = SequenceNumberForPageState(
-+      node->frame_entry->document_sequence_number());
-   state->initiator_origin = node->frame_entry->initiator_origin();
-   // Note: If UrlToOptionalString16 receives an empty GURL, it returns nullopt.
-   state->initiator_base_url_string = UrlToOptionalString16(
++  // Keep the frame entry's number, negative included. Writing 0 here made two
++  // copies of an entry that never had a sequence number unrestorable as one
++  // shared frame (ContentSerializedNavigationBuilderTest.ToNavigationEntries).
++  // Restore substitutes 0 onto the frame entry after dedup, which is what a
++  // commit is allowed to send.
+   state->item_sequence_number = node->frame_entry->item_sequence_number();
+   state->document_sequence_number =
+       node->frame_entry->document_sequence_number();

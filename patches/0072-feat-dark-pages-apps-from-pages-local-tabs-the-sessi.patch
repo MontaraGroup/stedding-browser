@@ -149,8 +149,8 @@ patches of their own and folds each fix into the patch that owns its code
  .../browser/ui/tabs/tab_menu_model_delegate.h |    6 +
  chrome/browser/ui/toasts/api/toast_id.cc      |    2 +
  chrome/browser/ui/toasts/api/toast_id.h       |    5 +-
- chrome/browser/ui/toasts/toast_controller.cc  |   36 +
- chrome/browser/ui/toasts/toast_controller.h   |   13 +
+ chrome/browser/ui/toasts/toast_controller.cc  |   44 +
+ chrome/browser/ui/toasts/toast_controller.h   |   17 +
  chrome/browser/ui/toasts/toast_service.cc     |   28 +
  chrome/browser/ui/toolbar/BUILD.gn            |    1 +
  chrome/browser/ui/toolbar/app_menu_model.cc   |    7 +
@@ -162,7 +162,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../commandbar/command_bar_view_unittest.cc   |  296 ++++-
  chrome/browser/ui/views/frame/BUILD.gn        |    9 +
  .../views/frame/browser_native_widget_mac.mm  |   16 +
- chrome/browser/ui/views/frame/browser_view.cc |    6 +-
+ chrome/browser/ui/views/frame/browser_view.cc |   14 +-
  .../ui/views/frame/contents_web_view.cc       |   94 +-
  .../ui/views/frame/contents_web_view.h        |   19 +
  .../frame/horizontal_tab_strip_region_view.cc |   20 +-
@@ -284,7 +284,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 225 files changed, 17182 insertions(+), 317 deletions(-)
+ 225 files changed, 17202 insertions(+), 317 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -7384,10 +7384,10 @@ index 2987a699cfde6..f954c4820c758 100644
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
  
 diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
-index fa3241ca7173b..d91083fe960e3 100644
+index fa3241ca7173b..a30d0d2e52146 100644
 --- a/chrome/browser/ui/toasts/toast_controller.cc
 +++ b/chrome/browser/ui/toasts/toast_controller.cc
-@@ -439,6 +439,26 @@ void ToastController::OnFullscreenStateChanged() {
+@@ -439,6 +439,34 @@ void ToastController::OnFullscreenStateChanged() {
        ShouldRenderToastOverWebContents());
  }
  
@@ -7407,6 +7407,14 @@ index fa3241ca7173b..d91083fe960e3 100644
 +  }
 +}
 +
++void ToastController::PlaceOnCurrentAnchor() {
++  if (!toast_widget_ || !currently_showing_toast_id_ || !toast_view_ ||
++      !toast_view_->GetAnchorView()) {
++    return;
++  }
++  toast_view_->SizeToContents();
++}
++
 +void ToastController::OnViewIsDeleting(views::View* observed_view) {
 +  infobars_observation_.Reset();
 +}
@@ -7414,7 +7422,7 @@ index fa3241ca7173b..d91083fe960e3 100644
  void ToastController::UpdateToastAnchor() {
    bool global_scope =
        toast_registry_
-@@ -467,6 +487,22 @@ views::View* ToastController::GetAnchorView(bool global_scope) {
+@@ -467,6 +495,22 @@ views::View* ToastController::GetAnchorView(bool global_scope) {
      BrowserElementsViews* browser_elements_views =
          BrowserElementsViews::From(browser_window_interface_);
      if (global_scope || browser_full_screen) {
@@ -7438,7 +7446,7 @@ index fa3241ca7173b..d91083fe960e3 100644
      } else {
        MultiContentsView* multi_contents_view = AsViewClass<MultiContentsView>(
 diff --git a/chrome/browser/ui/toasts/toast_controller.h b/chrome/browser/ui/toasts/toast_controller.h
-index 81c1b18c894e3..b1bbe8beef034 100644
+index 81c1b18c894e3..c4ff3a14920a4 100644
 --- a/chrome/browser/ui/toasts/toast_controller.h
 +++ b/chrome/browser/ui/toasts/toast_controller.h
 @@ -22,6 +22,7 @@
@@ -7471,7 +7479,18 @@ index 81c1b18c894e3..b1bbe8beef034 100644
    // content::WebContentsObserver:
    void PrimaryPageChanged(content::Page& page) override;
  
-@@ -184,6 +193,10 @@ class ToastController : public views::WidgetObserver,
+@@ -130,6 +139,10 @@ class ToastController : public views::WidgetObserver,
+   // content::WebContentsObserver:
+   void WebContentsDestroyed() override;
+ 
++  // Place the showing toast on its anchor's current bounds. BrowserView calls
++  // this at the end of layout, when those bounds are final (toolbar T38).
++  void PlaceOnCurrentAnchor();
++
+   views::Widget* GetToastWidgetForTesting() { return toast_widget_; }
+   toasts::ToastView* GetToastViewForTesting() { return toast_view_; }
+ 
+@@ -184,6 +197,10 @@ class ToastController : public views::WidgetObserver,
        this};
    base::ScopedObservation<OmniboxTabHelper, OmniboxTabHelper::Observer>
        omnibox_helper_observer_{this};
@@ -8492,10 +8511,32 @@ index 96a3121bcd885..7316905cfc8e7 100644
        if (auto* vertical_tab_strip_state_controller =
                tabs::VerticalTabStripStateController::From(browser)) {
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 73bcc4803f083..22635f995dca2 100644
+index 73bcc4803f083..4df865a93ceea 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -6178,7 +6178,11 @@ void BrowserView::FrameColorsChanged() {
+@@ -195,6 +195,7 @@
+ #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_view.h"
+ #include "chrome/browser/ui/views/hats/hats_next_web_dialog.h"
+ #include "chrome/browser/ui/views/incognito_clear_browsing_data_dialog_coordinator.h"
++#include "chrome/browser/ui/toasts/toast_controller.h"
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+ #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
+@@ -4948,6 +4949,13 @@ void BrowserView::Layout(PassKey) {
+ 
+   LayoutSuperclass<views::View>(this);
+ 
++  // A toast anchored under the infobars does not move on the Mac when the
++  // anchor is chosen during layout. Place it from the anchor's bounds now
++  // that those bounds are final (toolbar T38).
++  if (ToastController* toasts = ToastController::From(browser())) {
++    toasts->PlaceOnCurrentAnchor();
++  }
++
+   // TODO(jamescook): Why was this in the middle of layout code?
+   toolbar_->location_bar()->UpdateFocusBehavior(IsToolbarVisible());
+   GetFrameView()->UpdateMinimumSize();
+@@ -6178,7 +6186,11 @@ void BrowserView::FrameColorsChanged() {
      web_app_window_title_->SetEnabledColor(caption_color);
    }
    GetWidget()->SetBackgroundColor(kColorToolbar);
