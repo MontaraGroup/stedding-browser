@@ -914,7 +914,9 @@ macOS is set to.
     after, because the version resource cannot tell the two releases apart. The real fix is
     `S-72`: a file version of Stedding's own for every Windows release, never lower than the last
     one a profile ran (Chromium's downgrade manager reads a lower number as a downgrade), with the
-    About line's Chromium number read from the pin and not from `chrome/VERSION`.
+    About line's Chromium number read from the pin and not from `chrome/VERSION`. It landed in
+    patch 0073 (beta 19): a later release now installs beside a running Stedding, and only an
+    installer of the version already installed still repairs.
 
 63. **A synthetic two-finger swipe that sets the line delta travels eight times as far.**
     `CGEventCreateScrollWheelEvent` in pixel units sets the event's point delta; setting
@@ -1738,8 +1740,8 @@ beta 19's installer nine seconds after launch, the installer ran (`InstallerErro
 in-use update, `new_chrome.exe` beside both version folders), and the pill showed at 25
 seconds. A real click restarted into 156.2.0.19 in about two seconds, with `pv` 156.2.0.19,
 `new_chrome.exe` gone and the two tabs back; About read "Stedding 0.2.0-beta.19 · Chromium
-156.0.8078.36". Scripts: `n1-task.ps1` (through `tooling\win\drive.ps1`) and an `Up21` check
-that `out\win-release\chrome.exe` asks nothing.
+156.0.8078.36". Scripts: `tooling\win\update-n1.ps1` (through `tooling\win\drive.ps1`) and an
+`Up21` check that `out\win-release\chrome.exe` asks nothing.
 
 ## Release channel
 
@@ -1769,10 +1771,14 @@ image joins the same release from the Windows PC: `tooling\win\build-until-done.
 the installed build (docs/QUALITY.md, release checklist 13), the checksum pasted under
 *Windows* in the notes, commit, push, `tooling/publish-release` from Git for Windows -- whichever
 platform publishes first creates the release, the other uploads into it and the
-notes are refreshed (ADR 0018). Which platform went first for each beta is in
-`docs/PROJECT-LOG.md` and the notes. A Windows
-release on the same Chromium number as the installed one installs as a repair and needs
-Stedding closed (trap 62). The PC builds and tests its own image; driving it from the Mac
+notes are refreshed (ADR 0018). Then the Windows feed, on the PC after `git pull`:
+`tooling\win\publish-appcast.ps1 -Check`, then `-Push` on the operator's yes for that release
+(ADR 0023), one feed push at a time (both feeds are commits to `main`). Which platform went first for each beta is in
+`docs/PROJECT-LOG.md` and the notes. Since beta 19 (patch 0073, `S-72`) each Windows build
+carries its own version, `<milestone>.<100 x major + minor>.<patch>.<beta>` (156.2.0.19 for
+beta 19), so a newer Stedding over an older one is an ordinary upgrade on the same Chromium
+number; only an installer of the very version installed still repairs and needs Stedding
+closed (trap 62). The PC builds and tests its own image; driving it from the Mac
 over SSH (beta 12) put the browser suite in session 0, where it fails (traps 67, 68).
 After `publish-release`, nothing is needed on the site: its scheduled rebuild
 (every six hours) reads the release list, pre-releases included. To see the new

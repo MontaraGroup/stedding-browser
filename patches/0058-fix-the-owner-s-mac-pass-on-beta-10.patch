@@ -11,9 +11,10 @@ these, fixed here:
   has sequence numbers of -1. The session saved them in the page
   state, Blink keeps any non-zero number, and after a restart the
   document committed with -1, which the browser kills as a bad
-  message (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER). NavigationEntryImpl
-  now writes a missing number as 0, Blink's "none", and reads a saved
-  negative one as 0 (import I26).
+  message (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER). The page state a
+  renderer is sent for a commit now carries a negative number as 0,
+  Blink's "none"; the session and the frame entries keep upstream's -1,
+  so restored copies of one entry still share their frame (import I26).
 - The address row hid with the sidebar, which read as the address bar
   disappearing. The setting is now off by default (toolbar T8, T12).
 - The row's colour was often not the page's: pages paint their top
@@ -129,8 +130,8 @@ into the feature patches they belong to.
  .../test/stedding/space_switch_browsertest.cc | 194 ++++++++++++++++++
  chrome/test/stedding/welcome_browsertest.cc   | 110 ++++++++++
  .../stedding/window_buttons_browsertest.mm    |  36 ++++
- .../renderer_host/navigation_entry_impl.cc    |  44 +++-
- 54 files changed, 1995 insertions(+), 131 deletions(-)
+ .../renderer_host/navigation_entry_impl.cc    |  43 +++-
+ 54 files changed, 1994 insertions(+), 131 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color.cc
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color.h
  create mode 100644 chrome/browser/ui/stedding/theme/page_top_color_unittest.cc
@@ -3383,83 +3384,63 @@ index e0ce584eb8b3a..6e5a51dc678cf 100644
 +
  }  // namespace
 diff --git a/content/browser/renderer_host/navigation_entry_impl.cc b/content/browser/renderer_host/navigation_entry_impl.cc
-index 83b871f22c2fb..4e294cc86ba55 100644
+index 83b871f22c2fb..9d07960cfb41c 100644
 --- a/content/browser/renderer_host/navigation_entry_impl.cc
 +++ b/content/browser/renderer_host/navigation_entry_impl.cc
-@@ -8,6 +8,7 @@
- 
- #include <algorithm>
- #include <map>
-+#include <optional>
- #include <string>
- #include <utility>
- 
-@@ -62,12 +63,34 @@ int CreateUniqueEntryID() {
+@@ -62,6 +62,46 @@ int CreateUniqueEntryID() {
    return ++unique_id_counter;
  }
  
-+// Stedding: a sequence number a PageState may carry. In a PageState "none" is
-+// 0 -- Blink keeps any other value it is given -- while a FrameNavigationEntry
-+// that never committed has -1. A tab created unloaded, as the Arc import
-+// creates them, saved -1 with the session (RecursivelyGenerateFrameState
-+// below), and after a restart its document committed with -1, which the
-+// browser kills as a bad message (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER): every
-+// such tab came back as a crashed page until it was reloaded (owner,
-+// 2026-10-01). Negative numbers go into a PageState as 0, and a saved one
-+// restores as 0.
-+int64_t SequenceNumberForPageState(int64_t sequence_number) {
-+  return sequence_number < 0 ? 0 : sequence_number;
++// Stedding: the page state a renderer is sent for a frame entry. A
++// FrameNavigationEntry that never committed has the sequence numbers -1, and
++// the session saves them so (upstream's format, which the restore's sharing of
++// frame entries keys on). A tab created unloaded, as the Arc import creates
++// them, restored with that -1 in its page state; Blink keeps any number but 0,
++// "none", so the document committed with -1, which the browser kills as a bad
++// message (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER): every such tab came back
++// from a restart as a crashed page until it was reloaded (owner, 2026-10-01;
++// import I26). The renderer is sent 0 for a negative number, and the entry
++// keeps its own.
++void ZeroNegativeSequenceNumbers(blink::ExplodedFrameState& state,
++                                 bool& changed) {
++  if (state.item_sequence_number < 0) {
++    state.item_sequence_number = 0;
++    changed = true;
++  }
++  if (state.document_sequence_number < 0) {
++    state.document_sequence_number = 0;
++    changed = true;
++  }
++  for (blink::ExplodedFrameState& child : state.children) {
++    ZeroNegativeSequenceNumbers(child, changed);
++  }
++}
++
++std::string PageStateForRenderer(const blink::PageState& page_state) {
++  std::string data = page_state.ToEncodedData();
++  blink::ExplodedPageState exploded;
++  if (data.empty() || !blink::DecodePageState(data, &exploded)) {
++    return data;
++  }
++  bool changed = false;
++  ZeroNegativeSequenceNumbers(exploded.top, changed);
++  if (changed) {
++    data.clear();
++    blink::EncodePageState(exploded, &data);
++  }
++  return data;
 +}
 +
  void RecursivelyGenerateFrameEntries(
      NavigationEntryRestoreContextImpl* context,
--    const blink::ExplodedFrameState& state,
-+    const blink::ExplodedFrameState& restored_state,
-     const std::vector<std::optional<std::u16string>>& referenced_files,
-     NavigationEntryImpl::TreeNode* node) {
-   CHECK(context, base::NotFatalUntil::M152);
-+  // The saved numbers are the dedup key, including a negative one. A document
-+  // that never got a sequence number is saved as -1, and two copies of it (a
-+  // session written twice, or a replaceState from before the sequence was
-+  // stored) share one FrameNavigationEntry only when the lookup uses that -1.
-+  // Substituting 0 first disables the share: 0 means "not a sequence" and
-+  // GetFrameNavigationEntry ignores it. The frame entry itself stores 0, set
-+  // below after it has been registered under -1, because a commit of -1 is
-+  // killed (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER).
-+  const blink::ExplodedFrameState& state = restored_state;
-   // Set a single-frame PageState on the entry.
-   blink::ExplodedPageState page_state;
- 
-@@ -125,6 +148,20 @@ void RecursivelyGenerateFrameEntries(
-         nullptr /* policy_container_policies */,
-         state.protect_url_in_navigation_api);
-     context->AddFrameNavigationEntry(entry.get());
-+    // Register under the saved number first (Add keys on the entry's current
-+    // number), then store 0 for a negative one so the commit check passes.
-+    // set_item_sequence_number allows the write only while the entry is still
-+    // the unassigned -1 it was created with.
-+    if (SequenceNumberForPageState(state.item_sequence_number) !=
-+        state.item_sequence_number) {
-+      entry->set_item_sequence_number(
-+          SequenceNumberForPageState(state.item_sequence_number));
-+    }
-+    if (SequenceNumberForPageState(state.document_sequence_number) !=
-+        state.document_sequence_number) {
-+      entry->set_document_sequence_number(
-+          SequenceNumberForPageState(state.document_sequence_number));
-+    }
-   }
-   node->frame_entry = std::move(entry);
- 
-@@ -188,6 +225,11 @@ void RecursivelyGenerateFrameState(
-   state->url_string = UrlToOptionalString16(node->frame_entry->url());
-   state->referrer = UrlToOptionalString16(node->frame_entry->referrer().url);
-   state->referrer_policy = node->frame_entry->referrer().policy;
-+  // Keep the frame entry's number, negative included. Writing 0 here made two
-+  // copies of an entry that never had a sequence number unrestorable as one
-+  // shared frame (ContentSerializedNavigationBuilderTest.ToNavigationEntries).
-+  // Restore substitutes 0 onto the frame entry after dedup, which is what a
-+  // commit is allowed to send.
-   state->item_sequence_number = node->frame_entry->item_sequence_number();
-   state->document_sequence_number =
-       node->frame_entry->document_sequence_number();
+     const blink::ExplodedFrameState& state,
+@@ -1051,7 +1091,8 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
+           blink::StorageKey(), GetIsOverridingUserAgent(), redirects,
+           std::vector<blink::mojom::NavigationRedirectParamsPtr>(),
+           std::string(), original_url_for_renderer, original_method,
+-          GetCanLoadLocalResources(), frame_entry.page_state().ToEncodedData(),
++          GetCanLoadLocalResources(),
++          PageStateForRenderer(frame_entry.page_state()),
+           GetUniqueID(), subframe_unique_names, intended_as_new_entry,
+           pending_index_to_send, current_index_to_send, current_length_to_send,
+           false, IsViewSourceMode(), should_clear_history_list(),

@@ -111,7 +111,7 @@ Settings → Stedding → Shortcuts in the browser.
 | Space 1–9 / next / previous | ⌃1–⌃9 / ⌥⌘→ / ⌥⌘← | Alt+1–9 / Ctrl+Alt+→ / ← |
 | Most recent tab | ⌃⇥ | Ctrl+Tab |
 | Clear the Space's loose tabs | ⇧⌘K | Ctrl+Shift+K |
-| Split the tab with a new one | ⌥⌘N (⌃⌘N from beta 18) | Alt+Shift+N |
+| Split the tab with a new one | ⌥⌘N (⌃⌘N from beta 20) | Alt+Shift+N |
 | Dark pages on or off | ⌥⇧⌘D | Ctrl+Alt+Shift+D |
 | Copy the link, clean | ⇧⌘C | Ctrl+Shift+C |
 

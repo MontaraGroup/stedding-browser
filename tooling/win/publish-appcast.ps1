@@ -21,7 +21,9 @@ What it refuses:
     .sha256 the GitHub release carries (not checked for a local feed);
   * an installer whose version resource is not VERSION's Windows version (S-72): an installer
     of Chromium's number could not update a copy that runs;
-  * a signature that does not verify against the public key the builds carry.
+  * a signature that does not verify against the public key the builds carry;
+  * a feed with uncommitted changes of its own (the commit holds the feed alone), and a push
+    from a branch other than main (the feed is read from main), as tooling/publish-appcast does.
 #>
 param(
   [switch]$Check,
@@ -45,6 +47,11 @@ if (-not $Installer) { $Installer = Join-Path $Repo "dist\Stedding-$version-win-
 if (-not (Test-Path $Installer)) { throw "no installer at $Installer (tooling\win\package-installer.ps1)" }
 $local = [bool]$Feed
 if (-not $Feed) { $Feed = Join-Path $Repo 'updates\appcast-windows.xml' }
+# The repository comes from the remote, as in tooling/publish-release: a hardcoded owner would
+# publish to somebody else's project from a fork.
+$github = ([string](git -C $Repo remote get-url origin)).Trim() -replace '^git@github\.com:', 'https://github.com/'
+$github = $github -replace '\.git$', '' -replace '^https://github\.com/', ''
+if ($github -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw "cannot read owner/name from the origin remote of $Repo" }
 
 function Report([string]$what, [string]$value) { '  {0,-16} {1}' -f $what, $value }
 
@@ -56,11 +63,11 @@ if ($fileVersion -ne $windowsVersion) { throw "the installer's file version is $
 $hash = (Get-FileHash $Installer -Algorithm SHA256).Hash.ToLower()
 if (-not $local) {
   $tag = "v$version"
-  $releaseSha = (& gh release download $tag --repo ysalitrynskyi/stedding-browser --pattern "Stedding-$version-win-x64.exe.sha256" --output - 2>$null)
+  $releaseSha = (& gh release download $tag --repo $github --pattern "Stedding-$version-win-x64.exe.sha256" --output - 2>$null)
   if (-not $releaseSha) { throw "the release $tag carries no Windows installer checksum: publish it first (tooling/publish-release)" }
   if (($releaseSha -split '\s+')[0].ToLower() -ne $hash) { throw "dist's installer is not the one the release $tag carries" }
-  Report 'release' "$tag carries this installer"
-  if (-not $Url) { $Url = "https://github.com/ysalitrynskyi/stedding-browser/releases/download/$tag/Stedding-$version-win-x64.exe" }
+  Report 'release' "$tag on $github carries this installer"
+  if (-not $Url) { $Url = "https://github.com/$github/releases/download/$tag/Stedding-$version-win-x64.exe" }
 }
 if (-not $Url) { throw '-Url is needed for a local feed' }
 
@@ -77,6 +84,14 @@ if (-not $carried -and $env:STEDDING_CHROMIUM_SRC) {
 if (-not $carried) { throw 'no update_feed.h in patches\ or in the checkout (STEDDING_CHROMIUM_SRC): which key do the builds carry?' }
 if (-not (($carried -join "`n").Contains($publicKey))) { throw "the builds carry another public key than $publicKey (update_feed.h)" }
 Report 'key' $publicKey
+if (-not $local) {
+  if (git -C $Repo status --porcelain -- updates/appcast-windows.xml) {
+    throw 'updates\appcast-windows.xml has uncommitted changes: commit or restore them first'
+  }
+  $branch = (git -C $Repo rev-parse --abbrev-ref HEAD)
+  if ($Push -and $branch -ne 'main') { throw "on $branch; the feed is read from main" }
+  Report 'feed' 'updates\appcast-windows.xml, clean'
+}
 if ($Check) { 'ready to offer'; exit 0 }
 
 $signature = (& powershell -NoProfile -ExecutionPolicy Bypass -File $key -Sign $Installer).Trim()
@@ -87,7 +102,7 @@ Report 'signed' 'installer'
 $python = (Get-Command python -ErrorAction Stop).Source
 $date = [DateTime]::UtcNow.ToString('ddd, dd MMM yyyy HH:mm:ss +0000', [Globalization.CultureInfo]::InvariantCulture)
 $length = (Get-Item $Installer).Length
-& $python -I (Join-Path $Repo 'tooling\appcast.py') write --platform windows --feed $Feed --repo ysalitrynskyi/stedding-browser `
+& $python -I (Join-Path $Repo 'tooling\appcast.py') write --platform windows --feed $Feed --repo $github `
   --version $version --bundle-version $windowsVersion --minimum-system 10.0 --length $length `
   --signature $signature --date $date --url $Url
 if ($LASTEXITCODE -ne 0) { throw 'appcast.py write failed' }
@@ -100,7 +115,7 @@ if ($local) { exit 0 }
 Push-Location $Repo
 try {
   git add -- updates/appcast-windows.xml
-  git commit -q -m "release: offer $version to installed copies on Windows"
+  git commit -q -m "release: offer $version to installed copies on Windows" -- updates/appcast-windows.xml
   if ($LASTEXITCODE -ne 0) { throw 'git commit failed' }
   Report 'commit' (git log -1 --format=%h)
   if ($Push) {

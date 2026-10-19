@@ -104,7 +104,7 @@ With a second desktop, macOS Mission Control takes ⌃1–⌃9 before the browse
 Spaces menu keeps every command reachable ([SHORTCUTS.md](SHORTCUTS.md)).
 
 **Why does ⌥⌘N open Arc?**
-While Arc runs it takes ⌥⌘N from every app for Little Arc. From beta 18, split with ⌃⌘N, which
+While Arc runs it takes ⌥⌘N from every app for Little Arc. From beta 20, split with ⌃⌘N, which
 Arc leaves alone; in beta 17, quit Arc or use the tab menu's **New Split View with Current Tab**.
 
 **How do I get Chromium's full tab menu back?**

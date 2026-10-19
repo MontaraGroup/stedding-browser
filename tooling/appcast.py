@@ -14,8 +14,8 @@ Usage:
       --signature <base64> --date "Fri, 16 Oct 2026 12:00:00 +0000"
       [--url http://127.0.0.1:8765/Stedding.dmg]   # the n-1 check's own server
   appcast.py write --platform windows --feed updates/appcast-windows.xml --repo owner/name \
-      --version 0.2.0-beta.19 --bundle-version 156.2.0.19 --length 176000000 \
-      --signature <base64> --date "..."     # the Windows installer's item
+      --version 0.2.0-beta.19 --bundle-version 156.2.0.19 --minimum-system 10.0 \
+      --length 176000000 --signature <base64> --date "..."   # the Windows installer's item
   appcast.py attach-signature --feed f --signature <base64>
       # appends the feed's own signature, over every byte written before it, as Sparkle's
       # sign_update does; the Windows browser checks it (updates Up15)

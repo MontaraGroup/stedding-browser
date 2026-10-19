@@ -15,8 +15,11 @@ ADR 0023, and ADR 0026 for its key), and the version it needs (BACKLOG S-72):
   which version_info::GetChromiumVersionNumber() returns, and everything the
   web and Google's services see keeps it: the user agent, its client hints
   and navigator.userAgentData, the Web Store's and the component updater's
-  prodversion, extensions' minimum Chrome version, and About's Chromium
-  line. Without the line, as on the Mac, both versions are the same.
+  prodversion, extensions' minimum Chrome version, the Web Store's
+  getFullChromeVersion, the version sent to Safe Browsing, GCM, sync,
+  OAuth and with a Google image search, the DIAL search's user agent, the
+  root store's version rules, and About's Chromium line. Without the line,
+  as on the Mac, both versions are the same.
 - stedding::AppUpdater on Windows (app_updater_win.cc), started from
   ChromeBrowserMainPartsWin::PostProfileInit, and only in a copy the
   installer put in place: ten seconds after launch when a day has passed,
@@ -25,7 +28,11 @@ ADR 0023, and ADR 0026 for its key), and the version it needs (BACKLOG S-72):
   feed's Ed25519 signature (Sparkle's signed-feed comment) against the key
   every Windows build carries, parses it in the sandboxed XML parser
   (update_feed.cc), downloads a later Windows installer, checks its length
-  and signature off the UI thread, and runs it hidden. Chromium's in-use
+  and signature off the UI thread, and runs it hidden. One check runs at a
+  time; the feed request ends after a minute and the download after two
+  hours; the download's folder is made off the UI thread and its name is
+  checked; a quit does not wait for a running install, and the
+  installer's folder is deleted before the quit ends. Chromium's in-use
   update puts the new version beside the running one; the sidebar's pill
   then offers the restart, which is Chromium's own (chrome::AttemptRestart
   swaps new_chrome.exe in). An update installed and not yet restarted into
@@ -54,32 +61,41 @@ stays while Stedding ships more than one release on a Chromium build.
  .../version_info_values.h.version             |   4 +
  chrome/browser/BUILD.gn                       |   1 +
  chrome/browser/chrome_browser_main_win.cc     |   9 +
+ .../identity_get_auth_token_function.cc       |   4 +-
  .../chrome_extensions_browser_client.cc       |   3 +-
+ .../discovery/dial/dial_service_impl.cc       |   3 +-
  .../stedding_page/stedding_page.html.ts       |   2 +-
+ .../ui_thread_search_terms_data.cc            |   4 +-
  chrome/browser/ui/stedding/BUILD.gn           |  44 ++
  chrome/browser/ui/stedding/app_updater.cc     |   5 +-
  chrome/browser/ui/stedding/app_updater.h      |  17 +
- chrome/browser/ui/stedding/app_updater_win.cc | 489 ++++++++++++++++++
- chrome/browser/ui/stedding/app_updater_win.h  |  61 +++
- .../ui/stedding/app_updater_win_unittest.cc   | 273 ++++++++++
+ chrome/browser/ui/stedding/app_updater_win.cc | 532 ++++++++++++++++++
+ chrome/browser/ui/stedding/app_updater_win.h  |  61 ++
+ .../ui/stedding/app_updater_win_unittest.cc   | 273 +++++++++
  chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   3 +
  .../ui/stedding/stedding_prefs_unittest.cc    |   2 +
  .../browser/ui/stedding/stedding_version.cc   |   6 +-
- chrome/browser/ui/stedding/update_feed.cc     | 183 +++++++
- chrome/browser/ui/stedding/update_feed.h      |  84 +++
- .../ui/stedding/update_feed_unittest.cc       | 198 +++++++
+ chrome/browser/ui/stedding/update_feed.cc     | 194 +++++++
+ chrome/browser/ui/stedding/update_feed.h      |  85 +++
+ .../ui/stedding/update_feed_unittest.cc       | 200 +++++++
  chrome/browser/ui/webui/help/BUILD.gn         |  12 +-
  ...ing_mac.cc => version_updater_stedding.cc} |  28 +-
  .../chrome_update_query_params_delegate.cc    |   4 +-
  .../minimum_chrome_version_checker.cc         |   3 +-
  chrome/test/stedding/BUILD.gn                 |   4 +
- .../stedding/chromium_version_browsertest.cc  |  88 ++++
+ .../stedding/chromium_version_browsertest.cc  |  94 ++++
  .../component_updater/configurator_impl.cc    |   3 +-
  .../embedder_support/user_agent_utils.cc      |  22 +-
+ components/gcm_driver/gcm_desktop_utils.cc    |   4 +-
+ .../core/browser/db/sb_protocol_config.cc     |   8 +-
+ components/sync/base/sync_util.cc             |   4 +-
  .../update_client/update_query_params.cc      |   3 +-
  .../version_info_with_user_agent.cc           |   3 +-
- 31 files changed, 1560 insertions(+), 31 deletions(-)
+ .../webstore_private/webstore_private_api.cc  |   4 +-
+ net/cert/cert_verify_proc_builtin.cc          |   6 +-
+ .../cert_verifier_service_factory.cc          |   7 +-
+ 40 files changed, 1654 insertions(+), 44 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/app_updater_win.cc
  create mode 100644 chrome/browser/ui/stedding/app_updater_win.h
  create mode 100644 chrome/browser/ui/stedding/app_updater_win_unittest.cc
@@ -224,6 +240,21 @@ index 691b61da00a6f..6dfd469fa5352 100644
    // If Chrome was launched by a Progressive Web App launcher that needs to be
    // updated, update all launchers for this profile.
    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kAppId) &&
+diff --git a/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc b/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc
+index 358acdc3073e3..0d539e1269557 100644
+--- a/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc
++++ b/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc
+@@ -86,7 +86,9 @@ bool IsBrowserSigninAllowed(Profile* profile) {
+ }
+ 
+ std::string_view GetOAuth2MintTokenFlowVersion() {
+-  return version_info::GetVersionNumber();
++  // Stedding (BACKLOG S-72): Chromium's version, as Google's services are
++  // sent everywhere.
++  return version_info::GetChromiumVersionNumber();
+ }
+ 
+ std::string_view GetOAuth2MintTokenFlowChannel() {
 diff --git a/chrome/browser/extensions/chrome_extensions_browser_client.cc b/chrome/browser/extensions/chrome_extensions_browser_client.cc
 index 982247172ea41..a67257e41cd3b 100644
 --- a/chrome/browser/extensions/chrome_extensions_browser_client.cc
@@ -238,6 +269,20 @@ index 982247172ea41..a67257e41cd3b 100644
    base::Version browser_min_version(min_version);
    return !browser_version.IsValid() || !browser_min_version.IsValid() ||
           browser_min_version.CompareTo(browser_version) <= 0;
+diff --git a/chrome/browser/media/router/discovery/dial/dial_service_impl.cc b/chrome/browser/media/router/discovery/dial/dial_service_impl.cc
+index 6e6ceee70a73a..0c6e8578f8c54 100644
+--- a/chrome/browser/media/router/discovery/dial/dial_service_impl.cc
++++ b/chrome/browser/media/router/discovery/dial/dial_service_impl.cc
+@@ -122,7 +122,8 @@ std::string BuildRequest() {
+       "\r\n",
+       kDialRequestAddress, kDialRequestPort, kDialMaxResponseDelaySecs,
+       kDialSearchType, version_info::GetProductName().data(),
+-      version_info::GetVersionNumber().data(),
++      // Stedding (BACKLOG S-72): Chromium's version, as the web is sent.
++      version_info::GetChromiumVersionNumber().data(),
+       version_info::GetOSType().data()));
+   // 1500 is a good MTU value for most Ethernet LANs.
+   DCHECK_LE(request.size(), 1500U);
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 index ce3dabfbc6fbd..f6813d178c4b8 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
@@ -251,6 +296,22 @@ index ce3dabfbc6fbd..f6813d178c4b8 100644
    <settings-toggle-button
        id="updatesAutomatic"
        class="hr"
+diff --git a/chrome/browser/search_engines/ui_thread_search_terms_data.cc b/chrome/browser/search_engines/ui_thread_search_terms_data.cc
+index 3d744f1993a02..f99354df23e28 100644
+--- a/chrome/browser/search_engines/ui_thread_search_terms_data.cc
++++ b/chrome/browser/search_engines/ui_thread_search_terms_data.cc
+@@ -87,8 +87,10 @@ std::string UIThreadSearchTermsData::GoogleImageSearchSource() const {
+   // Do not distinguish extended from regular stable in image search queries.
+   const std::string channel_name =
+       chrome::GetChannelName(chrome::WithExtendedStable(false));
++  // Stedding (BACKLOG S-72): Chromium's version, as the web is sent
++  // everywhere.
+   return base::StrCat({version_info::GetProductName(), " ",
+-                       version_info::GetVersionNumber(),
++                       version_info::GetChromiumVersionNumber(),
+                        version_info::IsOfficialBuild() ? " (Official) " : " ",
+                        version_info::GetOSType(),
+                        channel_name.empty() ? "" : " ", channel_name});
 diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
 index 2b08047bf404e..dd041c3914b2d 100644
 --- a/chrome/browser/ui/stedding/BUILD.gn
@@ -386,10 +447,10 @@ index b052078444575..6a8e5fe86f0dc 100644
  #endif  // CHROME_BROWSER_UI_STEDDING_APP_UPDATER_H_
 diff --git a/chrome/browser/ui/stedding/app_updater_win.cc b/chrome/browser/ui/stedding/app_updater_win.cc
 new file mode 100644
-index 0000000000000..f671982747823
+index 0000000000000..b7d1e9359b9e5
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/app_updater_win.cc
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,532 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -462,6 +523,10 @@ index 0000000000000..f671982747823
 +// The feed is a few kilobytes; the installer about 170 MB.
 +constexpr size_t kMaxFeedSize = 1024 * 1024;
 +constexpr base::TimeDelta kInstallTimeout = base::Minutes(10);
++// A request that stalls ends, so the next check can run: the feed in a
++// minute, the installer within two hours (170 MB at under 0.2 Mbit/s).
++constexpr base::TimeDelta kFeedTimeout = base::Minutes(1);
++constexpr base::TimeDelta kDownloadTimeout = base::Hours(2);
 +
 +// The update test's own feed (docs/HANDOFF.md, "The updater"): the feed and
 +// the installer are still checked against the key the build carries.
@@ -485,7 +550,10 @@ index 0000000000000..f671982747823
 +            "check, once a day after that, or the user's Check for Updates."
 +          data: "None: the request carries no cookies and no machine data."
 +          destination: OTHER
-+          destination_other: "raw.githubusercontent.com and github.com."
++          destination_other:
++            "raw.githubusercontent.com, github.com, and the host GitHub "
++            "redirects a release download to "
++            "(release-assets.githubusercontent.com)."
 +          # Contact: the repository's Security tab (SECURITY.md).
 +          user_data { type: NONE }
 +          last_reviewed: "2026-10-19"
@@ -498,13 +566,27 @@ index 0000000000000..f671982747823
 +            "Not implemented: the setting turns it off."
 +        })");
 +
-+std::unique_ptr<network::SimpleURLLoader> MakeLoader(const GURL& url) {
++std::unique_ptr<network::SimpleURLLoader> MakeLoader(
++    const GURL& url,
++    base::TimeDelta timeout) {
 +  auto request = std::make_unique<network::ResourceRequest>();
 +  request->url = url;
 +  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 +  request->load_flags = net::LOAD_DISABLE_CACHE;
-+  return network::SimpleURLLoader::Create(std::move(request),
-+                                          kTrafficAnnotation);
++  std::unique_ptr<network::SimpleURLLoader> loader =
++      network::SimpleURLLoader::Create(std::move(request), kTrafficAnnotation);
++  loader->SetTimeoutDuration(timeout);
++  return loader;
++}
++
++// Off the UI thread: a new folder for the download, or an empty path.
++base::FilePath NewDownloadDir() {
++  base::FilePath dir;
++  if (!base::CreateNewTempDirectory(FILE_PATH_LITERAL("stedding_update"),
++                                    &dir)) {
++    return base::FilePath();
++  }
++  return dir;
 +}
 +
 +base::FilePath ExeDir() {
@@ -604,6 +686,8 @@ index 0000000000000..f671982747823
 +    user_asked_ = true;
 +    SetState(State::kChecking);
 +    if (!busy_) {
++      // The timer's check would start a second one over this.
++      timer_.Stop();
 +      Check();
 +    }
 +  }
@@ -648,9 +732,14 @@ index 0000000000000..f671982747823
 +  }
 +
 +  void Check() {
++    // One check at a time: a second would replace the loader and restart a
++    // download that is under way.
++    if (busy_) {
++      return;
++    }
 +    busy_ = true;
 +    local_state_->SetTime(prefs::kUpdatesLastCheck, base::Time::Now());
-+    loader_ = MakeLoader(env_.feed_url);
++    loader_ = MakeLoader(env_.feed_url, kFeedTimeout);
 +    loader_->DownloadToString(
 +        loader_factory_.get(),
 +        base::BindOnce(&WinAppUpdater::OnFeed, weak_factory_.GetWeakPtr()),
@@ -691,15 +780,23 @@ index 0000000000000..f671982747823
 +    SetVersion(base::UTF8ToUTF16(item_.version));
 +    SetProgress(0);
 +    SetState(State::kDownloading);
-+    base::FilePath dir;
-+    if (!base::CreateNewTempDirectory(FILE_PATH_LITERAL("stedding_update"),
-+                                      &dir)) {
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++        base::BindOnce(&NewDownloadDir),
++        base::BindOnce(&WinAppUpdater::OnDownloadDir,
++                       weak_factory_.GetWeakPtr()));
++  }
++
++  void OnDownloadDir(const base::FilePath& dir) {
++    if (dir.empty()) {
 +      Fail(u"Stedding could not make room for the new version.");
 +      return;
 +    }
++    // item_.version is the release's name, checked against its installer's
++    // version (LaterWindowsItem): digits, dots and "-beta.".
 +    download_ = dir.AppendASCII(
 +        base::StrCat({"Stedding-", item_.version, "-win-x64.exe"}));
-+    loader_ = MakeLoader(item_.url);
++    loader_ = MakeLoader(item_.url, kDownloadTimeout);
 +    loader_->SetOnDownloadProgressCallback(base::BindRepeating(
 +        &WinAppUpdater::OnProgress, weak_factory_.GetWeakPtr()));
 +    loader_->DownloadToFile(
@@ -737,10 +834,13 @@ index 0000000000000..f671982747823
 +      Fail(u"The download is not signed with Stedding's key.");
 +      return;
 +    }
++    // CONTINUE_ON_SHUTDOWN: a quit during the install must not wait for it;
++    // the installer finishes on its own, and the next start finds its work.
 +    base::ThreadPool::PostTaskAndReplyWithResult(
 +        FROM_HERE,
 +        {base::MayBlock(), base::WithBaseSyncPrimitives(),
-+         base::TaskPriority::USER_VISIBLE},
++         base::TaskPriority::USER_VISIBLE,
++         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
 +        base::BindOnce(env_.run_installer, path),
 +        base::BindOnce(&WinAppUpdater::OnInstalled, weak_factory_.GetWeakPtr(),
 +                       path));
@@ -759,10 +859,14 @@ index 0000000000000..f671982747823
 +    SetState(State::kReady);
 +  }
 +
-+  // The installer's folder, with its log, in the background.
++  // The installer's folder, with its log. A quit waits for it: the pill asks
++  // for the restart as soon as the install is done, and a best-effort task
++  // was skipped at that quit, leaving the 170 MB installer behind.
 +  static void Forget(const base::FilePath& path) {
 +    base::ThreadPool::PostTask(
-+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
++        FROM_HERE,
++        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++         base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
 +        base::BindOnce(base::IgnoreResult(&base::DeletePathRecursively),
 +                       path.DirName()));
 +  }
@@ -1283,16 +1387,17 @@ index e94ef6ecb7178..08a94ef776ebd 100644
  std::string_view SteddingVersion() {
 diff --git a/chrome/browser/ui/stedding/update_feed.cc b/chrome/browser/ui/stedding/update_feed.cc
 new file mode 100644
-index 0000000000000..576de63ee6559
+index 0000000000000..cad72c3fbf67d
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed.cc
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,194 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
 +
 +#include "chrome/browser/ui/stedding/update_feed.h"
 +
++#include <algorithm>
 +#include <string>
 +#include <vector>
 +
@@ -1340,6 +1445,15 @@ index 0000000000000..576de63ee6559
 +    return std::string();
 +  }
 +  return std::string(base::TrimWhitespaceASCII(text, base::TRIM_ALL));
++}
++
++// A release's name as its tag has it ("0.2.0-beta.19"): it names the
++// download's file, so nothing but digits, letters, dots and hyphens.
++bool IsReleaseName(std::string_view name) {
++  return !name.empty() && name.size() <= 32 &&
++         std::ranges::all_of(name, [](char c) {
++           return base::IsAsciiAlphaNumeric(c) || c == '.' || c == '-';
++         });
 +}
 +
 +bool AcceptableAddress(const GURL& url) {
@@ -1431,7 +1545,8 @@ index 0000000000000..576de63ee6559
 +        GURL(data_decoder::GetXmlElementAttribute(*enclosure, "url"));
 +    candidate.signature =
 +        data_decoder::GetXmlElementAttribute(*enclosure, sparkle("edSignature"));
-+    if (candidate.version.empty() || !candidate.file_version.IsValid() ||
++    if (!IsReleaseName(candidate.version) ||
++        !candidate.file_version.IsValid() ||
 +        candidate.file_version.components().size() != 4 ||
 +        candidate.file_version.CompareTo(installed) <= 0 ||
 +        !AcceptableAddress(candidate.url) || candidate.signature.empty() ||
@@ -1472,10 +1587,10 @@ index 0000000000000..576de63ee6559
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/update_feed.h b/chrome/browser/ui/stedding/update_feed.h
 new file mode 100644
-index 0000000000000..706aedc1a6351
+index 0000000000000..8c5cce84cb2ba
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed.h
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,85 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1545,9 +1660,10 @@ index 0000000000000..706aedc1a6351
 +
 +// updates Up14: the newest Windows x64 item of a parsed feed (data_decoder's
 +// XML tree, its root the <rss> element) whose installer version is later than
-+// `installed`. An item without a version, a later file version, a length, a
-+// signature, or an https address (http to this computer only, for the update
-+// test's local server) is passed over.
++// `installed`. An item without a version (a release name of digits, letters,
++// dots and hyphens: it names the download's file), a later file version, a
++// length, a signature, or an https address (http to this computer only, for
++// the update test's local server) is passed over.
 +std::optional<UpdateItem> LaterWindowsItem(const base::Value& feed,
 +                                           const base::Version& installed);
 +
@@ -1562,10 +1678,10 @@ index 0000000000000..706aedc1a6351
 +#endif  // CHROME_BROWSER_UI_STEDDING_UPDATE_FEED_H_
 diff --git a/chrome/browser/ui/stedding/update_feed_unittest.cc b/chrome/browser/ui/stedding/update_feed_unittest.cc
 new file mode 100644
-index 0000000000000..97540401a7f3c
+index 0000000000000..2a78a19a61085
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed_unittest.cc
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,200 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1753,6 +1869,8 @@ index 0000000000000..97540401a7f3c
 +       Item("0.2.0-beta.20", "156.2.0.20", "https://example.com/i.exe",
 +            "windows-x64", "-1"),
 +       Item("", "156.2.0.22", "https://example.com/i.exe"),
++       // The name becomes the download's file name.
++       Item("..\\..\\x", "156.2.0.23", "https://example.com/i.exe"),
 +       Item("0.2.0-beta.19", "156.2", "https://example.com/i.exe"),
 +       Item("0.2.0-beta.18", "156.2.0.18", "http://127.0.0.1:8765/i.exe")}));
 +  const std::optional<UpdateItem> later =
@@ -1931,10 +2049,10 @@ index dbb782a82db74..ecb156e5a2bce 100644
      "//chrome/app:branded_strings",
 diff --git a/chrome/test/stedding/chromium_version_browsertest.cc b/chrome/test/stedding/chromium_version_browsertest.cc
 new file mode 100644
-index 0000000000000..a8724c6a8b921
+index 0000000000000..fe7d415058b6f
 --- /dev/null
 +++ b/chrome/test/stedding/chromium_version_browsertest.cc
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,94 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1953,6 +2071,7 @@ index 0000000000000..a8724c6a8b921
 +#include "base/strings/utf_string_conversions.h"
 +#include "base/version.h"
 +#include "base/version_info/version_info.h"
++#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 +#include "chrome/browser/ui/stedding/stedding_version.h"
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -2002,6 +2121,11 @@ index 0000000000000..a8724c6a8b921
 +
 +  // The Web Store and the extension updater.
 +  EXPECT_EQ(chromium, update_client::UpdateQueryParams::GetProdVersion());
++  // What a Google image search is sent.
++  EXPECT_NE(std::string::npos,
++            UIThreadSearchTermsData().GoogleImageSearchSource().find(
++                base::StrCat({" ", chromium, " "})))
++      << UIThreadSearchTermsData().GoogleImageSearchSource();
 +  // An extension that asks for the next Chromium build is refused, whatever
 +  // the product's numbers say.
 +  const std::string next = base::StrCat(
@@ -2084,6 +2208,56 @@ index e699a6a394fd7..e8a598a1fdb84 100644
    metadata.architecture = GetCpuArchitecture();
    metadata.model = BuildModelInfo();
    metadata.form_factors = GetFormFactorsClientHint(metadata, metadata.mobile);
+diff --git a/components/gcm_driver/gcm_desktop_utils.cc b/components/gcm_driver/gcm_desktop_utils.cc
+index 4052fd500040a..08b0257bbb453 100644
+--- a/components/gcm_driver/gcm_desktop_utils.cc
++++ b/components/gcm_driver/gcm_desktop_utils.cc
+@@ -57,7 +57,9 @@ GCMClient::ChromeChannel GetChannel(version_info::Channel channel) {
+ }
+ 
+ std::string GetVersion() {
+-  return std::string(version_info::GetVersionNumber());
++  // Stedding (BACKLOG S-72): Chromium's version, as Google's services are
++  // sent everywhere.
++  return std::string(version_info::GetChromiumVersionNumber());
+ }
+ 
+ GCMClient::ChromeBuildInfo GetChromeBuildInfo(
+diff --git a/components/safe_browsing/core/browser/db/sb_protocol_config.cc b/components/safe_browsing/core/browser/db/sb_protocol_config.cc
+index 441203549c2bb..dbd94b3830250 100644
+--- a/components/safe_browsing/core/browser/db/sb_protocol_config.cc
++++ b/components/safe_browsing/core/browser/db/sb_protocol_config.cc
+@@ -26,9 +26,11 @@ SBProtocolConfig::~SBProtocolConfig() = default;
+ 
+ SBProtocolConfig GetSBProtocolConfig(const std::string& client_name,
+                                      bool disable_auto_update) {
+-  return SBProtocolConfig(client_name, disable_auto_update,
+-                          google_apis::GetAPIKey(),
+-                          std::string(version_info::GetVersionNumber()));
++  // Stedding (BACKLOG S-72): Chromium's version, as Google's services are
++  // sent everywhere.
++  return SBProtocolConfig(
++      client_name, disable_auto_update, google_apis::GetAPIKey(),
++      std::string(version_info::GetChromiumVersionNumber()));
+ }
+ 
+ }  // namespace safe_browsing
+diff --git a/components/sync/base/sync_util.cc b/components/sync/base/sync_util.cc
+index 89ffbb65f908d..450f9a10027fc 100644
+--- a/components/sync/base/sync_util.cc
++++ b/components/sync/base/sync_util.cc
+@@ -75,8 +75,10 @@ std::string FormatUserAgentForSync(const std::string& system,
+ #error SYNC_USER_AGENT_PRODUCT not defined, check BUILD.gn.
+ #endif
+   constexpr std::string_view kProduct = STRINGIZE(SYNC_USER_AGENT_PRODUCT);
++  // Stedding (BACKLOG S-72): Chromium's version, as Google's services are
++  // sent everywhere.
+   return base::StrCat(
+-      {kProduct, " ", system, version_info::GetVersionNumber(), " (",
++      {kProduct, " ", system, version_info::GetChromiumVersionNumber(), " (",
+        version_info::GetLastChange(), ")",
+        version_info::IsOfficialBuild()
+            ? base::StrCat(
 diff --git a/components/update_client/update_query_params.cc b/components/update_client/update_query_params.cc
 index b865f09a022cc..f648a6d56f32a 100644
 --- a/components/update_client/update_query_params.cc
@@ -2112,3 +2286,63 @@ index 49bdf4acbdee4..6b5c918f3e08a 100644
  }
  
  }  // namespace version_info
+diff --git a/extensions/browser/api/webstore_private/webstore_private_api.cc b/extensions/browser/api/webstore_private/webstore_private_api.cc
+index ad5ac45ba49b5..ca96b6cae8f1b 100644
+--- a/extensions/browser/api/webstore_private/webstore_private_api.cc
++++ b/extensions/browser/api/webstore_private/webstore_private_api.cc
+@@ -1605,7 +1605,9 @@ WebstorePrivateGetFullChromeVersionFunction::
+ 
+ ExtensionFunction::ResponseAction
+ WebstorePrivateGetFullChromeVersionFunction::Run() {
+-  std::string_view version = version_info::GetVersionNumber();
++  // Stedding (BACKLOG S-72): the store compares Chrome versions, as the
++  // install's minimum-version check does.
++  std::string_view version = version_info::GetChromiumVersionNumber();
+   GetFullChromeVersion::Results::Info info;
+   info.version_number = std::string(version);
+   return RespondNow(ArgumentList(GetFullChromeVersion::Results::Create(info)));
+diff --git a/net/cert/cert_verify_proc_builtin.cc b/net/cert/cert_verify_proc_builtin.cc
+index 284bab5a0349f..798bb7c44a6f9 100644
+--- a/net/cert/cert_verify_proc_builtin.cc
++++ b/net/cert/cert_verify_proc_builtin.cc
+@@ -893,13 +893,15 @@ class PathBuilderDelegateImpl : public bssl::SimplePathBuilderDelegate {
+       }
+     }
+ 
++    // Stedding (BACKLOG S-72): the root store's rules name Chromium builds;
++    // GetVersion() is the product's own number on Windows.
+     if (constraint.min_version.has_value() &&
+-        version_info::GetVersion() < constraint.min_version.value()) {
++        version_info::GetChromiumVersion() < constraint.min_version.value()) {
+       return false;
+     }
+ 
+     if (constraint.max_version_exclusive.has_value() &&
+-        version_info::GetVersion() >=
++        version_info::GetChromiumVersion() >=
+             constraint.max_version_exclusive.value()) {
+       return false;
+     }
+diff --git a/services/cert_verifier/cert_verifier_service_factory.cc b/services/cert_verifier/cert_verifier_service_factory.cc
+index 26e6bf32bbb0d..dfba6079644f0 100644
+--- a/services/cert_verifier/cert_verifier_service_factory.cc
++++ b/services/cert_verifier/cert_verifier_service_factory.cc
+@@ -141,13 +141,16 @@ std::string GetHash(const bssl::ParsedCertificate& cert) {
+ 
+ bool IsVersionConstraintSatisified(
+     const net::ChromeRootCertConstraints constraint) {
++  // Stedding (BACKLOG S-72): the root store's rules name Chromium builds;
++  // GetVersion() is the product's own number on Windows.
+   if (constraint.min_version.has_value() &&
+-      version_info::GetVersion() < constraint.min_version.value()) {
++      version_info::GetChromiumVersion() < constraint.min_version.value()) {
+     return false;
+   }
+ 
+   if (constraint.max_version_exclusive.has_value() &&
+-      version_info::GetVersion() >= constraint.max_version_exclusive.value()) {
++      version_info::GetChromiumVersion() >=
++          constraint.max_version_exclusive.value()) {
+     return false;
+   }
+ 

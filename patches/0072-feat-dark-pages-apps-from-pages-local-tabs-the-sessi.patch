@@ -149,9 +149,11 @@ patches of their own and folds each fix into the patch that owns its code
  .../browser/ui/tabs/tab_menu_model_delegate.h |    6 +
  chrome/browser/ui/toasts/api/toast_id.cc      |    2 +
  chrome/browser/ui/toasts/api/toast_id.h       |    5 +-
- chrome/browser/ui/toasts/toast_controller.cc  |   44 +
- chrome/browser/ui/toasts/toast_controller.h   |   17 +
+ chrome/browser/ui/toasts/toast_controller.cc  |   53 +
+ chrome/browser/ui/toasts/toast_controller.h   |   19 +
  chrome/browser/ui/toasts/toast_service.cc     |   28 +
+ chrome/browser/ui/toasts/toast_view.cc        |   10 +
+ chrome/browser/ui/toasts/toast_view.h         |    9 +
  chrome/browser/ui/toolbar/BUILD.gn            |    1 +
  chrome/browser/ui/toolbar/app_menu_model.cc   |    7 +
  chrome/browser/ui/unload_controller.cc        |    8 +
@@ -162,7 +164,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../commandbar/command_bar_view_unittest.cc   |  296 ++++-
  chrome/browser/ui/views/frame/BUILD.gn        |    9 +
  .../views/frame/browser_native_widget_mac.mm  |   16 +
- chrome/browser/ui/views/frame/browser_view.cc |   14 +-
+ chrome/browser/ui/views/frame/browser_view.cc |   15 +-
  .../ui/views/frame/contents_web_view.cc       |   94 +-
  .../ui/views/frame/contents_web_view.h        |   19 +
  .../frame/horizontal_tab_strip_region_view.cc |   20 +-
@@ -249,12 +251,12 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/test/base/chrome_unit_test_suite.cc    |   75 ++
  chrome/test/base/chrome_unit_test_suite.h     |    9 +
  chrome/test/stedding/BUILD.gn                 |   38 +
- .../test/stedding/address_band_browsertest.cc |  266 +++-
+ .../test/stedding/address_band_browsertest.cc |  272 +++-
  chrome/test/stedding/app_jar_browsertest.cc   |  802 ++++++++++++
  .../test/stedding/clear_space_browsertest.cc  |   61 +
  .../test/stedding/command_bar_browsertest.cc  |   24 +
  .../stedding/dark_pages_app_browsertest.cc    |  245 ++++
- .../test/stedding/dark_pages_browsertest.cc   | 1072 ++++++++++++++++
+ .../test/stedding/dark_pages_browsertest.cc   | 1081 ++++++++++++++++
  .../dark_pages_menu_mac_browsertest.mm        |   92 ++
  chrome/test/stedding/defaults_browsertest.cc  |   37 +
  .../stedding/isolation_mark_browsertest.cc    |  938 ++++++++++++++
@@ -264,7 +266,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../stedding/make_app_quiet_browsertest.cc    |  148 +++
  chrome/test/stedding/restore_browsertest.cc   |  529 ++++++++
  .../stedding/restored_title_browsertest.cc    |  311 +++++
- .../test/stedding/screenshot_browsertest.cc   |   62 +
+ .../test/stedding/screenshot_browsertest.cc   |   67 +
  .../stedding/settings_spaces_browsertest.cc   |  181 +++
  .../stedding/sidebar_forms_browsertest.cc     |  130 +-
  chrome/test/stedding/sidebar_test_util.cc     |   10 +
@@ -284,7 +286,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 225 files changed, 17202 insertions(+), 317 deletions(-)
+ 227 files changed, 17253 insertions(+), 317 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -7384,10 +7386,10 @@ index 2987a699cfde6..f954c4820c758 100644
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
  
 diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
-index fa3241ca7173b..a30d0d2e52146 100644
+index fa3241ca7173b..a2a5a232837e3 100644
 --- a/chrome/browser/ui/toasts/toast_controller.cc
 +++ b/chrome/browser/ui/toasts/toast_controller.cc
-@@ -439,6 +439,34 @@ void ToastController::OnFullscreenStateChanged() {
+@@ -439,6 +439,43 @@ void ToastController::OnFullscreenStateChanged() {
        ShouldRenderToastOverWebContents());
  }
  
@@ -7395,8 +7397,11 @@ index fa3241ca7173b..a30d0d2e52146 100644
 +                                              views::View* starting_view,
 +                                              bool visible) {
 +  // An infobar came or went under a toast: the toast moves with the page's
-+  // top edge (T38).
-+  if (toast_widget_ && currently_showing_toast_id_) {
++  // top edge (T38). Only the container's own change: a window hiding as it
++  // closes reaches here too, with its toast still up, and then nothing is
++  // to be placed.
++  if (starting_view == observed_view && toast_widget_ &&
++      currently_showing_toast_id_) {
 +    UpdateToastAnchor();
 +  }
 +}
@@ -7412,6 +7417,12 @@ index fa3241ca7173b..a30d0d2e52146 100644
 +      !toast_view_->GetAnchorView()) {
 +    return;
 +  }
++  // Not while the toast slides in or out: the slide sets the widget's bounds
++  // on every frame, and a layout then (one after Ctrl+W, as the toast comes
++  // in) would snap it to the end of its slide for a frame.
++  if (toast_view_->IsSliding()) {
++    return;
++  }
 +  toast_view_->SizeToContents();
 +}
 +
@@ -7422,7 +7433,7 @@ index fa3241ca7173b..a30d0d2e52146 100644
  void ToastController::UpdateToastAnchor() {
    bool global_scope =
        toast_registry_
-@@ -467,6 +495,22 @@ views::View* ToastController::GetAnchorView(bool global_scope) {
+@@ -467,6 +504,22 @@ views::View* ToastController::GetAnchorView(bool global_scope) {
      BrowserElementsViews* browser_elements_views =
          BrowserElementsViews::From(browser_window_interface_);
      if (global_scope || browser_full_screen) {
@@ -7446,7 +7457,7 @@ index fa3241ca7173b..a30d0d2e52146 100644
      } else {
        MultiContentsView* multi_contents_view = AsViewClass<MultiContentsView>(
 diff --git a/chrome/browser/ui/toasts/toast_controller.h b/chrome/browser/ui/toasts/toast_controller.h
-index 81c1b18c894e3..c4ff3a14920a4 100644
+index 81c1b18c894e3..9faa5ffac98e8 100644
 --- a/chrome/browser/ui/toasts/toast_controller.h
 +++ b/chrome/browser/ui/toasts/toast_controller.h
 @@ -22,6 +22,7 @@
@@ -7479,18 +7490,20 @@ index 81c1b18c894e3..c4ff3a14920a4 100644
    // content::WebContentsObserver:
    void PrimaryPageChanged(content::Page& page) override;
  
-@@ -130,6 +139,10 @@ class ToastController : public views::WidgetObserver,
+@@ -130,6 +139,12 @@ class ToastController : public views::WidgetObserver,
    // content::WebContentsObserver:
    void WebContentsDestroyed() override;
  
-+  // Place the showing toast on its anchor's current bounds. BrowserView calls
-+  // this at the end of layout, when those bounds are final (toolbar T38).
++  // Stedding (toolbar T38): places the showing toast on its anchor's current
++  // bounds, unless it is sliding in or out. BrowserView calls this at the end
++  // of layout, when those bounds are final; on the Mac an anchor chosen during
++  // layout left the toast where the old anchor had been.
 +  void PlaceOnCurrentAnchor();
 +
    views::Widget* GetToastWidgetForTesting() { return toast_widget_; }
    toasts::ToastView* GetToastViewForTesting() { return toast_view_; }
  
-@@ -184,6 +197,10 @@ class ToastController : public views::WidgetObserver,
+@@ -184,6 +199,10 @@ class ToastController : public views::WidgetObserver,
        this};
    base::ScopedObservation<OmniboxTabHelper, OmniboxTabHelper::Observer>
        omnibox_helper_observer_{this};
@@ -7557,6 +7570,74 @@ index c0d9f0b75b01b..0c52f9226f3aa 100644
    toast_registry_->RegisterToast(
        ToastId::kSkillSaved,
        ToastSpecification::Builder(
+diff --git a/chrome/browser/ui/toasts/toast_view.cc b/chrome/browser/ui/toasts/toast_view.cc
+index ca1c95c8996e7..cbe9f6af2fa20 100644
+--- a/chrome/browser/ui/toasts/toast_view.cc
++++ b/chrome/browser/ui/toasts/toast_view.cc
+@@ -376,6 +376,14 @@ void ToastView::AnimationProgressed(const gfx::Animation* animation) {
+   GetWidget()->SetBounds(current_bounds);
+ }
+ 
++void ToastView::AnimationEnded(const gfx::Animation* animation) {
++  AnimationDelegateViews::AnimationEnded(animation);
++  if (sliding_in_) {
++    sliding_in_ = false;
++    SizeToContents();
++  }
++}
++
+ void ToastView::AnimateIn() {
+   if (!animate_ || !gfx::Animation::ShouldRenderRichAnimation()) {
+     return;
+@@ -386,6 +394,7 @@ void ToastView::AnimateIn() {
+       target_widget_bounds_ - gfx::Vector2d{0, kAnimationHeightOffset};
+   height_animation_tween_ = gfx::Tween::ACCEL_5_70_DECEL_90;
+   height_animation_.SetDuration(base::Milliseconds(kAnimationEntryDuration));
++  sliding_in_ = true;
+   height_animation_.Start();
+ 
+   views::View* const bubble_frame_view = GetBubbleFrameView();
+@@ -518,6 +527,7 @@ void ToastView::AnimateOut(base::OnceClosure callback,
+     bubble_frame_view->layer()->SetFillsBoundsOpaquely(false);
+   }
+ 
++  sliding_in_ = false;
+   if (show_height_animation) {
+     starting_widget_bounds_ = GetWidget()->GetWindowBoundsInScreen();
+     target_widget_bounds_ =
+diff --git a/chrome/browser/ui/toasts/toast_view.h b/chrome/browser/ui/toasts/toast_view.h
+index 457daeba5ffa1..262c2885a4430 100644
+--- a/chrome/browser/ui/toasts/toast_view.h
++++ b/chrome/browser/ui/toasts/toast_view.h
+@@ -97,12 +97,17 @@ class ToastView : public views::BubbleDialogDelegateView,
+ 
+   // AnimationDelegateViews:
+   void AnimationProgressed(const gfx::Animation* animation) override;
++  void AnimationEnded(const gfx::Animation* animation) override;
+ 
+   void AnimateIn();
+ 
+   // Stedding: false stills the entry and exit (docs/features/motion.md O1).
+   void set_animate(bool animate) { animate_ = animate; }
+ 
++  // Stedding (toolbar T38): whether the entry or exit slide is moving the
++  // widget, which sets its bounds on every frame.
++  bool IsSliding() const { return height_animation_.is_animating(); }
++
+   // Animates out the toast, then closes the toast widget.
+   void Close(ToastCloseReason close_reason);
+ 
+@@ -140,6 +145,10 @@ class ToastView : public views::BubbleDialogDelegateView,
+   void OnMenuClosed();
+ 
+   gfx::LinearAnimation height_animation_{this};
++  // Stedding (toolbar T38): the entry slide is running. Its end is computed
++  // when it starts, so an anchor that moved meanwhile (the infobars came or
++  // went) is caught up with when it ends.
++  bool sliding_in_ = false;
+   gfx::Rect starting_widget_bounds_;
+   gfx::Rect target_widget_bounds_;
+   gfx::Tween::Type height_animation_tween_;
 diff --git a/chrome/browser/ui/toolbar/BUILD.gn b/chrome/browser/ui/toolbar/BUILD.gn
 index c0e36f586330b..f54777cdad8ef 100644
 --- a/chrome/browser/ui/toolbar/BUILD.gn
@@ -8511,24 +8592,25 @@ index 96a3121bcd885..7316905cfc8e7 100644
        if (auto* vertical_tab_strip_state_controller =
                tabs::VerticalTabStripStateController::From(browser)) {
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 73bcc4803f083..4df865a93ceea 100644
+index 73bcc4803f083..cc05ccc30cb1a 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -195,6 +195,7 @@
- #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_view.h"
- #include "chrome/browser/ui/views/hats/hats_next_web_dialog.h"
- #include "chrome/browser/ui/views/incognito_clear_browsing_data_dialog_coordinator.h"
+@@ -139,6 +139,7 @@
+ #include "chrome/browser/ui/tabs/tab_utils.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 +#include "chrome/browser/ui/toasts/toast_controller.h"
- #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
- #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
- #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
-@@ -4948,6 +4949,13 @@ void BrowserView::Layout(PassKey) {
+ #include "chrome/browser/ui/toolbar/app_menu_model.h"
+ #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
+ #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
+@@ -4948,6 +4949,14 @@ void BrowserView::Layout(PassKey) {
  
    LayoutSuperclass<views::View>(this);
  
-+  // A toast anchored under the infobars does not move on the Mac when the
-+  // anchor is chosen during layout. Place it from the anchor's bounds now
-+  // that those bounds are final (toolbar T38).
++  // Stedding (toolbar T38): a toast anchored under the infobars did not move
++  // on the Mac when the anchor was chosen during layout. Place it from the
++  // anchor's bounds now that those bounds are final; it does nothing unless
++  // the anchor has moved.
 +  if (ToastController* toasts = ToastController::From(browser())) {
 +    toasts->PlaceOnCurrentAnchor();
 +  }
@@ -8536,7 +8618,7 @@ index 73bcc4803f083..4df865a93ceea 100644
    // TODO(jamescook): Why was this in the middle of layout code?
    toolbar_->location_bar()->UpdateFocusBehavior(IsToolbarVisible());
    GetFrameView()->UpdateMinimumSize();
-@@ -6178,7 +6186,11 @@ void BrowserView::FrameColorsChanged() {
+@@ -6178,7 +6187,11 @@ void BrowserView::FrameColorsChanged() {
      web_app_window_title_->SetEnabledColor(caption_color);
    }
    GetWidget()->SetBackgroundColor(kColorToolbar);
@@ -14765,7 +14847,7 @@ index 204af319e74da..dbb782a82db74 100644
        "//ui/gfx:test_support",
      ]
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index f979524b0bb67..667c0c7178e68 100644
+index f979524b0bb67..a51c6a7083a57 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -13,8 +13,9 @@
@@ -14840,18 +14922,24 @@ index f979524b0bb67..667c0c7178e68 100644
  #include "ui/views/view_utils.h"
  #include "ui/views/widget/native_widget.h"
  #include "ui/views/widget/widget.h"
-@@ -166,6 +176,10 @@ class AddressBandTest : public InProcessBrowserTest {
+@@ -166,6 +176,16 @@ class AddressBandTest : public InProcessBrowserTest {
  // (tooling/dev, SERIAL_BROWSER_TESTS).
  class PageColourRowTest : public AddressBandTest {
   protected:
 +  // The row reads the page's top edge. Off the Mac, a browser test draws
-+  // nothing unless it asks: every edge read back transparent there.
-+  PageColourRowTest() { EnablePixelOutput(); }
++  // nothing unless it asks: every edge read back transparent there
++  // (trap 113). The Mac draws anyway, at the screen's own scale, which the
++  // call would force to 1.
++  PageColourRowTest() {
++#if defined(USE_AURA)
++    EnablePixelOutput();
++#endif
++  }
 +
    void SetUpOnMainThread() override {
      AddressBandTest::SetUpOnMainThread();
      stedding::test::KeepAboveOtherWindows(view()->GetWidget());
-@@ -180,13 +194,22 @@ class PageColourRowTest : public AddressBandTest {
+@@ -180,13 +200,22 @@ class PageColourRowTest : public AddressBandTest {
  
    // Until the row is `colour` and the window's colours are the row's: its
    // text in the colour with most contrast against it.
@@ -14881,7 +14969,7 @@ index f979524b0bb67..667c0c7178e68 100644
    }
  };
  
-@@ -461,6 +484,152 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
+@@ -461,6 +490,152 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
  }
  #endif  // BUILDFLAG(IS_WIN)
  
@@ -15034,7 +15122,7 @@ index f979524b0bb67..667c0c7178e68 100644
  // The omnibox's results dropdown, its own window, while it shows.
  views::Widget* Dropdown() {
    for (views::Widget* const widget : views::test::WidgetTest::GetAllWidgets()) {
-@@ -591,6 +760,85 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheAddressAndTheRowFollowThePage) {
+@@ -591,6 +766,85 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheAddressAndTheRowFollowThePage) {
    }
  }
  
@@ -16315,10 +16403,10 @@ index 0000000000000..8c0a94f7a1926
 +}  // namespace
 diff --git a/chrome/test/stedding/dark_pages_browsertest.cc b/chrome/test/stedding/dark_pages_browsertest.cc
 new file mode 100644
-index 0000000000000..9c408447cc565
+index 0000000000000..868fbd36fa912
 --- /dev/null
 +++ b/chrome/test/stedding/dark_pages_browsertest.cc
-@@ -0,0 +1,1072 @@
+@@ -0,0 +1,1081 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -16533,8 +16621,14 @@ index 0000000000000..9c408447cc565
 +class DarkPagesTest : public InProcessBrowserTest {
 + protected:
 +  // The tests read the page's pixels. Off the Mac, a browser test draws
-+  // nothing unless it asks: every pixel read back transparent there.
-+  DarkPagesTest() { EnablePixelOutput(); }
++  // nothing unless it asks: every pixel read back transparent there
++  // (trap 113). The Mac draws anyway, at the screen's own scale, which the
++  // call would force to 1.
++  DarkPagesTest() {
++#if defined(USE_AURA)
++    EnablePixelOutput();
++#endif
++  }
 +
 +  void SetUpOnMainThread() override {
 +    InProcessBrowserTest::SetUpOnMainThread();
@@ -16826,7 +16920,10 @@ index 0000000000000..9c408447cc565
 +  EXPECT_TRUE(ForcedDark(page()));
 +  EXPECT_TRUE(base::test::RunUntil([&]() {
 +    const std::optional<SkColor> colour = PixelAt(page(), gfx::Point(5, 5));
-+    return colour && color_utils::IsDark(*colour);
++    // Opaque: a pixel read before anything was drawn is transparent, and
++    // a transparent black would pass for dark.
++    return colour && SkColorGetA(*colour) == SK_AlphaOPAQUE &&
++           color_utils::IsDark(*colour);
 +  })) << "the error page is drawn dark";
 +}
 +
@@ -21465,7 +21562,7 @@ index 0000000000000..5d3f8279e5e19
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/screenshot_browsertest.cc b/chrome/test/stedding/screenshot_browsertest.cc
-index 6212359f49ea0..622ec099303f8 100644
+index 6212359f49ea0..a6c311cc82c91 100644
 --- a/chrome/test/stedding/screenshot_browsertest.cc
 +++ b/chrome/test/stedding/screenshot_browsertest.cc
 @@ -7,8 +7,12 @@
@@ -21489,7 +21586,7 @@ index 6212359f49ea0..622ec099303f8 100644
  #include "chrome/browser/ui/stedding/screenshot/screenshot_capture.h"
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
-@@ -28,17 +33,27 @@
+@@ -28,17 +33,32 @@
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "components/prefs/pref_service.h"
@@ -21511,13 +21608,18 @@ index 6212359f49ea0..622ec099303f8 100644
  class ScreenshotCaptureTest : public InProcessBrowserTest {
   protected:
 +  // A capture's pixels are read. Off the Mac, a browser test draws nothing
-+  // unless it asks: the PNG came back transparent there.
-+  ScreenshotCaptureTest() { EnablePixelOutput(); }
++  // unless it asks: the PNG came back transparent there (trap 113). The Mac
++  // draws anyway, at the screen's own scale, which the call would force to 1.
++  ScreenshotCaptureTest() {
++#if defined(USE_AURA)
++    EnablePixelOutput();
++#endif
++  }
 +
    void SetUpOnMainThread() override {
      InProcessBrowserTest::SetUpOnMainThread();
      ASSERT_TRUE(embedded_test_server()->Start());
-@@ -146,4 +161,51 @@ IN_PROC_BROWSER_TEST_F(ScreenshotCaptureTest,
+@@ -146,4 +166,51 @@ IN_PROC_BROWSER_TEST_F(ScreenshotCaptureTest,
    }
  }
  

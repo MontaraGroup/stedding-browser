@@ -78,7 +78,7 @@ Removable when: never; these are Stedding's own tests.
  .../test/stedding/private_coat_browsertest.cc |  170 +-
  .../test/stedding/quiet_start_browsertest.cc  |   51 +-
  chrome/test/stedding/restore_browsertest.cc   |  947 ++++----
- .../restored_page_state_browsertest.cc        |   81 +-
+ .../restored_page_state_browsertest.cc        |   91 +-
  .../test/stedding/screenshot_browsertest.cc   |  102 +-
  .../stedding/settings_spaces_browsertest.cc   |   59 +-
  .../stedding/sidebar_click_browsertest.cc     |  924 ++++----
@@ -92,7 +92,7 @@ Removable when: never; these are Stedding's own tests.
  .../test/stedding/space_switch_browsertest.cc |  605 +++--
  chrome/test/stedding/tab_drop_browsertest.cc  |  616 ++---
  chrome/test/stedding/welcome_browsertest.cc   |  258 +--
- 58 files changed, 7431 insertions(+), 5847 deletions(-)
+ 58 files changed, 7436 insertions(+), 5852 deletions(-)
 
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
 index 1e2ad017c8007..bb27ea5a5b363 100644
@@ -9422,20 +9422,34 @@ index 7d524cdb9296f..84654683baef6 100644
  }  // namespace
 +
 diff --git a/chrome/test/stedding/restored_page_state_browsertest.cc b/chrome/test/stedding/restored_page_state_browsertest.cc
-index 43f088c9d44ad..e0518a10ae361 100644
+index 43f088c9d44ad..c0bd818b4274f 100644
 --- a/chrome/test/stedding/restored_page_state_browsertest.cc
 +++ b/chrome/test/stedding/restored_page_state_browsertest.cc
-@@ -53,47 +53,50 @@ class RestoredPageStateTest : public InProcessBrowserTest {
+@@ -4,10 +4,11 @@
+ 
+ // A tab created unloaded -- as the Arc import makes them (import I3) -- saves
+ // a page state that the next start can load (owner, 2026-10-01). The saved
+-// state carried the sequence numbers -1 of an entry that never committed; the
+-// restored document committed with them, which the browser kills as a bad
+-// message (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER), so every such tab came back
+-// from a restart as a crashed page until it was reloaded.
++// state carries the sequence numbers -1 of an entry that never committed, as
++// upstream saves them; restored as they were, the document committed with
++// them, which the browser kills as a bad message
++// (RFH_INVALID_DOCUMENT_SEQUENCE_NUMBER), so every such tab came back from a
++// restart as a crashed page until it was reloaded.
+ 
+ #include <memory>
+ #include <optional>
+@@ -51,49 +52,51 @@ class RestoredPageStateTest : public InProcessBrowserTest {
+         ui::PAGE_TRANSITION_TYPED, false, std::string(),
+         browser()->GetProfile(), nullptr);
    }
- };
+-};
  
 -// What the session saves for a tab that was never loaded has no -1 in it.
 -IN_PROC_BROWSER_TEST_F(RestoredPageStateTest, AnUnloadedTabSavesNoMinusOne) {
-+// An unloaded tab saves no -1 sequence number, and a -1 saved by an earlier
-+// build still loads (import I26).
-+IN_PROC_BROWSER_TEST_F(RestoredPageStateTest,
-+                       AnUnloadedTabSavesAndAMinusOneLoads) {
-   const GURL url = embedded_test_server()->GetURL("/title1.html");
+-  const GURL url = embedded_test_server()->GetURL("/title1.html");
 -  std::unique_ptr<content::NavigationEntry> entry = UnloadedEntry(url);
 -  blink::ExplodedPageState saved;
 -  ASSERT_TRUE(
@@ -9443,35 +9457,46 @@ index 43f088c9d44ad..e0518a10ae361 100644
 -  EXPECT_GE(saved.top.item_sequence_number, 0);
 -  EXPECT_GE(saved.top.document_sequence_number, 0);
 -}
--
++  // Restores one entry holding `saved` into a new tab, as a session restore
++  // does, loads it and expects the page, not a killed renderer.
++  void RestoreAndLoad(const blink::PageState& saved, const GURL& url) {
++    std::unique_ptr<content::NavigationEntry> entry = UnloadedEntry(url);
++    std::unique_ptr<content::NavigationEntryRestoreContext> context =
++        content::NavigationEntryRestoreContext::Create();
++    entry->SetPageState(saved, context.get());
++    std::vector<std::unique_ptr<content::NavigationEntry>> entries;
++    entries.push_back(std::move(entry));
++    std::unique_ptr<content::WebContents> contents =
++        content::WebContents::Create(
++            content::WebContents::CreateParams(browser()->GetProfile()));
++    contents->GetController().Restore(0, content::RestoreType::kRestored,
++                                      &entries);
++    content::WebContents* const tab = contents.get();
++    browser()->tab_strip_model()->AppendWebContents(std::move(contents),
++                                                    /*foreground=*/true);
++    tab->GetController().LoadIfNecessary();
++    EXPECT_TRUE(content::WaitForLoadStop(tab));
++    EXPECT_FALSE(tab->IsCrashed())
++        << "the restored page's renderer was killed";
++    EXPECT_EQ(url, tab->GetLastCommittedURL());
++  }
++};
+ 
 -// A page state saved with -1 by an earlier build loads: the tab's page shows
 -// and its renderer is not killed.
 -IN_PROC_BROWSER_TEST_F(RestoredPageStateTest, AMinusOneSavedEarlierLoads) {
--  const GURL url = embedded_test_server()->GetURL("/title1.html");
++// What an unloaded tab saves loads after a restart, and so does a -1 saved by
++// any build (import I26).
++IN_PROC_BROWSER_TEST_F(RestoredPageStateTest,
++                       AnUnloadedTabSavesAndAMinusOneLoads) {
+   const GURL url = embedded_test_server()->GetURL("/title1.html");
 -  blink::ExplodedPageState saved;
 -  saved.top.url_string = base::UTF8ToUTF16(url.spec());
 -  saved.top.item_sequence_number = -1;
 -  saved.top.document_sequence_number = -1;
 -  std::string data;
 -  blink::EncodePageState(saved, &data);
-+  {
-+    SCOPED_TRACE("unloaded entry saves no minus one");
-+    std::unique_ptr<content::NavigationEntry> entry = UnloadedEntry(url);
-+    blink::ExplodedPageState saved;
-+    ASSERT_TRUE(
-+        blink::DecodePageState(entry->GetPageState().ToEncodedData(), &saved));
-+    EXPECT_GE(saved.top.item_sequence_number, 0);
-+    EXPECT_GE(saved.top.document_sequence_number, 0);
-+  }
-+  {
-+    SCOPED_TRACE("a saved minus one loads and the renderer lives");
-+    blink::ExplodedPageState saved;
-+    saved.top.url_string = base::UTF8ToUTF16(url.spec());
-+    saved.top.item_sequence_number = -1;
-+    saved.top.document_sequence_number = -1;
-+    std::string data;
-+    blink::EncodePageState(saved, &data);
- 
+-
 -  std::unique_ptr<content::NavigationEntry> entry = UnloadedEntry(url);
 -  std::unique_ptr<content::NavigationEntryRestoreContext> context =
 -      content::NavigationEntryRestoreContext::Create();
@@ -9491,26 +9516,19 @@ index 43f088c9d44ad..e0518a10ae361 100644
 -  EXPECT_TRUE(content::WaitForLoadStop(tab));
 -  EXPECT_FALSE(tab->IsCrashed()) << "the restored page's renderer was killed";
 -  EXPECT_EQ(url, tab->GetLastCommittedURL());
-+    std::unique_ptr<content::NavigationEntry> entry = UnloadedEntry(url);
-+    std::unique_ptr<content::NavigationEntryRestoreContext> context =
-+        content::NavigationEntryRestoreContext::Create();
-+    entry->SetPageState(blink::PageState::CreateFromEncodedData(data),
-+                        context.get());
-+    std::vector<std::unique_ptr<content::NavigationEntry>> entries;
-+    entries.push_back(std::move(entry));
-+    std::unique_ptr<content::WebContents> contents =
-+        content::WebContents::Create(
-+            content::WebContents::CreateParams(browser()->GetProfile()));
-+    contents->GetController().Restore(0, content::RestoreType::kRestored,
-+                                      &entries);
-+    content::WebContents* const tab = contents.get();
-+    browser()->tab_strip_model()->AppendWebContents(std::move(contents),
-+                                                    /*foreground=*/true);
-+    tab->GetController().LoadIfNecessary();
-+    EXPECT_TRUE(content::WaitForLoadStop(tab));
-+    EXPECT_FALSE(tab->IsCrashed())
-+        << "the restored page's renderer was killed";
-+    EXPECT_EQ(url, tab->GetLastCommittedURL());
++  {
++    SCOPED_TRACE("what an unloaded tab saves loads and the renderer lives");
++    RestoreAndLoad(UnloadedEntry(url)->GetPageState(), url);
++  }
++  {
++    SCOPED_TRACE("a saved minus one loads and the renderer lives");
++    blink::ExplodedPageState saved;
++    saved.top.url_string = base::UTF8ToUTF16(url.spec());
++    saved.top.item_sequence_number = -1;
++    saved.top.document_sequence_number = -1;
++    std::string data;
++    blink::EncodePageState(saved, &data);
++    RestoreAndLoad(blink::PageState::CreateFromEncodedData(data), url);
 +  }
  }
  

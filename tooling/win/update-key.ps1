@@ -14,11 +14,13 @@ Usage (PowerShell):
   update-key.ps1 -Sign <file>            prints the file's Ed25519 signature (base64)
   update-key.ps1 -Verify <file> -Signature <base64> [-Key <base64>]
                                          exit 0 when the signature verifies
-  update-key.ps1 -Backup <folder>        writes the encrypted key and its passphrase there, for the
-                                         operator to put somewhere safe and then delete
+  update-key.ps1 -Backup <folder>        writes the encrypted key there and its passphrase to the
+                                         sibling folder <folder>-passphrase, for the operator to
+                                         keep in two separate safe places and then delete
 
 The passphrase never leaves DPAPI except into OpenSSL's environment for one call, and into
--Backup's folder on the operator's word. OpenSSL is Git for Windows' (Ed25519 since 1.1.1).
+-Backup's passphrase folder on the operator's word. OpenSSL is Git for Windows' (3.0 or later:
+pkeyutl -rawin, which the signing and the check here use, came with 3.0).
 #>
 param(
   [switch]$Create,
@@ -119,11 +121,15 @@ if ($Verify) {
 
 if ($Backup) {
   if (-not (Test-Path $pem)) { throw "no key at $dir (run -Create)" }
-  New-Item -ItemType Directory -Force $Backup | Out-Null
-  Copy-Item $pem (Join-Path $Backup 'ed25519.pem')
-  Copy-Item $pub (Join-Path $Backup 'public.txt')
-  [IO.File]::WriteAllText((Join-Path $Backup 'passphrase.txt'), (Passphrase))
-  "written to ${Backup}: the encrypted key, its public key and its passphrase. Keep them apart and safe; delete this folder after."
+  # The passphrase goes to a folder of its own beside the key's, never next to the key it opens.
+  $keyFolder = $Backup.TrimEnd('\', '/')
+  if (-not $keyFolder -or $keyFolder.EndsWith(':')) { throw "-Backup needs a folder (E:\stedding-key), not a drive's root: the passphrase goes to a folder beside it" }
+  $passFolder = $keyFolder + '-passphrase'
+  New-Item -ItemType Directory -Force $keyFolder, $passFolder | Out-Null
+  Copy-Item $pem (Join-Path $keyFolder 'ed25519.pem')
+  Copy-Item $pub (Join-Path $keyFolder 'public.txt')
+  [IO.File]::WriteAllText((Join-Path (Resolve-Path -LiteralPath $passFolder).ProviderPath 'passphrase.txt'), (Passphrase))
+  "written: the encrypted key and its public key to $keyFolder, its passphrase to $passFolder. Keep the two folders apart, each somewhere safe, then delete both here."
   exit 0
 }
 
