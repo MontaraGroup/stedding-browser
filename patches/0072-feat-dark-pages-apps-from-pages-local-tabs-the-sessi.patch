@@ -43,7 +43,8 @@ tables, the preferences, Settings' Stedding page, the tab row):
   on Windows (S-231); the infobar container kept its height after its last bar
   went (S-227); the right-hand sidebar's test lost a real pointer on Windows
   (S-221); unit tests wrote into the person's data folder (S-220); the pin
-  notice raced a queued move; a toast was lost on navigation.
+  notice raced a queued move; a toast was lost on navigation; a toast of
+  the whole window covered the infobars' text (S-244: it sits under them).
 - Tests that failed on Windows alone (S-242): pixel reads there need the
   browser test to ask for drawing; Windows labels Chromium's menu row with
   its mnemonic; a test of the quiet install now allows no browser sign-in,
@@ -145,6 +146,8 @@ patches of their own and folds each fix into the patch that owns its code
  .../browser/ui/tabs/tab_menu_model_delegate.h |    6 +
  chrome/browser/ui/toasts/api/toast_id.cc      |    2 +
  chrome/browser/ui/toasts/api/toast_id.h       |    5 +-
+ chrome/browser/ui/toasts/toast_controller.cc  |   36 +
+ chrome/browser/ui/toasts/toast_controller.h   |   13 +
  chrome/browser/ui/toasts/toast_service.cc     |   28 +
  chrome/browser/ui/toolbar/BUILD.gn            |    1 +
  chrome/browser/ui/toolbar/app_menu_model.cc   |    7 +
@@ -242,7 +245,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/test/base/chrome_unit_test_suite.cc    |   75 ++
  chrome/test/base/chrome_unit_test_suite.h     |    9 +
  chrome/test/stedding/BUILD.gn                 |   38 +
- .../test/stedding/address_band_browsertest.cc |  174 ++-
+ .../test/stedding/address_band_browsertest.cc |  266 +++-
  chrome/test/stedding/app_jar_browsertest.cc   |  802 ++++++++++++
  .../test/stedding/clear_space_browsertest.cc  |   61 +
  .../test/stedding/command_bar_browsertest.cc  |   24 +
@@ -277,7 +280,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 222 files changed, 17008 insertions(+), 315 deletions(-)
+ 224 files changed, 17149 insertions(+), 315 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -7369,6 +7372,105 @@ index 2987a699cfde6..f954c4820c758 100644
  };
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
  
+diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
+index fa3241ca7173b..d91083fe960e3 100644
+--- a/chrome/browser/ui/toasts/toast_controller.cc
++++ b/chrome/browser/ui/toasts/toast_controller.cc
+@@ -439,6 +439,26 @@ void ToastController::OnFullscreenStateChanged() {
+       ShouldRenderToastOverWebContents());
+ }
+ 
++void ToastController::OnViewVisibilityChanged(views::View* observed_view,
++                                              views::View* starting_view,
++                                              bool visible) {
++  // An infobar came or went under a toast: the toast moves with the page's
++  // top edge (T38).
++  if (toast_widget_ && currently_showing_toast_id_) {
++    UpdateToastAnchor();
++  }
++}
++
++void ToastController::OnViewBoundsChanged(views::View* observed_view) {
++  if (toast_widget_ && currently_showing_toast_id_) {
++    UpdateToastAnchor();
++  }
++}
++
++void ToastController::OnViewIsDeleting(views::View* observed_view) {
++  infobars_observation_.Reset();
++}
++
+ void ToastController::UpdateToastAnchor() {
+   bool global_scope =
+       toast_registry_
+@@ -467,6 +487,22 @@ views::View* ToastController::GetAnchorView(bool global_scope) {
+     BrowserElementsViews* browser_elements_views =
+         BrowserElementsViews::From(browser_window_interface_);
+     if (global_scope || browser_full_screen) {
++      // Stedding (toolbar T38, BACKLOG S-244): in the Stedding window a toast
++      // sits in the page, under the address row (T35); with infobars up it
++      // sits under them, where the page starts, not over their text.
++      if (!browser_full_screen &&
++          base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++        views::View* const infobars =
++            browser_elements_views->GetView(kInfoBarContainerElementId);
++        if (infobars && !infobars_observation_.IsObservingSource(infobars)) {
++          infobars_observation_.Reset();
++          infobars_observation_.Observe(infobars);
++        }
++        if (infobars && infobars->GetVisible() &&
++            !infobars->bounds().IsEmpty()) {
++          return infobars;
++        }
++      }
+       return browser_elements_views->GetView(kTopContainerElementId);
+     } else {
+       MultiContentsView* multi_contents_view = AsViewClass<MultiContentsView>(
+diff --git a/chrome/browser/ui/toasts/toast_controller.h b/chrome/browser/ui/toasts/toast_controller.h
+index 81c1b18c894e3..b1bbe8beef034 100644
+--- a/chrome/browser/ui/toasts/toast_controller.h
++++ b/chrome/browser/ui/toasts/toast_controller.h
+@@ -22,6 +22,7 @@
+ #include "content/public/browser/web_contents_observer.h"
+ #include "ui/base/models/image_model.h"
+ #include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/view_observer.h"
+ #include "ui/views/widget/widget_observer.h"
+ 
+ class BrowserWindowInterface;
+@@ -77,6 +78,7 @@ struct ToastParams {
+ // can be displayed at a time. Subsequent calls to MaybeShowToast() will dismiss
+ // the current toast and automatically display the requested one.
+ class ToastController : public views::WidgetObserver,
++                        public views::ViewObserver,
+                         public OmniboxTabHelper::Observer,
+                         public content::WebContentsObserver {
+  public:
+@@ -117,6 +119,13 @@ class ToastController : public views::WidgetObserver,
+ #endif
+   void OnWidgetDestroyed(views::Widget* widget) override;
+ 
++  // views::ViewObserver, for the window's infobars (toolbar T38):
++  void OnViewVisibilityChanged(views::View* observed_view,
++                               views::View* starting_view,
++                               bool visible) override;
++  void OnViewBoundsChanged(views::View* observed_view) override;
++  void OnViewIsDeleting(views::View* observed_view) override;
++
+   // content::WebContentsObserver:
+   void PrimaryPageChanged(content::Page& page) override;
+ 
+@@ -184,6 +193,10 @@ class ToastController : public views::WidgetObserver,
+       this};
+   base::ScopedObservation<OmniboxTabHelper, OmniboxTabHelper::Observer>
+       omnibox_helper_observer_{this};
++  // Stedding (toolbar T38, BACKLOG S-244): the window's infobars, which a
++  // toast of the whole window sits under while any is up.
++  base::ScopedObservation<views::View, views::ViewObserver>
++      infobars_observation_{this};
+ 
+   // Stores a list of callbacks to inform when a toast widget is destroyed.
+   using WidgetDestroyedCallbackList =
 diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
 index c0d9f0b75b01b..0c52f9226f3aa 100644
 --- a/chrome/browser/ui/toasts/toast_service.cc
@@ -14552,7 +14654,7 @@ index 204af319e74da..dbb782a82db74 100644
        "//ui/gfx:test_support",
      ]
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index f979524b0bb67..cb61c436db261 100644
+index f979524b0bb67..667c0c7178e68 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -13,8 +13,9 @@
@@ -14583,7 +14685,7 @@ index f979524b0bb67..cb61c436db261 100644
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
  #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
  #include "chrome/browser/ui/color/chrome_color_id.h"
-@@ -48,6 +51,7 @@
+@@ -48,22 +51,27 @@
  #include "chrome/browser/ui/navigator/browser_navigator_params.h"
  #include "chrome/browser/ui/omnibox/omnibox_controller.h"
  #include "chrome/browser/ui/session_crashed_bubble.h"
@@ -14591,7 +14693,13 @@ index f979524b0bb67..cb61c436db261 100644
  #include "chrome/browser/ui/stedding/stedding_command_ids.h"
  #include "chrome/browser/ui/stedding/stedding_prefs.h"
  #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
-@@ -60,10 +64,13 @@
+ #include "chrome/browser/ui/stedding/theme/page_top_color.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/toasts/api/toast_id.h"
+ #include "chrome/browser/ui/toasts/toast_controller.h"
+ #include "chrome/browser/ui/toasts/toast_view.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
  #include "chrome/browser/ui/views/frame/top_container_view.h"
@@ -14605,7 +14713,7 @@ index f979524b0bb67..cb61c436db261 100644
  #include "chrome/browser/ui/views/toolbar/app_menu_control.h"
  #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
-@@ -72,6 +79,7 @@
+@@ -72,6 +80,7 @@
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "chrome/test/stedding/sidebar_test_util.h"
@@ -14613,7 +14721,7 @@ index f979524b0bb67..cb61c436db261 100644
  #include "components/prefs/pref_service.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/test/browser_test.h"
-@@ -105,6 +113,7 @@
+@@ -105,6 +114,7 @@
  #include "ui/views/test/views_test_utils.h"
  #include "ui/views/test/widget_test.h"
  #include "ui/views/view.h"
@@ -14621,7 +14729,7 @@ index f979524b0bb67..cb61c436db261 100644
  #include "ui/views/view_utils.h"
  #include "ui/views/widget/native_widget.h"
  #include "ui/views/widget/widget.h"
-@@ -166,6 +175,10 @@ class AddressBandTest : public InProcessBrowserTest {
+@@ -166,6 +176,10 @@ class AddressBandTest : public InProcessBrowserTest {
  // (tooling/dev, SERIAL_BROWSER_TESTS).
  class PageColourRowTest : public AddressBandTest {
   protected:
@@ -14632,7 +14740,7 @@ index f979524b0bb67..cb61c436db261 100644
    void SetUpOnMainThread() override {
      AddressBandTest::SetUpOnMainThread();
      stedding::test::KeepAboveOtherWindows(view()->GetWidget());
-@@ -180,13 +193,22 @@ class PageColourRowTest : public AddressBandTest {
+@@ -180,13 +194,22 @@ class PageColourRowTest : public AddressBandTest {
  
    // Until the row is `colour` and the window's colours are the row's: its
    // text in the colour with most contrast against it.
@@ -14662,7 +14770,7 @@ index f979524b0bb67..cb61c436db261 100644
    }
  };
  
-@@ -461,6 +483,61 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
+@@ -461,6 +484,152 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
  }
  #endif  // BUILDFLAG(IS_WIN)
  
@@ -14721,10 +14829,101 @@ index f979524b0bb67..cb61c436db261 100644
 +  EXPECT_TRUE(drawn()) << "the separator did not come back with the row";
 +}
 +
++// toolbar T38 (BACKLOG S-244): with infobars up a toast sits under them,
++// where the page starts, not over their text; when the last goes the toast
++// goes back up under the address row, and an infobar coming up takes it
++// down again. A tab's toast sits there as well. The Windows run's capture
++// had Ctrl+W's undo toast over "Continue where you left off" (2026-10-19).
++IN_PROC_BROWSER_TEST_F(AddressBandTest, AToastSitsUnderTheInfobars) {
++  content::WebContents* const contents =
++      browser()->GetTabStripModel()->GetActiveWebContents();
++  infobars::ContentInfoBarManager* const manager =
++      infobars::ContentInfoBarManager::FromWebContents(contents);
++  views::View* const bars = view()->infobar_container();
++  ASSERT_TRUE(bars);
++  const auto bars_up = [&]() {
++    views::test::RunScheduledLayout(view());
++    return bars->GetVisible() && bars->height() > 0;
++  };
++  const auto show_bar = [&]() {
++    ASSERT_TRUE(session_restore_infobar::SessionRestoreInfoBarDelegate::Show(
++        manager, *browser()->GetProfile(), base::DoNothing(),
++        session_restore_infobar::InfobarMessageType::kTurnOffFromRestart));
++    ASSERT_TRUE(base::test::RunUntil(bars_up)) << "the bar did not show";
++  };
++  ASSERT_NO_FATAL_FAILURE(show_bar());
++
++  ToastController* const toasts = ToastController::From(browser());
++  ASSERT_TRUE(toasts);
++  const auto toast_up = [&]() {
++    return toasts->IsShowingToast() && toasts->GetToastWidgetForTesting() &&
++           toasts->GetToastWidgetForTesting()->IsVisible();
++  };
++  // The toast's visible top: the widget's top plus the shadow its border
++  // draws, as TheBandTheFieldAndAToastLeaveTheAddressReadable reads it.
++  const auto toast_top = [&]() {
++    views::test::RunScheduledLayout(view());
++    auto* const toast = toasts->GetToastViewForTesting();
++    return toasts->GetToastWidgetForTesting()->GetWindowBoundsInScreen().y() +
++           toast->GetBubbleFrameView()->bubble_border()->GetInsets().top();
++  };
++  const auto row_bottom = [&]() {
++    return view()->toolbar()->GetBoundsInScreen().bottom();
++  };
++  // On or under the bars' bottom edge, where the page starts. A screen at
++  // 150% puts the toast's top a DIP over that edge by rounding (94 against
++  // 95 on the PC, 2026-10-19): the edge, not the bar's text.
++  const auto under_the_bars = [&]() {
++    return toast_top() >= bars->GetBoundsInScreen().bottom() - 1;
++  };
++
++  {
++    SCOPED_TRACE("the window's toast, from the user's Ctrl+W");
++    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), embedded_test_server()->GetURL("b.test", "/title1.html"),
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    chrome::CloseTab(browser());
++    ASSERT_EQ(contents, browser()->GetTabStripModel()->GetActiveWebContents());
++    ASSERT_TRUE(base::test::RunUntil(toast_up)) << "no undo toast";
++    ASSERT_TRUE(base::test::RunUntil(bars_up)) << "the bar went with the tab";
++    // It stays up for the steps below.
++    toasts->GetToastCloseTimerForTesting()->Stop();
++    EXPECT_TRUE(base::test::RunUntil(under_the_bars))
++        << "the toast's visible top is at " << toast_top()
++        << ", the infobars end at " << bars->GetBoundsInScreen().bottom();
++
++    manager->RemoveAllInfoBars(/*animate=*/false);
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !bars_up(); }));
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return toast_top() >= row_bottom() && toast_top() <= row_bottom() + 2;
++    })) << "with no bar the toast goes back under the row: its top at "
++        << toast_top() << ", the row ends at " << row_bottom();
++
++    ASSERT_NO_FATAL_FAILURE(show_bar());
++    EXPECT_TRUE(base::test::RunUntil(under_the_bars))
++        << "a bar coming up left the toast over it: its top at "
++        << toast_top() << ", the infobars end at "
++        << bars->GetBoundsInScreen().bottom();
++  }
++  {
++    SCOPED_TRACE("a tab's toast");
++    ASSERT_TRUE(bars_up());
++    // It takes the undo toast's place.
++    ASSERT_TRUE(toasts->MaybeShowToast(ToastParams(ToastId::kLinkCopied)));
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return toast_up() && toasts->GetCurrentToastId() == ToastId::kLinkCopied;
++    }));
++    EXPECT_TRUE(base::test::RunUntil(under_the_bars))
++        << "the tab's toast top is at " << toast_top()
++        << ", the infobars end at " << bars->GetBoundsInScreen().bottom();
++  }
++}
++
  // The omnibox's results dropdown, its own window, while it shows.
  views::Widget* Dropdown() {
    for (views::Widget* const widget : views::test::WidgetTest::GetAllWidgets()) {
-@@ -591,6 +668,85 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheAddressAndTheRowFollowThePage) {
+@@ -591,6 +760,85 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheAddressAndTheRowFollowThePage) {
    }
  }
  
