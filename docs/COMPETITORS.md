@@ -205,11 +205,11 @@ copyleft conditions). No other project on this list offers all three.
 
 ## Why users would not pick us today
 
-Honesty section. As of 2026-10-18:
+Honesty section. As of 2026-10-19:
 
 - **A beta.** The macOS image (Apple silicon only) is signed and notarized and updates
-  itself from beta 16 on; the Windows x64 preview is not code-signed and has no updater, so
-  a new version there is a new download. Every browser above ships an updating build on
+  itself from beta 16 on; the Windows x64 preview updates itself from beta 19 on but is not
+  code-signed, so SmartScreen asks once. Every browser above ships an updating build on
   more platforms than we do; Zen and Brave ship polished products today.
 - **No track record.** Keeping a Chromium fork current with security updates is a
   treadmill that has broken larger teams. Until we demonstrate months of on-time
@@ -220,8 +220,8 @@ Honesty section. As of 2026-10-18:
 - **Small team, bus factor.** Brave has a company behind it; Zen has a large
   community. We have neither yet. The BSD license is the mitigation — anyone can
   pick up the work — but a license is not a maintainer.
-- **No Linux and no Intel Mac yet.** Windows is a preview: no signing, no updates,
-  and links from other applications open as tabs (`BACKLOG.md` S-56).
+- **No Linux and no Intel Mac yet.** Windows is a preview: no signing, and links from
+  other applications open as tabs (`BACKLOG.md` S-56).
 
 The bet is that the empty cell above is worth occupying anyway, and that shipping
 complete, polished milestones (see QUALITY.md) closes the trust gap over time.

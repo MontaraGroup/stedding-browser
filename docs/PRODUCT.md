@@ -143,7 +143,7 @@ yet, `docs/features/library.md`) and a `+`.
   after its name in the title row, the tab menu's Space rows, the command bar, the archive
   and Settings -- and pinning one of its tabs to the essentials, which use the shared
   session, says so with an Undo (`features/sessions.md` S32–S34, `features/spaces.md` B38;
-  written, not yet run or released).
+  released in beta 18, on Windows so far).
 - **Move tabs between Spaces** **[1.0]** — the command bar's "Move Tab to [Space]", the tab
   menu, `⌥⇧⌘←/→`, or a drag onto a Space icon (`features/spaces.md` B12, B22).
 - **Air Traffic Control** **[1.0]** — Stedding's routing: rules sending a site, a part of
@@ -333,7 +333,7 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   (`features/toolbar.md` T11), and its tab is marked in the sidebar as Arc marks it:
   a yellow and black tape round the row while it is on screen, and at the
   Comfortable density its host and port under the title, with a setting to turn
-  it off (`features/local-tabs.md`; written, not yet run or released). Arc's other
+  it off (`features/local-tabs.md`; released in beta 18, on Windows so far). Arc's other
   developer affordances: `S-117`.
 - **Extensions** **[1.0]** — full Chrome Web Store compatibility, a hard requirement
   (`AGENTS.md`). `⌘E` to cycle extension actions is planned (`features/toolbar.md` T13;
@@ -351,7 +351,7 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   page as app…" on Windows, with its Start menu entry. The app's window is drawn edge to
   edge, with no sidebar or card; the app keeps the session of the Space it was made in
   (ADR 0025, proposed), and takes no links from the browser until the user turns that on
-  for it (`features/web-apps.md`; written, not yet run or released).
+  for it (`features/web-apps.md`; released in beta 18, on Windows so far).
 - **Arc Search (iOS/Android)** **[not applicable]** — mobile is out of scope
   (`ROADMAP.md`).
 
@@ -368,8 +368,7 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
 - **Dark mode for web pages**, on Chromium's own (`S-100`): one switch, a moon at the
   address row's right end, ⌥⇧⌘D, a command bar row, a page-menu row and, on the Mac, a
   View menu row, with sites kept light or the only ones darkened, and an app's title bar
-  darkened with its page (`features/dark-pages.md`; written, not yet run or
-  released).
+  darkened with its page (`features/dark-pages.md`; released in beta 18, on Windows so far).
 - **Smaller things seen in Nook**: the site's controls in one panel (`S-118`) and the rest
   of the small conveniences (`S-125`). Built in beta 14: clear a site's cookies and
   reload (`features/commandbar.md` K24, `features/sessions.md` S27), folder verbs

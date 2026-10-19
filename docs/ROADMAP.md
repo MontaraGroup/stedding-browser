@@ -93,8 +93,8 @@ Acceptance criteria:
 
 > **Done**, on Chromium's own vertical tabs (ADR 0010), and well past this scope since:
 > folders (ADR 0013), Arc's pins, the rail, density and text size, and from beta 13 a sidebar
-> that hides completely with the page edge to edge (`docs/features/sidebar.md` Y19). Written
-> on 2026-10-18 and not yet run or released: a tab on this computer's own server marked as
+> that hides completely with the page edge to edge (`docs/features/sidebar.md` Y19). Released
+> in beta 18, on Windows so far: a tab on this computer's own server marked as
 > Arc's Developer Mode marks it (`docs/features/local-tabs.md`, `S-117`).
 
 **Goal:** the Arc-style sidebar replaces the horizontal tab strip. First build we
@@ -138,7 +138,7 @@ Acceptance criteria:
 ## M3 — Workspaces
 
 > **Done** as Spaces (`docs/features/spaces.md`, ADR 0015, ADR 0016), each optionally with
-> cookies of its own (ADR 0019). Written on 2026-10-18 and not yet run or released: the mark
+> cookies of its own (ADR 0019). Released in beta 18, on Windows so far: the mark
 > of a Space with cookies of its own wherever Stedding names it (`docs/features/sessions.md`
 > S32–S34, `S-164`), and apps made from pages, which keep the session of the Space they were
 > made in (`docs/features/web-apps.md`, ADR 0025, proposed; `docs/PRODUCT.md` §12 gives
@@ -305,8 +305,8 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-18):** an unsigned preview ships with each beta beside the
-Mac's image, beta 17's on the current pin. Both suites passed with DCHECKs and the
+**Where this stands (2026-10-19):** an unsigned preview ships with each beta, and from beta
+19 it updates itself (`S-215`); betas 18 and 19 are Windows only until the Mac adds its image. Both suites passed with DCHECKs and the
 dangling-pointer detector on and under AddressSanitizer on 2026-09-30; with DCHECKs and the
 detector again on the series through patch 0061 on 2026-10-11, after one fix, and on the
 current pin on 2026-10-17, after one more, but for `S-214`, fixed since. Under

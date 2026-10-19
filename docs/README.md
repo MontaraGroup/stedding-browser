@@ -8,7 +8,7 @@ Everything under `docs/`, grouped by who it is for.
 |---|---|
 | [INSTALL.md](INSTALL.md) | Installing on macOS and Windows, verifying the checksum, updating, uninstalling, where your data lives |
 | [SHORTCUTS.md](SHORTCUTS.md) | Every keyboard shortcut, macOS and Windows, and where Stedding differs from Chromium |
-| [FAQ.md](FAQ.md) | Questions and answers, including Independent session |
+| [FAQ.md](FAQ.md) | Questions and answers: what Stedding has that Arc did not and the reverse, updates, Independent session |
 | [PRIVACY.md](PRIVACY.md) | The privacy principles and every network connection the browser makes |
 | [release-notes/](release-notes/) | What each release changed, with checksums |
 
@@ -48,5 +48,5 @@ Everything under `docs/`, grouped by who it is for.
 
 `images/` holds the captures the docs show, each from the build it was taken on: the
 `ui-*.png` measurements are beta 7's, the Windows captures beta 5's, and the README's
-`readme/` captures mostly beta 8's. `tooling/check-geometry` re-measures the ones the
+`readme/` captures 2026-10-19's, from a build after beta 17. `tooling/check-geometry` re-measures the ones the
 interface spec depends on.

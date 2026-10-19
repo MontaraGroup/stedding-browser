@@ -174,7 +174,7 @@ K24).
 
 ### Dark pages — local only, off by default
 
-**Dark pages** (`features/dark-pages.md`, not yet released) makes no network request and
+**Dark pages** (`features/dark-pages.md`, from beta 18) makes no network request and
 sends nothing. What it stores stays in the profile's `Preferences` file on this disk: the
 switch, the button's setting, and the mode and the two lists of sites, Chromium's content
 setting `AUTO_DARK_WEB_CONTENT`, which Stedding registers on desktop. The lists name sites
@@ -187,7 +187,7 @@ automatic darkening is on; it cannot read the lists.
 ### Apps made from pages — the page's own server only
 
 Making an app of a page (**Add to Dock…** on the Mac, **Install page as app…** on Windows;
-`features/web-apps.md`, not yet released) is part of the user's own browsing: it fetches
+`features/web-apps.md`, from beta 18) is part of the user's own browsing: it fetches
 only what the page names, in the page's own session -- its manifest (which may sit on
 another host), the icons the manifest lists, its favicons, and the manifest's screenshots
 for the larger dialog -- and later re-reads the manifest when a page of the app shows it.
