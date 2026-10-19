@@ -132,7 +132,7 @@ The first window opens the welcome flow, six steps, each one skippable (five bef
 
 Each choice can be changed later in Settings. If you skip the search engine step, or
 finish without picking one, searches go to DuckDuckGo and that is recorded as your
-choice, from the first release after beta 17. In beta 17 and earlier, Chromium's own
+choice, from beta 18 on Windows and beta 20 on the Mac. Before those, Chromium's own
 "Choose your search engine" dialog then opens on the first page (`S-134`).
 
 ## Linux

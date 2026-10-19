@@ -37,8 +37,8 @@ account, no telemetry, BSD-3-Clause.
    site in front of you and nothing else; Close Duplicate Tabs is one command away.
    [Spec](docs/features/commandbar.md)
 
-Dark pages, apps from pages and local development tabs came with beta 18 and are on Windows
-so far; the Mac gets them with its next image.
+Dark pages, apps from pages and local development tabs came with beta 18 on Windows and with
+beta 20 on the Mac.
 
 <p>
   <img src="docs/images/readme/dark-pages.png" width="49%" alt="A white website shown dark, the moon button by the address row lit">
@@ -80,8 +80,7 @@ Each feature has a specification naming the test behind every behaviour:
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.2.0 beta 19** (Windows); the newest macOS image is beta 17's. Both are on Chromium
-156.0.8078.36.
+is **0.2.0 beta 20**, for macOS and Windows, on Chromium 156.0.8078.36.
 
 | Platform | File | |
 |---|---|---|
