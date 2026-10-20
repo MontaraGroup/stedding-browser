@@ -2,7 +2,8 @@
 # Capture a browser state without a hand on the machine.
 #
 # Usage:
-#   tooling/capture-state --out <prefix> [--seed collapsed|grey-dark|light|dark] [--settle <seconds>]
+#   tooling/capture-state --out <prefix> [--seed collapsed|grey-dark|light|dark|horizontal|horizontal-light|horizontal-dark]
+#                         [--settle <seconds>]
 #                         [--features <list>] [--disable-features <list>]
 #                         [--size WxH] [--url URL] [--page URL] [--build DIR]
 #                         [chromium args and URLs...]
@@ -42,6 +43,9 @@
 #   --seed grey-dark                   dark mode with Customize Chrome's Grey
 #   --seed light, --seed dark          the window in light or dark, whatever macOS is set to
 #                                      (the key an incognito window has)
+#   --seed horizontal                  vertical tabs off: Chromium's horizontal tab strip
+#                                      (prefs::kVerticalTabsEnabled); horizontal-light and
+#                                      horizontal-dark set the window's scheme as well
 # The list of params is in docs/HANDOFF.md.
 
 # shellcheck source-path=SCRIPTDIR
@@ -105,8 +109,8 @@ main() {
   done
 
   case "$seed" in
-    ""|collapsed|grey-dark|light|dark) ;;
-    *) die "unknown seed: $seed (known: collapsed, grey-dark, light, dark)" ;;
+    ""|collapsed|grey-dark|light|dark|horizontal|horizontal-light|horizontal-dark) ;;
+    *) die "unknown seed: $seed (known: collapsed, grey-dark, light, dark, horizontal, horizontal-light, horizontal-dark)" ;;
   esac
   require_pyobjc
 
@@ -135,6 +139,11 @@ main() {
       # prefs::kBrowserColorScheme: 1 is light, 2 is dark.
       printf '{"browser":{"theme":{"color_scheme2":%d}}}' "$([ "$seed" = light ] && echo 1 || echo 2)" \
         > "$profile/Default/Preferences" ;;
+    horizontal)
+      printf '{"vertical_tabs":{"enabled":false}}' > "$profile/Default/Preferences" ;;
+    horizontal-light|horizontal-dark)
+      printf '{"vertical_tabs":{"enabled":false},"browser":{"theme":{"color_scheme2":%d}}}' \
+        "$([ "$seed" = horizontal-light ] && echo 1 || echo 2)" > "$profile/Default/Preferences" ;;
   esac
 
   # LaunchServices starts the app in /, so the log path must be absolute.

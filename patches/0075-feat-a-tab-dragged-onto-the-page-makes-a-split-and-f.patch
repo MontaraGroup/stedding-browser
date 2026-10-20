@@ -57,8 +57,8 @@ of its own (patches/README.md).
  chrome/browser/ui/cocoa/accelerators_cocoa.mm |   3 +
  chrome/browser/ui/cocoa/main_menu_builder.mm  |   5 +-
  .../ui/cocoa/main_menu_builder_unittest.mm    |  33 +
- chrome/browser/ui/spaces/space_model.cc       | 126 ++-
- chrome/browser/ui/spaces/space_model.h        |  20 +
+ chrome/browser/ui/spaces/space_model.cc       | 157 +++-
+ chrome/browser/ui/spaces/space_model.h        |  28 +
  .../ui/spaces/space_model_window_unittest.cc  | 393 ++++++++++
  chrome/browser/ui/stedding/BUILD.gn           |  21 +
  chrome/browser/ui/stedding/pin_lifecycle.cc   |  42 +-
@@ -77,13 +77,15 @@ of its own (patches/README.md).
  chrome/browser/ui/ui_features.cc              |  10 +-
  .../ui/views/bubble_anchor_util_views.cc      |  15 +
  chrome/browser/ui/views/commandbar/BUILD.gn   |  13 +-
- .../views/commandbar/address_row_controls.cc  | 251 ++++++
+ .../views/commandbar/address_row_controls.cc  | 271 +++++++
  .../views/commandbar/address_row_controls.h   |  86 +++
- .../ui/views/commandbar/command_bar_view.cc   | 268 ++++++-
- .../ui/views/commandbar/command_bar_view.h    |  45 +-
- .../commandbar/command_bar_view_unittest.cc   | 285 ++++++-
+ .../ui/views/commandbar/command_bar_view.cc   | 294 ++++++-
+ .../ui/views/commandbar/command_bar_view.h    |  51 +-
+ .../commandbar/command_bar_view_unittest.cc   | 301 +++++++-
  .../extensions/extensions_toolbar_desktop.cc  |  23 +
  chrome/browser/ui/views/frame/browser_view.cc |   8 +
+ .../ui/views/frame/top_container_view.cc      |  25 +
+ .../ui/views/frame/top_container_view.h       |   1 +
  .../frame/vertical_tab_strip_region_view.cc   |   5 +
  .../frame/vertical_tab_strip_region_view.h    |   4 +
  chrome/browser/ui/views/spaces/BUILD.gn       |   7 +
@@ -97,22 +99,25 @@ of its own (patches/README.md).
  .../views/tabs/dragging/drag_session_data.h   |   6 +
  .../tabs/dragging/tab_drag_controller.cc      |  20 +-
  .../ui/views/tabs/dragging/tab_drag_target.h  |   5 +
+ .../web_apps/web_app_diy_install_dialog.cc    |  12 +-
  .../browser/ui/webui/settings/settings_ui.cc  |  22 +
  .../settings/stedding_shortcuts_handler.cc    |   7 +
  .../stedding_shortcuts_handler_unittest.cc    |  52 ++
  chrome/test/stedding/BUILD.gn                 |  14 +
  .../test/stedding/command_bar_browsertest.cc  |  34 +-
  chrome/test/stedding/defaults_browsertest.cc  |  14 +-
- .../hidden_row_controls_browsertest.cc        | 428 +++++++++++
+ .../hidden_row_controls_browsertest.cc        | 537 +++++++++++++
  .../hover_card_picture_browsertest.cc         | 717 ++++++++++++++++++
+ chrome/test/stedding/make_app_browsertest.cc  |  39 +
  .../stedding/settings_security_browsertest.cc |  39 +
  .../stedding/settings_spaces_browsertest.cc   |  30 +
- .../stedding/sidebar_click_browsertest.cc     |  73 ++
+ .../stedding/sidebar_click_browsertest.cc     |  82 ++
  .../test/stedding/sleep_timer_browsertest.cc  | 300 ++++++++
+ .../test/stedding/space_keys_browsertest.mm   |  62 ++
  .../test/stedding/space_switch_browsertest.cc |  25 +
- .../test/stedding/startup_load_browsertest.cc | 424 +++++++++++
+ .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
  chrome/test/stedding/tab_drop_browsertest.cc  | 307 ++++++++
- 72 files changed, 5914 insertions(+), 82 deletions(-)
+ 77 files changed, 6401 insertions(+), 84 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -913,10 +918,18 @@ index 5b018eb9b0679..52dcbcf0f97fe 100644
 +
  }  // namespace
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index c803bc9f2d0e2..ca66f44e38a22 100644
+index c803bc9f2d0e2..0240328f42457 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
-@@ -190,6 +190,19 @@ std::vector<std::unique_ptr<Space>> SpacesFromSessionList(
+@@ -28,6 +28,7 @@
+ #include "base/values.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_restore.h"
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+ #include "chrome/browser/ui/archive/archive_mark.h"
+@@ -190,6 +191,19 @@ std::vector<std::unique_ptr<Space>> SpacesFromSessionList(
    }
    return spaces;
  }
@@ -936,7 +949,7 @@ index c803bc9f2d0e2..ca66f44e38a22 100644
  }  // namespace
  
  // SpaceId has no default constructor by design — an id that names nothing is
-@@ -319,6 +332,9 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+@@ -319,6 +333,9 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
    tab_strip_model_->SetBeforeDetachTabsCallback(
        base::BindRepeating(&SpaceModel::KeepAVisibleTabAsTabsLeave,
                            base::Unretained(this), /*closing=*/false));
@@ -946,7 +959,7 @@ index c803bc9f2d0e2..ca66f44e38a22 100644
  
    // Membership is decided on insertion (B1). The window's features are built
    // before its first tab, so this normally observes an empty strip; any tab
-@@ -1040,11 +1056,14 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+@@ -1040,11 +1057,14 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
    }
    if (essentials != TabStripModel::kNoTab) {
      // No tab of the Space's own: an essential on screen stays there, and
@@ -964,7 +977,44 @@ index c803bc9f2d0e2..ca66f44e38a22 100644
      }
      return;
    }
-@@ -1415,6 +1434,107 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
+@@ -1356,6 +1376,36 @@ void SpaceModel::RecordActivation(tabs::TabInterface* tab) {
+   if (!tab || cycle_ || !IsTabInActiveSpace(tab)) {
+     return;
+   }
++  // tabs R34 (2026-10-20): a session restore makes the window's first tab
++  // its active one as it fills the window, and selects the saved tab only
++  // once that tab is made; neither is a use. Counted, the first row the
++  // restore passed through was the row used last, and the first Cmd-W after
++  // a launch showed it. Once the restore is over, the tab on screen is.
++  if (profile_ && SessionRestore::IsRestoring(profile_)) {
++    if (!session_restored_) {
++      session_restored_ = SessionRestore::RegisterOnSessionRestoredCallback(
++          base::BindRepeating(&SpaceModel::OnSessionRestored,
++                              base::Unretained(this)));
++    }
++    return;
++  }
++  AddToHistory(tab);
++}
++
++void SpaceModel::OnSessionRestored(Profile* profile, int tabs_restored) {
++  if (profile != profile_) {
++    return;
++  }
++  session_restored_ = {};
++  // The restore still counts as under way while its callbacks run.
++  if (tabs::TabInterface* const active =
++          tab_strip_model_ ? tab_strip_model_->GetActiveTab() : nullptr;
++      active && !cycle_ && IsTabInActiveSpace(active)) {
++    AddToHistory(active);
++  }
++}
++
++void SpaceModel::AddToHistory(tabs::TabInterface* tab) {
+   std::vector<tabs::TabHandle>& history = history_[active_id_];
+   std::erase(history, tab->GetHandle());
+   history.insert(history.begin(), tab->GetHandle());
+@@ -1415,6 +1465,107 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
    return out;
  }
  
@@ -1073,10 +1123,18 @@ index c803bc9f2d0e2..ca66f44e38a22 100644
    if (!tab_strip_model_ || delta == 0) {
      return false;
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index 51abf9a01ac7a..683c43e82584e 100644
+index 51abf9a01ac7a..13c51742cc652 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
-@@ -260,6 +260,22 @@ class SpaceModel : public TabStripModelObserver,
+@@ -14,6 +14,7 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/callback_list.h"
+ #include "base/functional/callback.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/memory/raw_ptr.h"
+@@ -260,6 +261,22 @@ class SpaceModel : public TabStripModelObserver,
    std::vector<tabs::TabInterface*> RecentTabs(const SpaceId& id,
                                                size_t limit = 5) const;
  
@@ -1099,10 +1157,19 @@ index 51abf9a01ac7a..683c43e82584e 100644
    // switcher X1, X2: Ctrl-Tab. The first call of a run starts it: the recent
    // list of the active Space freezes so a held Ctrl walks it -- one step is
    // the previous tab, the next the one before that, wrapping -- and `delta`
-@@ -661,6 +677,10 @@ class SpaceModel : public TabStripModelObserver,
+@@ -659,8 +676,19 @@ class SpaceModel : public TabStripModelObserver,
+   std::map<SpaceId, tabs::TabHandle> last_active_;
+   // switcher X1: per Space, the tabs in most-recently-active order. `tab`
    // was just activated in the active Space; a run in progress freezes it.
++  // tabs R34: while a session restore fills the window, the tabs it selects
++  // on the way are not uses (OnSessionRestored).
    void RecordActivation(tabs::TabInterface* tab);
++  void AddToHistory(tabs::TabInterface* tab);
    std::map<SpaceId, std::vector<tabs::TabHandle>> history_;
++  // tabs R34: the restore is over; the tab on screen is the first the user
++  // has.
++  void OnSessionRestored(Profile* profile, int tabs_restored);
++  base::CallbackListSubscription session_restored_;
 +  // tabs R37: the essential the active Space used most recently, else the
 +  // first essential, never one of `leaving`; null when there is none.
 +  tabs::TabInterface* EssentialToShow(
@@ -2687,10 +2754,10 @@ index 8b39e3344729f..e928e4806f270 100644
      "//chrome/browser/ui/stedding:dark_pages",
 diff --git a/chrome/browser/ui/views/commandbar/address_row_controls.cc b/chrome/browser/ui/views/commandbar/address_row_controls.cc
 new file mode 100644
-index 0000000000000..ca771039a038b
+index 0000000000000..c624df1eda84d
 --- /dev/null
 +++ b/chrome/browser/ui/views/commandbar/address_row_controls.cc
-@@ -0,0 +1,251 @@
+@@ -0,0 +1,271 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -2711,6 +2778,7 @@ index 0000000000000..ca771039a038b
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 +#include "chrome/browser/ui/bubble_anchor_util.h"
 +#include "chrome/browser/ui/extensions/extensions_container.h"
++#include "chrome/browser/ui/global_media_controls/media_notification_service.h"
 +#include "chrome/browser/ui/global_media_controls/media_notification_service_factory.h"
 +#include "chrome/browser/ui/page_info/page_info_dialog.h"
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -2722,6 +2790,7 @@ index 0000000000000..ca771039a038b
 +#include "chrome/browser/ui/views/global_media_controls/media_toolbar_button.h"
 +#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 +#include "components/global_media_controls/public/constants.h"
++#include "components/global_media_controls/public/media_item_manager.h"
 +#include "content/public/browser/navigation_controller.h"
 +#include "content/public/browser/navigation_entry.h"
 +#include "content/public/browser/web_contents.h"
@@ -2868,8 +2937,16 @@ index 0000000000000..ca771039a038b
 +  if (g_media_controls_for_testing) {
 +    return g_media_controls_for_testing->available;
 +  }
-+  views::View* const button = MediaButtonView(browser);
-+  return button && button->GetVisible() && button->GetEnabled();
++  // A media session playing in the profile, as the toolbar's media button
++  // asks, not the button itself: the toolbar's layout hides the button
++  // while the row has no room -- a row hidden since the launch never had any
++  // -- and the bar listed no media controls (2026-10-20).
++  MediaNotificationService* const service =
++      browser ? MediaNotificationServiceFactory::GetForProfile(
++                    browser->GetProfile())
++              : nullptr;
++  return service && service->media_item_manager() &&
++         service->media_item_manager()->HasActiveItems();
 +}
 +
 +void ShowMediaControls(BrowserWindowInterface* browser) {
@@ -2879,14 +2956,24 @@ index 0000000000000..ca771039a038b
 +  }
 +  RunAfterTheBarCloses(base::BindOnce(
 +      [](base::WeakPtr<BrowserWindowInterface> browser) {
-+        views::View* const button = MediaButtonView(browser.get());
-+        if (!browser || !button) {
++        if (!browser) {
 +          return;
 +        }
 +        // The toolbar's button when it is drawn; else the page card's top
-+        // left, under the top container, as an extension's popup (T40).
++        // left, under the top container, as an extension's popup (T40). With
++        // the row drawn but too narrow for the button, the dialog hangs from
++        // the row's right end.
 +        const views::BubbleAnchor without_the_row =
 +            PopupAnchorWithoutTheRow(browser.get());
++        views::View* button = MediaButtonView(browser.get());
++        if (button && !button->IsDrawn()) {
++          BrowserView* const browser_view =
++              BrowserView::GetBrowserViewForBrowser(browser.get());
++          button = browser_view ? browser_view->toolbar() : nullptr;
++        }
++        if (!without_the_row && !button) {
++          return;
++        }
 +        Profile* const profile = browser->GetProfile();
 +        MediaDialogView::ShowDialog(
 +            without_the_row ? without_the_row : views::BubbleAnchor(button),
@@ -2944,7 +3031,7 @@ index 0000000000000..ca771039a038b
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/commandbar/address_row_controls.h b/chrome/browser/ui/views/commandbar/address_row_controls.h
 new file mode 100644
-index 0000000000000..b36eb81c96d64
+index 0000000000000..830164b683d9f
 --- /dev/null
 +++ b/chrome/browser/ui/views/commandbar/address_row_controls.h
 @@ -0,0 +1,86 @@
@@ -3001,9 +3088,9 @@ index 0000000000000..b36eb81c96d64
 +base::AutoReset<const std::vector<ExtensionActionRow>*>
 +SetExtensionActionRowsForTesting(const std::vector<ExtensionActionRow>* rows);
 +
-+// commandbar K32: whether the toolbar's media button would show (a media
-+// session in this profile), and the media dialog, anchored as toolbar T40
-+// says.
++// commandbar K32: whether a media session plays in this profile -- what the
++// toolbar's media button shows for, drawn or not -- and the media dialog,
++// anchored as toolbar T40 says.
 +bool MediaControlsAvailable(BrowserWindowInterface* browser);
 +void ShowMediaControls(BrowserWindowInterface* browser);
 +
@@ -3035,7 +3122,7 @@ index 0000000000000..b36eb81c96d64
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_COMMANDBAR_ADDRESS_ROW_CONTROLS_H_
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index 20e0ebbdf084e..62b7169efc7cc 100644
+index 20e0ebbdf084e..3402ce3e7149c 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -58,6 +58,7 @@
@@ -3063,7 +3150,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
  #include "ui/views/layout/box_layout.h"
  #include "ui/views/layout/layout_manager_base.h"
  #include "ui/views/layout/proposed_layout.h"
-@@ -157,6 +161,25 @@ constexpr SkAlpha kSelectedRowAlpha = 0x1F;
+@@ -157,6 +161,30 @@ constexpr SkAlpha kSelectedRowAlpha = 0x1F;
  // Stands in for the BrowserView in a test window (SetHostForTesting).
  views::View* g_host_for_testing = nullptr;
  
@@ -3071,6 +3158,11 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
 +// Mac and Ctrl+Alt elsewhere (windows N7), and the keys that are it.
 +#if BUILDFLAG(IS_MAC)
 +constexpr int kExtensionsChordModifiers = ui::EF_COMMAND_DOWN;
++// Escape with Cmd down did not reach the bar on the Mac: macOS 27 lists
++// Cmd-Escape among its enabled system shortcuts (2026-10-20). While the
++// chord is held, Cmd-Period, the Mac's cancel, does what Escape does.
++constexpr ui::Accelerator kHeldChordCancel(ui::VKEY_OEM_PERIOD,
++                                           ui::EF_COMMAND_DOWN);
 +// The Mac reports the right Command key as VKEY_APPS.
 +bool IsExtensionsChordModifier(ui::KeyboardCode key) {
 +  return key == ui::VKEY_COMMAND || key == ui::VKEY_RWIN ||
@@ -3089,7 +3181,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
  bool Matches(const std::u16string& haystack, const std::u16string& needle) {
    if (needle.empty()) {
      return true;
-@@ -410,6 +433,22 @@ class CommandBarView::ResultRow : public views::LabelButton {
+@@ -410,6 +438,22 @@ class CommandBarView::ResultRow : public views::LabelButton {
  BEGIN_METADATA(CommandBarView, ResultRow)
  END_METADATA
  
@@ -3112,7 +3204,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
  // static
  void CommandBarView::Show(BrowserWindowInterface* browser) {
    Show(browser, Mode::kTabs);
-@@ -453,6 +492,35 @@ void CommandBarView::Show(BrowserWindowInterface* browser,
+@@ -453,6 +497,35 @@ void CommandBarView::Show(BrowserWindowInterface* browser,
    }
  }
  
@@ -3148,7 +3240,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
  // static
  base::AutoReset<views::View*> CommandBarView::SetHostForTesting(
      views::View* host) {
-@@ -461,6 +529,11 @@ base::AutoReset<views::View*> CommandBarView::SetHostForTesting(
+@@ -461,6 +534,11 @@ base::AutoReset<views::View*> CommandBarView::SetHostForTesting(
  
  void CommandBarView::SetMode(Mode mode) {
    mode_ = mode;
@@ -3160,7 +3252,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    if (mode_ == Mode::kActions) {
      // K27: commands are not searched on a site; the query is the filter.
      ClearChip();
-@@ -487,6 +560,8 @@ void CommandBarView::Prefill(std::u16string text) {
+@@ -487,6 +565,8 @@ void CommandBarView::Prefill(std::u16string text) {
    field_->SelectAll(false);
    text_before_edit_ = text;
    selection_before_edit_ = field_->GetSelectedRange();
@@ -3169,7 +3261,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    UpdateResults(text, /*allow_inline=*/false);
  }
  
-@@ -599,6 +674,29 @@ void CommandBarView::BuildActions() {
+@@ -599,6 +679,29 @@ void CommandBarView::BuildActions() {
                   base::Unretained(browser_))});
        }
      }
@@ -3199,7 +3291,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
      // folders F30: the Space's folders, all at once. Each row is listed only
      // while it changes something on screen, and the chord is drawn on the
      // row it would run: Collapse while that is listed, else Expand.
-@@ -817,6 +915,31 @@ void CommandBarView::BuildActions() {
+@@ -817,6 +920,31 @@ void CommandBarView::BuildActions() {
          break;
      }
    }
@@ -3231,7 +3323,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    // dark-pages Dk19: the switch, its state in the title, in normal and
    // private windows alike: the switch is the profile's, which a private
    // window follows (Dk21), so it is not one of kBools, which private windows
-@@ -1024,6 +1147,19 @@ void CommandBarView::BuildActions() {
+@@ -1024,6 +1152,19 @@ void CommandBarView::BuildActions() {
              {5, u"5 minutes"},
              {15, u"15 minutes"},
              {60, u"1 hour"}}},
@@ -3251,7 +3343,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
        };
        for (const IntPref& pref : kInts) {
          const int value = prefs->GetInteger(pref.key);
-@@ -1052,6 +1188,10 @@ void CommandBarView::BuildActions() {
+@@ -1052,6 +1193,10 @@ void CommandBarView::BuildActions() {
  
  void CommandBarView::AddActionRows() {
    for (size_t i = 0; i < actions_.size(); ++i) {
@@ -3262,7 +3354,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
      if (Matches(actions_[i].title, query_) ||
          MatchesKeywords(actions_[i].title, actions_[i].keywords, query_)) {
        rows_.push_back({.kind = RowKind::kAction,
-@@ -1061,6 +1201,19 @@ void CommandBarView::AddActionRows() {
+@@ -1061,6 +1206,19 @@ void CommandBarView::AddActionRows() {
                         .mark = actions_[i].mark});
      }
    }
@@ -3282,7 +3374,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
  }
  
  void CommandBarView::Run(const Action& action) {
-@@ -1223,6 +1376,7 @@ void CommandBarView::Close() {
+@@ -1223,6 +1381,7 @@ void CommandBarView::Close() {
      return;
    }
    closing_ = true;
@@ -3290,7 +3382,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    views::FocusManager* const focus_manager = GetFocusManager();
    if (focus_manager) {
      focus_manager->RemoveFocusChangeListener(this);
-@@ -1266,6 +1420,7 @@ void CommandBarView::AddedToWidget() {
+@@ -1266,6 +1425,7 @@ void CommandBarView::AddedToWidget() {
  }
  
  void CommandBarView::RemovedFromWidget() {
@@ -3298,7 +3390,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    if (views::FocusManager* const focus_manager = GetFocusManager()) {
      focus_manager->RemoveFocusChangeListener(this);
    }
-@@ -1273,7 +1428,23 @@ void CommandBarView::RemovedFromWidget() {
+@@ -1273,7 +1433,29 @@ void CommandBarView::RemovedFromWidget() {
  }
  
  bool CommandBarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
@@ -3312,6 +3404,12 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
 +    MoveSelection(-1, /*wrap=*/true);
 +    return true;
 +  }
++#if BUILDFLAG(IS_MAC)
++  if (holding_chord_ && accelerator == kHeldChordCancel) {
++    Close();
++    return true;
++  }
++#endif
    if (accelerator.key_code() == ui::VKEY_ESCAPE) {
 +    // T39: the chord's bar closes on Escape and runs nothing, the modifier
 +    // held or not.
@@ -3322,7 +3420,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
      // Escape takes a site search chip away first, the query kept (K27).
      if (chip_) {
        LeaveSiteSearch();
-@@ -1379,6 +1550,14 @@ void CommandBarView::UpdateResults(const std::u16string& query,
+@@ -1379,6 +1561,14 @@ void CommandBarView::UpdateResults(const std::u16string& query,
      // Before the omnibox starts: its first answer can arrive inside Start()
      // and complete this row (K23).
      typed_row_ = rows_.back();
@@ -3337,7 +3435,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
      // K27: a site search the text names is offered under the typed row, so
      // Enter still does what K7 says; Tab, or Enter on this row, makes the
      // chip.
-@@ -1896,13 +2075,15 @@ bool CommandBarView::ActiveTabIsUntouchedNewTab() const {
+@@ -1896,13 +2086,15 @@ bool CommandBarView::ActiveTabIsUntouchedNewTab() const {
           contents->GetVisibleURL() == GURL(chrome::kChromeUINewTabURL);
  }
  
@@ -3356,7 +3454,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    if (next == selected_) {
      return;
    }
-@@ -2008,6 +2189,11 @@ void CommandBarView::RunRow(size_t index) {
+@@ -2008,6 +2200,11 @@ void CommandBarView::RunRow(size_t index) {
        // K27: the bar stays open, with the chip, for the query.
        EnterSiteSearch(row.keyword);
        return;
@@ -3368,7 +3466,7 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
    }
  }
  
-@@ -2193,6 +2379,82 @@ void CommandBarView::OnBeforeUserAction(views::Textfield* sender) {
+@@ -2193,6 +2390,97 @@ void CommandBarView::OnBeforeUserAction(views::Textfield* sender) {
    selection_before_edit_ = sender->GetSelectedRange();
  }
  
@@ -3434,6 +3532,15 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
 +  for (const ui::Accelerator& accelerator : HeldChordAccelerators()) {
 +    AddAccelerator(accelerator);
 +  }
++#if BUILDFLAG(IS_MAC)
++  // Ahead of the main menu: the window's key equivalents ask the focus
++  // manager's priority handlers before the menu, whose Stop has Cmd-Period.
++  if (views::FocusManager* const focus_manager = GetFocusManager()) {
++    focus_manager->RegisterAccelerator(
++        kHeldChordCancel, ui::AcceleratorManager::kHighPriority, this);
++    cancel_chord_manager_ = focus_manager;
++  }
++#endif
 +}
 +
 +void CommandBarView::EndHold() {
@@ -3446,16 +3553,30 @@ index 20e0ebbdf084e..62b7169efc7cc 100644
 +  for (const ui::Accelerator& accelerator : HeldChordAccelerators()) {
 +    RemoveAccelerator(accelerator);
 +  }
++#if BUILDFLAG(IS_MAC)
++  if (cancel_chord_manager_) {
++    cancel_chord_manager_->UnregisterAccelerator(kHeldChordCancel, this);
++    cancel_chord_manager_ = nullptr;
++  }
++#endif
 +}
 +
  bool CommandBarView::HandleKeyEvent(views::Textfield* sender,
                                      const ui::KeyEvent& event) {
    if (event.type() != ui::EventType::kKeyPressed) {
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.h b/chrome/browser/ui/views/commandbar/command_bar_view.h
-index 281b9883e86b0..2475c851c6b59 100644
+index 281b9883e86b0..9ec4cb4936fb0 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.h
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.h
-@@ -36,9 +36,11 @@ class TemplateURLService;
+@@ -15,6 +15,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/scoped_observation.h"
++#include "build/build_config.h"
+ #include "chrome/browser/ui/archive/archived_tabs.h"
+ #include "components/omnibox/browser/autocomplete_controller.h"
+ #include "components/omnibox/browser/autocomplete_result.h"
+@@ -36,9 +37,11 @@ class TemplateURLService;
  
  namespace ui {
  class AcceleratorProvider;
@@ -3467,7 +3588,7 @@ index 281b9883e86b0..2475c851c6b59 100644
  class Label;
  class ScrollView;
  class Textfield;
-@@ -81,6 +83,14 @@ class CommandBarView : public views::View,
+@@ -81,6 +84,14 @@ class CommandBarView : public views::View,
                     std::u16string prefill = std::u16string(),
                     bool replace_current_tab = false);
  
@@ -3482,7 +3603,7 @@ index 281b9883e86b0..2475c851c6b59 100644
    // A test window has no BrowserView. While the returned value lives, Show()
    // opens the bar in `host` instead, so a test reaches it through the
    // window's commands.
-@@ -159,6 +169,13 @@ class CommandBarView : public views::View,
+@@ -159,6 +170,13 @@ class CommandBarView : public views::View,
    };
    Classification ClassifyForTesting(const std::u16string& text) const;
  
@@ -3496,7 +3617,7 @@ index 281b9883e86b0..2475c851c6b59 100644
    // views::TextfieldController:
    void ContentsChanged(views::Textfield* sender,
                         const std::u16string& new_contents) override;
-@@ -203,6 +220,8 @@ class CommandBarView : public views::View,
+@@ -203,6 +221,8 @@ class CommandBarView : public views::View,
      kSiteSearch,
      // Opens a service's blank document in a new tab (K28).
      kNewDocument,
@@ -3505,7 +3626,7 @@ index 281b9883e86b0..2475c851c6b59 100644
    };
  
    // One row of the list. `rows_` is what the bar draws, what the arrow keys
-@@ -257,6 +276,9 @@ class CommandBarView : public views::View,
+@@ -257,6 +277,9 @@ class CommandBarView : public views::View,
      // row whose title names it by another word ("Add to Dock…" answers
      // "app" and "install"), each only from its start. Empty for most rows.
      std::u16string keywords;
@@ -3515,7 +3636,7 @@ index 281b9883e86b0..2475c851c6b59 100644
    };
    void SetMode(Mode mode);
    void Prefill(std::u16string text);
-@@ -318,8 +340,17 @@ class CommandBarView : public views::View,
+@@ -318,8 +341,17 @@ class CommandBarView : public views::View,
    // What row `row` draws: its title, and its detail at the right.
    static std::u16string RowText(const Row& row);
  
@@ -3535,7 +3656,7 @@ index 281b9883e86b0..2475c851c6b59 100644
  
    // The drawn view of row `index`, or null.
    views::View* RowView(size_t index);
-@@ -389,6 +420,16 @@ class CommandBarView : public views::View,
+@@ -389,6 +421,21 @@ class CommandBarView : public views::View,
    bool closing_ = false;
    // Set once the field has focus; focus changes before that are the bar's own.
    bool watching_focus_ = false;
@@ -3543,6 +3664,11 @@ index 281b9883e86b0..2475c851c6b59 100644
 +  // it; and the chord's modifier is still held.
 +  bool extensions_only_ = false;
 +  bool holding_chord_ = false;
++#if BUILDFLAG(IS_MAC)
++  // T39: the focus manager the hold registered Cmd-Period with, ahead of the
++  // main menu's Stop, which has the chord (HoldChord).
++  raw_ptr<views::FocusManager> cancel_chord_manager_ = nullptr;
++#endif
 +  class ChordWatcher;
 +  std::unique_ptr<ChordWatcher> chord_watcher_;
 +  std::unique_ptr<views::EventMonitor> chord_monitor_;
@@ -3553,7 +3679,7 @@ index 281b9883e86b0..2475c851c6b59 100644
        this};
    base::WeakPtrFactory<CommandBarView> weak_factory_{this};
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
-index c9dfd09a9ad9f..40171f67f4cd0 100644
+index c9dfd09a9ad9f..c0e85ae431b8a 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 @@ -13,6 +13,7 @@
@@ -3637,7 +3763,7 @@ index c9dfd09a9ad9f..40171f67f4cd0 100644
    };
  
    for (const Row& row : rows) {
-@@ -2367,4 +2409,243 @@ TEST_F(CommandBarViewTest, TheManageAppsRowOpensTheAppsPage) {
+@@ -2367,4 +2409,259 @@ TEST_F(CommandBarViewTest, TheManageAppsRowOpensTheAppsPage) {
              opened->GetContents()->GetVisibleURL());
  }
  
@@ -3766,6 +3892,22 @@ index c9dfd09a9ad9f..40171f67f4cd0 100644
 +    EXPECT_TRUE(runs_.empty());
 +    base::RunLoop().RunUntilIdle();
 +  }
++#if BUILDFLAG(IS_MAC)
++  {
++    // macOS 27 lists Cmd-Escape among its system shortcuts; Cmd-Period is
++    // the Mac's cancel.
++    SCOPED_TRACE("Cmd-Period with the modifier down");
++    CommandBarView* const bar = PressTheChord(host);
++    ASSERT_TRUE(bar);
++    PressTheChord(host);
++    EXPECT_TRUE(bar->AcceleratorPressed(
++        ui::Accelerator(ui::VKEY_OEM_PERIOD, ui::EF_COMMAND_DOWN)));
++    EXPECT_TRUE(bar->closing_for_testing());
++    bar->OnHeldChordEvent(ChordKeyReleased());
++    EXPECT_TRUE(runs_.empty());
++    base::RunLoop().RunUntilIdle();
++  }
++#endif
 +  {
 +    SCOPED_TRACE("a tap runs the first");
 +    CommandBarView* const bar = PressTheChord(host);
@@ -3955,6 +4097,61 @@ index cc05ccc30cb1a..8276d55b88edc 100644
    if (multi_contents_view_->IsInSplitView() ||
        !multi_contents_view_->IsDragAndDropEnabled()) {
      return nullptr;
+diff --git a/chrome/browser/ui/views/frame/top_container_view.cc b/chrome/browser/ui/views/frame/top_container_view.cc
+index 067596e00d174..35aaca242c412 100644
+--- a/chrome/browser/ui/views/frame/top_container_view.cc
++++ b/chrome/browser/ui/views/frame/top_container_view.cc
+@@ -14,6 +14,7 @@
+ #include "chrome/browser/ui/views/frame/stedding_window_background.h"
+ #include "chrome/browser/ui/views/frame/themed_background.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "base/i18n/rtl.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/views/paint_info.h"
+@@ -33,6 +34,30 @@ TopContainerView::TopContainerView(BrowserView* browser_view)
+ 
+ TopContainerView::~TopContainerView() = default;
+ 
++gfx::Rect TopContainerView::GetAnchorBoundsInScreen() const {
++  gfx::Rect bounds = views::View::GetAnchorBoundsInScreen();
++  // Stedding (toolbar T40): over the sidebar's rail the container spans the
++  // rail's column too, so a bubble hung from its leading end -- a popup of
++  // the address row asked for while the row is hidden -- opened over the
++  // rail (2026-10-20). Its anchor starts where the page card starts; the
++  // trailing end, where Chromium's bubbles hang from it, is left as it is.
++  const views::View* const card = browser_view_->contents_container();
++  if (!card || !card->IsDrawn()) {
++    return bounds;
++  }
++  const gfx::Rect card_bounds = card->GetBoundsInScreen();
++  if (base::i18n::IsRTL()) {
++    if (card_bounds.right() > bounds.x() &&
++        card_bounds.right() < bounds.right()) {
++      bounds.set_width(card_bounds.right() - bounds.x());
++    }
++  } else if (card_bounds.x() > bounds.x() &&
++             card_bounds.x() < bounds.right()) {
++    bounds.Inset(gfx::Insets::TLBR(0, card_bounds.x() - bounds.x(), 0, 0));
++  }
++  return bounds;
++}
++
+ bool TopContainerView::IsPositionInWindowCaption(
+     const gfx::Point& test_point) const {
+   ToolbarView* const toolbar = browser_view_->toolbar();
+diff --git a/chrome/browser/ui/views/frame/top_container_view.h b/chrome/browser/ui/views/frame/top_container_view.h
+index df8bba99aa9cc..6109c1f6d220f 100644
+--- a/chrome/browser/ui/views/frame/top_container_view.h
++++ b/chrome/browser/ui/views/frame/top_container_view.h
+@@ -31,6 +31,7 @@ class TopContainerView : public views::View {
+   // views::View overrides:
+   void PaintChildren(const views::PaintInfo& paint_info) override;
+   void ChildPreferredSizeChanged(views::View* child) override;
++  gfx::Rect GetAnchorBoundsInScreen() const override;
+ 
+  private:
+   // The parent of this view. Not owned.
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 index 70109ce58513f..9560aa979bb75 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
@@ -4878,6 +5075,29 @@ index 3bd8c25ee8f32..06a77f9e03be4 100644
    // Registers a callback that gets invoked when this is being destroyed.
    virtual base::CallbackListSubscription RegisterWillDestroyCallback(
        base::OnceClosure callback) = 0;
+diff --git a/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc b/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc
+index 210ab4487152d..d8205384cc88d 100644
+--- a/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc
++++ b/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc
+@@ -158,8 +158,16 @@ void ShowDiyAppInstallDialog(
+       .SetCloseActionCallback(base::BindOnce(
+           &WebAppInstallDialogDelegate::OnClose, delegate_weak_ptr))
+       .SetDialogDestroyingCallback(base::BindOnce(
+-          &WebAppInstallDialogDelegate::OnDestroyed, delegate_weak_ptr))
+-      .OverrideDefaultButton(ui::mojom::DialogButton::kCancel);
++          &WebAppInstallDialogDelegate::OnDestroyed, delegate_weak_ptr));
++  // Stedding web apps Wa23: Add (Install off the Mac) stays the default
++  // button, so Enter in the name field adds the app, as it accepts
++  // Chromium's other install dialogs. Chromium makes Cancel the default
++  // here, which a Mac dialog may not have (views::PlatformStyle), so on the
++  // Mac the dialog had no default button and Enter did nothing.
++  if (!base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    dialog_model_builder.OverrideDefaultButton(
++        ui::mojom::DialogButton::kCancel);
++  }
+ 
+   auto text_input_view = std::make_unique<SiteIconTextAndOriginView>(
+       icon_image, app_name,
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
 index ce04e3e707f51..577b199fc88a9 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
@@ -5190,10 +5410,10 @@ index 33fd489697678..39de516f47ddb 100644
      // can go into the back/forward cache. The cache is off for this tab, so a
 diff --git a/chrome/test/stedding/hidden_row_controls_browsertest.cc b/chrome/test/stedding/hidden_row_controls_browsertest.cc
 new file mode 100644
-index 0000000000000..19f6c5a3203a5
+index 0000000000000..0abe7970579c9
 --- /dev/null
 +++ b/chrome/test/stedding/hidden_row_controls_browsertest.cc
-@@ -0,0 +1,428 @@
+@@ -0,0 +1,537 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -5229,8 +5449,10 @@ index 0000000000000..19f6c5a3203a5
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 +#include "chrome/browser/ui/extensions/extensions_container.h"
 +#include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
 +#include "chrome/browser/ui/tabs/tab_enums.h"
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 +#include "chrome/browser/ui/toolbar/toolbar_action_view_model.h"
 +#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 +#include "chrome/browser/ui/views/commandbar/address_row_controls.h"
@@ -5238,11 +5460,13 @@ index 0000000000000..19f6c5a3203a5
 +#include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/browser/ui/views/frame/top_container_view.h"
 +#include "chrome/browser/ui/views/global_media_controls/media_dialog_view.h"
++#include "chrome/browser/ui/views/global_media_controls/media_toolbar_button.h"
 +#include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
 +#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
 +#include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/prefs/pref_service.h"
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/render_widget_host_view.h"
 +#include "content/public/browser/web_contents.h"
@@ -5257,6 +5481,7 @@ index 0000000000000..19f6c5a3203a5
 +#include "ui/base/accelerators/accelerator.h"
 +#include "ui/events/event.h"
 +#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/events/test/event_generator.h"
 +#include "ui/gfx/geometry/rect.h"
 +#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 +#include "ui/views/controls/textfield/textfield.h"
@@ -5264,14 +5489,17 @@ index 0000000000000..19f6c5a3203a5
 +#include "ui/views/focus/focus_manager.h"
 +#include "ui/views/test/views_test_utils.h"
 +#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_utils.h"
 +#include "url/gurl.h"
 +
 +namespace {
 +
 +#if BUILDFLAG(IS_MAC)
 +constexpr ui::KeyboardCode kChordKey = ui::VKEY_COMMAND;
++constexpr int kChordFlags = ui::EF_COMMAND_DOWN;
 +#else
 +constexpr ui::KeyboardCode kChordKey = ui::VKEY_CONTROL;
++constexpr int kChordFlags = ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN;
 +#endif
 +
 +class HiddenRowControlsTest : public InProcessBrowserTest {
@@ -5328,6 +5556,20 @@ index 0000000000000..19f6c5a3203a5
 +    ExtensionsContainer* const container =
 +        ExtensionsContainer::From(*browser());
 +    return container ? container->GetActionForId(extension.id()) : nullptr;
++  }
++
++  // The widget of `action`'s popup, or null. The popup's native view is its
++  // page's, inside the popup's widget: on the Mac any view of a window finds
++  // the window's widget, but on Aura only the widget's own window does, and
++  // the page's is a child of it, so the lookup walks up to the popup, a
++  // window of its own and never the browser's.
++  views::Widget* PopupWidget(ToolbarActionViewModel* action) {
++    views::Widget* const popup =
++        action->IsShowingPopup()
++            ? views::Widget::GetTopLevelWidgetForNativeView(
++                  action->GetPopupNativeView())
++            : nullptr;
++    return popup != widget() ? popup : nullptr;
 +  }
 +
 +  void HideTheRow() {
@@ -5443,10 +5685,7 @@ index 0000000000000..19f6c5a3203a5
 +    ToolbarActionViewModel* const action = ActionOf(*popup);
 +    ASSERT_TRUE(action);
 +    ASSERT_TRUE(base::test::RunUntil([&]() {
-+      views::Widget* const shown = action->IsShowingPopup()
-+                                       ? views::Widget::GetWidgetForNativeView(
-+                                             action->GetPopupNativeView())
-+                                       : nullptr;
++      views::Widget* const shown = PopupWidget(action);
 +      return shown && shown->IsVisible();
 +    })) << "no popup";
 +    ExpectTheRowHidden();
@@ -5534,9 +5773,9 @@ index 0000000000000..19f6c5a3203a5
 +
 +// toolbar T40: a popup asked for while the row is not drawn opens inside the
 +// window, in the page card's top half and not over the sidebar: an
-+// extension's popup and the media dialog under the top container's right
-+// end, page info at the card's top left. The row stays hidden, and when the
-+// popup closes the page has the focus (commandbar K1).
++// extension's popup and the media dialog hang from the top container at the
++// card's top left, page info from the card's corner. The row stays hidden,
++// and when the popup closes the page has the focus (commandbar K1).
 +IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest,
 +                       APopupWithoutTheRowOpensInsideThePage) {
 +  const scoped_refptr<const extensions::Extension> popup =
@@ -5553,9 +5792,7 @@ index 0000000000000..19f6c5a3203a5
 +    ASSERT_TRUE(action);
 +    views::Widget* shown = nullptr;
 +    ASSERT_TRUE(base::test::RunUntil([&]() {
-+      shown = action->IsShowingPopup() ? views::Widget::GetWidgetForNativeView(
-+                                             action->GetPopupNativeView())
-+                                       : nullptr;
++      shown = PopupWidget(action);
 +      // The popup shows small and grows to its page's size.
 +      return shown && shown->IsVisible() &&
 +             shown->GetWindowBoundsInScreen().width() >= 240 &&
@@ -5620,6 +5857,98 @@ index 0000000000000..19f6c5a3203a5
 +    MediaDialogView::HideDialog();
 +  }
 +}
++
++// toolbar T39: Escape pressed while the chord's modifier is still down, as a
++// keyboard sends it -- to the window, with the modifier's flag -- closes the
++// chord's bar and runs nothing, then or when the modifier is let go. On the
++// Mac the bar stayed open until a plain Escape (2026-10-20).
++IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, EscapeWithTheChordHeldClosesIt) {
++  const scoped_refptr<const extensions::Extension> popup =
++      LoadAction("Stedding Popup Probe", /*popup=*/true);
++  ASSERT_TRUE(popup);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("site.test", "/title1.html")));
++  widget()->Activate();
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_STEDDING_RUN_EXTENSION));
++  stedding::CommandBarView* const bar =
++      stedding::CommandBarView::GetOpenBar(browser_view());
++  ASSERT_TRUE(bar);
++  ASSERT_TRUE(bar->holding_chord_for_testing());
++  EXPECT_TRUE(bar->field_for_testing()->HasFocus());
++
++  ui::test::EventGenerator generator(views::GetRootWindow(widget()),
++                                     widget()->GetNativeWindow());
++  // On the Mac through the window as the application hands a key over: the
++  // window's key equivalents first, since the modifier is down, then its
++  // first responder.
++  generator.set_target(ui::test::EventGenerator::Target::WINDOW);
++  generator.PressKey(ui::VKEY_ESCAPE, kChordFlags);
++  generator.ReleaseKey(ui::VKEY_ESCAPE, kChordFlags);
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return !stedding::CommandBarView::GetOpenBar(browser_view());
++  })) << "Escape with the modifier down left the bar open";
++  ToolbarActionViewModel* const action = ActionOf(*popup);
++  ASSERT_TRUE(action);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(action->IsShowingPopup()) << "the chosen extension ran";
++}
++
++#if BUILDFLAG(IS_MAC)
++// commandbar K32, toolbar T40 (2026-10-20): the row hidden with the sidebar
++// in its rail (the setting that hides it with the sidebar, T8; off the Mac
++// the caption buttons keep the row, T22), and a page playing a clip with
++// sound. The row Show Media Controls follows the playing session, not the
++// toolbar's media button: with the button hidden, as the toolbar's layout
++// hides it when the row has no room for it, the row is still listed. The bar
++// had read the button and said "No matching command". Its dialog opens at
++// the page card's top left, not over the rail.
++IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest,
++                       TheMediaRowFollowsThePlayingSessionNotTheButton) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL(
++                     "site.test", "/media/session/video-with-metadata.html")));
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      stedding::prefs::kToolbarHideWithSidebar, true);
++  tabs::VerticalTabStripStateController* const sidebar =
++      tabs::VerticalTabStripStateController::From(browser());
++  ASSERT_TRUE(sidebar);
++  ASSERT_TRUE(sidebar->ShouldDisplayVerticalTabs());
++  sidebar->RequestCollapse(true);
++  ASSERT_TRUE(base::test::RunUntil([&]() { return sidebar->IsCollapsed(); }));
++  views::test::RunScheduledLayout(widget());
++  ASSERT_FALSE(browser_view()->IsToolbarVisible());
++
++  content::MediaStartStopObserver started(
++      page(), content::MediaStartStopObserver::Type::kStart);
++  page()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
++      u"play()", base::NullCallback(), content::ISOLATED_WORLD_ID_GLOBAL);
++  started.Wait();
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return stedding::MediaControlsAvailable(browser());
++  })) << "no media row while the clip plays";
++  views::View* const button =
++      browser_view()->toolbar()->media_button()->GetBubbleAnchor().GetIfView();
++  ASSERT_TRUE(button);
++  button->SetVisible(false);
++  EXPECT_TRUE(stedding::MediaControlsAvailable(browser()))
++      << "the row follows the toolbar's button, not the playing session";
++
++  ASSERT_NO_FATAL_FAILURE(RunRow(u"Show Media Controls"));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    MediaDialogView* const dialog = MediaDialogView::GetDialogViewForTesting();
++    return dialog && dialog->GetWidget() && dialog->GetWidget()->IsVisible();
++  })) << "no media dialog";
++  const gfx::Rect shown = MediaDialogView::GetDialogViewForTesting()
++                              ->GetWidget()
++                              ->GetWindowBoundsInScreen();
++  ExpectInTheCardsTopHalf(shown, "the media dialog");
++  const gfx::Rect card =
++      browser_view()->contents_container()->GetBoundsInScreen();
++  EXPECT_LE(shown.x(), card.x() + 16) << "the dialog is not at the card's left";
++  ExpectTheRowHidden();
++  MediaDialogView::HideDialog();
++}
++#endif  // BUILDFLAG(IS_MAC)
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/hover_card_picture_browsertest.cc b/chrome/test/stedding/hover_card_picture_browsertest.cc
@@ -6345,6 +6674,68 @@ index 0000000000000..b15ecba90853d
 +}
 +
 +}  // namespace
+diff --git a/chrome/test/stedding/make_app_browsertest.cc b/chrome/test/stedding/make_app_browsertest.cc
+index d208081f3b852..50ced16dddbec 100644
+--- a/chrome/test/stedding/make_app_browsertest.cc
++++ b/chrome/test/stedding/make_app_browsertest.cc
+@@ -57,13 +57,18 @@
+ #include "content/public/test/browser_test_utils.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
+ #include "ui/base/window_open_disposition.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/events/test/event_generator.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/test/widget_test.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/any_widget_observer.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/widget/widget_delegate.h"
++#include "ui/views/widget/widget_utils.h"
+ #include "ui/views/window/dialog_delegate.h"
+ #include "url/gurl.h"
+ 
+@@ -420,4 +425,38 @@ IN_PROC_BROWSER_TEST_F(MakeAppTest, TheAppWindowHasNoSidebarSpacesOrCard) {
+       menu.GetModelAndIndexForCommandId(IDC_STEDDING_MAKE_APP, &model, &index));
+ }
+ 
++// web apps Wa23 (2026-10-20): Enter in the dialog for a page without a
++// manifest -- its name field has the focus -- adds the app, as Return takes
++// the default button of Chromium's other install dialogs. Chromium makes this
++// dialog's Cancel the default, which the Mac's dialogs refuse to be, so on
++// the Mac it had no default button and Enter did nothing.
++IN_PROC_BROWSER_TEST_F(MakeAppTest, EnterInTheDialogAddsTheApp) {
++  OpenPage(PageUrl("a.test"));
++  views::Widget* dialog = nullptr;
++  views::AnyWidgetObserver dialogs(views::test::AnyWidgetTestPasskey{});
++  dialogs.set_shown_callback(
++      base::BindLambdaForTesting([&](views::Widget* widget) {
++        if (widget->GetName() == "WebAppDiyInstallDialog") {
++          dialog = widget;
++        }
++      }));
++  chrome::ExecuteCommand(browser(), IDC_STEDDING_MAKE_APP);
++  ASSERT_TRUE(base::test::RunUntil([&]() { return dialog != nullptr; }))
++      << "no install dialog for a page without a manifest";
++  views::DialogDelegate* const delegate =
++      dialog->widget_delegate()->AsDialogDelegate();
++  ASSERT_TRUE(delegate);
++  EXPECT_TRUE(delegate->GetIsDefault(ui::mojom::DialogButton::kOk))
++      << "Add is not the default button";
++
++  ui_test_utils::BrowserCreatedObserver created;
++  dialog->Activate();
++  ui::test::EventGenerator generator(views::GetRootWindow(dialog),
++                                     dialog->GetNativeWindow());
++  generator.PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
++  BrowserWindowInterface* const app = created.Wait();
++  ASSERT_TRUE(app) << "Enter added no app";
++  EXPECT_TRUE(web_app::AppBrowserController::IsWebApp(app));
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/settings_security_browsertest.cc b/chrome/test/stedding/settings_security_browsertest.cc
 index 50efbad65b66c..2e6d7ec490aeb 100644
 --- a/chrome/test/stedding/settings_security_browsertest.cc
@@ -6435,10 +6826,10 @@ index 5f897d64f4320..332df625369a9 100644
      // windows N5, N7: the page asks for the shortcut reference on every
      // platform, its handler answers on every platform -- a message nobody
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index 2418549ba9a43..87981a6941516 100644
+index 2418549ba9a43..49ddc2b32f256 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
-@@ -1179,6 +1179,79 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPaneOfASplitKeepsTheOther) {
+@@ -1179,6 +1179,88 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPaneOfASplitKeepsTheOther) {
    ASSERT_NO_FATAL_FAILURE(CollapseSidebar());
  }
  
@@ -6470,11 +6861,16 @@ index 2418549ba9a43..87981a6941516 100644
 +    ASSERT_NO_FATAL_FAILURE(ClickEachRow({index(tab)}));
 +  }
 +
++  // Their handles, read while the tabs live: a close frees the tab at once.
++  const tabs::TabHandle a_handle = a->GetHandle();
++  const tabs::TabHandle b_handle = b->GetHandle();
++  const tabs::TabHandle d_handle = d->GetHandle();
++  const tabs::TabHandle e_handle = e->GetHandle();
++
 +  // `closing` goes; then `shown` is the tab on screen, its row drawn.
-+  const auto expect_shown_after = [&](tabs::TabInterface* closing,
++  const auto expect_shown_after = [&](tabs::TabHandle closing,
 +                                      tabs::TabInterface* shown) {
-+    const tabs::TabHandle handle = closing->GetHandle();
-+    ASSERT_TRUE(base::test::RunUntil([&]() { return !handle.Get(); }))
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !closing.Get(); }))
 +        << "the row did not close";
 +    ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
 +    EXPECT_EQ(shown, tab_strip_model()->GetActiveTab());
@@ -6485,7 +6881,8 @@ index 2418549ba9a43..87981a6941516 100644
 +  {
 +    SCOPED_TRACE("Cmd-W on e");
 +    chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
-+    ASSERT_NO_FATAL_FAILURE(expect_shown_after(e, b));  // Not d, above it.
++    // Not d, above it.
++    ASSERT_NO_FATAL_FAILURE(expect_shown_after(e_handle, b));
 +  }
 +  {
 +    SCOPED_TRACE("the close button on b's row");
@@ -6497,7 +6894,8 @@ index 2418549ba9a43..87981a6941516 100644
 +    views::View* const button = row->close_button_for_testing();
 +    ASSERT_TRUE(button->GetVisible()) << "the hovered row has no close button";
 +    ClickAt(button->GetBoundsInScreen().CenterPoint());
-+    ASSERT_NO_FATAL_FAILURE(expect_shown_after(b, d));  // Not c, below it.
++    // Not c, below it.
++    ASSERT_NO_FATAL_FAILURE(expect_shown_after(b_handle, d));
 +  }
 +  {
 +    SCOPED_TRACE("a middle click on d's row");
@@ -6505,12 +6903,14 @@ index 2418549ba9a43..87981a6941516 100644
 +    TabView* const row = RowFor(index(d));
 +    ASSERT_TRUE(row);
 +    MiddleClickAt(row->GetBoundsInScreen().CenterPoint());
-+    ASSERT_NO_FATAL_FAILURE(expect_shown_after(d, a));  // Not c, above it.
++    // Not c, above it.
++    ASSERT_NO_FATAL_FAILURE(expect_shown_after(d_handle, a));
 +  }
 +  {
 +    SCOPED_TRACE("a's page closes itself");
 +    content::ExecuteScriptAsync(a->GetContents(), "window.close();");
-+    ASSERT_NO_FATAL_FAILURE(expect_shown_after(a, first));  // Not c.
++    // Not c.
++    ASSERT_NO_FATAL_FAILURE(expect_shown_after(a_handle, first));
 +  }
 +  EXPECT_EQ(2, tab_strip_model()->count());
 +}
@@ -6824,6 +7224,94 @@ index 0000000000000..52ed82fa140a7
 +}
 +
 +}  // namespace
+diff --git a/chrome/test/stedding/space_keys_browsertest.mm b/chrome/test/stedding/space_keys_browsertest.mm
+index 42bdcb43fa6f2..5b811ae8567fc 100644
+--- a/chrome/test/stedding/space_keys_browsertest.mm
++++ b/chrome/test/stedding/space_keys_browsertest.mm
+@@ -11,16 +11,21 @@
+ #import <Carbon/Carbon.h>
+ #import <Cocoa/Cocoa.h>
+ 
++#include "base/run_loop.h"
+ #include "base/test/run_until.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/global_keyboard_shortcuts_mac.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/views/commandbar/command_bar_view.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "content/public/test/browser_test.h"
+ #include "ui/base/window_open_disposition.h"
+ #include "ui/events/test/cocoa_test_event_utils.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/views/widget/widget.h"
+ #include "url/gurl.h"
+ 
+ namespace {
+@@ -125,4 +130,61 @@ IN_PROC_BROWSER_TEST_F(SpaceKeysTest, TheCoreChordsReachTheirCommands) {
+   }
+ }
+ 
++// toolbar T39 (2026-10-20): the extensions chord as the keyboard sends it on
++// the Mac, through the application's event queue -- where the bar's watch
++// on the held modifier sees each key before the window does -- and then the
++// window: Cmd down, E, then Escape with Cmd still down closes the bar, which
++// lists Manage Extensions alone, and letting go of Cmd runs nothing; so does
++// Cmd-Period, since macOS 27 lists Cmd-Escape among its system shortcuts and
++// a keyboard's did not reach the bar (it stayed open until a plain Escape).
++IN_PROC_BROWSER_TEST_F(SpaceKeysTest, EscapeWithTheExtensionsChordHeld) {
++  BrowserView* const view = BrowserView::GetBrowserViewForBrowser(browser());
++  ASSERT_TRUE(view);
++  view->GetWidget()->Activate();
++  NSWindow* const window =
++      view->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++  const auto post = [&](ui::KeyboardCode key, bool down, NSUInteger flags) {
++    NSEvent* const event =
++        cocoa_test_event_utils::SynthesizeKeyEvent(window, down, key, flags);
++    ASSERT_TRUE(event);
++    [NSApp postEvent:event atStart:NO];
++  };
++  post(ui::VKEY_COMMAND, true, NSEventModifierFlagCommand);
++  post(ui::VKEY_E, true, NSEventModifierFlagCommand);
++  post(ui::VKEY_E, false, NSEventModifierFlagCommand);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    stedding::CommandBarView* const bar =
++        stedding::CommandBarView::GetOpenBar(view);
++    return bar && bar->holding_chord_for_testing();
++  })) << "Cmd-E opened no bar";
++  post(ui::VKEY_ESCAPE, true, NSEventModifierFlagCommand);
++  post(ui::VKEY_ESCAPE, false, NSEventModifierFlagCommand);
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return !stedding::CommandBarView::GetOpenBar(view);
++  })) << "Escape with Cmd down left the bar open";
++  post(ui::VKEY_COMMAND, false, 0);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(stedding::CommandBarView::GetOpenBar(view));
++
++  // macOS 27 lists Cmd-Escape among its system shortcuts: Cmd-Period, the
++  // Mac's cancel, closes the bar too, ahead of the main menu's Stop, which
++  // has the chord.
++  post(ui::VKEY_COMMAND, true, NSEventModifierFlagCommand);
++  post(ui::VKEY_E, true, NSEventModifierFlagCommand);
++  post(ui::VKEY_E, false, NSEventModifierFlagCommand);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    stedding::CommandBarView* const bar =
++        stedding::CommandBarView::GetOpenBar(view);
++    return bar && bar->holding_chord_for_testing();
++  })) << "Cmd-E opened no bar";
++  post(ui::VKEY_OEM_PERIOD, true, NSEventModifierFlagCommand);
++  post(ui::VKEY_OEM_PERIOD, false, NSEventModifierFlagCommand);
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return !stedding::CommandBarView::GetOpenBar(view);
++  })) << "Cmd-Period with Cmd down left the bar open";
++  post(ui::VKEY_COMMAND, false, 0);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(stedding::CommandBarView::GetOpenBar(view));
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/space_switch_browsertest.cc b/chrome/test/stedding/space_switch_browsertest.cc
 index a8d89fb0ced25..f197f8567b25b 100644
 --- a/chrome/test/stedding/space_switch_browsertest.cc
@@ -6862,10 +7350,10 @@ index a8d89fb0ced25..f197f8567b25b 100644
  }
 diff --git a/chrome/test/stedding/startup_load_browsertest.cc b/chrome/test/stedding/startup_load_browsertest.cc
 new file mode 100644
-index 0000000000000..a6c9c849c9178
+index 0000000000000..ef81e9870337d
 --- /dev/null
 +++ b/chrome/test/stedding/startup_load_browsertest.cc
-@@ -0,0 +1,424 @@
+@@ -0,0 +1,549 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -6889,6 +7377,7 @@ index 0000000000000..a6c9c849c9178
 +#include <string_view>
 +#include <vector>
 +
++#include "base/command_line.h"
 +#include "base/files/file_path.h"
 +#include "base/files/file_util.h"
 +#include "base/notreached.h"
@@ -6901,6 +7390,7 @@ index 0000000000000..a6c9c849c9178
 +#include "chrome/browser/favicon/favicon_service_factory.h"
 +#include "chrome/browser/prefs/session_startup_pref.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 +#include "chrome/browser/ui/spaces/space.h"
 +#include "chrome/browser/ui/spaces/space_id.h"
@@ -6931,6 +7421,8 @@ index 0000000000000..a6c9c849c9178
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/test/browser_test.h"
 +#include "net/base/filename_util.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "third_party/skia/include/core/SkBitmap.h"
 +#include "third_party/skia/include/core/SkColor.h"
 +#include "ui/base/window_open_disposition.h"
@@ -7287,6 +7779,127 @@ index 0000000000000..a6c9c849c9178
 +  ASSERT_EQ(tabs::TabCollection::Type::FOLDER, folder->type());
 +  EXPECT_TRUE(static_cast<const tabs::FolderTabCollection*>(folder)
 +                  ->collapsed());
++}
++
++// tabs R34 after a relaunch (BACKLOG S-112, 2026-10-20): one Space of four
++// rows, all of them back from the session, the last one selected. As the
++// restore fills the window, the window's first row is its active tab until
++// the saved selection is made (on the Mac its page even begins to load, R46's
++// seam); that counted as a use of the first row, so the first Cmd-W after a
++// launch showed it instead of the row above the closed one. A restored row
++// counts once the user selects it.
++class RestoredCloseTest : public StartupLoadTest {};
++
++IN_PROC_BROWSER_TEST_F(RestoredCloseTest,
++                       PRE_TheFirstCloseAfterALaunchShowsTheRowAbove) {
++  WritePages();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), PageUrl('p')));
++  Open(PageUrl('s'));
++  Open(PageUrl('t'));
++  tabs::TabInterface* const f = Open(PageUrl('f'));
++  ASSERT_EQ(4, tabs()->count()) << Describe();
++  ASSERT_EQ(f, tabs()->GetActiveTab());
++}
++
++IN_PROC_BROWSER_TEST_F(RestoredCloseTest,
++                       TheFirstCloseAfterALaunchShowsTheRowAbove) {
++  ASSERT_EQ(4, tabs()->count()) << Describe();
++  tabs::TabInterface* const p = Find('p');
++  tabs::TabInterface* const s = Find('s');
++  tabs::TabInterface* const t = Find('t');
++  tabs::TabInterface* const f = Find('f');
++  ASSERT_TRUE(p && s && t && f) << Describe();
++  ASSERT_EQ(0, Index(p)) << Describe();
++  ASSERT_EQ(f, tabs()->GetActiveTab()) << "the saved selection, of"
++                                       << Describe();
++
++  // Cmd-W on the last row: no row has been used since the launch, so the
++  // row above it shows, not the window's first row.
++  chrome::CloseTab(browser());
++  ASSERT_TRUE(base::test::RunUntil([&]() { return tabs()->count() == 3; }));
++  EXPECT_EQ(t, tabs()->GetActiveTab())
++      << "the row above the closed one, of" << Describe();
++
++  // A restored row counts once the user selects it: the first row, then the
++  // second; closing the second shows the first.
++  tabs()->ActivateTabAt(
++      Index(p), TabStripUserGestureDetails(
++                    TabStripUserGestureDetails::GestureType::kMouse));
++  tabs()->ActivateTabAt(
++      Index(s), TabStripUserGestureDetails(
++                    TabStripUserGestureDetails::GestureType::kMouse));
++  chrome::CloseTab(browser());
++  ASSERT_TRUE(base::test::RunUntil([&]() { return tabs()->count() == 2; }));
++  EXPECT_EQ(p, tabs()->GetActiveTab())
++      << "the row used before the closed one, of" << Describe();
++}
++
++// tabs R46 (2026-10-20): addresses given on the command line are not a
++// restore. In a fresh profile each of them loads at launch, as Chromium loads
++// them, whatever "On startup, load" says. (The Mac app's own launches that
++// lost some of these requests that day are not reproduced here.)
++class CommandLineTabsTest : public InProcessBrowserTest {
++ public:
++  CommandLineTabsTest() { set_open_about_blank_on_browser_launch(false); }
++
++ protected:
++  static constexpr std::string_view kHosts = "abcde";
++
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
++    for (const char host : kHosts) {
++      command_line->AppendArg(Url(host).spec());
++    }
++  }
++
++  void SetUpInProcessBrowserTestFixture() override {
++    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
++    // Before the launch opens the addresses.
++    host_resolver()->AddRule("*.test", "127.0.0.1");
++    embedded_test_server()->StartAcceptingConnections();
++  }
++
++  GURL Url(char host) {
++    return embedded_test_server()->GetURL(std::string(1, host) + ".test",
++                                          "/title2.html");
++  }
++
++  TabStripModel* tabs() { return browser()->GetTabStripModel(); }
++
++  std::string Describe() {
++    std::string out;
++    for (int i = 0; i < tabs()->count(); ++i) {
++      content::WebContents* const contents = tabs()->GetWebContentsAt(i);
++      out += "\n  " + std::string(contents->GetVisibleURL().host()) +
++             (i == tabs()->active_index() ? " active" : "") +
++             (tabs()->IsTabHidden(i) ? " hidden" : "") +
++             (contents->WasDiscarded() ? " discarded" : "") +
++             (contents->IsLoading() ? " loading" : "") +
++             (contents->GetController().NeedsReload() ? " needs-reload" : "") +
++             (contents->GetController().GetPendingEntry() ? " pending" : "") +
++             (contents->GetPrimaryMainFrame()->IsRenderFrameLive() ? " live"
++                                                                   : "") +
++             " committed=" +
++             contents->GetPrimaryMainFrame()->GetLastCommittedURL().spec();
++    }
++    return out;
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(CommandLineTabsTest, EveryAddressLoadsAtLaunch) {
++  ASSERT_EQ(static_cast<int>(kHosts.size()), tabs()->count()) << Describe();
++  for (int i = 0; i < tabs()->count(); ++i) {
++    const GURL url = Url(kHosts[i]);
++    SCOPED_TRACE(url.host());
++    content::WebContents* const contents = tabs()->GetWebContentsAt(i);
++    ASSERT_EQ(url, contents->GetVisibleURL()) << Describe();
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return contents->GetPrimaryMainFrame()->GetLastCommittedURL() == url &&
++             !contents->IsLoading();
++    })) << "it never loaded, of" << Describe();
++    EXPECT_FALSE(contents->WasDiscarded()) << Describe();
++  }
 +}
 +
 +}  // namespace

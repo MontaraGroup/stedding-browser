@@ -164,7 +164,10 @@ patch 0060), and `tooling/capture-state
 into the fresh profile; `--seed grey-dark` writes dark mode with Customize Chrome's Grey
 (`browser.theme.color_scheme2` 2, `browser.theme.is_grayscale2`), the colour key a
 private window has; `--seed light` and `--seed dark` set the window's scheme whatever
-macOS is set to.
+macOS is set to; `--seed horizontal` (or `horizontal-light`, `horizontal-dark`) turns vertical
+tabs off, for Chromium's horizontal strip. A split, a tab group or pinned tabs in that strip
+come from an unpacked extension passed as `--load-extension=<dir>` with `--features
+ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
 
 ## Traps this project already paid for (do not rediscover)
 
@@ -964,7 +967,9 @@ macOS is set to.
     session, but Task Scheduler starts it below normal priority, and Chromium's test suite stops
     before it lists a test (`Check failed: !IsProcessBackgrounded()`, `base\test\test_suite.cc`).
     The task's script raises itself first, `(Get-Process -Id $PID).PriorityClass = 'Normal'`,
-    and what it starts inherits that. Even then the four tests that drag a row
+    and what it starts inherits that. That raises the processor priority only: the task's
+    disk and memory priorities stay low unless the task itself is made at priority 4 (trap
+    99). Even then the four tests that drag a row
     (`SidebarClickTest.EveryPartOfEveryRowSelects` and the three `TabDropTest` drags, trap 56's
     set) failed there on every run, most likely because Windows gives the mouse capture a drag
     needs only to the foreground window, and a task's window may not take the foreground from
@@ -1340,8 +1345,16 @@ macOS is set to.
     four runs on `win-release` and `win-checks` (2026-10-18):
     `SidebarNoBackupTest.AnHourOfAWindowWritesNoBackup`, which fast-forwards an hour,
     `SleepTabsTest.SpaceTimerLeavesTabsInUseAwake` and `TabArchiverTest.TimerSweeps`. The
-    same leg run over SSH passed every test, in seconds. Why the task's run starves them is
-    not known. Run the unit legs over SSH and the browser legs from the task.
+    same leg run over SSH passed every test, in seconds. The cause (found 2026-10-20): Task
+    Scheduler starts a task at its default priority 7, which gives the task's processes a low
+    disk priority (1) and memory priority (2), and the children inherit both; raising
+    `PriorityClass` in the script (trap 67) changes neither. Every `FastForwardBy` waits for the
+    thread pool to go idle, and there Chromium's own profile services were opening their
+    databases on the starved disk, one load taking 30 s. Make the task at priority 4 right
+    after `schtasks /Create`:
+    `$t = Get-ScheduledTask -TaskName <name>; $t.Settings.Priority = 4; Set-ScheduledTask -InputObject $t`.
+    So made, the unit leg passed 985 of 985 in 15 s on `win-release`, and 972 of 972 in 41 s
+    with four disk writers running beside it.
 
 100. **A test binary still running from an output directory makes the next link into it
     fail.** On 2026-10-18 the PC's `win-asan` build of the round's code stopped with

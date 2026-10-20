@@ -1,0 +1,3481 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Tue, 20 Oct 2026 14:14:40 -0400
+Subject: ui: a split's row in each pane's colour, the strip on top as pills,
+ the rail on one line
+
+The owner's look notes of 2026-10-20, in one patch because they share the
+window background, the colour mixer and the tab views:
+
+- The address row over a split (toolbar T41, splits J16): over each pane,
+  that pane's page colour, exactly as wide as the pane; over the gap, a blend
+  from one to the other, 6 DIP past each side, and the hairline under the row
+  blends the same way. Stacked, the upper pane's colour. A pane with no colour
+  yet leaves the window's ground, and the other part fades into it. The row's
+  text and icons take the one colour that reads on both parts. It follows a
+  resize, a swap, either pane navigating, dark pages and full screen; before,
+  the whole row took the active pane's colour.
+- The horizontal tab strip (tabs R49 to R53): every tab, the active one too,
+  is a rounded pill like the sidebar's rows; a split is two pills 2 DIP apart,
+  each half as wide as any other tab, so its titles are not cut to a few
+  letters; the strip's controls sit on the ground with no tile or disc; the
+  dividers, the toolbar's divider before the moon and the split button take
+  the text colour, not Material blue.
+- The rail's column (sidebar Y28): every glyph stands on the column's centre
+  within half a DIP. An emoji is centred by where its picture falls, not by
+  its advance (on the Mac an eighth of an em left of the line); a chord chip
+  widens by an even number of DIP; Archived and downloads sit on the
+  favicons' column in the open sidebar; the icons follow a density change.
+  Every drawn pixel counts as ink (Segoe UI Emoji's edge is fainter than a
+  quarter), and a glyph wider than its box is drawn unclipped in the real box,
+  since RenderText rounds its centring toward zero.
+- A read of a page's top edge begun before dark pages changed is dropped when
+  it comes back (dark-pages Dk8): a tab just sent to the background could put
+  its old pale edge back and show it when selected again. Older than this
+  patch; its Windows run found it.
+
+Tests: PageColourRowTest.ASplitRowTakesEachPanesColour and
+PageBarColorSupplierTest.ASplitRowsForegroundReadsOnBothParts (the row),
+HorizontalStripTest.* (the strip), SidebarColumnTest.EveryGlyphStandsOnTheColumn
+and GlyphInkTest.* (the column), PageColourRowTest.AnEdgeReadBegunBeforeTheSwitchIsDropped
+(the late read); each fails with its change taken out.
+
+Why: the owner saw the split's row in one pane's colour, the strip on top
+drawn badly, and the rail's emoji off the line of its "+".
+Removable when: never; the look is Stedding's own.
+---
+ .../browser/ui/color/stedding_color_mixer.cc  |  31 +-
+ .../stedding/theme/page_bar_color_supplier.cc |  51 +-
+ .../stedding/theme/page_bar_color_supplier.h  |  23 +-
+ .../theme/page_bar_color_supplier_unittest.cc |  39 ++
+ .../theme/page_theme_color_controller.cc      | 282 +++++++++--
+ .../theme/page_theme_color_controller.h       |  47 ++
+ .../views/frame/stedding_window_background.cc | 205 +++++++-
+ .../views/frame/stedding_window_background.h  |  14 +-
+ .../frame/vertical_tab_strip_region_view.cc   |  46 +-
+ .../frame/vertical_tab_strip_region_view.h    |   6 +-
+ chrome/browser/ui/views/spaces/BUILD.gn       |   1 +
+ .../ui/views/spaces/space_switcher_view.cc    |  35 +-
+ chrome/browser/ui/views/stedding/BUILD.gn     |  24 +
+ chrome/browser/ui/views/stedding/glyph_ink.cc | 194 ++++++++
+ chrome/browser/ui/views/stedding/glyph_ink.h  |  54 +++
+ .../ui/views/stedding/glyph_ink_unittest.cc   | 137 ++++++
+ chrome/browser/ui/views/tabs/BUILD.gn         |   1 +
+ chrome/browser/ui/views/tabs/common/BUILD.gn  |   1 +
+ .../ui/views/tabs/common/folder_view.cc       |   9 +
+ .../tabs/common/horizontal_tab_style_views.cc |  41 +-
+ .../ui/views/tabs/common/tab_strip_view.cc    |  65 ++-
+ chrome/browser/ui/views/tabs/tab.cc           |  13 +-
+ chrome/test/stedding/BUILD.gn                 |   1 +
+ .../test/stedding/address_band_browsertest.cc | 333 +++++++++++++
+ .../stedding/horizontal_strip_browsertest.cc  | 408 ++++++++++++++++
+ .../test/stedding/sidebar_rail_browsertest.cc | 458 +++++++++++++++++-
+ 26 files changed, 2443 insertions(+), 76 deletions(-)
+ create mode 100644 chrome/browser/ui/views/stedding/glyph_ink.cc
+ create mode 100644 chrome/browser/ui/views/stedding/glyph_ink.h
+ create mode 100644 chrome/browser/ui/views/stedding/glyph_ink_unittest.cc
+ create mode 100644 chrome/test/stedding/horizontal_strip_browsertest.cc
+
+diff --git a/chrome/browser/ui/color/stedding_color_mixer.cc b/chrome/browser/ui/color/stedding_color_mixer.cc
+index d9e6b84fdc02f..e118f03dc9f50 100644
+--- a/chrome/browser/ui/color/stedding_color_mixer.cc
++++ b/chrome/browser/ui/color/stedding_color_mixer.cc
+@@ -103,8 +103,35 @@ void AddSteddingColorMixer(ui::ColorProvider* provider,
+   // No hairline between toolbar and content: the card floats on the ground
+   // and a line across its top edge read as a seam in light mode.
+   mixer[kColorToolbarContentAreaSeparator] = {kColorToolbar};
+-  mixer[kColorNewTabButtonBackgroundFrameActive] = {kColorToolbar};
+-  mixer[kColorNewTabButtonBackgroundFrameInactive] = {kColorToolbar};
++  // The horizontal strip's controls sit on the ground as its tabs do (tabs
++  // R51): no disc or tile of their own -- the flat window colour drew a disc
++  // round the new tab button on the dark gradient, and Chromium's header
++  // container a pale blue tile round the tab search chevron on sand -- and
++  // their glyphs in the tabs' text colour, not Chromium's blue; the ink drop
++  // still shows a hover. The dividers between tabs are a quarter of that
++  // text colour over the ground, where Chromium's were blue on sand and grey
++  // on the blue; opaque, since the strip paints a divider at its own opacity
++  // whatever the colour's alpha.
++  mixer[kColorNewTabButtonBackgroundFrameActive] = {SK_ColorTRANSPARENT};
++  mixer[kColorNewTabButtonBackgroundFrameInactive] = {SK_ColorTRANSPARENT};
++  mixer[kColorNewTabButtonCRBackgroundFrameActive] = {SK_ColorTRANSPARENT};
++  mixer[kColorNewTabButtonCRBackgroundFrameInactive] = {SK_ColorTRANSPARENT};
++  mixer[kColorTabSearchButtonCRForegroundFrameActive] = {
++      kColorTabForegroundInactiveFrameActive};
++  mixer[kColorTabSearchButtonCRForegroundFrameInactive] = {
++      kColorTabForegroundInactiveFrameInactive};
++  mixer[kColorTabDividerFrameActive] = ui::AlphaBlend(
++      kColorTabForegroundInactiveFrameActive, {window}, 0x40);
++  mixer[kColorTabDividerFrameInactive] = ui::AlphaBlend(
++      kColorTabForegroundInactiveFrameInactive, {window}, 0x40);
++  // The address row's divider and an engaged action follow the row's icons
++  // the same way while the row is on the ground (tabs R53); a page-coloured
++  // row gets them from PageBarColorSupplier.
++  mixer[kColorToolbarExtensionSeparatorEnabled] =
++      ui::SetAlpha(kColorToolbarButtonIcon, 0x40);
++  mixer[kColorToolbarExtensionSeparatorDisabled] =
++      ui::SetAlpha(kColorToolbarButtonIcon, 0x26);
++  mixer[kColorToolbarActionItemEngaged] = {kColorToolbarButtonIcon};
+   // Tab rows as Arc draws them: every state is a tint of the row's own text
+   // colour over the ground, not a Material surface. In dark the active row is
+   // a translucent light pill (a solid grey card read as a foreign object on
+diff --git a/chrome/browser/ui/stedding/theme/page_bar_color_supplier.cc b/chrome/browser/ui/stedding/theme/page_bar_color_supplier.cc
+index e9ff41ae6f4bd..22d5bdeb2fa7b 100644
+--- a/chrome/browser/ui/stedding/theme/page_bar_color_supplier.cc
++++ b/chrome/browser/ui/stedding/theme/page_bar_color_supplier.cc
+@@ -4,6 +4,10 @@
+ 
+ #include "chrome/browser/ui/stedding/theme/page_bar_color_supplier.h"
+ 
++#include <algorithm>
++#include <array>
++#include <cmath>
++
+ #include "build/build_config.h"
+ 
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+@@ -11,10 +15,41 @@
+ #include "ui/color/color_provider.h"
+ #include "ui/color/color_recipe.h"
+ #include "ui/color/color_transform.h"
++#include "ui/gfx/color_utils.h"
+ 
+ namespace stedding {
+ 
+-PageBarColorSupplier::PageBarColorSupplier(SkColor page) : page_(page) {}
++SkColor SplitRowForeground(SkColor first, SkColor second) {
++  const SkColor single = color_utils::GetColorWithMaxContrast(first);
++  if (single == color_utils::GetColorWithMaxContrast(second)) {
++    // Both colours on the same side of the contrast line: the near-black or
++    // the white reads better on both than any grey between them.
++    return single;
++  }
++  // The grey whose contrast with the two colours is the same: its luminance
++  // plus 0.05 is the geometric mean of theirs, encoded back to sRGB.
++  const float luminance =
++      std::sqrt((color_utils::GetRelativeLuminance(first) + 0.05f) *
++                (color_utils::GetRelativeLuminance(second) + 0.05f)) -
++      0.05f;
++  const float linear = std::clamp(luminance, 0.f, 1.f);
++  const float encoded = linear <= 0.0031308f
++                            ? 12.92f * linear
++                            : 1.055f * std::pow(linear, 1.f / 2.4f) - 0.055f;
++  const U8CPU level = static_cast<U8CPU>(std::lround(encoded * 255.f));
++  const std::array<SkColor, 3> candidates = {
++      color_utils::GetColorWithMaxContrast(SK_ColorWHITE), SK_ColorWHITE,
++      SkColorSetRGB(level, level, level)};
++  const auto worse = [&](SkColor foreground) {
++    return std::min(color_utils::GetContrastRatio(foreground, first),
++                    color_utils::GetContrastRatio(foreground, second));
++  };
++  return *std::ranges::max_element(candidates, {}, worse);
++}
++
++PageBarColorSupplier::PageBarColorSupplier(SkColor page,
++                                           std::optional<SkColor> foreground)
++    : page_(page), foreground_(foreground) {}
+ 
+ PageBarColorSupplier::~PageBarColorSupplier() = default;
+ 
+@@ -24,8 +59,11 @@ void PageBarColorSupplier::AddColorMixers(
+   ui::ColorMixer& mixer = provider->AddMixer();
+   // The bar as painted: the page's colour itself (toolbar T15).
+   const ui::ColorTransform bar = ui::ColorTransform(page_);
+-  // White on a dark bar, near-black on a light one.
+-  const ui::ColorTransform fg = ui::GetColorWithMaxContrast(bar);
++  // White on a dark bar, near-black on a light one; a split row's shared
++  // colour when its two parts want different ones (T41).
++  const ui::ColorTransform fg = foreground_
++                                    ? ui::ColorTransform(*foreground_)
++                                    : ui::GetColorWithMaxContrast(bar);
+   mixer[kColorToolbarButtonIcon] = fg;
+   mixer[kColorToolbarButtonIconHovered] = fg;
+   mixer[kColorToolbarButtonIconPressed] = fg;
+@@ -40,6 +78,13 @@ void PageBarColorSupplier::AddColorMixers(
+   // location bar's "surrounding foreground" (toolbar T17): they kept the
+   // theme's colour, faint on a light bar in dark mode, until 2026-09-05.
+   mixer[kColorOmniboxActionIcon] = fg;
++  // The divider before the pinned actions and an engaged action's icon and
++  // underline follow the row's text as well (tabs R53): they were Material's
++  // divider blue and primary blue, picked against the window's ground, on a
++  // row in the page's colour.
++  mixer[kColorToolbarExtensionSeparatorEnabled] = ui::SetAlpha(fg, 0x40);
++  mixer[kColorToolbarExtensionSeparatorDisabled] = ui::SetAlpha(fg, 0x26);
++  mixer[kColorToolbarActionItemEngaged] = fg;
+   // The quiet hover tint behind the URL text follows the text (UI-SPEC), as
+   // does the page-info chip's capsule (a white capsule sat on a dark bar).
+   mixer[kColorLocationBarBackground] = {SK_ColorTRANSPARENT};
+diff --git a/chrome/browser/ui/stedding/theme/page_bar_color_supplier.h b/chrome/browser/ui/stedding/theme/page_bar_color_supplier.h
+index 695ff2fefbbcb..8b25d147523ed 100644
+--- a/chrome/browser/ui/stedding/theme/page_bar_color_supplier.h
++++ b/chrome/browser/ui/stedding/theme/page_bar_color_supplier.h
+@@ -5,11 +5,23 @@
+ #ifndef CHROME_BROWSER_UI_STEDDING_THEME_PAGE_BAR_COLOR_SUPPLIER_H_
+ #define CHROME_BROWSER_UI_STEDDING_THEME_PAGE_BAR_COLOR_SUPPLIER_H_
+ 
++#include <optional>
++
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/color/color_provider_key.h"
+ 
+ namespace stedding {
+ 
++// toolbar T41: the one foreground of a row whose two parts are two colours,
++// a split's two pages. The window has one ColorProvider, so the row's icons
++// and text are one colour wherever they sit: the near-black or the white the
++// contrast rule picks for a single page (T7) when it picks the same for both
++// colours, and otherwise whichever of that near-black, white or a grey reads
++// best on both parts, by the lower of its two contrast ratios. The grey is
++// the one whose contrast with the two colours is the same: a white page
++// beside GitHub's dark gives one of about 4.3:1 against each.
++SkColor SplitRowForeground(SkColor first, SkColor second);
++
+ // The toolbar's foreground colours for a page-coloured address row
+ // (docs/features/toolbar.md T7). The window's ColorProviderKey carries one of
+ // these as its app controller while the active page has a colour; the mixer
+@@ -20,14 +32,22 @@ namespace stedding {
+ // One supplier per colour, never freed: the ColorProviderManager caches
+ // providers by the supplier's address, so an address must not be reused for
+ // a different colour.
++//
++// `foreground`, when given, is the row's icon and text colour in place of the
++// one with most contrast against `page`: a split row's shared one (T41). The
++// focused field and the results dropdown keep `page`, the active pane's
++// colour, with the contrast colour of their own.
+ class PageBarColorSupplier : public ui::ColorProviderKey::InitializerSupplier {
+  public:
+-  explicit PageBarColorSupplier(SkColor page);
++  explicit PageBarColorSupplier(
++      SkColor page,
++      std::optional<SkColor> foreground = std::nullopt);
+   PageBarColorSupplier(const PageBarColorSupplier&) = delete;
+   PageBarColorSupplier& operator=(const PageBarColorSupplier&) = delete;
+   ~PageBarColorSupplier() override;
+ 
+   SkColor page() const { return page_; }
++  std::optional<SkColor> foreground() const { return foreground_; }
+ 
+   // ui::ColorProviderKey::InitializerSupplier:
+   void AddColorMixers(ui::ColorProvider* provider,
+@@ -35,6 +55,7 @@ class PageBarColorSupplier : public ui::ColorProviderKey::InitializerSupplier {
+ 
+  private:
+   const SkColor page_;
++  const std::optional<SkColor> foreground_;
+ };
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc b/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
+index 320991c1592e4..a4a75b3582c98 100644
+--- a/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
++++ b/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
+@@ -51,5 +51,44 @@ TEST(PageBarColorSupplierTest, IconsContrastWithThePageColour) {
+ #endif
+ }
+ 
++// toolbar T41: a split row has one foreground for its two parts. Two light
++// pages give the near-black one light page gets, two dark ones white, and a
++// white page beside a dark one a grey with the same contrast against each,
++// where either extreme would vanish on one part.
++TEST(PageBarColorSupplierTest, ASplitRowsForegroundReadsOnBothParts) {
++  constexpr SkColor kPeach = SkColorSetRGB(0xFF, 0xE0, 0xB2);
++  constexpr SkColor kGitHubDark = SkColorSetRGB(0x0D, 0x11, 0x17);
++  constexpr SkColor kPlum = SkColorSetRGB(0x30, 0x20, 0x40);
++  EXPECT_EQ(color_utils::GetColorWithMaxContrast(SK_ColorWHITE),
++            SplitRowForeground(SK_ColorWHITE, kPeach));
++  EXPECT_EQ(SK_ColorWHITE, SplitRowForeground(kGitHubDark, kPlum));
++
++  const SkColor grey = SplitRowForeground(SK_ColorWHITE, kGitHubDark);
++  EXPECT_EQ(grey, SplitRowForeground(kGitHubDark, SK_ColorWHITE))
++      << "the order of the panes does not matter";
++  EXPECT_EQ(SkColorGetR(grey), SkColorGetG(grey));
++  EXPECT_EQ(SkColorGetG(grey), SkColorGetB(grey));
++  EXPECT_GT(color_utils::GetContrastRatio(grey, SK_ColorWHITE), 4.3f);
++  EXPECT_GT(color_utils::GetContrastRatio(grey, kGitHubDark), 4.3f);
++  EXPECT_LT(color_utils::GetContrastRatio(
++                color_utils::GetColorWithMaxContrast(SK_ColorWHITE),
++                kGitHubDark),
++            1.5f)
++      << "the near-black alone would vanish on the dark part";
++
++  // The supplier puts the shared colour on the row's icons and text; the
++  // focused field and the dropdown keep the active page's colour.
++  ui::ColorProviderKey key;
++  key.color_mode = ui::ColorProviderKey::ColorMode::kLight;
++  ui::ColorProvider provider;
++  PageBarColorSupplier split(SK_ColorWHITE, grey);
++  split.AddColorMixers(&provider, key);
++  provider.GenerateColorMapForTesting();
++  EXPECT_EQ(grey, provider.GetColor(kColorToolbarButtonIcon));
++  EXPECT_EQ(grey, provider.GetColor(kColorOmniboxText));
++  EXPECT_EQ(grey, provider.GetColor(kColorOmniboxActionIcon));
++  EXPECT_EQ(SK_ColorWHITE, provider.GetColor(kColorOmniboxResultsBackground));
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
+index d5167a50b99d4..131c017227f9c 100644
+--- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
++++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ 
+ #include <algorithm>
++#include <utility>
+ 
+ #include "base/functional/bind.h"
+ #include "base/no_destructor.h"
+@@ -15,6 +16,7 @@
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding/theme/page_top_color.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/tabs/public/split_tab_data.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/viz/common/frame_sinks/copy_output_result.h"
+ #include "content/public/browser/page.h"
+@@ -22,6 +24,7 @@
+ #include "content/public/browser/visibility.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/blink/public/common/web_preferences/web_preferences.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/size.h"
+ 
+@@ -61,6 +64,33 @@ constexpr base::TimeDelta kSampleScrollMid = base::Milliseconds(700);
+ constexpr base::TimeDelta kSampleScrollEnd = base::Milliseconds(1600);
+ constexpr base::TimeDelta kSampleTimeout = base::Seconds(1);
+ 
++// T31, T3, Dk8: the colour of the row over `contents` -- its top edge's
++// when the edge was read as one colour, else its declared theme colour, else
++// its background -- and in `edge_read` whether the edge has been read at all.
++std::optional<SkColor> PageColourOf(content::WebContents& contents,
++                                    bool& edge_read) {
++  const PageTopSample* const sample =
++      PageTopSample::GetForPage(contents.GetPrimaryPage());
++  edge_read = sample;
++  if (sample && sample->color) {
++    return sample->color;
++  }
++  std::optional<SkColor> page = contents.GetThemeColor();
++  if (page) {
++    // dark-pages Dk8: the declared colour is the author's, which dark
++    // pages does not darken; the document background already is.
++    page = PageThemeColorController::RowColorForThemeColor(
++        *page, DarkPagesApplyTo(&contents));
++  } else {
++    page = contents.GetBackgroundColor();
++  }
++  if (!page || SkColorGetA(*page) == SK_AlphaTRANSPARENT) {
++    return std::nullopt;
++  }
++  // The bar is an opaque surface.
++  return SkColorSetA(*page, SK_AlphaOPAQUE);
++}
++
+ // toolbar T20: one of 16 levels per channel, the nearest -- 0x00, 0x11 ...
+ // 0xFF -- so white stays white and black black, and no channel moves by more
+ // than 8.
+@@ -74,6 +104,44 @@ SkColor BarKey(SkColor colour) {
+ 
+ }  // namespace
+ 
++// toolbar T41: the other pane of the active tab's split, watched as the
++// active page is: its colour follows the same events, and its top edge is
++// read with the active page's.
++class PageThemeColorController::PartnerObserver
++    : public content::WebContentsObserver {
++ public:
++  explicit PartnerObserver(PageThemeColorController& owner) : owner_(owner) {}
++
++  void Watch(content::WebContents* contents) { Observe(contents); }
++
++  // content::WebContentsObserver:
++  void DidChangeThemeColor() override { Changed({kSampleAfterStyle}); }
++  void OnBackgroundColorChanged() override { Changed({kSampleAfterStyle}); }
++  void PrimaryPageChanged(content::Page& page) override {
++    owner_->RefreshPartner();
++  }
++  void DidFirstVisuallyNonEmptyPaint() override {
++    Changed({kSampleAfterPaint});
++  }
++  void DidStopLoading() override { Changed({kSampleAfterLoad, kSampleLate}); }
++  void DidGetUserInteraction(const blink::WebInputEvent& event) override {
++    owner_->ScheduleTopSamples(
++        {kSampleScroll, kSampleScrollMid, kSampleScrollEnd});
++  }
++  void WebContentsDestroyed() override {
++    Observe(nullptr);
++    owner_->RefreshPartner();
++  }
++
++ private:
++  void Changed(std::initializer_list<base::TimeDelta> delays) {
++    owner_->RefreshPartner();
++    owner_->ScheduleTopSamples(delays);
++  }
++
++  const raw_ref<PageThemeColorController> owner_;
++};
++
+ DEFINE_USER_DATA(PageThemeColorController);
+ 
+ // static
+@@ -88,6 +156,7 @@ PageThemeColorController::PageThemeColorController(
+     : browser_(browser),
+       private_window_(private_window),
+       scoped_user_data_(browser.GetUnownedUserDataHost(), *this) {
++  partner_observer_ = std::make_unique<PartnerObserver>(*this);
+   browser_->GetTabStripModel()->AddObserver(this);
+   if (tabs::TabInterface* const active =
+           browser_->GetTabStripModel()->GetActiveTab()) {
+@@ -98,6 +167,7 @@ PageThemeColorController::PageThemeColorController(
+       base::BindRepeating(&PageThemeColorController::OnDarkPagesChanged,
+                           base::Unretained(this)));
+   Refresh();
++  UpdatePartner();
+ }
+ 
+ PageThemeColorController::~PageThemeColorController() {
+@@ -116,7 +186,19 @@ PageThemeColorController::bar_supplier() const {
+   // field and the results dropdown take it (toolbar T20) -- so each channel
+   // goes to its nearest level, white staying white: dropping the low four
+   // bits drew a white page's focused field 0xF0F0F0 on its white row.
+-  const SkColor key = BarKey(*color_);
++  const SkColor bar = BarKey(*color_);
++  // toolbar T41: a split row's icons and text read on both its parts. The
++  // supplier of the active page's colour alone serves whenever the other
++  // pane's colour wants the same foreground; otherwise one keyed by the
++  // shared foreground too, a grey in practice: one of 256 per colour.
++  std::optional<SkColor> foreground;
++  if (partner_color_) {
++    const SkColor shared = SplitRowForeground(bar, BarKey(*partner_color_));
++    if (shared != color_utils::GetColorWithMaxContrast(bar)) {
++      foreground = shared;
++    }
++  }
++  const std::pair<SkColor, std::optional<SkColor>> key(bar, foreground);
+   if (private_window_) {
+     // private V9: a private window's key holds this supplier where it held
+     // the private mark, so the supplier is marked to stand for it. Shared by
+@@ -124,11 +206,12 @@ PageThemeColorController::bar_supplier() const {
+     // cached by the key, and a freed supplier's address could come back for
+     // a normal window's key, whose provider would then be the graphite one.
+     static base::NoDestructor<
+-        std::map<SkColor, std::unique_ptr<PageBarColorSupplier>>>
++        std::map<std::pair<SkColor, std::optional<SkColor>>,
++                 std::unique_ptr<PageBarColorSupplier>>>
+         shared;
+     auto& supplier = (*shared)[key];
+     if (!supplier) {
+-      supplier = std::make_unique<PageBarColorSupplier>(key);
++      supplier = std::make_unique<PageBarColorSupplier>(bar, foreground);
+       SetMarksPrivateWindow(supplier.get(), true);
+     }
+     return supplier.get();
+@@ -138,15 +221,34 @@ PageThemeColorController::bar_supplier() const {
+   // would then get the normal window's cached, non-graphite provider. At most
+   // 4096 colours, a few bytes each.
+   static base::NoDestructor<
+-      std::map<SkColor, std::unique_ptr<PageBarColorSupplier>>>
++      std::map<std::pair<SkColor, std::optional<SkColor>>,
++               std::unique_ptr<PageBarColorSupplier>>>
+       shared;
+   auto& supplier = (*shared)[key];
+   if (!supplier) {
+-    supplier = std::make_unique<PageBarColorSupplier>(key);
++    supplier = std::make_unique<PageBarColorSupplier>(bar, foreground);
+   }
+   return supplier.get();
+ }
+ 
++content::WebContents* PageThemeColorController::partner() const {
++  return partner_observer_ ? partner_observer_->web_contents() : nullptr;
++}
++
++std::optional<SkColor> PageThemeColorController::ColorOf(
++    const content::WebContents* contents) const {
++  if (!contents) {
++    return std::nullopt;
++  }
++  if (contents == web_contents()) {
++    return color_;
++  }
++  if (contents == partner()) {
++    return partner_color_;
++  }
++  return std::nullopt;
++}
++
+ base::CallbackListSubscription PageThemeColorController::AddChangedCallback(
+     base::RepeatingClosure callback) {
+   return changed_callbacks_.Add(std::move(callback));
+@@ -157,11 +259,16 @@ void PageThemeColorController::OnTabStripModelChanged(
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
+   if (selection.active_tab_changed()) {
++    // A click on a split's other pane makes it the active tab and the tab
++    // left the partner, which keeps the colour it showed (T41).
++    content::WebContents* const left = shown_contents_.get();
++    const std::optional<SkColor> left_color = color_;
+     Observe(selection.new_tab ? selection.new_tab->GetContents() : nullptr);
+     // Reads due for the tab that was active belong to it.
+     sample_due_.clear();
+     sample_timer_.Stop();
+     Refresh();
++    UpdatePartner(left, left_color);
+     if (content::WebContents* const contents = web_contents();
+         contents && contents->CompletedFirstVisuallyNonEmptyPaint()) {
+       ScheduleTopSamples({kSampleAfterShown});
+@@ -169,6 +276,14 @@ void PageThemeColorController::OnTabStripModelChanged(
+   }
+ }
+ 
++void PageThemeColorController::OnSplitTabChanged(
++    const SplitTabChange& change) {
++  // A split made or ended around the active tab, or a pane given another
++  // tab. A new ratio or layout needs nothing here: the window repaints the
++  // row when the panes move (SteddingWindowBackground).
++  UpdatePartner();
++}
++
+ void PageThemeColorController::OnBackgroundColorChanged() {
+   Refresh();
+   ScheduleTopSamples({kSampleAfterStyle});
+@@ -235,12 +350,31 @@ void PageThemeColorController::OnDarkPagesChanged() {
+   // theme colour and the background Blink reports once the page has
+   // repainted.
+   TabStripModel* const model = browser_->GetTabStripModel();
++  bool any_change = false;
+   for (int i = 0; model && i < model->count(); ++i) {
+     content::WebContents* const tab = model->GetWebContentsAt(i);
+-    if (tab != web_contents() && decision_changes(tab)) {
++    if (!decision_changes(tab)) {
++      continue;
++    }
++    any_change = true;
++    if (tab != web_contents()) {
+       forget_sample(tab->GetPrimaryPage());
+     }
+   }
++  // A read of an edge begun before the change comes back with the page as
++  // it was, and for a tab just sent to the background up to a second later
++  // (CopyFromSurface copies what a hidden page last drew): kept, it put the
++  // edge read just forgotten back, and the tab shown again took the pale
++  // edge of its page before the switch (PageColourRowTest, 2026-10-20).
++  if (any_change) {
++    ++top_read_generation_;
++  }
++  // toolbar T41: a split's other pane is on screen too, and its part of the
++  // row follows its page the way the active page's does.
++  if (decision_changes(partner())) {
++    RefreshPartner();
++    ScheduleTopSamples({kSampleAfterStyle, kSampleAfterLoad});
++  }
+   content::WebContents* const contents = web_contents();
+   if (!decision_changes(contents)) {
+     return;
+@@ -267,24 +401,8 @@ void PageThemeColorController::Refresh() {
+     // colour; then the page's own background, the way Safari tints its bar,
+     // so a white page gets a white bar and a dark page a dark one even
+     // without a <meta name="theme-color"> (T3).
+-    const PageTopSample* const sample =
+-        PageTopSample::GetForPage(contents->GetPrimaryPage());
+-    if (sample && sample->color) {
+-      color = sample->color;
+-    } else {
+-      std::optional<SkColor> page = contents->GetThemeColor();
+-      if (page) {
+-        // dark-pages Dk8: the declared colour is the author's, which dark
+-        // pages does not darken; the document background already is.
+-        page = RowColorForThemeColor(*page, DarkPagesApplyTo(contents));
+-      } else {
+-        page = contents->GetBackgroundColor();
+-      }
+-      if (page && SkColorGetA(*page) != SK_AlphaTRANSPARENT) {
+-        // The bar is an opaque surface.
+-        color = SkColorSetA(*page, SK_AlphaOPAQUE);
+-      }
+-    }
++    bool sample = false;
++    color = PageColourOf(*contents, sample);
+     // A reload: the new Page starts with no colour of its own, and it reports
+     // one only when it differs from the last colour the WebContents sent
+     // (WebContentsImpl::OnBackgroundColorChanged keeps that on the
+@@ -311,6 +429,67 @@ void PageThemeColorController::Refresh() {
+   SetColor(color);
+ }
+ 
++void PageThemeColorController::UpdatePartner(
++    content::WebContents* left,
++    std::optional<SkColor> left_color) {
++  content::WebContents* other = nullptr;
++  TabStripModel* const model = browser_->GetTabStripModel();
++  tabs::TabInterface* const active = model ? model->GetActiveTab() : nullptr;
++  // A tab can still name a split the model has let go of while the model
++  // tells its observers, and GetSplitData CHECKs that the split exists.
++  if (active && active->IsSplit() &&
++      model->ContainsSplit(*active->GetSplit())) {
++    if (split_tabs::SplitTabData* const split =
++            model->GetSplitData(*active->GetSplit())) {
++      for (tabs::TabInterface* const tab : split->ListTabs()) {
++        if (tab != active) {
++          other = tab->GetContents();
++          break;
++        }
++      }
++    }
++  }
++  if (other == partner()) {
++    RefreshPartner();
++    return;
++  }
++  partner_observer_->Watch(other);
++  // The tab that was active keeps the colour it showed, as the active page
++  // keeps its own through a reload (T21): no flash when the panes trade.
++  const bool keeps = other && other == left;
++  partner_color_ = keeps ? left_color : std::nullopt;
++  partner_shown_ = keeps ? other->GetWeakPtr()
++                         : base::WeakPtr<content::WebContents>();
++  RefreshPartner();
++  // The row's parts change with the split even when no colour does.
++  PostNotify();
++  if (other && other->CompletedFirstVisuallyNonEmptyPaint()) {
++    ScheduleTopSamples({kSampleAfterShown});
++  }
++}
++
++void PageThemeColorController::RefreshPartner() {
++  content::WebContents* const contents = partner();
++  std::optional<SkColor> color;
++  if (contents) {
++    bool sample = false;
++    color = PageColourOf(*contents, sample);
++    // The rule the active page's colour keeps through a reload (T21).
++    if (partner_color_ && partner_shown_.get() == contents &&
++        (!color || (contents->IsLoading() && !sample))) {
++      return;
++    }
++  }
++  partner_shown_ = contents ? contents->GetWeakPtr()
++                            : base::WeakPtr<content::WebContents>();
++  if (color == partner_color_ || (color && partner_color_ &&
++                                  PageColorsMatch(*color, *partner_color_))) {
++    return;
++  }
++  partner_color_ = color;
++  PostNotify();
++}
++
+ void PageThemeColorController::ScheduleTopSamples(
+     std::initializer_list<base::TimeDelta> delays) {
+   if (!web_contents()) {
+@@ -344,8 +523,14 @@ void PageThemeColorController::OnSampleTimer() {
+ }
+ 
+ void PageThemeColorController::SampleTop() {
+-  content::WebContents* const contents = web_contents();
+-  if (!contents || sample_in_flight_ ||
++  SampleTopOf(web_contents(), sample_in_flight_);
++  // T41: the split's other pane is on screen beside it.
++  SampleTopOf(partner(), partner_sample_in_flight_);
++}
++
++void PageThemeColorController::SampleTopOf(content::WebContents* contents,
++                                           bool& in_flight) {
++  if (!contents || in_flight ||
+       contents->GetVisibility() != content::Visibility::VISIBLE) {
+     return;
+   }
+@@ -360,7 +545,7 @@ void PageThemeColorController::SampleTop() {
+       viewport.height() < kPageTopStripHeight) {
+     return;
+   }
+-  sample_in_flight_ = true;
++  in_flight = true;
+   // The result may come back on another sequence; the controller and the
+   // page live on this one.
+   view->CopyFromSurface(
+@@ -371,14 +556,33 @@ void PageThemeColorController::SampleTop() {
+           base::SequencedTaskRunner::GetCurrentDefault(),
+           base::BindOnce(&PageThemeColorController::OnTopSampled,
+                          weak_factory_.GetWeakPtr(),
+-                         contents->GetPrimaryPage().GetWeakPtr())));
++                         contents->GetPrimaryPage().GetWeakPtr(),
++                         base::Unretained(&in_flight), top_read_generation_)));
+ }
+ 
+ void PageThemeColorController::OnTopSampled(
+     base::WeakPtr<content::Page> page,
++    bool* in_flight,
++    int generation,
+     const content::CopyFromSurfaceResult& result) {
+-  sample_in_flight_ = false;
+-  if (!page || !result.has_value()) {
++  if (hold_top_reads_for_testing_) {
++    hold_top_reads_for_testing_.Run(base::BindOnce(
++        &PageThemeColorController::TakeTopRead, weak_factory_.GetWeakPtr(),
++        std::move(page), base::Unretained(in_flight), generation, result));
++    return;
++  }
++  TakeTopRead(std::move(page), in_flight, generation, result);
++}
++
++void PageThemeColorController::TakeTopRead(
++    base::WeakPtr<content::Page> page,
++    bool* in_flight,
++    int generation,
++    const content::CopyFromSurfaceResult& result) {
++  // The flag is a member: the weak pointer bound with it says this lives.
++  *in_flight = false;
++  // Dk8: begun before a dark-pages change, the read is the page as it was.
++  if (generation != top_read_generation_ || !page || !result.has_value()) {
+     return;
+   }
+   PageTopSample* const sample = PageTopSample::GetOrCreateForPage(*page);
+@@ -389,6 +593,9 @@ void PageThemeColorController::OnTopSampled(
+   content::WebContents* const contents = web_contents();
+   if (contents && &contents->GetPrimaryPage() == page.get()) {
+     Refresh();
++  } else if (content::WebContents* const other = partner();
++             other && &other->GetPrimaryPage() == page.get()) {
++    RefreshPartner();
+   }
+ }
+ 
+@@ -398,6 +605,10 @@ void PageThemeColorController::SetColor(std::optional<SkColor> color) {
+     return;
+   }
+   color_ = color;
++  PostNotify();
++}
++
++void PageThemeColorController::PostNotify() {
+   // Not from inside the change. The active tab changes in the middle of the
+   // tab strip's own notification, before its views have caught up, and a
+   // window re-themed from there reached a folder header whose folder had
+@@ -427,4 +638,15 @@ void PageThemeColorController::SetColorForTesting(
+   SetColor(color);
+ }
+ 
++void PageThemeColorController::SetPartnerColorForTesting(
++    std::optional<SkColor> color) {
++  partner_color_ = color;
++  PostNotify();
++}
++
++void PageThemeColorController::HoldTopReadsForTesting(
++    base::RepeatingCallback<void(base::OnceClosure)> hold) {
++  hold_top_reads_for_testing_ = std::move(hold);
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
+index f1ad9e311a968..008814fe781e8 100644
+--- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
++++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
+@@ -59,6 +59,15 @@ class PageThemeColorController : public TabStripModelObserver,
+   // has not painted yet).
+   std::optional<SkColor> color() const { return color_; }
+ 
++  // toolbar T41: in a split, the other pane's page, and its colour by the
++  // same rules; null and nothing outside a split.
++  content::WebContents* partner() const;
++  std::optional<SkColor> partner_color() const { return partner_color_; }
++
++  // The colour of the row over `contents`: color() for the active page,
++  // partner_color() for the other pane of its split, nothing for any other.
++  std::optional<SkColor> ColorOf(const content::WebContents* contents) const;
++
+   // The supplier that recolours the toolbar for the current page colour
+   // (toolbar T7), or null without one. BrowserWidget puts it on the window's
+   // ColorProviderKey. One supplier per colour, kept for the window's life:
+@@ -74,6 +83,7 @@ class PageThemeColorController : public TabStripModelObserver,
+       TabStripModel* tab_strip_model,
+       const TabStripModelChange& change,
+       const TabStripSelectionChange& selection) override;
++  void OnSplitTabChanged(const SplitTabChange& change) override;
+ 
+   // content::WebContentsObserver:
+   void DidChangeThemeColor() override;
+@@ -86,6 +96,14 @@ class PageThemeColorController : public TabStripModelObserver,
+ 
+   // The change path without a page, for tests.
+   void SetColorForTesting(std::optional<SkColor> color);
++  // The same for the split's other pane (T41): its colour as if its page had
++  // none yet, or another.
++  void SetPartnerColorForTesting(std::optional<SkColor> color);
++  // Hands each read of a page's top edge, as it comes back, to `hold`, to be
++  // taken when the closure it is given runs; a null `hold` takes them at once
++  // again.
++  void HoldTopReadsForTesting(
++      base::RepeatingCallback<void(base::OnceClosure)> hold);
+ 
+   // dark-pages Dk8: the colour the row takes from a page's declared theme
+   // colour. While dark pages darkens the page, a theme colour Blink would
+@@ -96,20 +114,39 @@ class PageThemeColorController : public TabStripModelObserver,
+   static SkColor RowColorForThemeColor(SkColor theme_color, bool page_darkened);
+ 
+  private:
++  class PartnerObserver;
++
+   // Dk8: the switch, the mode or a list changed, and the page repaints: its
+   // top edge is read again.
+   void OnDarkPagesChanged();
+   void Refresh();
+   void SetColor(std::optional<SkColor> color);
++  void PostNotify();
+   void NotifyChanged();
+ 
++  // T41: follows the other pane of the active tab's split. `left` and
++  // `left_color` are the tab that was active and the colour it had, which the
++  // partner keeps when it is that tab (a click on the other pane).
++  void UpdatePartner(content::WebContents* left = nullptr,
++                     std::optional<SkColor> left_color = std::nullopt);
++  void RefreshPartner();
++
+   // T31: reads the page's top edge after each delay, from now; an earlier
+   // read already due stays due. Reads that fall due together are one read.
+   void ScheduleTopSamples(std::initializer_list<base::TimeDelta> delays);
+   void OnSampleTimer();
+   void SampleTop();
++  // Reads `contents`' top edge unless a read of it is in flight already.
++  void SampleTopOf(content::WebContents* contents, bool& in_flight);
++  // `generation` is top_read_generation_ when the read began.
+   void OnTopSampled(base::WeakPtr<content::Page> page,
++                    bool* in_flight,
++                    int generation,
+                     const content::CopyFromSurfaceResult& result);
++  void TakeTopRead(base::WeakPtr<content::Page> page,
++                   bool* in_flight,
++                   int generation,
++                   const content::CopyFromSurfaceResult& result);
+ 
+   const raw_ref<BrowserWindowInterface> browser_;
+   const bool private_window_;
+@@ -120,6 +157,16 @@ class PageThemeColorController : public TabStripModelObserver,
+   base::flat_set<base::TimeTicks> sample_due_;
+   base::OneShotTimer sample_timer_;
+   bool sample_in_flight_ = false;
++  // T41: the split's other pane, its colour and the tab that colour is
++  // (the T21 rule, per pane).
++  std::unique_ptr<PartnerObserver> partner_observer_;
++  std::optional<SkColor> partner_color_;
++  base::WeakPtr<content::WebContents> partner_shown_;
++  bool partner_sample_in_flight_ = false;
++  // Dk8: one more at each dark-pages change that changes a page's decision;
++  // a read begun before it is dropped when it comes back.
++  int top_read_generation_ = 0;
++  base::RepeatingCallback<void(base::OnceClosure)> hold_top_reads_for_testing_;
+   base::RepeatingClosureList changed_callbacks_;
+   ui::ScopedUnownedUserData<PageThemeColorController> scoped_user_data_;
+   std::unique_ptr<DarkPagesWatcher> dark_pages_watcher_;
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.cc b/chrome/browser/ui/views/frame/stedding_window_background.cc
+index 143d919328a85..653d8d07861e7 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.cc
++++ b/chrome/browser/ui/views/frame/stedding_window_background.cc
+@@ -5,6 +5,8 @@
+ #include "chrome/browser/ui/views/frame/stedding_window_background.h"
+ 
+ #include <algorithm>
++#include <cmath>
++#include <optional>
+ 
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+@@ -17,10 +19,13 @@
+ #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/contents_container_view.h"
++#include "chrome/browser/ui/views/frame/contents_web_view.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "components/split_tabs/split_tab_visual_data.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkPoint.h"
+@@ -32,6 +37,7 @@
+ #include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
++#include "ui/gfx/scoped_canvas.h"
+ #include "ui/native_theme/native_theme.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_utils.h"
+@@ -46,7 +52,16 @@ constexpr SkColor kDarkTo = SkColorSetRGB(0x31, 0x24, 0x3A);
+ 
+ }  // namespace
+ 
+-SteddingWindowBackground::SteddingWindowBackground(BrowserView* browser_view) {
++SteddingWindowBackground::SteddingWindowBackground(BrowserView* browser_view)
++    : browser_view_(browser_view) {
++  // toolbar T41: in a split the row has a part over each pane, so it is
++  // painted again whenever the panes move.
++  if (MultiContentsView* const panes = browser_view->multi_contents_view()) {
++    for (ContentsContainerView* const pane :
++         panes->contents_container_views()) {
++      pane_observations_.AddObservation(pane);
++    }
++  }
+   // The bar takes the active page's colour (PaintPageBar); repaint the window
+   // when it changes. Kept here rather than as a BrowserView member so the
+   // browser view's header stays untouched (docs/HANDOFF.md, rebuild cost).
+@@ -74,6 +89,21 @@ SteddingWindowBackground::SteddingWindowBackground(BrowserView* browser_view) {
+ }
+ SteddingWindowBackground::~SteddingWindowBackground() = default;
+ 
++void SteddingWindowBackground::OnViewBoundsChanged(
++    views::View* observed_view) {
++  const gfx::RectF row = PageBarSurface(browser_view_);
++  if (!row.IsEmpty()) {
++    browser_view_->SchedulePaintInRect(gfx::ToEnclosingRect(row));
++  } else if (views::View* const top = browser_view_->top_container()) {
++    // Full screen: the overlay paints the row (PaintOverlayPageBar).
++    top->SchedulePaint();
++  }
++}
++
++void SteddingWindowBackground::OnViewIsDeleting(views::View* observed_view) {
++  pane_observations_.RemoveObservation(observed_view);
++}
++
+ void SteddingWindowBackground::Paint(gfx::Canvas* canvas,
+                                      views::View* view) const {
+   const gfx::Rect bounds = view->GetLocalBounds();
+@@ -141,6 +171,77 @@ void SteddingWindowBackground::Paint(gfx::Canvas* canvas,
+ 
+ namespace {
+ 
++// toolbar T41: how far the blend between a split's two parts of the row
++// runs past each side of the gap between the panes, so the change from one
++// page's colour to the other's reads as soft.
++constexpr float kSplitBlendOverhang = 6.f;
++
++// The hairline under the row where it meets a page of colour `bar`: a tenth
++// of the contrast colour (toolbar T15).
++SkColor HairlineFor(SkColor bar) {
++  return color_utils::AlphaBlend(color_utils::GetColorWithMaxContrast(bar),
++                                 bar, 0.10f);
++}
++
++// A split's two parts of the row, left and right, in a target view's
++// coordinates: the gap between the panes, and each pane's page colour.
++struct RowParts {
++  float gap_left = 0;
++  float gap_right = 0;
++  std::optional<SkColor> left;
++  std::optional<SkColor> right;
++};
++
++// `view`'s bounds in `target`'s coordinates. In full screen on macOS the row
++// is in an overlay widget of its own (toolbar T24), where a pane's rectangle
++// arrives through the screen: converting across widgets is a CHECK.
++gfx::RectF BoundsIn(views::View* view, views::View* target) {
++  gfx::RectF bounds(view->GetLocalBounds());
++  if (view->GetWidget() == target->GetWidget()) {
++    views::View::ConvertRectToTarget(view, target, &bounds);
++    return bounds;
++  }
++  gfx::Point origin;
++  views::View::ConvertPointToScreen(view, &origin);
++  views::View::ConvertPointFromScreen(target, &origin);
++  return gfx::RectF(gfx::PointF(origin.x(), origin.y()), bounds.size());
++}
++
++// The row's parts over a split, or nothing outside one (toolbar T41). Side
++// by side, each pane's page colour over that pane; stacked, the row sits
++// over the upper pane alone and is its colour throughout.
++std::optional<RowParts> SplitRowParts(BrowserView* browser_view,
++                                      views::View* target,
++                                      const PageThemeColorController& pages) {
++  MultiContentsView* const multi = browser_view->multi_contents_view();
++  if (!multi || !multi->IsInSplitView() ||
++      multi->contents_container_views().size() != 2) {
++    return std::nullopt;
++  }
++  ContentsContainerView* const first = multi->contents_container_views()[0];
++  ContentsContainerView* const second = multi->contents_container_views()[1];
++  const gfx::RectF first_bounds = BoundsIn(first, target);
++  const gfx::RectF second_bounds = BoundsIn(second, target);
++  const auto colour_of = [&pages](ContentsContainerView* pane) {
++    return pages.ColorOf(pane->contents_view()->web_contents());
++  };
++  RowParts parts;
++  if (multi->GetSplitLayout() != split_tabs::SplitTabLayout::kSideBySide) {
++    const bool first_on_top = first_bounds.y() <= second_bounds.y();
++    parts.left = parts.right = colour_of(first_on_top ? first : second);
++    parts.gap_left = parts.gap_right = first_bounds.right();
++    return parts;
++  }
++  // Left and right as drawn, whichever pane is the split's start (a
++  // right-to-left layout puts the start on the right).
++  const bool first_left = first_bounds.x() <= second_bounds.x();
++  parts.left = colour_of(first_left ? first : second);
++  parts.right = colour_of(first_left ? second : first);
++  parts.gap_left = (first_left ? first_bounds : second_bounds).right();
++  parts.gap_right = (first_left ? second_bounds : first_bounds).x();
++  return parts;
++}
++
+ // The row's surface: `surface` in `bar`, its top corners rounded as the
+ // card's are, and one hairline along its bottom where the row meets the page,
+ // a tenth of the contrast colour: row and page are one colour, so the line
+@@ -169,6 +270,70 @@ void PaintBarSurface(gfx::Canvas* canvas,
+                    hairline);
+ }
+ 
++// toolbar T41: a split's row, a part over each pane in that pane's colour,
++// a short horizontal blend from one to the other over the gap between them
++// and kSplitBlendOverhang past each side, the hairline under each part in its
++// own colour. A part whose page has no colour leaves the ground there, the
++// other part fading into it.
++void PaintSplitBarSurface(gfx::Canvas* canvas,
++                          const gfx::RectF& surface,
++                          const RowParts& parts,
++                          bool square) {
++  if (!parts.left && !parts.right) {
++    return;
++  }
++  const float radius =
++      square ? 0.f : static_cast<float>(stedding::kContentsCornerRadius.Get());
++  SkRRect rrect;
++  const SkVector radii[4] = {
++      {radius, radius}, {radius, radius}, {0, 0}, {0, 0}};
++  rrect.setRectRadii(gfx::RectFToSkRect(surface), radii);
++  gfx::ScopedCanvas scoped(canvas);
++  canvas->ClipPath(SkPath::RRect(rrect), /*do_anti_alias=*/true);
++
++  // A missing colour is the other one, transparent, so the blend fades
++  // rather than passing through black. Each side is read only when it is
++  // known: value_or() evaluates its fallback, and dereferenced the empty side
++  // whenever the other was known (a pane whose page had no colour yet).
++  const SkColor known = parts.left ? *parts.left : *parts.right;
++  const SkColor left = parts.left ? *parts.left : SkColorSetA(known, 0);
++  const SkColor right = parts.right ? *parts.right : SkColorSetA(known, 0);
++  const SkColor left_line = parts.left
++                                ? HairlineFor(*parts.left)
++                                : SkColorSetA(HairlineFor(known), 0);
++  const SkColor right_line = parts.right
++                                 ? HairlineFor(*parts.right)
++                                 : SkColorSetA(HairlineFor(known), 0);
++  const float blend_left = std::clamp(parts.gap_left - kSplitBlendOverhang,
++                                      surface.x(), surface.right());
++  const float blend_right = std::clamp(parts.gap_right + kSplitBlendOverhang,
++                                       blend_left, surface.right());
++  const auto band = [&](float top, float height, SkColor from, SkColor to) {
++    cc::PaintFlags flags;
++    flags.setColor(from);
++    canvas->DrawRect(
++        gfx::RectF(surface.x(), top, blend_left - surface.x(), height), flags);
++    flags.setColor(to);
++    canvas->DrawRect(
++        gfx::RectF(blend_right, top, surface.right() - blend_right, height),
++        flags);
++    if (blend_right > blend_left) {
++      const SkPoint points[2] = {SkPoint::Make(blend_left, top),
++                                 SkPoint::Make(blend_right, top)};
++      const SkColor4f colors[2] = {SkColor4f::FromColor(from),
++                                   SkColor4f::FromColor(to)};
++      cc::PaintFlags blend;
++      blend.setShader(cc::PaintShader::MakeLinearGradient(
++          points, colors, nullptr, 2, SkTileMode::kClamp));
++      canvas->DrawRect(
++          gfx::RectF(blend_left, top, blend_right - blend_left, height),
++          blend);
++    }
++  };
++  band(surface.y(), surface.height(), left, right);
++  band(std::floor(surface.bottom()) - 1, 1, left_line, right_line);
++}
++
+ }  // namespace
+ 
+ bool PageBarViewsShareWidget(const views::View* painted,
+@@ -195,7 +360,22 @@ void SteddingWindowBackground::PaintPageBar(gfx::Canvas* canvas,
+   }
+   const PageThemeColorController* const controller =
+       PageThemeColorController::From(browser_view->browser());
+-  if (!controller || !controller->color()) {
++  if (!controller) {
++    return;
++  }
++  // toolbar T41: in a split, a part of the row over each pane.
++  if (const std::optional<RowParts> parts =
++          SplitRowParts(browser_view, browser_view, *controller)) {
++    const gfx::RectF surface = PageBarSurface(browser_view);
++    if (!surface.IsEmpty()) {
++      PaintSplitBarSurface(
++          canvas, surface, *parts,
++          /*square=*/VerticalTabStripRegionView::SteddingCardGutter(
++              browser_view) == 0);
++    }
++    return;
++  }
++  if (!controller->color()) {
+     return;
+   }
+   // Whichever side of the contrast line the page is on, the bar takes it;
+@@ -275,18 +455,29 @@ void PaintOverlayPageBar(const ui::PaintContext& context,
+   }
+   const PageThemeColorController* const controller =
+       PageThemeColorController::From(browser_view->browser());
+-  if (!controller || !controller->color()) {
++  if (!controller) {
+     return;
+   }
+   const gfx::Rect toolbar = browser_view->toolbar()->bounds();
+   if (toolbar.IsEmpty()) {
+     return;
+   }
++  const bool square =
++      VerticalTabStripRegionView::SteddingCardGutter(browser_view) == 0;
++  // toolbar T41: a split's parts, the panes read through the screen.
++  if (const std::optional<RowParts> parts =
++          SplitRowParts(browser_view, top_container, *controller)) {
++    ui::PaintRecorder recorder(context, top_container->size());
++    PaintSplitBarSurface(recorder.canvas(), gfx::RectF(toolbar), *parts,
++                         square);
++    return;
++  }
++  if (!controller->color()) {
++    return;
++  }
+   ui::PaintRecorder recorder(context, top_container->size());
+-  PaintBarSurface(
+-      recorder.canvas(), gfx::RectF(toolbar), *controller->color(),
+-      /*square=*/VerticalTabStripRegionView::SteddingCardGutter(browser_view) ==
+-          0);
++  PaintBarSurface(recorder.canvas(), gfx::RectF(toolbar), *controller->color(),
++                  square);
+ }
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.h b/chrome/browser/ui/views/frame/stedding_window_background.h
+index 1da57954e59fd..1baa588dfc651 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.h
++++ b/chrome/browser/ui/views/frame/stedding_window_background.h
+@@ -6,8 +6,11 @@
+ #define CHROME_BROWSER_UI_VIEWS_FRAME_STEDDING_WINDOW_BACKGROUND_H_
+ 
+ #include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_multi_source_observation.h"
+ #include "ui/gfx/geometry/rect_f.h"
+ #include "ui/views/background.h"
++#include "ui/views/view_observer.h"
+ 
+ class BrowserView;
+ 
+@@ -53,7 +56,8 @@ void PaintOverlayPageBar(const ui::PaintContext& context,
+ // when either view is missing or in another widget (full screen, T24).
+ gfx::RectF PageBarSurface(BrowserView* browser_view);
+ 
+-class SteddingWindowBackground : public views::Background {
++class SteddingWindowBackground : public views::Background,
++                                 public views::ViewObserver {
+  public:
+   // `browser_view` is the view this background paints; the background
+   // repaints it when the active page's colour changes.
+@@ -63,6 +67,11 @@ class SteddingWindowBackground : public views::Background {
+   // views::Background:
+   void Paint(gfx::Canvas* canvas, views::View* view) const override;
+ 
++  // views::ViewObserver: a split's panes moved -- a new ratio, a swap, the
++  // other layout -- and the row's two parts move with them (toolbar T41).
++  void OnViewBoundsChanged(views::View* observed_view) override;
++  void OnViewIsDeleting(views::View* observed_view) override;
++
+  private:
+   // The page-coloured surface behind the address row (see the .cc).
+   void PaintPageBar(gfx::Canvas* canvas,
+@@ -70,7 +79,10 @@ class SteddingWindowBackground : public views::Background {
+                     bool dark,
+                     SkColor ground) const;
+ 
++  const raw_ptr<BrowserView> browser_view_;
+   base::CallbackListSubscription page_color_subscription_;
++  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
++      pane_observations_{this};
+ };
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 9560aa979bb75..e26bbd8da038a 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -228,6 +228,12 @@ constexpr int kKeyboardResizeWidth = 50;
+ // hidden sidebar in, and how long it rests there first, so a pointer
+ // crossing the edge on its way elsewhere does not open it.
+ constexpr int kLeadingEdgeWidth = 6;
++// sidebar Y8: in the open sidebar a row's favicon stands this far inside the
++// row (the tab rows' content inset, the New Tab and title rows' border), and
++// its title this far after the favicon (TabViewVerticalLayout's favicon
++// padding). The Archived row and the downloads button stand on that column.
++constexpr int kRowFaviconInset = 8;
++constexpr int kRowFaviconTitleGap = 8;
+ constexpr base::TimeDelta kLeadingEdgeRevealDelay = base::Milliseconds(100);
+ constexpr int kSnapDistance = 15;
+ 
+@@ -593,8 +599,11 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+     archived_row->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+     archived_row->SetQuiet(vector_icons::kHistoryIcon,
+                            stedding::SidebarFaviconSize());
+-    archived_row->SetImageLabelSpacing(10);
+-    archived_row->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 18)));
++    // On the rows' favicon column, its label where their titles start
++    // (ApplyRailForm gives each form its own).
++    archived_row->SetImageLabelSpacing(kRowFaviconTitleGap);
++    archived_row->SetBorder(views::CreateEmptyBorder(
++        gfx::Insets::VH(0, region_horizontal_padding + kRowFaviconInset)));
+     archived_row->SetPreferredSize(
+         gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
+     archived_row->SetTooltipText(kArchivedRowName);
+@@ -1144,6 +1153,16 @@ void VerticalTabStripRegionView::OnThemeChanged() {
+     archived_row_->SetPreferredSize(
+         gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
+   }
++  // sidebar Y1, Y8: the form sizes the New Tab row's plus, the Archived
++  // row's icon and the downloads button's place by the preset's favicon,
++  // and a density change applies it again. They kept the size they were
++  // given at the last collapse or expand, so after a change in the open
++  // sidebar they stood a DIP or two off the favicons' column (the owner,
++  // 2026-10-20).
++  if (applied_favicon_size_ != stedding::SidebarFaviconSize()) {
++    applied_rail_form_.reset();
++    InvalidateLayout();
++  }
+ }
+ 
+ void VerticalTabStripRegionView::AddedToWidget() {
+@@ -2876,6 +2895,7 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+   const bool arc_style =
+       base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
+   applied_rail_form_ = rail;
++  applied_favicon_size_ = stedding::SidebarFaviconSize();
+   rail_form_ = arc_style && rail;
+   // The button containers sit on the rows' column: the rail's padding
+   // from the strip's edges in the rail, the open sidebar's 12 DIP
+@@ -2914,8 +2934,14 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+     }
+   }
+   // The Archived row is its icon alone in the rail, centred like the tab rows'
+-  // favicons and a size up like them; the label and its 18 DIP inset are for
+-  // the open sidebar. Its tooltip names it in either form.
++  // favicons and a size up like them; the label and its inset are for the
++  // open sidebar. Its tooltip names it in either form. Open, the icon stands
++  // on the rows' favicon column, the preset's size: its 18 DIP inset put it
++  // 2 DIP left of the column, and its size stayed the one the last collapse
++  // or expand gave it (the owner, 2026-10-20; sidebar Y1, Y8).
++  const int open_column_inset =
++      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding) +
++      kRowFaviconInset;
+   if (archived_row_) {
+     auto* const row = static_cast<SidebarRowButton*>(archived_row_.get());
+     row->SetHorizontalAlignment(rail ? gfx::ALIGN_CENTER : gfx::ALIGN_LEFT);
+@@ -2924,7 +2950,8 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+       row->GetViewAccessibility().SetName(std::u16string(kArchivedRowName));
+     }
+     row->SetTooltipText(kArchivedRowName);
+-    row->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, rail ? 0 : 18)));
++    row->SetBorder(views::CreateEmptyBorder(
++        gfx::Insets::VH(0, rail ? 0 : open_column_inset)));
+     row->SetQuiet(vector_icons::kHistoryIcon,
+                   stedding::SidebarFaviconSize() + (rail ? 4 : 0));
+   }
+@@ -2956,9 +2983,14 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+     }
+   }
+   if (downloads_button_) {
++    // Open, its icon on the rows' favicon column, where it stood 3 DIP left
++    // of the column (the owner, 2026-10-20; sidebar Y8).
++    const int open_left =
++        open_column_inset + stedding::SidebarFaviconSize() / 2 -
++        downloads_button_->GetPreferredSize().width() / 2;
+     downloads_button_->SetProperty(
+-        views::kMarginsKey,
+-        rail ? gfx::Insets::TLBR(0, 0, 8, 0) : gfx::Insets::TLBR(0, 10, 0, 0));
++        views::kMarginsKey, rail ? gfx::Insets::TLBR(0, 0, 8, 0)
++                                 : gfx::Insets::TLBR(0, open_left, 0, 0));
+   }
+   // The row's height follows its children (sidebar Y13); the orientation
+   // and the margins above changed what they add up to.
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index d71c31a500879..0c9d55bed3781 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -379,8 +379,12 @@ class VerticalTabStripRegionView final
+   // the state does not describe (sidebar Y8, PLAN.md WIN-3).
+   void ApplyRailForm(bool rail);
+   // The form ApplyRailForm last applied; empty when the next layout must
+-  // apply one whatever the width -- a new strip, or new rail margins.
++  // apply one whatever the width -- a new strip, new rail margins, or a
++  // new favicon size.
+   std::optional<bool> applied_rail_form_;
++  // The density's favicon size ApplyRailForm last sized the icons by
++  // (sidebar Y1): a density change applies the form again.
++  int applied_favicon_size_ = 0;
+   // sidebar Y11: the pause before the rail expands on hover, from the
+   // profile; zero means Chromium's own timing.
+   base::TimeDelta SteddingHoverDelay() const;
+diff --git a/chrome/browser/ui/views/spaces/BUILD.gn b/chrome/browser/ui/views/spaces/BUILD.gn
+index c61c93a589c3f..15f3b875f466a 100644
+--- a/chrome/browser/ui/views/spaces/BUILD.gn
++++ b/chrome/browser/ui/views/spaces/BUILD.gn
+@@ -38,6 +38,7 @@ source_set("spaces") {
+     "//chrome/browser/ui/toasts/api:toasts",
+     # splits J10 (BACKLOG S-113): Chromium's "Create split view" words.
+     "//chrome/app:generated_resources",
++    "//chrome/browser/ui/views/stedding:glyph_ink",
+     "//chrome/browser/ui/views/stedding:isolation_mark",
+     "//chrome/browser/ui/views/stedding:rename_field_watcher",
+     "//components/constrained_window",
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index bcee2fee97a80..077337566ee8b 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/ui/toasts/toast_controller.h"
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_rules.h"
++#include "chrome/browser/ui/views/stedding/glyph_ink.h"
+ #include "chrome/browser/ui/views/stedding/isolation_mark_view.h"
+ #include "chrome/browser/ui/views/stedding/rename_field_watcher.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -256,17 +257,34 @@ class SpaceChipButton : public views::LabelButton {
+     }
+   }
+ 
+-  // views::LayoutDelegate: the button's own layout, and the badge on the
+-  // corner of the glyph the label draws in the middle of the chip.
++  // views::LayoutDelegate: the button's own layout, with the glyph centred
++  // by its ink, and the badge on the corner of the glyph the label draws in
++  // the middle of the chip.
+   views::ProposedLayout CalculateProposedLayout(
+       const views::SizeBounds& size_bounds) const override {
+     views::ProposedLayout layout =
+         views::LabelButton::CalculateProposedLayout(size_bounds);
+-    if (!badge_ || !size_bounds.is_fully_bounded()) {
++    if (!size_bounds.is_fully_bounded()) {
+       return layout;
+     }
+     const gfx::Rect chip(gfx::Size(size_bounds.width().value(),
+                                    size_bounds.height().value()));
++    // sidebar Y8, spaces B11 (the owner, 2026-10-20): the emoji on the
++    // chip's centre, where the rail's other glyphs stand. Centred by its
++    // advance, which on the Mac is a quarter of an em wider than the
++    // picture and starts where the picture does, it stood 2 DIP left of
++    // them.
++    for (views::ChildLayout& child : layout.child_layouts) {
++      if (child.child_view == label()) {
++        child.bounds.Offset(
++            stedding::InkCentringShift(GetText(), label()->font_list(),
++                                       child.bounds, chip.width() / 2.f),
++            0);
++      }
++    }
++    if (!badge_) {
++      return layout;
++    }
+     gfx::Rect glyph = chip;
+     glyph.ClampToCenteredSize(gfx::Size(kGlyphSize, kGlyphSize));
+     const auto* const manager =
+@@ -636,9 +654,14 @@ void SpaceSwitcherView::ApplyOverflow() {
+     // tabs R11 (BACKLOG S-144): a chord takes the width its text needs. The
+     // chip is sized for the emoji, and at the glyph's size most chords are
+     // wider than that on the Mac's system font: ⌃3 drew as "…", where ⌃1
+-    // and ⌃2 happened to fit.
+-    const int full_width =
+-        chord ? std::max(kIconSize, chip->TextWidth()) : kIconSize;
++    // and ⌃2 happened to fit. It grows by an even number of DIP, so the
++    // rail's column, as wide as its widest chip, still centres every chip
++    // and the "+" on the rail's centre: one DIP wider put the chips that
++    // kept 24 DIP, and the "+", a DIP left of it while ⌘ was held (the
++    // owner, 2026-10-20; sidebar Y8).
++    const int chord_extra =
++        chord ? std::max(0, chip->TextWidth() - kIconSize) : 0;
++    const int full_width = kIconSize + chord_extra + chord_extra % 2;
+     chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
+                                : gfx::Size(full_width, kIconSize));
+     if (!dot) {
+diff --git a/chrome/browser/ui/views/stedding/BUILD.gn b/chrome/browser/ui/views/stedding/BUILD.gn
+index 7512d0cab6b4c..4d2858910bfe8 100644
+--- a/chrome/browser/ui/views/stedding/BUILD.gn
++++ b/chrome/browser/ui/views/stedding/BUILD.gn
+@@ -43,6 +43,26 @@ source_set("isolation_mark") {
+   ]
+ }
+ 
++# A Space's glyph centred on an icon column by the ink it draws, not by its
++# advance, which for an emoji is wider than its picture (sidebar Y8; spaces
++# B11, B16): the switcher's chips and the Space title row both draw it.
++source_set("glyph_ink") {
++  sources = [
++    "glyph_ink.cc",
++    "glyph_ink.h",
++  ]
++  public_deps = [
++    "//ui/base",
++    "//ui/color",
++  ]
++  deps = [
++    "//base",
++    "//skia",
++    "//ui/gfx",
++    "//ui/gfx/geometry",
++  ]
++}
++
+ # The sidebar's resize edge: the bar it shows after a rest and the double
+ # click that resets the width (sidebar Y22). The owner passes the colour and
+ # the reset, so this needs no browser either.
+@@ -112,12 +132,14 @@ source_set("update_pill") {
+ source_set("unit_tests") {
+   testonly = true
+   sources = [
++    "glyph_ink_unittest.cc",
+     "isolation_mark_view_unittest.cc",
+     "rename_field_watcher_unittest.cc",
+     "sidebar_resize_handle_unittest.cc",
+     "update_pill_unittest.cc",
+   ]
+   deps = [
++    ":glyph_ink",
+     ":isolation_mark",
+     ":rename_field_watcher",
+     ":sidebar_resize_handle",
+@@ -125,7 +147,9 @@ source_set("unit_tests") {
+     "//chrome/browser/ui/stedding:app_updater_test_support",
+     "//base",
+     "//base/test:test_support",
++    "//skia",
+     "//testing/gtest",
++    "//ui/base",
+     "//ui/color",
+     "//ui/compositor",
+     "//ui/events:test_support",
+diff --git a/chrome/browser/ui/views/stedding/glyph_ink.cc b/chrome/browser/ui/views/stedding/glyph_ink.cc
+new file mode 100644
+index 0000000000000..e42632845255a
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/glyph_ink.cc
+@@ -0,0 +1,194 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/stedding/glyph_ink.h"
++
++#include <algorithm>
++#include <cmath>
++#include <map>
++#include <memory>
++#include <string>
++#include <tuple>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/no_destructor.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/font.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/gfx/image/canvas_image_source.h"
++#include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/render_text.h"
++#include "ui/gfx/text_constants.h"
++
++namespace stedding {
++
++namespace {
++
++// Drawn at the Mac's scale, so the ink's centre is known to the half DIP.
++constexpr float kMeasureScale = 2.f;
++// Enough measurements for every glyph, chord and size the sidebar shows.
++constexpr size_t kMaxRemembered = 256;
++
++// The text, the font (its family, size, weight and style) and the box.
++using Key = std::tuple<std::u16string, std::string, int, int, int, int>;
++
++// Draws `text` as a label draws it centred in `box` (Canvas::
++// DrawStringRectWithFlags with TEXT_ALIGN_CENTER, NO_ELLIPSIS and
++// NO_SUBPIXEL_RENDERING), but not clipped to the box: what passes its edges
++// is drawn too.
++void DrawCentredText(gfx::Canvas& canvas,
++                     std::u16string_view text,
++                     const gfx::FontList& font_list,
++                     SkColor color,
++                     const gfx::Rect& box) {
++  std::unique_ptr<gfx::RenderText> render_text =
++      gfx::RenderText::CreateRenderText();
++  render_text->set_clip_to_display_rect(false);
++  render_text->SetFontList(font_list);
++  render_text->SetText(text);
++  render_text->SetCursorEnabled(false);
++  render_text->SetDisplayRect(box);
++  render_text->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  render_text->set_subpixel_rendering_suppressed(true);
++  render_text->SetColor(color);
++  const int style = font_list.GetFontStyle();
++  render_text->SetStyle(gfx::TEXT_STYLE_ITALIC,
++                        (style & gfx::Font::ITALIC) != 0);
++  render_text->SetStyle(gfx::TEXT_STYLE_UNDERLINE,
++                        (style & gfx::Font::UNDERLINE) != 0);
++  render_text->SetStyle(gfx::TEXT_STYLE_STRIKE,
++                        (style & gfx::Font::STRIKE_THROUGH) != 0);
++  render_text->SetWeight(font_list.GetFontWeight());
++  render_text->Draw(&canvas);
++}
++
++std::optional<float> MeasureInkCentre(std::u16string_view text,
++                                      const gfx::FontList& font_list,
++                                      int box_width) {
++  // The box itself, with this much room round it for ink past its edges.
++  // The text is centred in the box, not in a wider one: RenderText rounds
++  // a centring offset toward zero, so a text two DIP or more wider than its
++  // box stood a DIP right of where it stood centred in a box wider by the
++  // same each side.
++  const int margin = font_list.GetHeight();
++  const gfx::Rect box(margin, margin, box_width, font_list.GetHeight());
++  gfx::Canvas canvas(
++      gfx::Size(box_width + 2 * margin, font_list.GetHeight() + 2 * margin),
++      kMeasureScale, /*is_opaque=*/false);
++  DrawCentredText(canvas, text, font_list, SK_ColorBLACK, box);
++  const SkBitmap bitmap = canvas.GetBitmap();
++  // Every pixel the text draws on is ink, its faint antialiased edge too:
++  // the screen shows it. From a quarter opacity on, a column at the edge of
++  // Segoe UI Emoji's house at 17 DIP was left out, and the rail's title row
++  // stood 0.75 DIP right of the column (the owner's bound is half a DIP).
++  int left = bitmap.width();
++  int right = -1;
++  for (int y = 0; y < bitmap.height(); ++y) {
++    for (int x = 0; x < bitmap.width(); ++x) {
++      if (SkColorGetA(bitmap.getColor(x, y)) > 0) {
++        left = std::min(left, x);
++        right = std::max(right, x);
++      }
++    }
++  }
++  if (right < 0) {
++    return std::nullopt;
++  }
++  return (left + right + 1) / 2.f / kMeasureScale - margin;
++}
++
++// Draws `text` across the image, its ink centred.
++class CentredGlyphSource : public gfx::CanvasImageSource {
++ public:
++  CentredGlyphSource(std::u16string text,
++                     gfx::FontList font_list,
++                     SkColor color,
++                     const gfx::Size& size)
++      : gfx::CanvasImageSource(size),
++        text_(std::move(text)),
++        font_list_(std::move(font_list)),
++        color_(color) {}
++  CentredGlyphSource(const CentredGlyphSource&) = delete;
++  CentredGlyphSource& operator=(const CentredGlyphSource&) = delete;
++  ~CentredGlyphSource() override = default;
++
++  // gfx::CanvasImageSource:
++  void Draw(gfx::Canvas* canvas) override {
++    const std::optional<float> ink =
++        GlyphInkCentre(text_, font_list_, size().width());
++    canvas->Save();
++    if (ink) {
++      canvas->sk_canvas()->translate(size().width() / 2.f - *ink, 0);
++    }
++    // Clipped by the image's edges alone: a box clip, moved with the text,
++    // cut a picture wider than the image on one side only.
++    DrawCentredText(*canvas, text_, font_list_, color_, gfx::Rect(size()));
++    canvas->Restore();
++  }
++
++ private:
++  const std::u16string text_;
++  const gfx::FontList font_list_;
++  const SkColor color_;
++};
++
++}  // namespace
++
++std::optional<float> GlyphInkCentre(std::u16string_view text,
++                                    const gfx::FontList& font_list,
++                                    int box_width) {
++  if (text.empty()) {
++    return std::nullopt;
++  }
++  static base::NoDestructor<std::map<Key, std::optional<float>>> remembered;
++  Key key(std::u16string(text), font_list.GetPrimaryFont().GetFontName(),
++          font_list.GetFontSize(), static_cast<int>(font_list.GetFontWeight()),
++          font_list.GetFontStyle(), box_width);
++  if (const auto it = remembered->find(key); it != remembered->end()) {
++    return it->second;
++  }
++  if (remembered->size() >= kMaxRemembered) {
++    remembered->clear();
++  }
++  const std::optional<float> centre =
++      MeasureInkCentre(text, font_list, box_width);
++  remembered->emplace(std::move(key), centre);
++  return centre;
++}
++
++int InkCentringShift(std::u16string_view text,
++                     const gfx::FontList& font_list,
++                     const gfx::Rect& label_bounds,
++                     float centre_x) {
++  const std::optional<float> ink =
++      GlyphInkCentre(text, font_list, label_bounds.width());
++  if (!ink) {
++    return 0;
++  }
++  return static_cast<int>(std::lround(centre_x - (label_bounds.x() + *ink)));
++}
++
++ui::ImageModel CentredGlyphImage(std::u16string_view text,
++                                 const gfx::FontList& font_list,
++                                 ui::ColorVariant color,
++                                 int width) {
++  const gfx::Size size(width, std::max(width, font_list.GetHeight()));
++  return ui::ImageModel::FromImageGenerator(
++      base::BindRepeating(
++          [](const std::u16string& text, const gfx::FontList& font_list,
++             const ui::ColorVariant& color, const gfx::Size& size,
++             const ui::ColorProvider* provider) {
++            return gfx::CanvasImageSource::MakeImageSkia<CentredGlyphSource>(
++                text, font_list, color.ResolveToSkColor(provider), size);
++          },
++          std::u16string(text), font_list, color, size),
++      size);
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/stedding/glyph_ink.h b/chrome/browser/ui/views/stedding/glyph_ink.h
+new file mode 100644
+index 0000000000000..73c5f56a10c59
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/glyph_ink.h
+@@ -0,0 +1,54 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STEDDING_GLYPH_INK_H_
++#define CHROME_BROWSER_UI_VIEWS_STEDDING_GLYPH_INK_H_
++
++#include <optional>
++#include <string_view>
++
++#include "ui/base/models/image_model.h"
++#include "ui/color/color_variant.h"
++
++namespace gfx {
++class FontList;
++class Rect;
++}  // namespace gfx
++
++namespace stedding {
++
++// A Space's glyph is text, an emoji as a rule, and text is placed by its
++// advance, which is not where its picture is: on the Mac an emoji's picture
++// is one em wide at the start of an advance a quarter of an em wider, so an
++// emoji centred by its advance stands an eighth of an em left of the centre,
++// 2 DIP at the chips' 16 (the owner, 2026-10-20; sidebar Y8, Y13; spaces
++// B11, B16). These centre the ink itself, found by drawing the text.
++
++// The horizontal centre of the ink `text` draws in `font_list` when a label
++// centres it in a box `box_width` DIP wide starting at 0, every pixel it
++// draws on counted; nothing when it draws no ink. Drawn once for each text,
++// font and width, then remembered.
++std::optional<float> GlyphInkCentre(std::u16string_view text,
++                                    const gfx::FontList& font_list,
++                                    int box_width);
++
++// How many whole DIP to move a label that centres `text` in `label_bounds`
++// so that its ink, not its advance, is centred on `centre_x`, in the same
++// coordinates; 0 when it draws no ink.
++int InkCentringShift(std::u16string_view text,
++                     const gfx::FontList& font_list,
++                     const gfx::Rect& label_bounds,
++                     float centre_x);
++
++// `text` in `font_list` and `color` as an image `width` DIP wide, its ink
++// centred across it, and as tall as `width` or the text's line, whichever is
++// taller: a glyph that stands on an icon column as the icons' images do.
++ui::ImageModel CentredGlyphImage(std::u16string_view text,
++                                 const gfx::FontList& font_list,
++                                 ui::ColorVariant color,
++                                 int width);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STEDDING_GLYPH_INK_H_
+diff --git a/chrome/browser/ui/views/stedding/glyph_ink_unittest.cc b/chrome/browser/ui/views/stedding/glyph_ink_unittest.cc
+new file mode 100644
+index 0000000000000..01ad397d23e4f
+--- /dev/null
++++ b/chrome/browser/ui/views/stedding/glyph_ink_unittest.cc
+@@ -0,0 +1,137 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/stedding/glyph_ink.h"
++
++#include <algorithm>
++#include <optional>
++#include <string>
++#include <utility>
++
++#include "base/strings/utf_string_conversions.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/models/image_model.h"
++#include "ui/color/color_variant.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/image/image_skia_rep.h"
++#include "ui/gfx/text_utils.h"
++
++namespace stedding {
++namespace {
++
++// Measured as the sidebar's tests read the screen: at the Mac's scale.
++constexpr float kScale = 2.f;
++
++// The glyphs a Space without an icon takes by its place, and an icon picked.
++constexpr const char* kGlyphs[] = {
++    "\xF0\x9F\x8F\xA0",  // house
++    "\xF0\x9F\x92\xBC",  // briefcase
++    "\xF0\x9F\x93\x9A",  // books
++    "\xF0\x9F\x8E\xA8",  // palette
++    "\xF0\x9F\x94\xAC",  // microscope
++    "\xF0\x9F\x8E\xB5",  // note
++    "\xF0\x9F\x9A\x80",  // rocket
++};
++
++// The centre across `bitmap`, in DIP, of every pixel column anything is
++// drawn in, the faintest edge too; nothing when nothing is drawn.
++std::optional<double> DrawnCentre(const SkBitmap& bitmap) {
++  int left = bitmap.width();
++  int right = -1;
++  for (int y = 0; y < bitmap.height(); ++y) {
++    for (int x = 0; x < bitmap.width(); ++x) {
++      if (SkColorGetA(bitmap.getColor(x, y)) > 0) {
++        left = std::min(left, x);
++        right = std::max(right, x);
++      }
++    }
++  }
++  if (right < 0) {
++    return std::nullopt;
++  }
++  return (left + right + 1) / 2.0 / kScale;
++}
++
++// sidebar Y8, Y28 (the owner, 2026-10-20): a glyph a label centres in its
++// bounds, moved by InkCentringShift, stands within half a DIP of the centre
++// asked for, counting every pixel it draws, at each text size the sidebar
++// can draw a Space's glyph at, in a label of either parity and about a
++// centre on a whole DIP or between two. Left out of the ink, the faint
++// column at an emoji's edge put the rail's title row 0.75 DIP right of the
++// rail's column on Windows (Segoe UI Emoji at 17 DIP).
++TEST(GlyphInkTest, AGlyphMovedByItsShiftStandsOnTheCentre) {
++  const gfx::FontList base;
++  constexpr int kRowWidth = 64;
++  for (int size = 10; size <= 26; ++size) {
++    const gfx::FontList font =
++        base.DeriveWithSizeDelta(size - base.GetFontSize());
++    for (const char* const utf8 : kGlyphs) {
++      const std::u16string glyph = base::UTF8ToUTF16(utf8);
++      const int advance = gfx::GetStringWidth(glyph, font);
++      for (int width : {advance, advance + 1}) {
++        for (float centre : {32.f, 32.5f}) {
++          SCOPED_TRACE(testing::Message()
++                       << "size " << size << ", glyph " << utf8 << ", label "
++                       << width << " DIP wide, centre " << centre);
++          gfx::Rect label((kRowWidth - width) / 2, 0, width, font.GetHeight());
++          label.Offset(InkCentringShift(glyph, font, label, centre), 0);
++          gfx::Canvas canvas(gfx::Size(kRowWidth, font.GetHeight()), kScale,
++                             /*is_opaque=*/false);
++          canvas.DrawStringRectWithFlags(
++              glyph, font, SK_ColorBLACK, label,
++              gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_ELLIPSIS |
++                  gfx::Canvas::NO_SUBPIXEL_RENDERING);
++          const std::optional<double> drawn = DrawnCentre(canvas.GetBitmap());
++          if (!drawn) {
++            // A font with no picture for it draws nothing to centre.
++            continue;
++          }
++          EXPECT_NEAR(centre, *drawn, 0.5)
++              << "the glyph stands " << *drawn - centre << " DIP off";
++        }
++      }
++    }
++  }
++}
++
++// sidebar Y8: the open sidebar's title row draws the Space's glyph as an
++// image the favicons' size; every pixel of its picture is centred across
++// the image within the half DIP the column allows (the owner, 2026-10-20).
++// On Windows the picture stood up to 1.25 DIP off: a text two DIP or more
++// wider than the image was centred as if it fitted, and its clip moved with
++// it. On the Mac the microscope at 18 to 23 DIP stands exactly half a DIP
++// left in images narrower than it, which is within the bound.
++TEST(GlyphInkTest, TheGlyphImageCentresItsPicture) {
++  const gfx::FontList base;
++  for (int size = 10; size <= 26; ++size) {
++    const gfx::FontList font =
++        base.DeriveWithSizeDelta(size - base.GetFontSize());
++    for (const char* const utf8 : kGlyphs) {
++      for (int width : {14, 16, 18, 22}) {
++        SCOPED_TRACE(testing::Message() << "size " << size << ", glyph " << utf8
++                                        << ", image " << width);
++        const gfx::ImageSkia image =
++            CentredGlyphImage(base::UTF8ToUTF16(utf8), font,
++                              ui::ColorVariant(SK_ColorBLACK), width)
++                .Rasterize(nullptr);
++        const std::optional<double> drawn =
++            DrawnCentre(image.GetRepresentation(kScale).GetBitmap());
++        if (!drawn) {
++          continue;
++        }
++        EXPECT_NEAR(width / 2.0, *drawn, 0.5)
++            << "the picture stands " << *drawn - width / 2.0 << " DIP off";
++      }
++    }
++  }
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/tabs/BUILD.gn b/chrome/browser/ui/views/tabs/BUILD.gn
+index afe435d1c434e..7bc2b861bc769 100644
+--- a/chrome/browser/ui/views/tabs/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/BUILD.gn
+@@ -278,6 +278,7 @@ source_set("tab_impl") {
+     "//chrome/browser/themes",
+     "//chrome/browser/ui:browser_element_identifiers",
+     "//chrome/browser/ui:layout_constants",
++    "//chrome/browser/ui:stedding_ui_metrics",
+     "//chrome/browser/ui:ui_features",
+     "//chrome/browser/ui:view_ids",
+     "//chrome/browser/ui/browser_window",
+diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
+index aaeb06ef13d65..3b27ffbd98f62 100644
+--- a/chrome/browser/ui/views/tabs/common/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
+@@ -147,6 +147,7 @@ source_set("impl") {
+     "//chrome/browser/ui/views/frame:frame_separator",
+     "//chrome/browser/ui/views/frame:glass_frame_service",
+     "//chrome/browser/ui/views/frame:themed_background",
++    "//chrome/browser/ui/views/stedding:glyph_ink",
+     "//chrome/browser/ui/views/stedding:isolation_mark",
+     "//chrome/browser/ui/views/stedding:rename_field_watcher",
+     "//chrome/browser/ui/views/tabs:base",
+diff --git a/chrome/browser/ui/views/tabs/common/folder_view.cc b/chrome/browser/ui/views/tabs/common/folder_view.cc
+index 6738fe2ccd2ff..557f7702f83a3 100644
+--- a/chrome/browser/ui/views/tabs/common/folder_view.cc
++++ b/chrome/browser/ui/views/tabs/common/folder_view.cc
+@@ -457,6 +457,15 @@ void FolderView::UpdateHeader() {
+   }
+   header_->SetPreferredSize(
+       gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
++  // sidebar Y1, Y8: the glyph's box is the rows' favicon column, the
++  // preset's favicon wide. It kept the size the header was made with, so
++  // after a density change the glyph stood a DIP right of the favicons
++  // (the owner, 2026-10-20).
++  const gfx::Size glyph_box(stedding::SidebarFaviconSize(),
++                            stedding::SidebarFaviconSize());
++  if (glyph_->GetPreferredSize() != glyph_box) {
++    glyph_->SetPreferredSize(glyph_box);
++  }
+   const std::string& title = f->title();
+   name_->SetText(title.empty() ? u"New Folder" : base::UTF8ToUTF16(title));
+   // The header is the folder's control: a screen reader reads it by the name
+diff --git a/chrome/browser/ui/views/tabs/common/horizontal_tab_style_views.cc b/chrome/browser/ui/views/tabs/common/horizontal_tab_style_views.cc
+index 5e8bf7705c1b2..ab186a80359ce 100644
+--- a/chrome/browser/ui/views/tabs/common/horizontal_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/common/horizontal_tab_style_views.cc
+@@ -8,6 +8,7 @@
+ #include <cmath>
+ #include <utility>
+ 
++#include "base/feature_list.h"
+ #include "base/i18n/rtl.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/numerics/safe_conversions.h"
+@@ -16,6 +17,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/ui_features.h"
+@@ -39,6 +41,14 @@
+ #include "ui/views/controls/separator.h"
+ #include "ui/views/widget/widget.h"
+ 
++namespace {
++
++// Stedding (tabs R49, R50): how far apart a split's two halves are drawn,
++// the sidebar's gap between them (SplitTabView::kSplitViewGap).
++constexpr float kSteddingSplitGap = 2.f;
++
++}  // namespace
++
+ HorizontalTabStyleViews::HorizontalTabStyleViews(
+     std::unique_ptr<TabStyleViewDelegate> delegate)
+     : delegate_(std::move(delegate)) {
+@@ -70,6 +80,19 @@ SkPath HorizontalTabStyleViews::GetPath(TabStyle::PathType path_type,
+     return GetPinnedPath(path_type, scale, flags).value_or(SkPath());
+   }
+ 
++  // Stedding (tabs R49): the address row is a card a gutter below the strip,
++  // not Chromium's toolbar, so the active tab's skirts, drawn to join the
++  // toolbar, ended in the gutter, and its fill, the tab colour, sat over a
++  // row in the page's colour. Every tab is a detached pill instead, the
++  // shape a hovered tab already has, as the sidebar draws its rows; its
++  // outline, when it has one, follows the pill.
++  const bool stedding_pills =
++      base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
++  if (stedding_pills && (path_type == TabStyle::PathType::kActiveTab ||
++                         path_type == TabStyle::PathType::kBorder)) {
++    path_type = TabStyle::PathType::kHighlight;
++  }
++
+   const int stroke_thickness = GetStrokeThickness();
+ 
+   // We'll do the entire path calculation in aligned pixels.
+@@ -146,15 +169,27 @@ SkPath HorizontalTabStyleViews::GetPath(TabStyle::PathType path_type,
+       const bool expand_into_right_separator =
+           limited_tab_space || path_type == TabStyle::PathType::kHitTest ||
+           delegate_->IsLeftSplitTab();
++      // Stedding (tabs R50): a split's halves are two pills a hair apart, as
++      // the sidebar draws a split, each painted once: one shape cut in two
++      // overlapped its halves by the separator's width, and the translucent
++      // fill of an active split in dark drew a bright bar where they met.
++      // The hit test keeps Chromium's, so the gap still selects a half.
++      const float split_inset =
++          stedding_pills && path_type != TabStyle::PathType::kHitTest
++              ? kSteddingSplitGap * scale / 2
++              : 0;
+       if (expand_into_left_separator) {
+-        left -= separator_overlap / 2.0;
++        left -= separator_overlap / 2.0 -
++                (delegate_->IsRightSplitTab() ? split_inset : 0);
+       }
+       if (expand_into_right_separator) {
+-        right += separator_overlap / 2.0;
++        right += separator_overlap / 2.0 -
++                 (delegate_->IsLeftSplitTab() ? split_inset : 0);
+       }
+     }
+ 
+-    if (delegate_->IsSplit()) {
++    if (delegate_->IsSplit() &&
++        (!stedding_pills || path_type == TabStyle::PathType::kHitTest)) {
+       if (delegate_->IsLeftSplitTab()) {
+         top_right_corner_radius = 0;
+         bottom_right_corner_radius = 0;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
+index 6996491d999cf..52e322499f57a 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/frame_separator.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/stedding/glyph_ink.h"
+ #include "chrome/browser/ui/views/stedding/isolation_mark_view.h"
+ #include "chrome/browser/ui/views/stedding/rename_field_watcher.h"
+ #include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
+@@ -110,14 +111,26 @@ class SidebarRowButton : public views::LabelButton {
+     InvalidateLayout();
+   }
+ 
+-  // views::LayoutDelegate: the button's own layout, then the mark: after the
+-  // text, which gives up its end when the name is too long for both, or on
+-  // the corner of the glyph the rail's row draws in its middle.
++  // sidebar Y8, spaces B16: the rail's title row is the Space's glyph alone,
++  // centred on the rail's column by the ink it draws, as the switcher's
++  // chips are. Centred by its advance, an emoji stood 2.5 DIP left of the
++  // rail's other glyphs (the owner, 2026-10-20).
++  void SetCentreTextInk(bool centre) {
++    if (centre_text_ink_ != centre) {
++      centre_text_ink_ = centre;
++      InvalidateLayout();
++    }
++  }
++
++  // views::LayoutDelegate: the button's own layout, the text centred by its
++  // ink where asked, then the mark: after the text, which gives up its end
++  // when the name is too long for both, or on the corner of the glyph the
++  // rail's row draws in its middle.
+   views::ProposedLayout CalculateProposedLayout(
+       const views::SizeBounds& size_bounds) const override {
+     views::ProposedLayout layout =
+         views::LabelButton::CalculateProposedLayout(size_bounds);
+-    if (!mark_ || !size_bounds.is_fully_bounded()) {
++    if (!size_bounds.is_fully_bounded()) {
+       return layout;
+     }
+     const auto text = std::ranges::find_if(
+@@ -129,6 +142,20 @@ class SidebarRowButton : public views::LabelButton {
+     }
+     const gfx::Rect row(gfx::Size(size_bounds.width().value(),
+                                   size_bounds.height().value()));
++    if (centre_text_ink_) {
++      // The middle of the room the button centres its contents in.
++      gfx::Rect area = row;
++      area.Inset(gfx::Insets::TLBR(0, GetInsets().left(), 0,
++                                   GetInsets().right()));
++      text->bounds.Offset(
++          stedding::InkCentringShift(GetText(), label()->font_list(),
++                                     text->bounds,
++                                     area.x() + area.width() / 2.f),
++          0);
++    }
++    if (!mark_) {
++      return layout;
++    }
+     gfx::Rect mark;
+     if (mark_->form() == stedding::IsolationMarkView::Form::kGlyph) {
+       const stedding::MarkAfterText placed = stedding::PlaceMarkAfterText(
+@@ -151,6 +178,7 @@ class SidebarRowButton : public views::LabelButton {
+ 
+  private:
+   raw_ptr<stedding::IsolationMarkView> mark_ = nullptr;
++  bool centre_text_ink_ = false;
+ };
+ 
+ BEGIN_METADATA(SidebarRowButton)
+@@ -158,6 +186,9 @@ END_METADATA
+ 
+ // Stedding: the Space title row above the pinned tabs.
+ constexpr int kSpaceTitleRowHeight = 30;
++// The gap between a row's favicon and its title (TabViewVerticalLayout's
++// favicon padding), which the title row keeps between its glyph and name.
++constexpr int kFaviconTitleGap = 8;
+ 
+ bool IsVerticalOrientation(const TabCollectionNode* collection_node) {
+   return collection_node &&
+@@ -460,14 +491,26 @@ void TabStripView::ApplySpaceTitleForm() {
+   // size up like the rail's favicons; the open sidebar the glyph and the
+   // name on the tab rows' column. The name, elided to "…" beside the
+   // glyph, sat left in the rail until 2026-09-09 (sidebar Y13).
+-  std::u16string text = space_title_glyph_;
+-  if (!rail_form_ && !space_title_name_.empty()) {
+-    text = text.empty() ? space_title_name_
+-                        : base::StrCat({space_title_glyph_, u"   ",
+-                                        space_title_name_});
+-  }
++  // In the open sidebar the glyph is an image the favicons' size in their
++  // column, centred there by its ink, and the name the row's text, where
++  // the rows' titles start. As one text, "glyph   name", the emoji stood
++  // 3 DIP left of the favicons and the name 2 DIP right of the titles at
++  // Compact and Dense (the owner, 2026-10-20; sidebar Y8).
++  const bool glyph_image = !rail_form_ && !space_title_glyph_.empty();
+   auto* const row = static_cast<SidebarRowButton*>(space_title_row_.get());
+-  row->SetText(text);
++  row->SetText(rail_form_ ? space_title_glyph_ : space_title_name_);
++  row->SetCentreTextInk(rail_form_);
++  // A private window's row keeps the icon SetSpaceTitleIcon gave it.
++  if (!space_title_glyph_.empty()) {
++    row->SetImageModel(
++        views::Button::STATE_NORMAL,
++        glyph_image ? stedding::CentredGlyphImage(
++                          space_title_glyph_, stedding::SidebarFont(),
++                          kColorTabForegroundInactiveFrameActive,
++                          stedding::SidebarFaviconSize())
++                    : ui::ImageModel());
++    row->SetImageLabelSpacing(kFaviconTitleGap);
++  }
+   // Named for assistive technology whatever form it takes: the rail shows the
+   // glyph alone, or nothing for a Space with neither (found by the views
+   // accessibility paint check, 2026-09-30).
+diff --git a/chrome/browser/ui/views/tabs/tab.cc b/chrome/browser/ui/views/tabs/tab.cc
+index 7a77fc7f0bbe9..9fd53036acb8a 100644
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -12,6 +12,7 @@
+ #include <string_view>
+ #include <utility>
+ 
++#include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/metrics/user_metrics.h"
+@@ -29,6 +30,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+ #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
+ #include "chrome/browser/ui/tabs/saved_tab_groups/collaboration_messaging_tab_data.h"
+@@ -986,10 +988,17 @@ TabSlotView::ViewType Tab::GetTabSlotViewType() const {
+ }
+ 
+ TabSizeInfo Tab::GetTabSizeInfo() const {
++  // Stedding (tabs R52): each half of a split is sized as any other tab, so
++  // a split takes two tabs' room rather than one and its titles are not cut
++  // to a few letters beside wide tabs; it still shrinks with the rest when
++  // the strip fills. A pinned split keeps Chromium's width.
++  const bool half_width =
++      split().has_value() &&
++      !base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
+   return {tab_style()->GetPinnedWidth(split().has_value()),
+-          tab_style()->GetMinimumActiveWidth(split().has_value()),
++          tab_style()->GetMinimumActiveWidth(half_width),
+           tab_style()->GetMinimumInactiveWidth(),
+-          tab_style()->GetStandardWidth(split().has_value())};
++          tab_style()->GetStandardWidth(half_width)};
+ }
+ 
+ void Tab::SetGroup(std::optional<tab_groups::TabGroupId> group) {
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 318718b5a59c0..7d6b53d1051d3 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -33,6 +33,7 @@ test("stedding_browser_tests") {
+     "external_extensions_browsertest.cc",
+     "folder_tabs_browsertest.cc",
+     "hidden_row_controls_browsertest.cc",
++    "horizontal_strip_browsertest.cc",
+     "hover_card_picture_browsertest.cc",
+     "https_first_browsertest.cc",
+     "import_browsertest.cc",
+diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
+index a51c6a7083a57..033e450900933 100644
+--- a/chrome/test/stedding/address_band_browsertest.cc
++++ b/chrome/test/stedding/address_band_browsertest.cc
+@@ -29,6 +29,7 @@
+ #include "base/callback_list.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/run_loop.h"
++#include "base/strings/strcat.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/test/bind.h"
+ #include "base/test/run_until.h"
+@@ -54,8 +55,10 @@
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/theme/page_bar_color_supplier.h"
+ #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/stedding/theme/page_top_color.h"
++#include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/toasts/api/toast_id.h"
+@@ -63,6 +66,8 @@
+ #include "chrome/browser/ui/toasts/toast_view.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/contents_container_view.h"
++#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+@@ -82,12 +87,14 @@
+ #include "chrome/test/stedding/sidebar_test_util.h"
+ #include "components/infobars/content/content_infobar_manager.h"
+ #include "components/prefs/pref_service.h"
++#include "components/split_tabs/split_tab_visual_data.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/test_navigation_observer.h"
+ #include "net/dns/mock_host_resolver.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/skia/include/core/SkBitmap.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/base_window.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -100,8 +107,10 @@
+ #include "ui/gfx/animation/animation_container.h"
+ #include "ui/gfx/animation/animation_runner.h"
+ #include "ui/gfx/animation/animation_test_api.h"
++#include "ui/gfx/canvas.h"
+ #include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/gfx/render_text.h"
+ #include "ui/gfx/render_text_test_api.h"
+@@ -845,6 +854,330 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
+       << std::hex << *row()->color();
+ }
+ 
++// dark-pages Dk8: a read of a tab's top edge begun before the switch changes
++// and back after it is the page as it was, and is dropped. A tab sent to the
++// background with a read in flight had it back up to a second later, after
++// the switch had forgotten its edge, and shown again the row was the pale
++// orange edge of the page before the switch (win-release, once in a run of
++// ATabInTheBackgroundTakesTheSwitchAtOnce, 2026-10-20). The read is held
++// here until after the switch, so it always comes back late.
++IN_PROC_BROWSER_TEST_F(PageColourRowTest,
++                       AnEdgeReadBegunBeforeTheSwitchIsDropped) {
++  constexpr SkColor kEdge = SkColorSetRGB(0xff, 0xf3, 0xe0);
++  constexpr SkColor kThemeColour = SkColorSetRGB(0xe8, 0xf0, 0xfe);
++  const GURL header(
++      "data:text/html,<meta name='theme-color' content='%23e8f0fe'>"
++      "<body style='margin:0'><div style='height:80px;background:%23fff3e0'>"
++      "</div><p>A pale header</p></body>");
++  Profile* const profile = browser()->GetProfile();
++  ThemeServiceFactory::GetForProfile(profile)->SetBrowserColorScheme(
++      ThemeService::BrowserColorScheme::kLight);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), header));
++  ASSERT_TRUE(WaitForTheRow(kEdge)) << "the edge was read";
++  // The next read of the edge, the one after the load or the late one, is
++  // held as it comes back: the pale edge, read before the switch.
++  std::vector<base::OnceClosure> held;
++  row()->HoldTopReadsForTesting(base::BindLambdaForTesting(
++      [&](base::OnceClosure take) { held.push_back(std::move(take)); }));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return !held.empty(); }))
++      << "no read of the edge after the first";
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), GURL("data:text/html,<body>Another page</body>"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++
++  stedding::SetDarkPagesOn(profile, true);
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return row()->color() && color_utils::IsDark(*row()->color());
++  })) << "the tab shown is darkened";
++  // Back after the switch, as it came back on the PC.
++  row()->HoldTopReadsForTesting(
++      base::RepeatingCallback<void(base::OnceClosure)>());
++  for (base::OnceClosure& take : held) {
++    std::move(take).Run();
++  }
++  browser()->GetTabStripModel()->ActivateTabAt(0);
++  ASSERT_TRUE(row()->color());
++  EXPECT_TRUE(color_utils::IsDark(*row()->color()))
++      << "the edge read before the switch: " << std::hex << *row()->color();
++  EXPECT_TRUE(stedding::PageColorsMatch(
++      *row()->color(), stedding::DarkenLikeBlink(kThemeColour)))
++      << std::hex << *row()->color();
++}
++
++// toolbar T41: a split's row as the window's background paints it, along
++// the row's middle, against the colours each part should have: over each
++// pane up to the blend that pane's colour, and over the gap between them a
++// colour between the two in every channel where they differ.
++testing::AssertionResult SplitRowReads(BrowserView* window,
++                                       SkColor left,
++                                       SkColor right) {
++  views::test::RunScheduledLayout(window);
++  MultiContentsView* const panes = window->multi_contents_view();
++  if (!panes || !panes->IsInSplitView()) {
++    return testing::AssertionFailure() << "no split on screen";
++  }
++  const auto bounds_of = [window](views::View* pane) {
++    gfx::RectF bounds(pane->GetLocalBounds());
++    views::View::ConvertRectToTarget(pane, window, &bounds);
++    return gfx::ToEnclosingRect(bounds);
++  };
++  gfx::Rect first = bounds_of(panes->contents_container_views()[0]);
++  gfx::Rect second = bounds_of(panes->contents_container_views()[1]);
++  if (first.x() > second.x()) {
++    std::swap(first, second);
++  }
++  gfx::RectF toolbar(window->toolbar()->GetLocalBounds());
++  views::View::ConvertRectToTarget(window->toolbar(), window, &toolbar);
++  const int y = static_cast<int>(toolbar.CenterPoint().y());
++
++  gfx::Canvas canvas(window->size(), 1.0f, /*is_opaque=*/true);
++  window->background()->Paint(&canvas, window);
++  const SkBitmap& row = canvas.GetBitmap();
++  // The blend runs 6 DIP past each side of the gap.
++  const struct {
++    const char* where;
++    int x;
++    SkColor want;
++  } solid[] = {
++      {"over the left pane's middle", first.CenterPoint().x(), left},
++      {"over the left pane, before the blend", first.right() - 8, left},
++      {"over the right pane, after the blend", second.x() + 8, right},
++      {"over the right pane's middle", second.CenterPoint().x(), right},
++  };
++  for (const auto& point : solid) {
++    const SkColor got = row.getColor(point.x, y);
++    if (got != point.want) {
++      return testing::AssertionFailure()
++             << point.where << " (x " << point.x << ") the row is "
++             << color_utils::SkColorToRgbaString(got) << ", not "
++             << color_utils::SkColorToRgbaString(point.want) << "; panes "
++             << first.ToString() << " and " << second.ToString();
++    }
++  }
++  if (left != right) {
++    const int middle = (first.right() + second.x()) / 2;
++    const SkColor got = row.getColor(middle, y);
++    const auto between = [](U8CPU value, U8CPU a, U8CPU b) {
++      return a == b ? value == a : std::min(a, b) < value && value < std::max(a, b);
++    };
++    if (!between(SkColorGetR(got), SkColorGetR(left), SkColorGetR(right)) ||
++        !between(SkColorGetG(got), SkColorGetG(left), SkColorGetG(right)) ||
++        !between(SkColorGetB(got), SkColorGetB(left), SkColorGetB(right))) {
++      return testing::AssertionFailure()
++             << "over the gap (x " << middle << ") the row is "
++             << color_utils::SkColorToRgbaString(got)
++             << ", not a blend of the two";
++    }
++  }
++  return testing::AssertionSuccess();
++}
++
++// toolbar T41 (the owner, 2026-10-20): in a split the row takes each pane's
++// page colour over that pane, with a short blend over the gap between them,
++// and its icons and text read on both parts. It follows a swap, a new
++// ratio, the other pane navigating and dark pages, and goes with the row
++// hidden and with the split. Before, the row was the active pane's colour
++// across its whole width, over the other page too.
++IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
++  const auto page = [](const char* colour) {
++    return GURL(base::StrCat({"data:text/html,<body style='margin:0;"
++                              "background:%23",
++                              colour, "'><p>A page</p></body>"}));
++  };
++  Profile* const profile = browser()->GetProfile();
++  ThemeServiceFactory::GetForProfile(profile)->SetBrowserColorScheme(
++      ThemeService::BrowserColorScheme::kLight);
++  TabStripModel* const tabs = browser()->GetTabStripModel();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page("ffffff")));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), page("102030"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  content::WebContents* const light = tabs->GetWebContentsAt(0);
++  content::WebContents* const dark = tabs->GetWebContentsAt(1);
++  tabs->ActivateTabAt(0);
++  const split_tabs::SplitTabId split =
++      tabs->AddToNewSplit({1}, split_tabs::SplitTabVisualData(),
++                          split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  ASSERT_TRUE(tabs->GetTabAtIndex(1)->IsSplit());
++
++  // Each pane's colour as the row has it: the edge read, within a level or
++  // two of the page's own (T31).
++  const auto colour_of = [&](content::WebContents* pane) {
++    return row()->ColorOf(pane).value_or(SK_ColorTRANSPARENT);
++  };
++  const auto has = [&](content::WebContents* pane, SkColor colour) {
++    return row()->ColorOf(pane) &&
++           stedding::PageColorsMatch(*row()->ColorOf(pane), colour);
++  };
++  const auto icons = [&]() {
++    return bar()->GetColorProvider()->GetColor(kColorToolbarButtonIcon);
++  };
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return has(light, SK_ColorWHITE) &&
++           has(dark, SkColorSetRGB(0x10, 0x20, 0x30));
++  })) << "the panes' colours: " << std::hex << colour_of(light) << ", "
++      << colour_of(dark);
++  {
++    SCOPED_TRACE("each pane's colour over it, a blend between");
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return SplitRowReads(view(), colour_of(light), colour_of(dark));
++    })) << SplitRowReads(view(), colour_of(light), colour_of(dark)).message();
++  }
++  {
++    SCOPED_TRACE("the icons read on both parts");
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      // A grey: 4.0:1 against the white and 4.1:1 against the dark blue,
++      // where the near-black the white alone gets has 1.0:1 on the blue.
++      return color_utils::GetContrastRatio(icons(), colour_of(light)) >= 3.9 &&
++             color_utils::GetContrastRatio(icons(), colour_of(dark)) >= 3.9;
++    })) << "the icons are " << color_utils::SkColorToRgbaString(icons());
++  }
++  {
++    // Either pane's page can have no colour yet (it has not painted, or its
++    // edge was not read): the row leaves the ground over it and the other
++    // part fades into it. Reading the unknown side crashed the painter
++    // whenever the left pane's colour was known and the right one's was not
++    // (FolderTabsTest.AFolderComesBackInOrder, 2026-10-20).
++    SCOPED_TRACE("a pane with no colour yet leaves the ground over it");
++    const SkColor light_colour = colour_of(light);
++    const SkColor dark_colour = colour_of(dark);
++    ASSERT_EQ(light, tabs->GetActiveWebContents());
++    for (const bool left_known : {true, false}) {
++      SCOPED_TRACE(left_known ? "the right pane's colour unknown"
++                              : "the left pane's colour unknown");
++      row()->SetColorForTesting(left_known ? std::optional(light_colour)
++                                           : std::nullopt);
++      row()->SetPartnerColorForTesting(left_known ? std::nullopt
++                                                  : std::optional(dark_colour));
++      views::test::RunScheduledLayout(view());
++      const auto bounds_of = [&](int index) {
++        views::View* const pane =
++            view()->multi_contents_view()->contents_container_views()[index];
++        gfx::RectF bounds(pane->GetLocalBounds());
++        views::View::ConvertRectToTarget(pane, view(), &bounds);
++        return gfx::ToEnclosingRect(bounds);
++      };
++      const gfx::Rect left_pane = bounds_of(0);
++      const gfx::Rect right_pane = bounds_of(1);
++      gfx::RectF toolbar(view()->toolbar()->GetLocalBounds());
++      views::View::ConvertRectToTarget(view()->toolbar(), view(), &toolbar);
++      const int y = static_cast<int>(toolbar.CenterPoint().y());
++      gfx::Canvas canvas(view()->size(), 1.0f, /*is_opaque=*/true);
++      view()->background()->Paint(&canvas, view());
++      const SkBitmap& painted = canvas.GetBitmap();
++      // The ground, where no row is: the window's top gutter at that x.
++      const auto ground = [&](int x) { return painted.getColor(x, 2); };
++      const int left_x = left_pane.CenterPoint().x();
++      const int right_x = right_pane.CenterPoint().x();
++      if (left_known) {
++        EXPECT_EQ(light_colour, painted.getColor(left_x, y));
++        EXPECT_EQ(ground(right_x), painted.getColor(right_x, y));
++      } else {
++        EXPECT_EQ(ground(left_x), painted.getColor(left_x, y));
++        EXPECT_EQ(dark_colour, painted.getColor(right_x, y));
++      }
++    }
++    row()->SetColorForTesting(light_colour);
++    row()->SetPartnerColorForTesting(dark_colour);
++  }
++  {
++    SCOPED_TRACE("a swap takes the colours with the pages");
++    tabs->ReverseTabsInSplit(split);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return SplitRowReads(view(), colour_of(dark), colour_of(light));
++    })) << SplitRowReads(view(), colour_of(dark), colour_of(light)).message();
++  }
++  {
++    SCOPED_TRACE("a new ratio moves the blend with the gap");
++    const int old_middle = view()->multi_contents_view()->GetBoundsInScreen()
++                               .CenterPoint()
++                               .x();
++    tabs->UpdateSplitRatio(split, 0.3);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      const gfx::Rect start = view()
++                                  ->multi_contents_view()
++                                  ->contents_container_views()[0]
++                                  ->GetBoundsInScreen();
++      return start.right() < old_middle - 50 &&
++             SplitRowReads(view(), colour_of(dark), colour_of(light));
++    })) << SplitRowReads(view(), colour_of(dark), colour_of(light)).message();
++  }
++  {
++    SCOPED_TRACE("the other pane navigates: both light, the icons dark");
++    ASSERT_NE(dark, tabs->GetActiveWebContents());
++    ASSERT_TRUE(content::NavigateToURL(dark, page("ffe0b2")));
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return has(dark, SkColorSetRGB(0xff, 0xe0, 0xb2)) &&
++             SplitRowReads(view(), colour_of(dark), colour_of(light)) &&
++             icons() == color_utils::GetColorWithMaxContrast(SK_ColorWHITE);
++    })) << SplitRowReads(view(), colour_of(dark), colour_of(light)).message()
++        << "; the icons are " << color_utils::SkColorToRgbaString(icons());
++  }
++  {
++    SCOPED_TRACE("dark pages darkens both parts, and the icons go white");
++    stedding::SetDarkPagesOn(profile, true);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return row()->ColorOf(dark) && color_utils::IsDark(colour_of(dark)) &&
++             row()->ColorOf(light) && color_utils::IsDark(colour_of(light)) &&
++             SplitRowReads(view(), colour_of(dark), colour_of(light)) &&
++             icons() == SK_ColorWHITE;
++    })) << std::hex << colour_of(dark) << ", " << colour_of(light);
++    stedding::SetDarkPagesOn(profile, false);
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return has(light, SK_ColorWHITE); }));
++  }
++  {
++    SCOPED_TRACE("the row hidden: no part of it is drawn");
++    ASSERT_TRUE(
++        chrome::ExecuteCommand(browser(), IDC_STEDDING_TOGGLE_ADDRESS_ROW));
++    views::test::RunScheduledLayout(view());
++    ASSERT_FALSE(view()->IsToolbarVisible());
++    gfx::RectF card(view()->multi_contents_view()->GetLocalBounds());
++    views::View::ConvertRectToTarget(view()->multi_contents_view(), view(),
++                                     &card);
++    gfx::Canvas canvas(view()->size(), 1.0f, /*is_opaque=*/true);
++    view()->background()->Paint(&canvas, view());
++    for (int y = 0; y < card.y(); ++y) {
++      for (const float x : {card.x() + card.width() / 4,
++                            card.x() + card.width() * 3 / 4}) {
++        const SkColor got = canvas.GetBitmap().getColor(x, y);
++        EXPECT_NE(colour_of(light), got) << "at " << x << ", " << y;
++        EXPECT_NE(colour_of(dark), got) << "at " << x << ", " << y;
++      }
++    }
++    ASSERT_TRUE(
++        chrome::ExecuteCommand(browser(), IDC_STEDDING_TOGGLE_ADDRESS_ROW));
++    views::test::RunScheduledLayout(view());
++    ASSERT_TRUE(view()->IsToolbarVisible());
++  }
++  {
++    SCOPED_TRACE("the split ended: the active page's colour across");
++    const gfx::Rect end = view()
++                              ->multi_contents_view()
++                              ->contents_container_views()[1]
++                              ->bounds();
++    tabs->RemoveSplit(split);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      views::test::RunScheduledLayout(view());
++      if (view()->multi_contents_view()->IsInSplitView() ||
++          !row()->color()) {
++        return false;
++      }
++      gfx::RectF toolbar(view()->toolbar()->GetLocalBounds());
++      views::View::ConvertRectToTarget(view()->toolbar(), view(), &toolbar);
++      gfx::Canvas canvas(view()->size(), 1.0f, /*is_opaque=*/true);
++      view()->background()->Paint(&canvas, view());
++      gfx::Point probe = end.CenterPoint();
++      views::View::ConvertPointToTarget(view()->multi_contents_view(), view(),
++                                        &probe);
++      return canvas.GetBitmap().getColor(
++                 probe.x(), static_cast<int>(toolbar.CenterPoint().y())) ==
++             *row()->color();
++    }));
++  }
++}
++
+ // toolbar T23: a bubble asked for before its window is shown, with the
+ // address row hidden -- the crashed-session "Restore pages?" bubble at
+ // startup -- anchors to the top container. The app menu button is not drawn,
+diff --git a/chrome/test/stedding/horizontal_strip_browsertest.cc b/chrome/test/stedding/horizontal_strip_browsertest.cc
+new file mode 100644
+index 0000000000000..37f742b15e021
+--- /dev/null
++++ b/chrome/test/stedding/horizontal_strip_browsertest.cc
+@@ -0,0 +1,408 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// tabs R49-R53: Chromium's horizontal tab strip, with vertical tabs off, in
++// the Stedding window. The owner (2026-10-20): "Tabs look really bad when on
++// top, especially when split." The address row there is a card a gutter
++// below the strip, so the active tab's skirts, drawn to join Chromium's
++// toolbar, ended in the gutter; a split's two halves overlapped, which the
++// dark window's translucent fill drew as a bright bar; and the strip's
++// controls and dividers kept Chromium's Material colours on Stedding's
++// ground. Each test reads what the strip paints or the colours it paints
++// with, in a light and a dark window.
++
++#include <string>
++
++#include "base/test/run_until.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/themes/theme_service.h"
++#include "chrome/browser/themes/theme_service_factory.h"
++#include "chrome/browser/ui/browser_element_identifiers.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/tabs/split_tab_metrics.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/tabs/tab_style.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/tabs/tab.h"
++#include "chrome/browser/ui/views/tabs/tab/tab_title.h"
++#include "chrome/browser/ui/views/tabs/tab_strip.h"
++#include "chrome/browser/ui/views/tabs/tab_style_views.h"
++#include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_divider.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/split_tabs/split_tab_visual_data.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/test/browser_test.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "third_party/skia/include/core/SkPath.h"
++#include "third_party/skia/include/core/SkRRect.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/color/color_provider_key.h"
++#include "ui/display/display.h"
++#include "ui/display/screen.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/gfx/geometry/vector2d.h"
++#include "ui/views/background.h"
++#include "ui/views/test/views_test_utils.h"
++#include "ui/views/view.h"
++#include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
++#include "ui/views/widget/widget.h"
++#include "url/gurl.h"
++#include "url/url_constants.h"
++
++namespace {
++
++using Scheme = ThemeService::BrowserColorScheme;
++
++// The view under `root` with the element identifier `id`, or null.
++views::View* FindById(views::View* root, ui::ElementIdentifier id) {
++  if (root->GetProperty(views::kElementIdentifierKey) == id) {
++    return root;
++  }
++  for (views::View* const child : root->children()) {
++    if (views::View* const found = FindById(child, id)) {
++      return found;
++    }
++  }
++  return nullptr;
++}
++
++// The first view of class T under `root`, or null.
++template <typename T>
++T* FindFirst(views::View* root) {
++  if (T* const found = views::AsViewClass<T>(root)) {
++    return found;
++  }
++  for (views::View* const child : root->children()) {
++    if (T* const found = FindFirst<T>(child)) {
++      return found;
++    }
++  }
++  return nullptr;
++}
++
++class HorizontalStripTest
++    : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
++ protected:
++  void SetUpOnMainThread() override {
++    VerticalTabsBrowserTestMixin<InProcessBrowserTest>::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  BrowserView* browser_view() {
++    return BrowserView::GetBrowserViewForBrowser(browser());
++  }
++  TabStrip* strip() { return browser_view()->horizontal_tab_strip_for_testing(); }
++
++  void Open(const std::string& host) {
++    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), embedded_test_server()->GetURL(host, "/title1.html"),
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  }
++
++  // Horizontal tabs, the window in `scheme`, laid out.
++  void ShowStrip(Scheme scheme) {
++    ExitVerticalTabsMode();
++    ASSERT_FALSE(
++        vertical_tab_strip_state_controller()->ShouldDisplayVerticalTabs());
++    ThemeServiceFactory::GetForProfile(browser()->GetProfile())
++        ->SetBrowserColorScheme(scheme);
++    const auto mode = scheme == Scheme::kDark
++                          ? ui::ColorProviderKey::ColorMode::kDark
++                          : ui::ColorProviderKey::ColorMode::kLight;
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return browser_view()->GetWidget()->GetColorProviderKeyForTesting()
++                 .color_mode == mode;
++    }));
++    views::test::RunScheduledLayout(browser_view());
++    ASSERT_TRUE(strip());
++  }
++
++  // What a tab's style paints, at `offset` on `canvas`.
++  static void PaintInto(gfx::Canvas& canvas,
++                        const Tab* tab,
++                        const gfx::Vector2d& offset) {
++    canvas.Save();
++    canvas.Translate(offset);
++    tab->tab_style_views()->PaintTab(&canvas);
++    canvas.Restore();
++  }
++
++  static const char* Name(Scheme scheme) {
++    return scheme == Scheme::kDark ? "dark window" : "light window";
++  }
++};
++
++// tabs R49: the active tab is a detached pill, the shape a hovered tab has,
++// in the active fill; nothing of it runs down into the gutter above the
++// address row, where Chromium's skirts were.
++IN_PROC_BROWSER_TEST_F(HorizontalStripTest, TheActiveTabIsAPill) {
++  Open("a.test");
++  Open("b.test");
++  for (const Scheme scheme : {Scheme::kLight, Scheme::kDark}) {
++    SCOPED_TRACE(Name(scheme));
++    ShowStrip(scheme);
++    Tab* const active = strip()->tab_at(tab_strip_model()->active_index());
++    ASSERT_TRUE(active && active->IsActive() && active->IsDrawn());
++    const TabStyleViews* const style = active->tab_style_views();
++    const SkPath fill =
++        style->GetPath(TabStyle::PathType::kActiveTab, 1.0f, {});
++    const SkPath hover =
++        style->GetPath(TabStyle::PathType::kHighlight, 1.0f, {});
++    EXPECT_TRUE(fill.isRRect(nullptr))
++        << "the active tab is a rounded rectangle, with no skirts";
++    EXPECT_EQ(hover.getBounds(), fill.getBounds())
++        << "the active tab has the shape a hovered tab has";
++    EXPECT_LT(fill.getBounds().bottom(), active->height() - 1)
++        << "the active tab stops above the strip's foot";
++
++    gfx::Canvas canvas(active->size(), 1.0f, /*is_opaque=*/false);
++    PaintInto(canvas, active, gfx::Vector2d());
++    const SkBitmap& painted = canvas.GetBitmap();
++    const SkColor want = active->GetColorProvider()->GetColor(
++        kColorTabBackgroundActiveFrameActive);
++    const SkRect pill = fill.getBounds();
++    const SkColor middle =
++        painted.getColor(static_cast<int>(pill.centerX()),
++                         static_cast<int>(pill.centerY()));
++    EXPECT_NEAR(SkColorGetA(want), SkColorGetA(middle), 2)
++        << "the pill is the active fill, "
++        << color_utils::SkColorToRgbaString(want) << ", not "
++        << color_utils::SkColorToRgbaString(middle);
++    for (const int x : {1, active->width() - 2}) {
++      EXPECT_EQ(SK_AlphaTRANSPARENT,
++                SkColorGetA(painted.getColor(x, active->height() - 2)))
++          << "a skirt at x " << x;
++    }
++  }
++}
++
++// tabs R50: a split is two pills, the sidebar's 2 DIP apart, each with its
++// four corners round and each painted once: nothing between them, and no
++// part of either drawn twice, which the translucent fill of the dark window
++// showed as a bright bar between the halves.
++IN_PROC_BROWSER_TEST_F(HorizontalStripTest, ASplitIsTwoPillsAHairApart) {
++  Open("left.test");
++  Open("right.test");
++  const int left_index = tab_strip_model()->count() - 2;
++  tab_strip_model()->ActivateTabAt(left_index);
++  tab_strip_model()->AddToNewSplit(
++      {left_index + 1}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  ASSERT_TRUE(tab_strip_model()->GetTabAtIndex(left_index)->IsSplit());
++  for (const Scheme scheme : {Scheme::kLight, Scheme::kDark}) {
++    SCOPED_TRACE(Name(scheme));
++    ShowStrip(scheme);
++    Tab* const left = strip()->tab_at(left_index);
++    Tab* const right = strip()->tab_at(left_index + 1);
++    ASSERT_TRUE(left && right && left->IsDrawn() && right->IsDrawn());
++    ASSERT_TRUE(left->IsActive() && right->IsActive())
++        << "both halves of the split on screen are drawn active";
++
++    // Each half's pill in the strip's coordinates.
++    const auto pill_of = [](const Tab* tab) {
++      SkRect pill =
++          tab->tab_style_views()
++              ->GetPath(TabStyle::PathType::kActiveTab, 1.0f, {})
++              .getBounds();
++      pill.offset(tab->x(), tab->y());
++      return pill;
++    };
++    const SkRect first = pill_of(left);
++    const SkRect second = pill_of(right);
++    EXPECT_NEAR(2.f, second.left() - first.right(), 0.6f)
++        << "the halves " << first.left() << "-" << first.right() << " and "
++        << second.left() << "-" << second.right();
++    for (const Tab* const half : {left, right}) {
++      SkRRect shape;
++      ASSERT_TRUE(half->tab_style_views()
++                      ->GetPath(TabStyle::PathType::kActiveTab, 1.0f, {})
++                      .isRRect(&shape));
++      for (const SkRRect::Corner corner :
++           {SkRRect::kUpperLeft_Corner, SkRRect::kUpperRight_Corner,
++            SkRRect::kLowerRight_Corner, SkRRect::kLowerLeft_Corner}) {
++        EXPECT_GT(shape.radii(corner).x(), 0) << "corner " << corner;
++      }
++    }
++
++    // Both halves painted where the strip has them, read along their middle.
++    const int x0 = left->x();
++    const int width = right->bounds().right() - x0;
++    gfx::Canvas canvas(gfx::Size(width, left->height()), 1.0f,
++                       /*is_opaque=*/false);
++    PaintInto(canvas, left, gfx::Vector2d(0, 0));
++    PaintInto(canvas, right, gfx::Vector2d(right->x() - x0, 0));
++    const SkBitmap& painted = canvas.GetBitmap();
++    const SkAlpha fill = SkColorGetA(left->GetColorProvider()->GetColor(
++        kColorTabBackgroundActiveFrameActive));
++    const int y = static_cast<int>(first.centerY());
++    const int from = static_cast<int>(first.left()) + 12 - x0;
++    const int to = static_cast<int>(second.right()) - 12 - x0;
++    int gap = 0;
++    for (int x = from; x < to; ++x) {
++      const SkAlpha alpha = SkColorGetA(painted.getColor(x, y));
++      if (alpha == SK_AlphaTRANSPARENT) {
++        ++gap;
++        continue;
++      }
++      EXPECT_LE(alpha, fill + 2) << "drawn twice at x " << x + x0;
++      if (alpha > fill + 2) {
++        break;
++      }
++    }
++    EXPECT_GE(gap, 1) << "nothing between the halves";
++  }
++}
++
++// tabs R51: the strip's controls have no disc or tile of their own and
++// their glyphs are in the tabs' text colour; the dividers between tabs are a
++// tint of that colour. Chromium's were a pale blue tile and a blue glyph for
++// the tab search chevron, the flat window colour round the new tab button on
++// the dark gradient, and blue or grey dividers.
++IN_PROC_BROWSER_TEST_F(HorizontalStripTest, TheControlsAndDividersSitOnTheGround) {
++  Open("a.test");
++  for (const Scheme scheme : {Scheme::kLight, Scheme::kDark}) {
++    SCOPED_TRACE(Name(scheme));
++    ShowStrip(scheme);
++    const ui::ColorProvider* const colours = browser_view()->GetColorProvider();
++    const SkColor text =
++        colours->GetColor(kColorTabForegroundInactiveFrameActive);
++    for (const ui::ColorId id :
++         {kColorNewTabButtonBackgroundFrameActive,
++          kColorNewTabButtonBackgroundFrameInactive,
++          kColorNewTabButtonCRBackgroundFrameActive,
++          kColorNewTabButtonCRBackgroundFrameInactive}) {
++      EXPECT_EQ(SK_AlphaTRANSPARENT, SkColorGetA(colours->GetColor(id)))
++          << "control background " << id;
++    }
++    EXPECT_EQ(text,
++              colours->GetColor(kColorTabSearchButtonCRForegroundFrameActive));
++    // tabs R53: the address row's divider before the pinned actions is a
++    // quarter of the row's icon colour, and an engaged action is that colour,
++    // not Material's blue.
++    const SkColor icon = colours->GetColor(kColorToolbarButtonIcon);
++    EXPECT_EQ(SkColorSetA(icon, 0x40),
++              colours->GetColor(kColorToolbarExtensionSeparatorEnabled));
++    EXPECT_EQ(icon, colours->GetColor(kColorToolbarActionItemEngaged));
++    // The divider shows with an extension's button beside it; the test
++    // window has none, so it is given its size to be painted.
++    ToolbarDivider* const divider =
++        FindFirst<ToolbarDivider>(browser_view()->toolbar());
++    ASSERT_TRUE(divider);
++    if (divider->size().IsEmpty()) {
++      divider->SetSize(divider->GetPreferredSize());
++    }
++    gfx::Canvas row_canvas(divider->size(), 1.0f, /*is_opaque=*/false);
++    divider->background()->Paint(&row_canvas, divider);
++    const SkColor drawn = row_canvas.GetBitmap().getColor(
++        divider->width() / 2, divider->height() / 2);
++    EXPECT_NEAR(0x40, SkColorGetA(drawn), 2) << "the divider as drawn";
++    EXPECT_FALSE(SkColorGetB(drawn) > SkColorGetR(drawn) + 40)
++        << "a blue divider: " << color_utils::SkColorToRgbaString(drawn);
++    // Opaque: the strip paints a divider at its own opacity.
++    EXPECT_EQ(color_utils::AlphaBlend(
++                  text, colours->GetColor(ui::kColorFrameActive), SkAlpha{0x40}),
++              colours->GetColor(kColorTabDividerFrameActive));
++
++    views::View* const plus = FindById(browser_view(), kNewTabButtonElementId);
++    ASSERT_TRUE(plus && plus->IsDrawn());
++    gfx::Canvas canvas(plus->size(), 1.0f, /*is_opaque=*/false);
++    if (plus->background()) {
++      plus->background()->Paint(&canvas, plus);
++    }
++    EXPECT_EQ(SK_AlphaTRANSPARENT,
++              SkColorGetA(canvas.GetBitmap().getColor(plus->width() / 2,
++                                                      plus->height() / 2)))
++        << "a disc round the new tab button";
++  }
++}
++
++// tabs R52: each half of a split is as wide as any other tab, so a split
++// takes two tabs' room and its titles are not cut beside wide tabs; it
++// shrinks with the others when the strip fills. Chromium gave the two halves
++// one tab's room, and "Left pane" read "Left par" beside a wide "Inbox".
++IN_PROC_BROWSER_TEST_F(HorizontalStripTest, ASplitHalfIsAsWideAsATab) {
++  browser_view()->GetWidget()->SetBounds(gfx::Rect(
++      display::Screen::Get()->GetPrimaryDisplay().work_area().origin(),
++      gfx::Size(1600, 900)));
++  const auto open_titled = [&](const std::string& host) {
++    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), embedded_test_server()->GetURL(host, "/title2.html"),
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  };
++  open_titled("one.test");
++  open_titled("two.test");
++  open_titled("three.test");
++  open_titled("left.test");
++  open_titled("right.test");
++  const int left = tab_strip_model()->count() - 2;
++  tab_strip_model()->ActivateTabAt(left);
++  tab_strip_model()->AddToNewSplit(
++      {left + 1}, split_tabs::SplitTabVisualData(),
++      split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  tabs::TabInterface* const left_half = tab_strip_model()->GetTabAtIndex(left);
++  tabs::TabInterface* const right_half =
++      tab_strip_model()->GetTabAtIndex(left + 1);
++  ASSERT_TRUE(left_half->IsSplit());
++  // Tabs opened later can land before the split: the halves are found by tab.
++  const auto half = [&](tabs::TabInterface* tab) {
++    return tab_strip_model()->GetIndexOfTab(tab);
++  };
++  ShowStrip(Scheme::kLight);
++  const auto settle = [&]() {
++    strip()->StopAnimating();
++    views::test::RunScheduledLayout(browser_view());
++  };
++  const auto width_of = [&](int index) { return strip()->tab_at(index)->width(); };
++  const auto title_fits = [&](int index) {
++    TabTitle* const title = FindFirst<TabTitle>(strip()->tab_at(index));
++    return title && title->GetVisible() && !title->GetText().empty() &&
++           title->width() >= title->GetPreferredSize({}).width();
++  };
++  {
++    SCOPED_TRACE("a wide strip");
++    settle();
++    const int plain = width_of(1);
++    EXPECT_NEAR(plain, width_of(half(left_half)), 1);
++    EXPECT_NEAR(plain, width_of(half(right_half)), 1);
++    for (const int index : {1, half(left_half), half(right_half)}) {
++      EXPECT_TRUE(title_fits(index)) << "the title of tab " << index
++                                     << " is cut";
++    }
++  }
++  {
++    SCOPED_TRACE("a crowded strip");
++    const int preferred = width_of(1);
++    for (int i = 0; i < 24; ++i) {
++      chrome::AddTabAt(browser(), GURL(url::kAboutBlankURL), -1,
++                       /*foreground=*/false);
++    }
++    // Every tab compared is inactive: the active one keeps a minimum of its
++    // own.
++    tab_strip_model()->ActivateTabAt(tab_strip_model()->count() - 1);
++    settle();
++    const int plain = width_of(1);
++    EXPECT_LT(plain, preferred) << "the strip did not fill";
++    EXPECT_NEAR(plain, width_of(half(left_half)), 1);
++    EXPECT_NEAR(plain, width_of(half(right_half)), 1);
++  }
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/sidebar_rail_browsertest.cc b/chrome/test/stedding/sidebar_rail_browsertest.cc
+index 7e08aa2f90a3f..a14c5772a7192 100644
+--- a/chrome/test/stedding/sidebar_rail_browsertest.cc
++++ b/chrome/test/stedding/sidebar_rail_browsertest.cc
+@@ -12,6 +12,12 @@
+ 
+ #include <algorithm>
+ #include <cstddef>
++#include <cstdlib>
++#include <memory>
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
+ 
+ #include "base/command_line.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -29,6 +35,8 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
++#include "chrome/browser/ui/stedding/fake_app_updater.h"
+ #include "chrome/browser/ui/stedding/sleep_tabs.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
+@@ -40,6 +48,8 @@
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
++#include "chrome/browser/ui/views/stedding/update_pill.h"
++#include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+@@ -58,10 +68,14 @@
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkCanvas.h"
+ #include "third_party/skia/include/core/SkColor.h"
++#include "third_party/skia/include/core/SkImage.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/window_open_disposition.h"
+ #include "ui/color/color_provider_key.h"
++#include "ui/compositor/canvas_painter.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/events/event.h"
+ #include "ui/events/test/event_generator.h"
+@@ -71,13 +85,16 @@
+ #include "ui/gfx/font_list.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/gfx/image/image_skia.h"
+ #include "ui/gfx/text_constants.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/image_view.h"
+ #include "ui/views/controls/label.h"
++#include "ui/views/paint_info.h"
+ #include "ui/views/test/views_test_utils.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+@@ -984,8 +1001,19 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest, TheRailsColumnShowsWhatFitsIt) {
+   const int open_size = label_of(title)->font_list().GetFontSize();
+   {
+     SCOPED_TRACE("open sidebar: the glyph and the name");
+-    EXPECT_EQ(base::StrCat({glyph, u"   ", name}),
+-              std::u16string(title->GetText()));
++    // The glyph is an image the favicons' width, on their column, and the
++    // name the row's text (SidebarColumnTest.EveryGlyphStandsOnTheColumn
++    // measures where each is drawn).
++    EXPECT_EQ(name, std::u16string(title->GetText()));
++    views::ImageView* glyph_image = nullptr;
++    for (views::View* const child : title->children()) {
++      if (auto* const image = views::AsViewClass<views::ImageView>(child)) {
++        glyph_image = image;
++      }
++    }
++    ASSERT_TRUE(glyph_image);
++    EXPECT_TRUE(glyph_image->IsDrawn()) << "the glyph is not drawn";
++    EXPECT_EQ(stedding::SidebarFaviconSize(), glyph_image->width());
+     EXPECT_EQ(gfx::ALIGN_LEFT, title->GetHorizontalAlignment());
+   }
+ 
+@@ -1031,4 +1059,430 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest, TheRailsColumnShowsWhatFitsIt) {
+   }
+ }
+ 
++// The horizontal centre of `rect`, to the half DIP: a box an odd number of
++// DIP wide centres between two.
++double CentreX(const gfx::Rect& rect) {
++  return rect.x() + rect.width() / 2.0;
++}
++
++// The centre across the screen of the image `button` draws, or nothing when
++// it draws none. LabelButton keeps its image view protected; it is a child.
++std::optional<double> ImageCentreX(views::View* button) {
++  if (!button || !button->IsDrawn()) {
++    return std::nullopt;
++  }
++  for (views::View* const child : button->children()) {
++    if (auto* const image = views::AsViewClass<views::ImageView>(child);
++        image && image->GetVisible() && !image->size().IsEmpty()) {
++      return CentreX(image->GetBoundsInScreen());
++    }
++  }
++  return std::nullopt;
++}
++
++// Paints every view under `parent` that has a layer of its own, and what
++// draws in that layer, onto `canvas` over what is there: the compositor
++// stacks a child's layer over its parent's, and a view's own paint leaves
++// out the views with layers under it. `canvas` holds `origin`'s pixels at
++// `scale`.
++void PaintChildLayers(views::View* parent,
++                      views::View* origin,
++                      float scale,
++                      SkCanvas& canvas) {
++  for (views::View* const child : parent->children()) {
++    if (!child->GetVisible()) {
++      continue;
++    }
++    ui::Layer* const layer = child->layer();
++    if (!layer) {
++      PaintChildLayers(child, origin, scale, canvas);
++      continue;
++    }
++    if (!layer->GetTargetVisibility() || layer->GetTargetOpacity() == 0.f ||
++        child->size().IsEmpty()) {
++      continue;
++    }
++    SkBitmap own;
++    {
++      ui::CanvasPainter painter(&own, child->size(), scale, SK_ColorTRANSPARENT,
++                                /*is_pixel_canvas=*/false);
++      child->Paint(views::PaintInfo::CreateRootPaintInfo(painter.context(),
++                                                         child->size()));
++    }
++    const gfx::Point at =
++        views::View::ConvertPointToTarget(child, origin, gfx::Point());
++    canvas.drawImage(own.asImage(), at.x() * scale, at.y() * scale);
++    PaintChildLayers(child, origin, scale, canvas);
++  }
++}
++
++// The runs of ink `view` draws, left to right, each as its left and right
++// edges across the screen in DIP: stretches of pixel columns with ink in
++// them, two runs at least 2 DIP apart. `view` is painted with the rest of
++// its layer, at twice its size as the Mac draws it, with the views in it
++// that have layers of their own over it, as the screen shows them -- on
++// Windows a LabelButton's image is on a layer of its own, and the Space title
++// row's glyph read as missing without it -- and only the pixels inside it are
++// read. Ink is any pixel well unlike the one at its top left corner, the
++// ground it is drawn on.
++std::vector<std::pair<double, double>> InkRuns(views::View* view) {
++  std::vector<std::pair<double, double>> runs;
++  if (!view || !view->IsDrawn()) {
++    return runs;
++  }
++  views::View* layer_root = view;
++  while (layer_root->parent() && !layer_root->layer()) {
++    layer_root = layer_root->parent();
++  }
++  constexpr float kScale = 2.f;
++  SkBitmap bitmap;
++  {
++    ui::CanvasPainter painter(&bitmap, layer_root->size(), kScale,
++                              SK_ColorTRANSPARENT, /*is_pixel_canvas=*/false);
++    layer_root->Paint(views::PaintInfo::CreateRootPaintInfo(
++        painter.context(), layer_root->size()));
++  }
++  {
++    SkCanvas canvas(bitmap);
++    PaintChildLayers(view, layer_root, kScale, canvas);
++  }
++  gfx::Rect pixels = gfx::ScaleToEnclosedRect(
++      views::View::ConvertRectToTarget(view, layer_root,
++                                       view->GetLocalBounds()),
++      kScale);
++  pixels.Intersect(gfx::Rect(bitmap.width(), bitmap.height()));
++  if (pixels.IsEmpty()) {
++    return runs;
++  }
++  const SkColor ground = bitmap.getColor(pixels.x(), pixels.y());
++  const auto inked = [&](int x) {
++    for (int y = pixels.y(); y < pixels.bottom(); ++y) {
++      const SkColor pixel = bitmap.getColor(x, y);
++      const int difference =
++          std::abs(static_cast<int>(SkColorGetA(pixel)) -
++                   static_cast<int>(SkColorGetA(ground))) +
++          std::abs(static_cast<int>(SkColorGetR(pixel)) -
++                   static_cast<int>(SkColorGetR(ground))) +
++          std::abs(static_cast<int>(SkColorGetG(pixel)) -
++                   static_cast<int>(SkColorGetG(ground))) +
++          std::abs(static_cast<int>(SkColorGetB(pixel)) -
++                   static_cast<int>(SkColorGetB(ground)));
++      if (difference > 96) {
++        return true;
++      }
++    }
++    return false;
++  };
++  const double left = view->GetBoundsInScreen().x();
++  const auto edges = [&](int first, int last) {
++    return std::make_pair(left + (first - pixels.x()) / kScale,
++                          left + (last + 1 - pixels.x()) / kScale);
++  };
++  std::optional<int> first;
++  int last = 0;
++  for (int x = pixels.x(); x < pixels.right(); ++x) {
++    if (!inked(x)) {
++      continue;
++    }
++    if (first && x - last > 2 * kScale) {
++      runs.push_back(edges(*first, last));
++      first.reset();
++    }
++    if (!first) {
++      first = x;
++    }
++    last = x;
++  }
++  if (first) {
++    runs.push_back(edges(*first, last));
++  }
++  return runs;
++}
++
++// The centre across the screen of the `index`th run of ink `view` draws.
++std::optional<double> InkCentreX(views::View* view, size_t index = 0) {
++  const std::vector<std::pair<double, double>> runs = InkRuns(view);
++  if (runs.size() <= index) {
++    return std::nullopt;
++  }
++  return (runs[index].first + runs[index].second) / 2;
++}
++
++// A window with a version waiting, so its sidebar shows the update pill
++// (updates Up3, sidebar Y25).
++class SidebarColumnTest : public SidebarRailTest {
++ protected:
++  // Before the first window, whose sidebar adds the pill.
++  void SetUpInProcessBrowserTestFixture() override {
++    SidebarRailTest::SetUpInProcessBrowserTestFixture();
++    updater_ = std::make_unique<stedding::FakeAppUpdater>();
++  }
++  // After the windows, which watch it.
++  void TearDownInProcessBrowserTestFixture() override {
++    updater_.reset();
++    SidebarRailTest::TearDownInProcessBrowserTestFixture();
++  }
++
++  std::unique_ptr<stedding::FakeAppUpdater> updater_;
++};
++
++// The owner, 2026-10-20 (sidebar Y6, Y8, Y9, Y25; spaces B11, B16; tabs R11):
++// in the rail every glyph stands on one vertical line, the rail's centre
++// (with the card's gutter, Y6, or without it while the page is flush, Y23):
++// the toggle, the Space title row's glyph, an essential's favicon, a Space
++// pin's, the rows' and a folder's, the folder's glyph, the New Tab row's
++// plus, the Archived row's icon, the update pill's, the downloads button's,
++// every Space chip and the New Space plus; at every density and in both
++// themes, and while ⌘ is held, when a chip shows its chord and the column
++// can be wider than a chip (BACKLOG S-144). In the open sidebar the leading
++// glyphs stand on the rows' favicon column the same way, and the Space
++// title row's name starts where the rows' titles do. A glyph that is an
++// image is measured by its image's bounds; a Space's glyph is text, an
++// emoji, and is measured by the ink it draws.
++IN_PROC_BROWSER_TEST_F(SidebarColumnTest, EveryGlyphStandsOnTheColumn) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  const GURL page = embedded_test_server()->GetURL("/title2.html");
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  // Four Spaces, four full chips in the rail (sidebar Y13): three with the
++  // glyph a Space without an icon takes by its place, one with its own.
++  model->SetSpaceName(model->active_id(), "Home");
++  ASSERT_TRUE(model->AddSpace("Work", SK_ColorBLUE));
++  ASSERT_TRUE(model->AddSpace("Play", SK_ColorGREEN));
++  spaces::Space* const trips = model->AddSpace("Trips", SK_ColorRED);
++  ASSERT_TRUE(trips);
++  model->SetSpaceIcon(trips->id(), "\xF0\x9F\x9A\x80");  // rocket
++
++  // In Home: a Space pin, an essential, a folder of two rows and a plain row.
++  TabStripModel* const strip = tab_strip_model();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
++  tabs::TabInterface* const space_pin = strip->GetActiveTab();
++  model->SetSpacePinned(space_pin, true);
++  const auto open_tab = [&]() {
++    EXPECT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), page, WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    return strip->GetActiveTab();
++  };
++  tabs::TabInterface* const essential = open_tab();
++  strip->SetTabPinned(strip->GetIndexOfTab(essential), true);
++  tabs::TabInterface* const plain = open_tab();
++  tabs::TabInterface* const in_folder = open_tab();
++  open_tab();
++  tabs::FolderTabCollection* const folder = strip->AddToNewFolder(
++      {strip->count() - 2, strip->count() - 1});
++  ASSERT_TRUE(folder);
++  // The plain row is not the selected one, whose pill would be its ground.
++  strip->ActivateTabAt(strip->GetIndexOfTab(space_pin));
++  updater_->Set(stedding::AppUpdater::State::kReady, u"0.2.0-beta.99");
++
++  views::Widget* const widget = browser_view()->GetWidget();
++  views::View* const root = widget->GetRootView();
++  TabStripView* const tabs_view =
++      stedding::test::FindView<TabStripView>(region());
++  ASSERT_TRUE(tabs_view);
++  spaces::SpaceSwitcherView* const switcher =
++      stedding::test::FindView<spaces::SpaceSwitcherView>(region());
++  ASSERT_TRUE(switcher);
++  stedding::UpdatePill* const pill =
++      stedding::test::FindView<stedding::UpdatePill>(region());
++  ASSERT_TRUE(pill);
++  PrefService* const local_state = g_browser_process->local_state();
++
++  const auto favicon = [&](tabs::TabInterface* tab) -> std::optional<double> {
++    TabView* const row = stedding::test::FindDrawnRow(root, tab);
++    if (!row) {
++      return std::nullopt;
++    }
++    TabIcon* const icon = row->GetTabIconForTesting();
++    gfx::Rect bounds = icon->GetFaviconBoundsForTesting();
++    views::View::ConvertRectToScreen(icon, &bounds);
++    return CentreX(bounds);
++  };
++  const auto folder_glyph = [&]() -> std::optional<double> {
++    FolderView* const view = stedding::test::FindDrawnFolder(root, folder);
++    if (!view || !view->glyph_for_testing() ||
++        !view->glyph_for_testing()->IsDrawn()) {
++      return std::nullopt;
++    }
++    return CentreX(view->glyph_for_testing()->GetBoundsInScreen());
++  };
++  struct Glyph {
++    std::string name;
++    std::optional<double> centre;
++  };
++  const auto expect_on = [](double column, const std::vector<Glyph>& glyphs) {
++    for (const Glyph& glyph : glyphs) {
++      if (!glyph.centre) {
++        ADD_FAILURE() << glyph.name << " is not drawn";
++        continue;
++      }
++      EXPECT_NEAR(column, *glyph.centre, 0.5)
++          << glyph.name << " stands " << *glyph.centre - column
++          << " DIP off the column at " << column;
++    }
++  };
++  // The chips, in the Spaces' order, each named by its Space.
++  const auto chips = [&]() {
++    std::vector<std::pair<std::string, views::View*>> drawn;
++    for (const auto& space : model->spaces()) {
++      drawn.emplace_back(base::StrCat({"the chip of ", space->name()}),
++                         switcher->ChipForTesting(space->id()));
++    }
++    return drawn;
++  };
++  const auto settle = [&]() {
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget));
++    views::test::RunScheduledLayout(widget);
++  };
++  const auto collapse = [&](bool collapsed) {
++    controller()->RequestCollapse(collapsed);
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !Animating(); }));
++    ASSERT_EQ(collapsed, controller()->IsCollapsed());
++    ASSERT_NO_FATAL_FAILURE(settle());
++  };
++
++  // The open sidebar: the rows' favicon column.
++  const auto check_the_open_column = [&]() {
++    SCOPED_TRACE("the open sidebar");
++    const std::optional<double> column = favicon(plain);
++    ASSERT_TRUE(column) << "the plain row is not drawn";
++    views::View* const title_row = tabs_view->GetSpaceTitleRow();
++    expect_on(*column,
++              {
++                  {"the Space title row's glyph", InkCentreX(title_row)},
++                  {"the New Tab row's plus",
++                   ImageCentreX(tabs_view->GetNewTabRow())},
++                  {"a Space pin's favicon", favicon(space_pin)},
++                  {"the folder's glyph", folder_glyph()},
++                  {"the Archived row's icon",
++                   ImageCentreX(FindButtonWithTooltip(region(),
++                                                      u"Archived tabs"))},
++                  {"the downloads button's icon",
++                   ImageCentreX(region()->downloads_button())},
++              });
++    // The name after the glyph starts where the rows' titles start, give
++    // or take the first letters' own margins.
++    TabView* const row = stedding::test::FindDrawnRow(root, plain);
++    ASSERT_TRUE(row);
++    const std::vector<std::pair<double, double>> title_ink =
++        InkRuns(title_row);
++    const std::vector<std::pair<double, double>> row_ink =
++        InkRuns(row->title_for_testing());
++    ASSERT_GE(title_ink.size(), 2u) << "the title row draws no name";
++    ASSERT_FALSE(row_ink.empty()) << "the row draws no title";
++    EXPECT_NEAR(row_ink.front().first, title_ink[1].first, 1.5)
++        << "the Space's name starts " << title_ink[1].first -
++               row_ink.front().first
++        << " DIP off the rows' titles";
++  };
++
++  // The rail: its centre, gutter included unless the page is flush.
++  const auto check_the_rail = [&]() {
++    SCOPED_TRACE("the rail");
++    const gfx::Rect rail = region()->GetBoundsInScreen();
++    EXPECT_EQ(region()->CollapsedWidthNow(), rail.width());
++    const double column =
++        rail.x() +
++        (rail.width() +
++         VerticalTabStripRegionView::SteddingCardGutter(browser_view())) /
++            2.0;
++    std::vector<Glyph> glyphs = {
++        {"the toggle",
++         ImageCentreX(region()
++                          ->top_button_container_for_testing()
++                          ->GetCollapseButton())},
++        {"the Space title row's glyph",
++         InkCentreX(tabs_view->GetSpaceTitleRow())},
++        {"an essential's favicon", favicon(essential)},
++        {"a Space pin's favicon", favicon(space_pin)},
++        {"the New Tab row's plus", ImageCentreX(tabs_view->GetNewTabRow())},
++        {"a row's favicon", favicon(plain)},
++        {"the folder's glyph", folder_glyph()},
++        {"a folder row's favicon", favicon(in_folder)},
++        {"the Archived row's icon",
++         ImageCentreX(FindButtonWithTooltip(region(), u"Archived tabs"))},
++        {"the update pill's icon", ImageCentreX(pill)},
++        {"the downloads button's icon",
++         ImageCentreX(region()->downloads_button())},
++    };
++    for (const auto& [name, chip] : chips()) {
++      glyphs.push_back({name, InkCentreX(chip)});
++    }
++    glyphs.push_back({"the New Space plus",
++                      ImageCentreX(FindButtonWithTooltip(switcher,
++                                                         u"New Space"))});
++    expect_on(column, glyphs);
++#if BUILDFLAG(IS_MAC)
++    {
++      // tabs R11: with ⌘ held each chip shows its chord, as wide as its text
++      // (BACKLOG S-144), and the column of chips is as wide as the widest.
++      SCOPED_TRACE("⌘ held");
++      switcher->SetNumberBadges(true);
++      views::test::RunScheduledLayout(widget);
++      std::vector<Glyph> held;
++      for (const auto& [name, chip] : chips()) {
++        held.push_back({name, chip ? std::optional<double>(CentreX(
++                                         chip->GetBoundsInScreen()))
++                                   : std::nullopt});
++      }
++      held.push_back({"the New Space plus",
++                      ImageCentreX(FindButtonWithTooltip(switcher,
++                                                         u"New Space"))});
++      held.push_back({"the downloads button's icon",
++                      ImageCentreX(region()->downloads_button())});
++      expect_on(column, held);
++      switcher->SetNumberBadges(false);
++      views::test::RunScheduledLayout(widget);
++    }
++#endif
++  };
++
++  ThemeService* const themes =
++      ThemeServiceFactory::GetForProfile(browser()->GetProfile());
++  constexpr struct {
++    ThemeService::BrowserColorScheme scheme;
++    ui::ColorProviderKey::ColorMode mode;
++    const char* name;
++  } kThemes[] = {
++      {ThemeService::BrowserColorScheme::kDark,
++       ui::ColorProviderKey::ColorMode::kDark, "dark"},
++      {ThemeService::BrowserColorScheme::kLight,
++       ui::ColorProviderKey::ColorMode::kLight, "light"},
++  };
++  constexpr struct {
++    int pref;
++    const char* name;
++  } kDensities[] = {{0, "Comfortable"}, {1, "Compact"}, {2, "Dense"}};
++  for (const auto& theme : kThemes) {
++    SCOPED_TRACE(theme.name);
++    themes->SetBrowserColorScheme(theme.scheme);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return widget->GetColorProviderKeyForTesting().color_mode == theme.mode;
++    }));
++    for (const auto& density : kDensities) {
++      SCOPED_TRACE(density.name);
++      // As Settings and the command bar's actions set it (sidebar Y1, Y4).
++      local_state->SetInteger(stedding::prefs::kSidebarDensity, density.pref);
++      ASSERT_NO_FATAL_FAILURE(settle());
++      check_the_open_column();
++      ASSERT_NO_FATAL_FAILURE(collapse(true));
++      check_the_rail();
++      ASSERT_NO_FATAL_FAILURE(collapse(false));
++    }
++  }
++  {
++    // sidebar Y23: with the page flush the column is the rail's own centre.
++    SCOPED_TRACE("the page flush, Comfortable");
++    local_state->SetInteger(stedding::prefs::kSidebarDensity, 0);
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kSidebarPageFlush, true);
++    ASSERT_NO_FATAL_FAILURE(collapse(true));
++    check_the_rail();
++    ASSERT_NO_FATAL_FAILURE(collapse(false));
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kSidebarPageFlush, false);
++  }
++}
++
+ }  // namespace

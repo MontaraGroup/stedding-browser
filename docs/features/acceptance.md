@@ -215,8 +215,7 @@ One row per run, as for the core loop. None yet.
 The live checks `docs/features/web-apps.md` cites: what its browser tests cannot reach, because
 they run against a stand-in for the Dock and a test override for the launchers and shortcuts
 (the Dock tile, the launcher, the Start menu, the app's window as it looks, an update with an
-app installed, a launch with Stedding quit). About thirty minutes by hand on each platform;
-none has run yet.
+app installed, a launch with Stedding quit). About thirty minutes by hand on each platform.
 
 ### Before the run
 
@@ -248,10 +247,12 @@ none has run yet.
 
 ### Runs
 
-One row per run, as for the core loop. None yet.
+One row per run, as for the core loop. A check left out of a run is "not run".
 
 | Date | Build | Platform | `wa_mac_install` | `wa_tile_kept_out` | `wa_win_install` | `wa_app_*` | `wa_session` | `wa_session_off` | `wa_relaunch` | `wa_launch_quit` | `wa_update` | `wa_uninstall` | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-20 | installed beta 20 | Windows 11 | — | — | pass | not run | pass (the shortcut's first request carried Work's cookie) | not run | not run | not run | not run | pass, from the app's menu and from chrome://apps | The uninstall box ran its two sentences together; fixed in patch 0072. The Start menu folder is "Stedding Apps" (Wa8) |
+| 2026-10-20 | release build of patch 0075 | macOS 27 | pass, from the command bar; File → Add to Dock… is listed and enabled but was not pressed (the input tool does not drive the menu bar); Enter in the dialog did nothing, its Add button worked (BACKLOG `S-235`) | not run | — | not run | not run | not run | not run | not run | not run | pass, from chrome://apps: the launcher and the tile went, the Dock had its 43 tiles in the same order; the app window's own Uninstall was not tried | The empty `~/Applications/Stedding Apps.localized` folder stays after the last app goes, as Chromium leaves its own |
 
 ## The tests beside the script
 
