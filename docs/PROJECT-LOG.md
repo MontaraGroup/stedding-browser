@@ -7,6 +7,48 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-19, evening -- a review of betas 18 and 19, and beta 20 for both platforms
+
+The operator asked for every change since patch 0072 was first pushed to be read, those made on
+the Mac by another agent most of all, for the bugs to be fixed, and for the next version to be
+built and released on both platforms together.
+
+- **The review** read four parts at once: the two fixes made on the Mac after beta 18 (patches
+  0058 and 0072), the Windows updater (patch 0073), the PC's changes to patch 0072, and the
+  repository's tooling and docs.
+- **Restored tabs were crashing again** (import I26). The Mac's fix for two restored copies
+  of an entry sharing their frame wrote the sequence number -1 back into the saved page state
+  and sent it to the renderer, which the browser kills; `RestoredPageStateTest` failed on that
+  build. Now the session and the frame entries keep upstream's -1 (so Chromium's
+  `ToNavigationEntries` and `ToNavigationEntry` pass) and only the page state sent for a
+  commit carries 0 (patch 0058).
+- **The toast** (toolbar T38): on the Mac `AddressBandTest.AToastSitsUnderTheInfobars` had
+  never passed. A toast whose anchor changed while it slid in stayed where the slide ended; it
+  is placed again when the slide ends, the end-of-layout placement skips the slide's frames,
+  and a window closing with a toast up no longer re-anchors it, which crashed the test's
+  teardown once the toast stayed up (patch 0072).
+- **The Windows updater** (patch 0073, `S-249` for what is left): one check at a time,
+  timeouts on both requests, the download's folder made off the UI thread, its name checked,
+  a quit not held by an install, the installer deleted before a quit ends; the root store's
+  rules, the Web Store, Safe Browsing, GCM, sync, OAuth, image search and DIAL now get
+  Chromium's version. Tooling: `publish-appcast.ps1` got the Mac script's guards,
+  `update-key.ps1`'s backup keeps the passphrase apart, `build.ps1` refuses what the Mac
+  cannot build. The Mac's pixel tests run at the screen's scale again.
+- **Beta 20's checks.** Mac release build: unit 964, components 56, browser 361, all green.
+  PC: release unit 951 and browser 341; `win-checks` the same with no DCHECK; ASan the same
+  with no report. The installer upgraded the installed beta 19, uninstalled keeping the
+  profile and installed fresh, `chrome.dll` matching each time. The Mac's n-1 from the
+  released beta 17 to a Developer-ID copy of this build: pill at 25 seconds, relaunched as
+  10020.20 13 seconds after the press, tab and thank-you page there. A first signing attempt
+  stopped because the notary profile had gone from the keychain; the operator stored it
+  again.
+- **Published** `v0.2.0-beta.20` from the Mac (the DMG) and the PC (the installer); both
+  downloads matched their checksums and Gatekeeper accepted the app. Both feeds pushed and
+  verified. **The first real Windows update**: the PC's installed beta 19 installed beta 20
+  from GitHub within 30 seconds and swapped it in at the quit. The Mac's installed copy
+  updated itself through the real feed as well. Beta 18 and 19's notes and release pages now
+  say the Mac's image of that work is beta 20's.
+
 ## 2026-10-19, afternoon -- the Windows updater, beta 19
 
 The operator asked for automatic updates on Windows to be built while the Mac added its image
