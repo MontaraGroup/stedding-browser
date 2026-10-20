@@ -32,12 +32,20 @@ ADR 0023, and ADR 0026 for its key), and the version it needs (BACKLOG S-72):
   time; the feed request ends after a minute and the download after two
   hours; the download's folder is made off the UI thread and its name is
   checked; a quit does not wait for a running install, and the
-  installer's folder is deleted before the quit ends. Chromium's in-use
+  installer's folder is deleted before the quit ends. The installer is
+  checked and run on one handle no one may write to meanwhile; a signed feed
+  older than one already read is refused as a replay; plain http to this
+  computer is allowed only to a test feed; a check that cannot reach the
+  feed tries again within the hour; automatic updates turned off during a
+  download install nothing; a failed install's log is kept; old download
+  folders are cleared at launch (BACKLOG S-249). Chromium's in-use
   update puts the new version beside the running one; the sidebar's pill
   then offers the restart, which is Chromium's own (chrome::AttemptRestart
   swaps new_chrome.exe in). An update installed and not yet restarted into
   is offered at launch. --stedding-update-feed points a copy at a test feed,
   still checked against the same key.
+- The uninstaller deletes the PDF handler's ProgId key as well, which
+  upstream leaves behind (BACKLOG S-71).
 - About on Windows reads the same updater as the Mac's
   (version_updater_stedding.cc, renamed from _mac), and Settings shows the
   switch on Windows too.
@@ -69,22 +77,23 @@ stays while Stedding ships more than one release on a Chromium build.
  chrome/browser/ui/stedding/BUILD.gn           |  44 ++
  chrome/browser/ui/stedding/app_updater.cc     |   5 +-
  chrome/browser/ui/stedding/app_updater.h      |  17 +
- chrome/browser/ui/stedding/app_updater_win.cc | 532 ++++++++++++++++++
- chrome/browser/ui/stedding/app_updater_win.h  |  61 ++
- .../ui/stedding/app_updater_win_unittest.cc   | 273 +++++++++
- chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
- chrome/browser/ui/stedding/stedding_prefs.h   |   3 +
- .../ui/stedding/stedding_prefs_unittest.cc    |   2 +
+ chrome/browser/ui/stedding/app_updater_win.cc | 635 ++++++++++++++++++
+ chrome/browser/ui/stedding/app_updater_win.h  |  64 ++
+ .../ui/stedding/app_updater_win_unittest.cc   | 375 +++++++++++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   7 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   3 +
  .../browser/ui/stedding/stedding_version.cc   |   6 +-
- chrome/browser/ui/stedding/update_feed.cc     | 194 +++++++
- chrome/browser/ui/stedding/update_feed.h      |  85 +++
- .../ui/stedding/update_feed_unittest.cc       | 200 +++++++
+ chrome/browser/ui/stedding/update_feed.cc     | 230 +++++++
+ chrome/browser/ui/stedding/update_feed.h      |  93 +++
+ .../ui/stedding/update_feed_unittest.cc       | 224 ++++++
  chrome/browser/ui/webui/help/BUILD.gn         |  12 +-
  ...ing_mac.cc => version_updater_stedding.cc} |  28 +-
  .../chrome_update_query_params_delegate.cc    |   4 +-
  .../minimum_chrome_version_checker.cc         |   3 +-
+ chrome/installer/setup/uninstall.cc           |  10 +-
  chrome/test/stedding/BUILD.gn                 |   4 +
- .../stedding/chromium_version_browsertest.cc  |  94 ++++
+ .../stedding/chromium_version_browsertest.cc  |  94 +++
  .../component_updater/configurator_impl.cc    |   3 +-
  .../embedder_support/user_agent_utils.cc      |  22 +-
  components/gcm_driver/gcm_desktop_utils.cc    |   4 +-
@@ -95,7 +104,7 @@ stays while Stedding ships more than one release on a Chromium build.
  .../webstore_private/webstore_private_api.cc  |   4 +-
  net/cert/cert_verify_proc_builtin.cc          |   6 +-
  .../cert_verifier_service_factory.cc          |   7 +-
- 40 files changed, 1654 insertions(+), 44 deletions(-)
+ 41 files changed, 1944 insertions(+), 46 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/app_updater_win.cc
  create mode 100644 chrome/browser/ui/stedding/app_updater_win.h
  create mode 100644 chrome/browser/ui/stedding/app_updater_win_unittest.cc
@@ -447,10 +456,10 @@ index b052078444575..6a8e5fe86f0dc 100644
  #endif  // CHROME_BROWSER_UI_STEDDING_APP_UPDATER_H_
 diff --git a/chrome/browser/ui/stedding/app_updater_win.cc b/chrome/browser/ui/stedding/app_updater_win.cc
 new file mode 100644
-index 0000000000000..b7d1e9359b9e5
+index 0000000000000..fd14a4c65ccb4
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/app_updater_win.cc
-@@ -0,0 +1,532 @@
+@@ -0,0 +1,635 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -472,6 +481,8 @@ index 0000000000000..b7d1e9359b9e5
 +#include <utility>
 +
 +#include "base/command_line.h"
++#include "base/files/file.h"
++#include "base/files/file_enumerator.h"
 +#include "base/files/file_path.h"
 +#include "base/files/file_util.h"
 +#include "base/functional/bind.h"
@@ -527,6 +538,18 @@ index 0000000000000..b7d1e9359b9e5
 +// minute, the installer within two hours (170 MB at under 0.2 Mbit/s).
 +constexpr base::TimeDelta kFeedTimeout = base::Minutes(1);
 +constexpr base::TimeDelta kDownloadTimeout = base::Hours(2);
++// A check that could not reach the feed tries again within the hour rather
++// than a day later: a copy offline at launch is not left a day behind.
++constexpr base::TimeDelta kRetryDelay = base::Hours(1);
++// What the downloads' folders are called (base::CreateNewTempDirectory adds
++// to it), and how old one must be before a launch clears it away.
++constexpr base::FilePath::CharType kDownloadDirPrefix[] =
++    FILE_PATH_LITERAL("stedding_update");
++constexpr base::TimeDelta kStaleDownloadAge = base::Days(1);
++// A failed install's log, kept in the temporary folder for a report (the
++// folder it was written to goes with the installer).
++constexpr base::FilePath::CharType kFailedInstallLog[] =
++    FILE_PATH_LITERAL("stedding_update_failed_install.log");
 +
 +// The update test's own feed (docs/HANDOFF.md, "The updater"): the feed and
 +// the installer are still checked against the key the build carries.
@@ -582,11 +605,31 @@ index 0000000000000..b7d1e9359b9e5
 +// Off the UI thread: a new folder for the download, or an empty path.
 +base::FilePath NewDownloadDir() {
 +  base::FilePath dir;
-+  if (!base::CreateNewTempDirectory(FILE_PATH_LITERAL("stedding_update"),
-+                                    &dir)) {
++  if (!base::CreateNewTempDirectory(kDownloadDirPrefix, &dir)) {
 +    return base::FilePath();
 +  }
 +  return dir;
++}
++
++// Off the UI thread, at launch: download folders a day old or older, left by
++// a quit during a download or by an earlier build. A younger one may belong to
++// another copy's download under way.
++void ClearStaleDownloads() {
++  base::FilePath temp;
++  if (!base::GetTempDir(&temp)) {
++    return;
++  }
++  base::FileEnumerator folders(temp, /*recursive=*/false,
++                               base::FileEnumerator::DIRECTORIES,
++                               base::StrCat({kDownloadDirPrefix,
++                                             FILE_PATH_LITERAL("*")}));
++  for (base::FilePath folder = folders.Next(); !folder.empty();
++       folder = folders.Next()) {
++    if (base::Time::Now() - folders.GetInfo().GetLastModifiedTime() >=
++        kStaleDownloadAge) {
++      base::DeletePathRecursively(folder);
++    }
++  }
 +}
 +
 +base::FilePath ExeDir() {
@@ -608,15 +651,36 @@ index 0000000000000..b7d1e9359b9e5
 +  return base::Version(base::WideToUTF8(version));
 +}
 +
-+// Off the UI thread: the download's length and signature (updates Up16).
-+bool InstallerVerifies(const base::FilePath& path,
-+                       int64_t length,
-+                       const std::string& signature,
-+                       const std::string& public_key) {
-+  const std::optional<std::vector<uint8_t>> bytes =
-+      base::ReadFileToBytes(path);
-+  return bytes && static_cast<int64_t>(bytes->size()) == length &&
-+         SignatureVerifies(*bytes, signature, public_key);
++// What became of a downloaded installer (updates Up16, Up17).
++struct InstallResult {
++  bool verified = false;
++  // The installer's exit code, or -1; set only when it verified.
++  int exit_code = -1;
++};
++
++// Off the UI thread: the download's length and signature, then the
++// installer, on one handle that denies writing to the file and deleting or
++// renaming it until the installer has run: what runs is what was checked.
++InstallResult VerifyAndInstall(
++    const base::FilePath& path,
++    int64_t length,
++    const std::string& signature,
++    const std::string& public_key,
++    const base::RepeatingCallback<int(const base::FilePath&)>& run_installer) {
++  InstallResult result;
++  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
++                            base::File::FLAG_WIN_EXCLUSIVE_WRITE);
++  if (!file.IsValid() || file.GetLength() != length) {
++    return result;
++  }
++  std::vector<uint8_t> bytes(static_cast<size_t>(length));
++  if (!file.ReadAndCheck(0, bytes) ||
++      !SignatureVerifies(bytes, signature, public_key)) {
++    return result;
++  }
++  result.verified = true;
++  result.exit_code = run_installer.Run(path);
++  return result;
 +}
 +
 +// Off the UI thread: the installer, hidden, per user, beside the running
@@ -656,6 +720,11 @@ index 0000000000000..b7d1e9359b9e5
 +                   base::BindRepeating(&WinAppUpdater::OnAutomaticChanged,
 +                                       base::Unretained(this)));
 +    SetInstance(this);
++    base::ThreadPool::PostTask(
++        FROM_HERE,
++        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
++         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
++        base::BindOnce(&ClearStaleDownloads));
 +    // An update this run or an earlier one installed and no restart has
 +    // taken yet: the pill shows at once (updates Up17).
 +    if (base::PathExists(env_.exe_dir.Append(kNewChromeExe))) {
@@ -738,7 +807,6 @@ index 0000000000000..b7d1e9359b9e5
 +      return;
 +    }
 +    busy_ = true;
-+    local_state_->SetTime(prefs::kUpdatesLastCheck, base::Time::Now());
 +    loader_ = MakeLoader(env_.feed_url, kFeedTimeout);
 +    loader_->DownloadToString(
 +        loader_factory_.get(),
@@ -749,9 +817,13 @@ index 0000000000000..b7d1e9359b9e5
 +  void OnFeed(std::optional<std::string> body) {
 +    loader_.reset();
 +    if (!body) {
++      // Not the day's check: the next one comes within the hour.
++      retry_soon_ = true;
 +      Fail(u"Stedding could not reach its update server.");
 +      return;
 +    }
++    // updates Up14: the server answered, so this was the day's check.
++    local_state_->SetTime(prefs::kUpdatesLastCheck, base::Time::Now());
 +    // updates Up15: nothing in a feed is read until its signature verifies.
 +    const std::optional<std::string_view> signed_body =
 +        SignedFeedBody(*body, env_.public_key);
@@ -770,8 +842,22 @@ index 0000000000000..b7d1e9359b9e5
 +      Fail(u"The update feed could not be read.");
 +      return;
 +    }
++    // updates Up15 (BACKLOG S-249): a signed feed older than one read before
++    // is an old feed served again, which would hold this copy back.
++    const base::Version newest = NewestWindowsVersion(*feed);
++    const base::Version newest_seen(
++        local_state_->GetString(prefs::kUpdatesNewestListed));
++    if (newest.IsValid() && newest_seen.IsValid() &&
++        newest.CompareTo(newest_seen) < 0) {
++      Fail(u"The update feed is older than one Stedding has already read.");
++      return;
++    }
++    if (newest.IsValid()) {
++      local_state_->SetString(prefs::kUpdatesNewestListed,
++                              newest.GetString());
++    }
 +    const std::optional<UpdateItem> item =
-+        LaterWindowsItem(*feed, env_.running);
++        LaterWindowsItem(*feed, env_.running, env_.allow_local_http);
 +    if (!item) {
 +      Finish(State::kUpToDate);
 +      return;
@@ -816,22 +902,15 @@ index 0000000000000..b7d1e9359b9e5
 +  void OnDownloaded(base::FilePath path) {
 +    loader_.reset();
 +    if (path.empty()) {
++      Forget(download_, /*keep_log=*/false);
 +      Fail(u"The new version could not be downloaded.");
 +      return;
 +    }
-+    base::ThreadPool::PostTaskAndReplyWithResult(
-+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-+        base::BindOnce(&InstallerVerifies, path, item_.length,
-+                       item_.signature, env_.public_key),
-+        base::BindOnce(&WinAppUpdater::OnVerified, weak_factory_.GetWeakPtr(),
-+                       path));
-+  }
-+
-+  void OnVerified(const base::FilePath& path, bool verifies) {
-+    if (!verifies) {
-+      // updates Up16: an installer that is not the release's never runs.
-+      Forget(path);
-+      Fail(u"The download is not signed with Stedding's key.");
++    // updates Up20 (BACKLOG S-249): automatic updates turned off while a
++    // check the user did not ask for was downloading: nothing is installed.
++    if (!user_asked_ && !Automatic()) {
++      Forget(path, /*keep_log=*/false);
++      Finish(State::kIdle);
 +      return;
 +    }
 +    // CONTINUE_ON_SHUTDOWN: a quit during the install must not wait for it;
@@ -841,17 +920,24 @@ index 0000000000000..b7d1e9359b9e5
 +        {base::MayBlock(), base::WithBaseSyncPrimitives(),
 +         base::TaskPriority::USER_VISIBLE,
 +         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-+        base::BindOnce(env_.run_installer, path),
++        base::BindOnce(&VerifyAndInstall, path, item_.length, item_.signature,
++                       env_.public_key, env_.run_installer),
 +        base::BindOnce(&WinAppUpdater::OnInstalled, weak_factory_.GetWeakPtr(),
 +                       path));
 +  }
 +
-+  void OnInstalled(const base::FilePath& path, int exit_code) {
-+    Forget(path);
++  void OnInstalled(const base::FilePath& path, InstallResult result) {
++    if (!result.verified) {
++      // updates Up16: an installer that is not the release's never runs.
++      Forget(path, /*keep_log=*/false);
++      Fail(u"The download is not signed with Stedding's key.");
++      return;
++    }
++    Forget(path, /*keep_log=*/result.exit_code != 0);
 +    busy_ = false;
-+    if (exit_code != 0) {
++    if (result.exit_code != 0) {
 +      Fail(base::StrCat({u"The new version could not be installed (",
-+                         base::NumberToString16(exit_code), u")."}));
++                         base::NumberToString16(result.exit_code), u")."}));
 +      return;
 +    }
 +    // updates Up17: the new version waits beside this one; the pill offers
@@ -859,16 +945,31 @@ index 0000000000000..b7d1e9359b9e5
 +    SetState(State::kReady);
 +  }
 +
-+  // The installer's folder, with its log. A quit waits for it: the pill asks
++  // The installer's folder, with its log; a failed install's log is first
++  // kept in the temporary folder for a report. A quit waits for it: the pill asks
 +  // for the restart as soon as the install is done, and a best-effort task
 +  // was skipped at that quit, leaving the 170 MB installer behind.
-+  static void Forget(const base::FilePath& path) {
++  static void Forget(const base::FilePath& path, bool keep_log) {
++    if (path.empty()) {
++      return;
++    }
 +    base::ThreadPool::PostTask(
 +        FROM_HERE,
 +        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
 +         base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-+        base::BindOnce(base::IgnoreResult(&base::DeletePathRecursively),
-+                       path.DirName()));
++        base::BindOnce(
++            [](const base::FilePath& path, bool keep_log) {
++              // The temporary folder by name, not the download's parent: an
++              // elevated process makes its folders in the system's.
++              base::FilePath temp;
++              if (keep_log && base::GetTempDir(&temp)) {
++                base::CopyFile(
++                    path.ReplaceExtension(FILE_PATH_LITERAL(".log")),
++                    temp.Append(kFailedInstallLog));
++              }
++              base::DeletePathRecursively(path.DirName());
++            },
++            path, keep_log));
 +  }
 +
 +  // A check that found nothing, or failed: an answer for the user who asked,
@@ -884,6 +985,14 @@ index 0000000000000..b7d1e9359b9e5
 +    } else {
 +      SetState(State::kIdle);
 +    }
++    if (retry_soon_ && Automatic()) {
++      retry_soon_ = false;
++      timer_.Start(FROM_HERE, kRetryDelay,
++                   base::BindOnce(&WinAppUpdater::Check,
++                                  base::Unretained(this)));
++      return;
++    }
++    retry_soon_ = false;
 +    ScheduleCheck();
 +  }
 +
@@ -911,6 +1020,8 @@ index 0000000000000..b7d1e9359b9e5
 +  base::FilePath download_;
 +  bool busy_ = false;
 +  bool user_asked_ = false;
++  // The last check could not reach the feed (Finish retries within the hour).
++  bool retry_soon_ = false;
 +  base::WeakPtrFactory<WinAppUpdater> weak_factory_{this};
 +};
 +
@@ -976,6 +1087,7 @@ index 0000000000000..b7d1e9359b9e5
 +  environment.exe_dir = ExeDir();
 +  environment.installed_version = base::BindRepeating(&InstalledVersion);
 +  environment.run_installer = base::BindRepeating(&RunInstaller);
++  environment.allow_local_http = command_line.HasSwitch(kUpdateFeedSwitch);
 +  // Owned by the process, as the Mac's.
 +  CreateWinAppUpdater(local_state, std::move(restart),
 +                      std::move(url_loader_factory), std::move(environment))
@@ -985,10 +1097,10 @@ index 0000000000000..b7d1e9359b9e5
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/app_updater_win.h b/chrome/browser/ui/stedding/app_updater_win.h
 new file mode 100644
-index 0000000000000..c02c70f06dd62
+index 0000000000000..2693a93e4c2ce
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/app_updater_win.h
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,64 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1037,6 +1149,9 @@ index 0000000000000..c02c70f06dd62
 +  base::RepeatingCallback<base::Version()> installed_version;
 +  // Runs the verified installer, off the UI thread; its exit code.
 +  base::RepeatingCallback<int(const base::FilePath&)> run_installer;
++  // Whether the feed may list an installer on plain http to this computer:
++  // only a copy pointed at a test feed (--stedding-update-feed) allows it.
++  bool allow_local_http = false;
 +};
 +
 +// The updater, made with `environment`; it is AppUpdater::Get() while it
@@ -1052,10 +1167,10 @@ index 0000000000000..c02c70f06dd62
 +#endif  // CHROME_BROWSER_UI_STEDDING_APP_UPDATER_WIN_H_
 diff --git a/chrome/browser/ui/stedding/app_updater_win_unittest.cc b/chrome/browser/ui/stedding/app_updater_win_unittest.cc
 new file mode 100644
-index 0000000000000..a36db70c1ae20
+index 0000000000000..2c8f60d81a9e2
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/app_updater_win_unittest.cc
-@@ -0,0 +1,273 @@
+@@ -0,0 +1,375 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1081,8 +1196,11 @@ index 0000000000000..a36db70c1ae20
 +#include "chrome/browser/ui/stedding/app_updater.h"
 +#include "chrome/browser/ui/stedding/stedding_prefs.h"
 +#include "components/prefs/testing_pref_service.h"
++#include "net/base/net_errors.h"
 +#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
++#include "services/network/public/cpp/url_loader_completion_status.h"
 +#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
 +#include "services/network/test/test_url_loader_factory.h"
 +#include "testing/gtest/include/gtest/gtest.h"
 +#include "third_party/boringssl/src/include/openssl/curve25519.h"
@@ -1173,6 +1291,11 @@ index 0000000000000..a36db70c1ae20
 +    ++installer_runs_;
 +    installer_bytes_ = base::ReadFileToBytes(path).value_or(
 +        std::vector<uint8_t>());
++    // As the real installer's --log-file.
++    base::WriteFile(path.ReplaceExtension(FILE_PATH_LITERAL(".log")),
++                    "the installer's log");
++    // While it runs, nothing else may change the file it was checked as.
++    installer_could_be_changed_ = base::WriteFile(path, "MZ swapped");
 +    return installer_exit_code_;
 +  }
 +
@@ -1202,6 +1325,7 @@ index 0000000000000..a36db70c1ae20
 +  base::Lock lock_;
 +  int installer_runs_ = 0;
 +  int installer_exit_code_ = 0;
++  bool installer_could_be_changed_ = false;
 +  std::vector<uint8_t> installer_bytes_;
 +};
 +
@@ -1317,6 +1441,99 @@ index 0000000000000..a36db70c1ae20
 +
 +// updates Up17: an update installed and not yet restarted into offers the
 +// restart at launch, named for the installed version, and asks nothing.
++// updates Up16 (BACKLOG S-249): the installer runs from the handle it was
++// checked on, which no one may write to while it runs.
++TEST_F(WinAppUpdaterTest, TheCheckedInstallerCannotBeChangedBeforeItRuns) {
++  const std::string installer = "MZ the beta 19 installer";
++  Serve(SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()),
++        installer);
++  Start();
++  updater_->CheckNow();
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(State::kReady, updater_->state());
++  EXPECT_EQ(1, installer_runs());
++  base::AutoLock hold(lock_);
++  EXPECT_FALSE(installer_could_be_changed_);
++}
++
++// updates Up15 (BACKLOG S-249): a signed feed older than one already read is
++// an old feed served again; it offers nothing and says so.
++TEST_F(WinAppUpdaterTest, AFeedOlderThanOneAlreadyReadIsRefused) {
++  const std::string installer = "MZ the beta 19 installer";
++  Serve(SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()),
++        installer);
++  local_state_.SetString(prefs::kUpdatesNewestListed, "156.2.0.20");
++  Start();
++  updater_->CheckNow();
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(State::kFailed, updater_->state());
++  EXPECT_NE(std::u16string::npos, updater_->error().find(u"older"));
++  EXPECT_EQ(0, installer_runs());
++  EXPECT_EQ("156.2.0.20", local_state_.GetString(prefs::kUpdatesNewestListed));
++
++  updater_.reset();
++  local_state_.SetString(prefs::kUpdatesNewestListed, "156.2.0.18");
++  Start();
++  updater_->CheckNow();
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(State::kReady, updater_->state());
++  EXPECT_EQ("156.2.0.19", local_state_.GetString(prefs::kUpdatesNewestListed))
++      << "a newer feed moves the mark on";
++}
++
++// updates Up14 (BACKLOG S-249): a check that cannot reach the feed is not the
++// day's check: the next one comes within the hour.
++TEST_F(WinAppUpdaterTest, AnOfflineCheckTriesAgainWithinTheHour) {
++  loader_factory_.AddResponse(
++      GURL(kFeedUrl), network::mojom::URLResponseHead::New(), std::string(),
++      network::URLLoaderCompletionStatus(net::ERR_INTERNET_DISCONNECTED));
++  Start();
++  task_environment_.FastForwardBy(base::Seconds(11));
++  EXPECT_EQ(1u, loader_factory_.total_requests());
++  EXPECT_TRUE(local_state_.GetTime(prefs::kUpdatesLastCheck).is_null());
++  task_environment_.FastForwardBy(base::Hours(1));
++  EXPECT_EQ(2u, loader_factory_.total_requests());
++}
++
++// updates Up20 (BACKLOG S-249): automatic updates turned off while a check
++// the user did not ask for downloads: the download is not installed.
++TEST_F(WinAppUpdaterTest, TurningAutomaticOffDuringADownloadInstallsNothing) {
++  const std::string installer = "MZ the beta 19 installer";
++  loader_factory_.AddResponse(
++      kFeedUrl,
++      SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()));
++  Start();
++  task_environment_.FastForwardBy(base::Seconds(11));
++  EXPECT_EQ(State::kDownloading, updater_->state());
++  local_state_.SetBoolean(prefs::kUpdatesAutomatic, false);
++  loader_factory_.AddResponse(kInstallerUrl, installer);
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(0, installer_runs());
++  EXPECT_NE(State::kReady, updater_->state());
++}
++
++// updates Up17 (BACKLOG S-249): a failed install's log is kept in the
++// temporary folder for a report, where the download's folder goes.
++TEST_F(WinAppUpdaterTest, AFailedInstallKeepsItsLog) {
++  base::FilePath temp;
++  ASSERT_TRUE(base::GetTempDir(&temp));
++  const base::FilePath kept =
++      temp.Append(FILE_PATH_LITERAL("stedding_update_failed_install.log"));
++  base::DeleteFile(kept);
++  const std::string installer = "MZ the beta 19 installer";
++  Serve(SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()),
++        installer);
++  installer_exit_code_ = 31;
++  Start();
++  updater_->CheckNow();
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(State::kFailed, updater_->state());
++  std::string log;
++  EXPECT_TRUE(base::ReadFileToString(kept, &log));
++  EXPECT_EQ("the installer's log", log);
++  base::DeleteFile(kept);
++}
++
 +TEST_F(WinAppUpdaterTest, AWaitingUpdateIsOfferedAtLaunch) {
 +  ASSERT_TRUE(base::WriteFile(exe_dir_.GetPath().Append(L"new_chrome.exe"),
 +                              "MZ"));
@@ -1330,41 +1547,47 @@ index 0000000000000..a36db70c1ae20
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
-index 359dfde2dcf3c..ea39481c8e133 100644
+index 359dfde2dcf3c..7ef06610d3ebe 100644
 --- a/chrome/browser/ui/stedding/stedding_prefs.cc
 +++ b/chrome/browser/ui/stedding/stedding_prefs.cc
-@@ -67,6 +67,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+@@ -67,6 +67,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
    registry->RegisterIntegerPref(kSidebarDensity, 0);
    registry->RegisterIntegerPref(kSidebarTextSize, 0);
    registry->RegisterBooleanPref(kUpdatesAutomatic, true);
 +  registry->RegisterTimePref(kUpdatesLastCheck, base::Time());
++  registry->RegisterStringPref(kUpdatesNewestListed, std::string());
    registry->RegisterBooleanPref(kThanksAfterUpdate, true);
    registry->RegisterStringPref(kLastRunVersion, std::string());
    registry->RegisterBooleanPref(kThanksAfterInstallShown, false);
 diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
-index d5baa9d4a4884..c4a67d9fcf74e 100644
+index d5baa9d4a4884..b35d8fac87d26 100644
 --- a/chrome/browser/ui/stedding/stedding_prefs.h
 +++ b/chrome/browser/ui/stedding/stedding_prefs.h
-@@ -140,6 +140,9 @@ inline constexpr char kPendingJarWipes[] = "stedding.spaces.pending_jar_wipes";
+@@ -140,6 +140,13 @@ inline constexpr char kPendingJarWipes[] = "stedding.spaces.pending_jar_wipes";
  // request at all. Browser-wide, like the updater. On by default (the owner,
  // 2026-10-16).
  inline constexpr char kUpdatesAutomatic[] = "stedding.updates.automatic";
 +// updates Up14: when the Windows updater last asked the feed, so it asks once
 +// a day across launches.
 +inline constexpr char kUpdatesLastCheck[] = "stedding.updates.last_check";
++// updates Up15 (BACKLOG S-249): the newest Windows version a verified feed has
++// listed, so an older feed served again later is read as a replay.
++inline constexpr char kUpdatesNewestListed[] =
++    "stedding.updates.newest_listed";
  // updates Up10: the first launch of a later version opens stedding.dev's
  // thank-you page in one tab. On by default.
  inline constexpr char kThanksAfterUpdate[] =
 diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
-index b2276ebb152d8..500e59af82628 100644
+index b2276ebb152d8..44f6c1fd55575 100644
 --- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
 +++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
-@@ -61,6 +61,8 @@ TEST(SteddingPrefsTest, TheBrowserWidePreferencesRegisterWithTheirDefaults) {
+@@ -61,6 +61,9 @@ TEST(SteddingPrefsTest, TheBrowserWidePreferencesRegisterWithTheirDefaults) {
    EXPECT_TRUE(local_state.GetBoolean(kThanksAfterUpdate));
    EXPECT_EQ("", local_state.GetString(kLastRunVersion));
    EXPECT_FALSE(local_state.GetBoolean(kThanksAfterInstallShown));
 +  EXPECT_TRUE(local_state.GetTime(kUpdatesLastCheck).is_null())
 +      << "updates Up14: no check yet, so the first launch checks";
++  EXPECT_EQ("", local_state.GetString(kUpdatesNewestListed));
  }
  
  }  // namespace
@@ -1387,10 +1610,10 @@ index e94ef6ecb7178..08a94ef776ebd 100644
  std::string_view SteddingVersion() {
 diff --git a/chrome/browser/ui/stedding/update_feed.cc b/chrome/browser/ui/stedding/update_feed.cc
 new file mode 100644
-index 0000000000000..cad72c3fbf67d
+index 0000000000000..9770b6370d3a6
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed.cc
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,230 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1399,6 +1622,7 @@ index 0000000000000..cad72c3fbf67d
 +
 +#include <algorithm>
 +#include <string>
++#include <utility>
 +#include <vector>
 +
 +#include "base/base64.h"
@@ -1456,10 +1680,50 @@ index 0000000000000..cad72c3fbf67d
 +         });
 +}
 +
-+bool AcceptableAddress(const GURL& url) {
++bool AcceptableAddress(const GURL& url, bool allow_local_http) {
 +  return url.is_valid() &&
 +         (url.SchemeIs(url::kHttpsScheme) ||
-+          (url.SchemeIs(url::kHttpScheme) && net::IsLocalhost(url)));
++          (allow_local_http && url.SchemeIs(url::kHttpScheme) &&
++           net::IsLocalhost(url)));
++}
++
++// A Windows x64 item of a parsed feed: the item and its enclosure.
++using WindowsEntry = std::pair<const base::Value*, const base::Value*>;
++
++// The feed's Windows x64 items, and `prefix` set to the feed's prefix for
++// Sparkle's tags and attributes.
++std::vector<WindowsEntry> WindowsEntries(const base::Value& feed,
++                                         std::string* prefix) {
++  if (!data_decoder::IsXmlElementNamed(feed, "rss")) {
++    return {};
++  }
++  // The parser keeps a tag as written ("sparkle:version") and, here, no
++  // record of the xmlns declaration: the feed's own prefix when it is
++  // recorded, else Sparkle's, which tooling/appcast.py always writes.
++  if (!data_decoder::GetXmlElementNamespacePrefix(feed, kSparkleNamespace,
++                                                  prefix)) {
++    *prefix = "sparkle";
++  }
++  const base::Value* const channel =
++      data_decoder::GetXmlElementChildWithTag(feed, "channel");
++  std::vector<const base::Value*> items;
++  if (!channel ||
++      !data_decoder::GetAllXmlElementChildrenWithTag(*channel, "item",
++                                                     &items)) {
++    return {};
++  }
++  std::vector<WindowsEntry> entries;
++  for (const base::Value* const item : items) {
++    const base::Value* const enclosure =
++        data_decoder::GetXmlElementChildWithTag(*item, "enclosure");
++    if (enclosure &&
++        data_decoder::GetXmlElementAttribute(
++            *enclosure, data_decoder::GetXmlQualifiedName(*prefix, "os")) ==
++            kWindowsOs) {
++      entries.emplace_back(item, enclosure);
++    }
++  }
++  return entries;
 +}
 +
 +}  // namespace
@@ -1507,37 +1771,17 @@ index 0000000000000..cad72c3fbf67d
 +}
 +
 +std::optional<UpdateItem> LaterWindowsItem(const base::Value& feed,
-+                                           const base::Version& installed) {
-+  if (!installed.IsValid() || !data_decoder::IsXmlElementNamed(feed, "rss")) {
++                                           const base::Version& installed,
++                                           bool allow_local_http) {
++  if (!installed.IsValid()) {
 +    return std::nullopt;
 +  }
-+  // The parser keeps a tag as written ("sparkle:version") and, here, no
-+  // record of the xmlns declaration: the feed's own prefix when it is
-+  // recorded, else Sparkle's, which tooling/appcast.py always writes.
 +  std::string prefix;
-+  if (!data_decoder::GetXmlElementNamespacePrefix(feed, kSparkleNamespace,
-+                                                  &prefix)) {
-+    prefix = "sparkle";
-+  }
 +  const auto sparkle = [&](const std::string& name) {
 +    return data_decoder::GetXmlQualifiedName(prefix, name);
 +  };
-+  const base::Value* const channel =
-+      data_decoder::GetXmlElementChildWithTag(feed, "channel");
-+  std::vector<const base::Value*> items;
-+  if (!channel ||
-+      !data_decoder::GetAllXmlElementChildrenWithTag(*channel, "item",
-+                                                     &items)) {
-+    return std::nullopt;
-+  }
 +  std::optional<UpdateItem> best;
-+  for (const base::Value* const item : items) {
-+    const base::Value* const enclosure =
-+        data_decoder::GetXmlElementChildWithTag(*item, "enclosure");
-+    if (!enclosure || data_decoder::GetXmlElementAttribute(
-+                          *enclosure, sparkle("os")) != kWindowsOs) {
-+      continue;
-+    }
++  for (const auto& [item, enclosure] : WindowsEntries(feed, &prefix)) {
 +    UpdateItem candidate;
 +    candidate.version = ChildText(*item, sparkle("shortVersionString"));
 +    candidate.file_version = base::Version(ChildText(*item, sparkle("version")));
@@ -1549,7 +1793,8 @@ index 0000000000000..cad72c3fbf67d
 +        !candidate.file_version.IsValid() ||
 +        candidate.file_version.components().size() != 4 ||
 +        candidate.file_version.CompareTo(installed) <= 0 ||
-+        !AcceptableAddress(candidate.url) || candidate.signature.empty() ||
++        !AcceptableAddress(candidate.url, allow_local_http) ||
++        candidate.signature.empty() ||
 +        !base::StringToInt64(
 +            data_decoder::GetXmlElementAttribute(*enclosure, "length"),
 +            &candidate.length) ||
@@ -1561,6 +1806,20 @@ index 0000000000000..cad72c3fbf67d
 +    }
 +  }
 +  return best;
++}
++
++base::Version NewestWindowsVersion(const base::Value& feed) {
++  std::string prefix;
++  base::Version newest;
++  for (const auto& [item, enclosure] : WindowsEntries(feed, &prefix)) {
++    const base::Version version(
++        ChildText(*item, data_decoder::GetXmlQualifiedName(prefix, "version")));
++    if (version.IsValid() && version.components().size() == 4 &&
++        (!newest.IsValid() || version.CompareTo(newest) > 0)) {
++      newest = version;
++    }
++  }
++  return newest;
 +}
 +
 +std::string SteddingVersionOfWindowsVersion(const base::Version& version) {
@@ -1587,10 +1846,10 @@ index 0000000000000..cad72c3fbf67d
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/update_feed.h b/chrome/browser/ui/stedding/update_feed.h
 new file mode 100644
-index 0000000000000..8c5cce84cb2ba
+index 0000000000000..e9c3c196e8689
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed.h
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,93 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1663,9 +1922,17 @@ index 0000000000000..8c5cce84cb2ba
 +// `installed`. An item without a version (a release name of digits, letters,
 +// dots and hyphens: it names the download's file), a later file version, a
 +// length, a signature, or an https address (http to this computer only, for
-+// the update test's local server) is passed over.
++// the update test's local server, and only when `allow_local_http`: a copy
++// pointed at a test feed) is passed over.
 +std::optional<UpdateItem> LaterWindowsItem(const base::Value& feed,
-+                                           const base::Version& installed);
++                                           const base::Version& installed,
++                                           bool allow_local_http);
++
++// updates Up15 (BACKLOG S-249): the newest Windows x64 file version a parsed
++// feed lists, whatever is installed; invalid when it lists none. A verified
++// feed whose newest is older than one listed before is an old feed served
++// again, which would hold an installed copy back.
++base::Version NewestWindowsVersion(const base::Value& feed);
 +
 +// updates Up14 (BACKLOG S-72): the release a Windows file version stands for,
 +// <milestone>.<100 x major + minor>.<patch>.<beta n, 999 for a release>:
@@ -1678,10 +1945,10 @@ index 0000000000000..8c5cce84cb2ba
 +#endif  // CHROME_BROWSER_UI_STEDDING_UPDATE_FEED_H_
 diff --git a/chrome/browser/ui/stedding/update_feed_unittest.cc b/chrome/browser/ui/stedding/update_feed_unittest.cc
 new file mode 100644
-index 0000000000000..2a78a19a61085
+index 0000000000000..755667a9d32e5
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/update_feed_unittest.cc
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,224 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1843,7 +2110,8 @@ index 0000000000000..2a78a19a61085
 +       Item("0.2.0-beta.20", "10020.20", kRelease, "macos")}));
 +
 +  std::optional<UpdateItem> later =
-+      LaterWindowsItem(feed, base::Version("156.2.0.18"));
++      LaterWindowsItem(feed, base::Version("156.2.0.18"),
++                       /*allow_local_http=*/false);
 +  ASSERT_TRUE(later);
 +  EXPECT_EQ("0.2.0-beta.19", later->version);
 +  EXPECT_EQ(base::Version("156.2.0.19"), later->file_version);
@@ -1851,13 +2119,16 @@ index 0000000000000..2a78a19a61085
 +  EXPECT_EQ(176000000, later->length);
 +  EXPECT_EQ("c2ln", later->signature);
 +
-+  later = LaterWindowsItem(feed, base::Version("156.0.8000.10"));
++  later = LaterWindowsItem(feed, base::Version("156.0.8000.10"),
++                           /*allow_local_http=*/false);
 +  ASSERT_TRUE(later) << "beta 18 and earlier carried Chromium's number";
 +  EXPECT_EQ("0.2.0-beta.19", later->version);
 +
-+  EXPECT_FALSE(LaterWindowsItem(feed, base::Version("156.2.0.19")))
++  EXPECT_FALSE(LaterWindowsItem(feed, base::Version("156.2.0.19"),
++                               /*allow_local_http=*/false))
 +      << "the installed version is the newest";
-+  EXPECT_FALSE(LaterWindowsItem(feed, base::Version("157.2.0.1")))
++  EXPECT_FALSE(LaterWindowsItem(feed, base::Version("157.2.0.1"),
++                               /*allow_local_http=*/false))
 +      << "a later milestone is never downgraded";
 +}
 +
@@ -1873,11 +2144,31 @@ index 0000000000000..2a78a19a61085
 +       Item("..\\..\\x", "156.2.0.23", "https://example.com/i.exe"),
 +       Item("0.2.0-beta.19", "156.2", "https://example.com/i.exe"),
 +       Item("0.2.0-beta.18", "156.2.0.18", "http://127.0.0.1:8765/i.exe")}));
-+  const std::optional<UpdateItem> later =
-+      LaterWindowsItem(feed, base::Version("156.2.0.17"));
++  EXPECT_FALSE(LaterWindowsItem(feed, base::Version("156.2.0.17"),
++                                /*allow_local_http=*/false))
++      << "plain http, even to this computer, from the real feed";
++  const std::optional<UpdateItem> later = LaterWindowsItem(
++      feed, base::Version("156.2.0.17"), /*allow_local_http=*/true);
 +  ASSERT_TRUE(later);
 +  EXPECT_EQ("0.2.0-beta.18", later->version)
 +      << "http to this computer is the update test's server";
++}
++
++// updates Up15 (BACKLOG S-249): the newest Windows version a feed lists,
++// whatever is installed, to tell a feed served again later from a new one;
++// the Mac's item and a malformed version do not count.
++TEST_F(UpdateFeedItemsTest, TheNewestListedWindowsVersionIsRead) {
++  const std::string kRelease = "https://example.com/i.exe";
++  EXPECT_EQ(base::Version("156.2.0.20"),
++            NewestWindowsVersion(Parse(base::StrCat(
++                {Item("0.2.0-beta.19", "156.2.0.19", kRelease),
++                 Item("0.2.0-beta.20", "156.2.0.20", kRelease),
++                 Item("0.2.0-beta.21", "10020.21", kRelease, "macos"),
++                 Item("0.2.0-beta.22", "156.2", kRelease)}))));
++  EXPECT_FALSE(
++      NewestWindowsVersion(Parse(Item("0.2.0-beta.21", "10020.21", kRelease,
++                                      "macos")))
++          .IsValid());
 +}
 +
 +}  // namespace
@@ -2025,6 +2316,27 @@ index ef98f36ba6903..42f36b01bf974 100644
    if (!current_version.IsValid()) {
      NOTREACHED();
    }
+diff --git a/chrome/installer/setup/uninstall.cc b/chrome/installer/setup/uninstall.cc
+index e1b1a9d71585f..16bc4964e5a68 100644
+--- a/chrome/installer/setup/uninstall.cc
++++ b/chrome/installer/setup/uninstall.cc
+@@ -616,8 +616,14 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
+                                     browser_entry_suffix);
+   DeleteSoftwareClassesSubkey(root, chrome_prog_id);
+ 
+-  // TODO(crbug.com/40384442): Delete ChromePDF ProgId once support for
+-  // PDF docs has landed.
++  // Stedding (BACKLOG S-71): delete {root}\Software\Classes\SteddingPDF as
++  // well. The install registers it as a .pdf handler (ShellUtil's
++  // GetPDFProgId) and the uninstall above removes the .pdf association to it,
++  // but the key itself stayed, naming a program that is no longer there.
++  // (Upstream: TODO(crbug.com/40384442).)
++  const std::wstring pdf_prog_id(install_static::GetPDFProgIdPrefix() +
++                                 browser_entry_suffix);
++  DeleteSoftwareClassesSubkey(root, pdf_prog_id);
+ 
+   // Delete {root}\Software\Classes\<DirectLaunchUrlScheme> (e.g.,
+   // google-chrome, chromium).
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
 index dbb782a82db74..ecb156e5a2bce 100644
 --- a/chrome/test/stedding/BUILD.gn
