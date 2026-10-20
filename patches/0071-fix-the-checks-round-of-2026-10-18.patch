@@ -71,6 +71,11 @@ user's path where a test can ask the question, with the faults they found:
   sidebar row kept a pointer to it after it was freed: upstream's
   CloseWebContentses asked twice and told the tab only on matching
   answers. Each closed tab is now told exactly once (S-250).
+- The toolbar's download button could stay hidden when horizontal tabs
+  hand downloads back to it: the row is 26 DIP tall and the pinned
+  buttons 28, so a container measured mid-slide never fitted, hid, and
+  had no size to grow back from. The pinned-actions and extensions
+  containers are measured by the row's width alone (S-250).
 
 Why: each item is behaviour its spec states, a defect a user meets, or a
 crash.
@@ -163,6 +168,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/browser/ui/views/tabs/tab/tab_icon.h   |  18 +
  .../vertical_tab_strip_bottom_container.cc    |  24 +-
  .../vertical_tab_strip_bottom_container.h     |  15 +-
+ .../browser/ui/views/toolbar/toolbar_view.cc  |  44 +-
  chrome/browser/ui/webui/settings/BUILD.gn     |   2 +
  .../browser/ui/webui/settings/settings_ui.cc  |  10 +-
  .../settings/stedding_shortcuts_handler.cc    |   4 +-
@@ -181,7 +187,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../test/stedding/clear_space_browsertest.cc  | 209 +++-
  .../test/stedding/command_bar_browsertest.cc  | 572 +++++++++-
  chrome/test/stedding/defaults_browsertest.cc  |  45 +-
- chrome/test/stedding/downloads_browsertest.cc | 326 ++++++
+ chrome/test/stedding/downloads_browsertest.cc | 363 +++++++
  chrome/test/stedding/import_browsertest.cc    | 409 +++++++
  .../test/stedding/pinned_run_browsertest.cc   | 160 +++
  .../stedding/privacy_defaults_browsertest.cc  | 199 ++++
@@ -204,7 +210,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 127 files changed, 11102 insertions(+), 759 deletions(-)
+ 128 files changed, 11177 insertions(+), 765 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -5437,6 +5443,79 @@ index 74d7670a76476..ec003347f99b1 100644
    raw_ptr<TabStripFlatEdgeButton> new_tab_button_ = nullptr;
    base::CallbackListSubscription collapsed_state_change_subscription_;
    base::CallbackListSubscription new_tab_button_pressed_subscription_;
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 12923a69524af..2310ead9f81dc 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -261,6 +261,26 @@ void SetRefreshMargins(views::View* button, bool expanded) {
+                       : kBrowserAppMenuRefreshCollapsedMargin));
+ }
+ 
++// Stedding (BACKLOG S-250): an animating container's flex rule, measured
++// against the row's width alone. Stedding's row is as tall as its back
++// button -- an 18 DIP icon and 4 DIP insets, 26 DIP -- while the containers
++// lay their buttons out at kToolbarButtonHeight, 28 DIP, and the row centres
++// them over its margins. Bounded by the row's height as well, no size a
++// container offered fitted, so the rule measured it again in the width it
++// was given, part of the way through its slide-in, where its button had no
++// room: the row hid the container, the container snapped to no width, and
++// the button it was showing never appeared. Chromium's row is as tall as
++// its buttons, and there the height never decides.
++views::FlexRule MeasuredByWidth(views::FlexRule rule) {
++  return base::BindRepeating(
++      [](const views::FlexRule& rule, const views::View* view,
++         const views::SizeBounds& bounds) {
++        return rule.Run(view,
++                        views::SizeBounds(bounds.width(), views::SizeBound()));
++      },
++      std::move(rule));
++}
++
+ }  // namespace
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -1704,11 +1724,19 @@ void ToolbarView::InitLayout() {
+     }
+   }
+ 
++  // Stedding (BACKLOG S-250): the animating containers are measured by the
++  // row's width alone (MeasuredByWidth).
++  const bool stedding_row =
++      base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
+   if (extensions_container_) {
++    views::FlexRule extensions_rule =
++        extensions_container_->GetAnimatingLayoutManager()
++            ->GetDefaultFlexRule();
++    if (stedding_row) {
++      extensions_rule = MeasuredByWidth(std::move(extensions_rule));
++    }
+     const views::FlexSpecification extensions_flex_rule =
+-        views::FlexSpecification(
+-            extensions_container_->GetAnimatingLayoutManager()
+-                ->GetDefaultFlexRule())
++        views::FlexSpecification(std::move(extensions_rule))
+             .WithOrder(kExtensionsFlexOrder);
+ 
+     extensions_container_->SetProperty(views::kFlexBehaviorKey,
+@@ -1716,11 +1744,15 @@ void ToolbarView::InitLayout() {
+   }
+ 
+   if (pinned_toolbar_actions_container_) {
++    views::FlexRule actions_rule =
++        pinned_toolbar_actions_container_->GetAnimatingLayoutManager()
++            ->GetDefaultFlexRule();
++    if (stedding_row) {
++      actions_rule = MeasuredByWidth(std::move(actions_rule));
++    }
+     pinned_toolbar_actions_container_->SetProperty(
+         views::kFlexBehaviorKey,
+-        views::FlexSpecification(
+-            pinned_toolbar_actions_container_->GetAnimatingLayoutManager()
+-                ->GetDefaultFlexRule())
++        views::FlexSpecification(std::move(actions_rule))
+             .WithOrder(kToolbarActionsFlexOrder));
+   }
+ 
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
 index 5be9e7c0d9e23..24e07b081f579 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
@@ -7983,10 +8062,10 @@ index ff9d9ee52afc5..92b95c4c544db 100644
      EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(
 diff --git a/chrome/test/stedding/downloads_browsertest.cc b/chrome/test/stedding/downloads_browsertest.cc
 new file mode 100644
-index 0000000000000..802026bd1d345
+index 0000000000000..754d782da3d7a
 --- /dev/null
 +++ b/chrome/test/stedding/downloads_browsertest.cc
-@@ -0,0 +1,326 @@
+@@ -0,0 +1,363 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -8037,11 +8116,13 @@ index 0000000000000..802026bd1d345
 +#include "ui/base/l10n/l10n_util.h"
 +#include "ui/base/models/image_model.h"
 +#include "ui/base/window_open_disposition.h"
++#include "ui/gfx/animation/animation_test_api.h"
 +#include "ui/gfx/vector_icon_types.h"
 +#include "ui/views/accessibility/view_accessibility.h"
 +#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 +#include "ui/views/controls/button/button.h"
 +#include "ui/views/controls/button/label_button.h"
++#include "ui/views/layout/animating_layout_manager.h"
 +#include "ui/views/layout/animating_layout_manager_test_util.h"
 +#include "ui/views/test/views_test_utils.h"
 +#include "ui/views/view_utils.h"
@@ -8204,6 +8285,41 @@ index 0000000000000..802026bd1d345
 +  EXPECT_TRUE(RingShows()) << "the toolbar's button has no ring";
 +  EXPECT_EQ(toolbar_button(), ClickForTheBubble(toolbar_button()))
 +      << "the bubble did not open from the toolbar's button";
++}
++
++// toolbar T27, BACKLOG S-250: the toolbar's button appears when the row is
++// first laid out while it slides in, not only when the slide has not begun.
++// The row measured the part-slid container against its own height, which the
++// 28 DIP button does not fit, hid it at no width, and the container snapped
++// to a layout with no room for the button: it never appeared. A loaded
++// machine laid the row out that late about one run in ten.
++IN_PROC_BROWSER_TEST_F(SteddingDownloadsTest,
++                       TheToolbarButtonAppearsWhenLaidOutPartWay) {
++  ToggleTabStrip();
++  ASSERT_FALSE(
++      vertical_tab_strip_state_controller()->ShouldDisplayVerticalTabs());
++  ASSERT_FALSE(ToolbarButtonShows());
++  auto* const container = static_cast<PinnedToolbarActionsContainer*>(
++      browser_view()->toolbar_button_provider()->GetPinnedToolbarActions());
++  views::AnimatingLayoutManager* const layout =
++      container->GetAnimatingLayoutManager();
++  gfx::AnimationContainerTestApi clock(
++      layout->GetAnimationContainerForTesting());
++
++  // What a download starting does, then a third of the slide before the row
++  // is laid out, then the rest.
++  downloads()->Show();
++  ASSERT_TRUE(ToolbarButtonShows());
++  ASSERT_TRUE(layout->is_animating());
++  clock.IncrementTime(base::Milliseconds(100));
++  views::test::RunScheduledLayout(window());
++  clock.IncrementTime(base::Seconds(1));
++  views::test::RunScheduledLayout(window());
++
++  EXPECT_FALSE(layout->is_animating());
++  EXPECT_TRUE(toolbar_button()->IsDrawn());
++  EXPECT_FALSE(toolbar_button()->size().IsEmpty())
++      << toolbar_button()->bounds().ToString();
 +}
 +
 +// toolbar T14, docs/history/plan-2026-09-26.md WIN-16: in the sidebar, its
