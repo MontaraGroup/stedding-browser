@@ -7,6 +7,51 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-19 night to 2026-10-20 -- the planned fixes, six features, the owner's look notes, beta 21
+
+The operator asked for S-250 and "all other planned things": the defects, the updater's
+leftovers, the checks owed that need no new hardware and Chrome's own defaults first, then the
+features in the backlog's order, with the owner's choices for six of them; then for GitHub
+issue 7 (drag a tab onto the page to split it) to be built without a comment on it, for the
+collapsed sidebar's icons to line up, for a split's address row to take each pane's colour, and
+for the tab strip on top to look right. Beta 21 was to follow once the checks passed.
+
+- **Fixes** (patches 0071 to 0073): a closing tab is told of its detach once (`S-250`, the
+  checks build's dangling pointer); the toolbar's download button measured mid-slide
+  (`S-250`); a quit's windows stay in the archive when the next launch does not reopen them
+  (`S-230`); a moved row's stuck hover (`S-143`); the chips' chords drawn whole (`S-144`); a
+  Space model's leftover callback; an app's uninstall box; the Windows updater's six review
+  items and the uninstaller's PDF key (`S-249`, `S-71`).
+- **Chrome's defaults** (patch 0074, `S-236`, `S-237`, `S-240`): the features Chrome turns on
+  for all its users by its field trials, Google's key pins and Certificate Transparency, with
+  none of Chrome's certificate reports; `tooling/field-trials` compares Chrome Stable's seed
+  with the pin's defaults.
+- **Checks owed**, on the installed beta 20: the core loop and the by-hand checks on both
+  platforms (`docs/features/acceptance.md`), the Windows install of an app made from a page
+  (`S-235`), the sidebar labels' grayscale text (`S-214`).
+- **Six features** (patch 0075, the owner's choices of 2026-10-20): a tab dragged onto the page
+  makes a split (`S-113`, issue 7); the tab shown after a close is the one used last (`S-112`);
+  only the selected tab loads at launch (`S-110`); tabs sleep on a timer and under memory
+  pressure, with Sleep Other Tabs (`S-111`); page pictures in the Mac's hover cards (`S-115`);
+  with the address row hidden, its controls in the command bar and ⌘E (`S-104`).
+- **The Mac by hand**, with the real pointer and keyboard on a release build: the split by drop
+  from the sidebar, the rail and the strip, ⌘W, the launch choices, Sleep Other Tabs, the hover
+  pictures and Add to Dock with its Dock tile passed. It found five faults: four fixed in patch
+  0075 (the first ⌘W after a relaunch counted the restore's own selections; Escape with ⌘ held
+  never reached the bar, so ⌘. cancels; Show Media Controls looked for the hidden button; Return
+  did nothing in the Add to Dock box) plus a popup over the rail; the fifth, tabs given on the
+  command line that sometimes never load, is in beta 20 too (`S-251`).
+- **The owner's look notes** (patch 0076): the row over a split in each pane's colour with a
+  blend over the gap; the horizontal strip's tabs as pills, a split's halves each a tab wide, no
+  Material blue left; every glyph of the rail on its centre line, emoji centred by their ink.
+  Its Windows run found the glyph's ink measured short with Segoe UI Emoji and an older race
+  that put a page's old edge colour back on a background tab after Dark Pages changed (Dk8);
+  both fixed with tests.
+- **The PC's test runs**: the two extension-popup tests had looked up the popup's widget the
+  Mac's way; the four mock-clock unit tests that stalled only in the scheduled task were starved
+  by its default priority 7, which lowers disk and memory priority (traps 67 and 99): made at
+  priority 4, the unit leg takes 19 seconds.
+
 ## 2026-10-19, evening -- a review of betas 18 and 19, and beta 20 for both platforms
 
 The operator asked for every change since patch 0072 was first pushed to be read, those made on
