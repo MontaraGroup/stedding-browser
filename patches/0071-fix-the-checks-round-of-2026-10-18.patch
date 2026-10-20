@@ -66,6 +66,11 @@ user's path where a test can ask the question, with the faults they found:
 - The command bar lists the active Space's tabs first (K2); Cmd-W on a pin
   shows a row of its Space, never an essential (H3); Settings' shortcut
   notes no longer speak of rounds.
+- A tab closed while its page's beforeunload answer changed (it turns
+  after 500 ms) was never told it was being detached for deletion, so a
+  sidebar row kept a pointer to it after it was freed: upstream's
+  CloseWebContentses asked twice and told the tab only on matching
+  answers. Each closed tab is now told exactly once (S-250).
 
 Why: each item is behaviour its spec states, a defect a user meets, or a
 crash.
@@ -116,8 +121,9 @@ that owns its code (patches/README.md, the round-patch exception).
  .../ui/stedding/theme/page_top_color.cc       |  12 +
  .../stedding/theme/page_top_color_unittest.cc |   3 +
  .../ui/tabs/tab_menu_model_unittest.cc        |  65 --
- chrome/browser/ui/tabs/tab_strip_model.cc     |  35 +-
+ chrome/browser/ui/tabs/tab_strip_model.cc     |  46 +-
  chrome/browser/ui/tabs/tab_strip_model.h      |   9 +
+ .../ui/tabs/tab_strip_model_unittest.cc       |  61 ++
  chrome/browser/ui/views/commandbar/BUILD.gn   |   1 +
  .../ui/views/commandbar/command_bar_view.cc   | 132 ++-
  .../ui/views/commandbar/command_bar_view.h    |  17 +-
@@ -198,7 +204,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 126 files changed, 11031 insertions(+), 758 deletions(-)
+ 127 files changed, 11102 insertions(+), 759 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -2536,7 +2542,7 @@ index 494a9734cbfcf..9638355c35335 100644
  // after Rename, and a split row arranges its panes instead of offering a
  // split.
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index f44c855e8cab2..76fe8f0ab472c 100644
+index f44c855e8cab2..82fac882c4974 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -426,6 +426,13 @@ std::unique_ptr<content::WebContents> TabStripModel::DiscardWebContents(
@@ -2595,6 +2601,38 @@ index f44c855e8cab2..76fe8f0ab472c 100644
  bool TabStripModel::IsGroupCollapsed(
      const tab_groups::TabGroupId& group) const {
    DCHECK(group_model_);
+@@ -4301,6 +4334,14 @@ bool TabStripModel::CloseWebContentses(
+     return true;
+   }
+ 
++  // Stedding (BACKLOG S-250): the tabs told of their detach here, before
++  // their unload handlers. The rest are told below, once they turn out to
++  // close. Asking the unload question a second time there missed a tab whose
++  // answer changed in between -- a page waiting on its handlers is ready to
++  // close once its beforeunload timeout runs out -- and its WillDetach
++  // subscribers kept pointers to the deleted tab; the other way round, a tab
++  // was told twice.
++  std::set<const content::WebContents*> told_of_detach;
+   for (WebContents* contents : items) {
+     const int index = GetIndexOfWebContents(contents);
+     tabs::TabModel* tab_model = GetTabModelAtIndex(index);
+@@ -4315,6 +4356,7 @@ bool TabStripModel::CloseWebContentses(
+     if (!ShouldRunUnloadListenerBeforeClosing(contents)) {
+       tab_model->WillDetach(base::PassKey<TabStripModel>(),
+                             tabs::TabInterface::DetachReason::kDelete);
++      told_of_detach.insert(contents);
+     }
+   }
+ 
+@@ -4374,7 +4416,7 @@ bool TabStripModel::CloseWebContentses(
+     }
+ 
+     tabs::TabModel* tab_model = GetTabModelAtIndex(current_index);
+-    if (ShouldRunUnloadListenerBeforeClosing(closing_contents)) {
++    if (!told_of_detach.contains(closing_contents)) {
+       tab_model->WillDetach(base::PassKey<TabStripModel>(),
+                             tabs::TabInterface::DetachReason::kDelete);
+     }
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
 index 586770894b81f..cc67db17b87aa 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.h
@@ -2629,6 +2667,78 @@ index 586770894b81f..cc67db17b87aa 100644
  
    bool tab_strip_ui_was_set_ = false;
  
+diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+index 45ea2a63149cb..1c280e48bfa05 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
+@@ -4982,6 +4982,67 @@ TEST_F(TabStripModelTest, CloseTypesPreservedAfterUnload) {
+             TabCloseTypesData::FromWebContents(raw_contents)->close_types());
+ }
+ 
++namespace {
++
++// Stedding (BACKLOG S-250): a page whose answer to "must its unload handlers
++// run before it closes?" changes once the strip has asked it to run them, as
++// a page waiting on its handlers becomes ready to close when its beforeunload
++// timeout runs out. The handlers never hold the close up.
++class UnloadAnswerChangesTabStripModelDelegate
++    : public TestTabStripModelDelegate {
++ public:
++  UnloadAnswerChangesTabStripModelDelegate(bool before, bool after)
++      : before_(before), after_(after) {}
++
++  bool ShouldRunUnloadListenerBeforeClosing(WebContents* contents) override {
++    return asked_to_run_ ? after_ : before_;
++  }
++  bool RunUnloadListenerBeforeClosing(WebContents* contents) override {
++    asked_to_run_ = true;
++    return false;
++  }
++
++ private:
++  const bool before_;
++  const bool after_;
++  bool asked_to_run_ = false;
++};
++
++}  // namespace
++
++// Stedding (BACKLOG S-250): a closed tab is told of its detach for deletion
++// exactly once, before it is deleted, even when its unload answer changes
++// while it closes. A tab that needed its handlers at first and not later was
++// told nothing, and the sidebar row's TabDataObserver kept a pointer to the
++// deleted tab (the checks build's dangling-pointer detector); the other way
++// round it was told twice.
++TEST_F(TabStripModelTest, AClosedTabIsToldOfItsDetachOnce) {
++  for (const auto [before, after] : {std::pair(true, false),
++                                     std::pair(false, true)}) {
++    SCOPED_TRACE(testing::Message() << "needs its handlers first: " << before
++                                    << ", then: " << after);
++    UnloadAnswerChangesTabStripModelDelegate delegate(before, after);
++    TabStripModel tabstrip(&delegate, profile());
++    tabstrip.AppendWebContents(CreateWebContents(), true);
++    tabstrip.AppendWebContents(CreateWebContents(), true);
++
++    std::vector<tabs::TabInterface::DetachReason> told;
++    base::CallbackListSubscription subscription =
++        tabstrip.GetTabAtIndex(1)->RegisterWillDetach(base::BindRepeating(
++            [](std::vector<tabs::TabInterface::DetachReason>* told,
++               tabs::TabInterface* tab,
++               tabs::TabInterface::DetachReason reason) {
++              told->push_back(reason);
++            },
++            &told));
++    tabstrip.CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
++
++    EXPECT_EQ(1, tabstrip.count()) << "the tab closed";
++    EXPECT_EQ(std::vector{tabs::TabInterface::DetachReason::kDelete}, told);
++    tabstrip.CloseAllTabs();
++  }
++}
++
+ // Tests various permutations of pinning tabs.
+ TEST_F(TabStripModelTest, Pinning) {
+   typedef MockTabStripModelObserver::State State;
 diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
 index a1973941c440e..d71b6a5633e9e 100644
 --- a/chrome/browser/ui/views/commandbar/BUILD.gn

@@ -1,0 +1,932 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Tue, 20 Oct 2026 00:59:07 -0400
+Subject: base: Chrome's launched defaults, its key pins and certificate
+ transparency
+
+Chrome turns features on for every Stable user by server-side field trial,
+which Stedding never receives, so a feature Chrome has launched stays off in
+Stedding until upstream flips its default (BACKLOG S-236, found by comparing
+Chrome Stable's seed with the pin's defaults, tooling/field-trials). This
+patch turns on, each with a `Stedding (BACKLOG S-236)` comment:
+StructuredHeadersInRust, DeprecateUnload and DeprecateUnloadByBucket
+(Stedding's own chrome:// pages keep their unload handlers, as the permissions
+policy already allows), AperitifHelpers (the Mac's helper processes; every
+kind starts from the app bundle), PdfBufferedPaintManager,
+IgnoreQuicCryptoConfigMemoryPressure, CheckAutoCommitInCommitAndRollback,
+PaymentRequestRejectTooSmallWindows and TabSearchCjkWordBoundary.
+TcpPortRandomizationMac stays off: the fix it needs is not in this pin.
+
+Google's static key pins apply off iOS whatever the branding
+(net/http/transport_security_state.cc); a pin list over ten weeks old turns
+them off, and no violation is reported anywhere.
+
+Certificate transparency is enforced (BACKLOG S-237): a public authority's
+certificate must carry proof that it was logged, from the log list the
+certificate component already brings, while a list over seventy days old
+enforces nothing. The certificate audit reports Chrome sends with it stay off
+in code: SCTReportingService always answers the disabled mode.
+
+Tests: DefaultsTest.AFreshProfileHoldsAndWorksAfterStay checks every default
+and that a web page's unload handler no longer runs while a chrome:// page's
+still may; CertificateChecksTest.UnloggedAndUnpinnedCertificatesAreRefused
+and CertificateReportsTest.NoCertificateIsReported, each failing with
+Chromium's own code put back. SleepGateTest's unload page opts back in to
+unload with a header.
+
+Why: what every Chrome user has had for months, a safer and leaner browser,
+should not be missing from Stedding because it arrives by a field trial.
+Removable when: upstream turns each default on in code (re-read at every pin
+move with tooling/field-trials), and drop this patch's hunks as they land.
+---
+ chrome/browser/browser_features.cc            |   9 +-
+ chrome/browser/ssl/sct_reporting_service.cc   |  11 +-
+ chrome/browser/ui/tabs/features.cc            |   4 +-
+ chrome/test/stedding/BUILD.gn                 |  25 ++
+ .../certificate_checks_browsertest.cc         | 410 ++++++++++++++++++
+ chrome/test/stedding/defaults_browsertest.cc  |  87 +++-
+ .../test/stedding/sleep_gate_browsertest.cc   |  22 +-
+ components/payments/core/features.cc          |   6 +-
+ content/public/common/content_features.cc     |   5 +-
+ net/base/features.cc                          |   4 +-
+ net/http/structured_headers.cc                |   4 +-
+ net/http/transport_security_state.cc          |   6 +-
+ pdf/pdf_features.cc                           |   4 +-
+ services/network/public/cpp/features.cc       |  12 +-
+ sql/database.cc                               |   4 +-
+ 15 files changed, 583 insertions(+), 30 deletions(-)
+ create mode 100644 chrome/test/stedding/certificate_checks_browsertest.cc
+
+diff --git a/chrome/browser/browser_features.cc b/chrome/browser/browser_features.cc
+index cbc2f4280a2fa..f5e34d6847113 100644
+--- a/chrome/browser/browser_features.cc
++++ b/chrome/browser/browser_features.cc
+@@ -41,12 +41,13 @@ BASE_FEATURE(kBookmarkTriggerForPrefetch, base::FEATURE_DISABLED_BY_DEFAULT);
+ // should first reach out to chrome-certificate-transparency@google.com.
+ // On builds where CT is enabled, this flag is also used as an emergency kill
+ // switch.
++// Stedding (BACKLOG S-237): on, as in Google Chrome. The log list comes with
++// the certificate component updates, and a list more than ten weeks old
++// switches enforcement off (ChromeCTPolicyEnforcer::IsLogDataTimely()).
++// Chromium ties its sampled certificate reports to Google to this switch;
++// SCTReportingService::GetReportingMode() keeps them off.
+ BASE_FEATURE(kCertificateTransparencyAskBeforeEnabling,
+-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+              base::FEATURE_ENABLED_BY_DEFAULT);
+-#else
+-             base::FEATURE_DISABLED_BY_DEFAULT);
+-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ 
+ // Enables using network time for certificate verification. If enabled, network
+ // time will be used to verify certificate validity, however certificates that
+diff --git a/chrome/browser/ssl/sct_reporting_service.cc b/chrome/browser/ssl/sct_reporting_service.cc
+index 790be3f7d5cf9..8d50dfa4e44c8 100644
+--- a/chrome/browser/ssl/sct_reporting_service.cc
++++ b/chrome/browser/ssl/sct_reporting_service.cc
+@@ -215,11 +215,14 @@ SCTReportingService::SCTReportingService(
+ SCTReportingService::~SCTReportingService() = default;
+ 
+ network::mojom::SCTAuditingMode SCTReportingService::GetReportingMode() {
++  // Stedding (BACKLOG S-237, docs/PRIVACY.md): Certificate Transparency is
++  // enforced, but no certificate is ever reported. Chromium turns these
++  // reports on with enforcement: a sample of the certificates a user meets,
++  // and the site each came from, sent to Google (kSBSCTAuditingReportURL), or
++  // looked up there first (kHashdanceLookupQueryURL), whenever Safe Browsing
++  // is on. Every network context therefore gets kDisabled, whatever the Safe
++  // Browsing settings say.
+   bool is_sct_auditing_enabled = false;
+-#if !BUILDFLAG(IS_ANDROID)
+-  is_sct_auditing_enabled =
+-      SystemNetworkContextManager::IsCertificateTransparencyEnabled();
+-#endif
+   if (profile_->IsOffTheRecord() || !is_sct_auditing_enabled) {
+     return network::mojom::SCTAuditingMode::kDisabled;
+   }
+diff --git a/chrome/browser/ui/tabs/features.cc b/chrome/browser/ui/tabs/features.cc
+index 6aac05299cda8..b5c1befa56cdf 100644
+--- a/chrome/browser/ui/tabs/features.cc
++++ b/chrome/browser/ui/tabs/features.cc
+@@ -28,7 +28,9 @@ BASE_FEATURE_PARAM(bool,
+                    "split_view_horizontal_direct_tab_access",
+                    false);
+ 
+-BASE_FEATURE(kTabSearchCjkWordBoundary, base::FEATURE_DISABLED_BY_DEFAULT);
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// by field trial, which Stedding never receives.
++BASE_FEATURE(kTabSearchCjkWordBoundary, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kTabSearchPerformanceImprovements,
+              base::FEATURE_DISABLED_BY_DEFAULT);
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index ecb156e5a2bce..7c918e274c412 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -2,6 +2,7 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//pdf/features.gni")
+ import("//testing/test.gni")
+ 
+ assert(!is_android)
+@@ -20,6 +21,7 @@ test("stedding_browser_tests") {
+     "app_jar_browsertest.cc",
+     "archive_sweep_browsertest.cc",
+     "branding_browsertest.cc",
++    "certificate_checks_browsertest.cc",
+     "chromium_version_browsertest.cc",
+     "clear_space_browsertest.cc",
+     "command_bar_browsertest.cc",
+@@ -75,6 +77,25 @@ test("stedding_browser_tests") {
+     "//base/test:test_support",
+     "//chrome/app:branded_strings",
+     "//chrome/browser",
++    # BACKLOG S-236, S-237: the launched defaults, and the certificate checks
++    # with the certificate component's lists.
++    "//chrome/browser:browser_features",
++    "//chrome/browser/component_updater",
++    "//chrome/browser/net",
++    "//chrome/browser/net:key_pinning_proto",
++    "//chrome/browser/ssl:cert_verifier_test_support",
++    "//chrome/browser/ssl:test_support",
++    "//chrome/browser/ui/tabs:features",
++    "//components/certificate_transparency:proto",
++    "//components/payments/core",
++    "//components/safe_browsing/core/common:features",
++    "//components/safe_browsing/core/common:safe_browsing_prefs",
++    "//components/security_state/core",
++    "//content/public/common",
++    "//net",
++    "//pdf:buildflags",
++    "//services/cert_verifier/public/mojom",
++    "//services/network/public/proto",
+     "//chrome/browser/bookmarks",
+     "//chrome/browser/extensions",
+     "//chrome/browser/content_settings:content_settings_factory",
+@@ -226,6 +247,10 @@ test("stedding_browser_tests") {
+     "//ui/views:test_support",
+   ]
+ 
++  if (enable_pdf) {
++    deps += [ "//pdf:features" ]
++  }
++
+   data_deps = [ "//chrome:browser_tests_pak" ]
+   if (!is_mac) {
+     # The browser under test reads its WebUI pages -- the welcome flow's
+diff --git a/chrome/test/stedding/certificate_checks_browsertest.cc b/chrome/test/stedding/certificate_checks_browsertest.cc
+new file mode 100644
+index 0000000000000..4248e9a274d0b
+--- /dev/null
++++ b/chrome/test/stedding/certificate_checks_browsertest.cc
+@@ -0,0 +1,410 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// The certificate checks Chrome makes and Stedding makes too (BACKLOG S-236,
++// S-237; docs/PRIVACY.md), each seen on a navigation.
++//
++// Certificate Transparency: a public authority's certificate that was never
++// recorded in the public logs is refused while the log list is fresh. The
++// list comes with the certificate component updates, and the browser loads
++// it; a list more than ten weeks old enforces nothing, so a copy that has not
++// been updated keeps working. A root the user added (a company's, a debugging
++// proxy's) needs no log.
++//
++// Google's key pins: a certificate for a Google site that chains to a public
++// root Google did not pin is refused; one from a root the user added is not.
++//
++// Neither check reports anything: Chromium's sampled certificate reports to
++// Google stay off, whatever the Safe Browsing settings say.
++
++#include <memory>
++#include <string>
++#include <tuple>
++#include <vector>
++
++#include "base/feature_list.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/run_loop.h"
++#include "base/synchronization/lock.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "base/time/time.h"
++#include "chrome/browser/component_updater/pki_metadata_component_installer.h"
++#include "chrome/browser/net/key_pinning.pb.h"
++#include "chrome/browser/net/system_network_context_manager.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ssl/cert_verifier_browser_test.h"
++#include "chrome/browser/ssl/sct_reporting_service.h"
++#include "chrome/browser/ssl/sct_reporting_service_factory.h"
++#include "chrome/browser/ssl/ssl_browsertest_util.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/certificate_transparency/certificate_transparency_config.pb.h"
++#include "components/prefs/pref_service.h"
++#include "components/safe_browsing/core/common/features.h"
++#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
++#include "components/security_state/core/security_state.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/network_service_instance.h"
++#include "content/public/browser/ssl_status.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "content/public/test/test_utils.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "net/base/net_errors.h"
++#include "net/cert/cert_status_flags.h"
++#include "net/cert/cert_verify_result.h"
++#include "net/cert/sct_status_flags.h"
++#include "net/cert/signed_certificate_timestamp.h"
++#include "net/cert/signed_certificate_timestamp_and_status.h"
++#include "net/cert/test_root_certs.h"
++#include "net/cert/x509_certificate.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/http/http_status_code.h"
++#include "net/test/cert_test_util.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "net/test/test_data_directory.h"
++#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
++#include "services/network/public/mojom/ct_log_info.mojom.h"
++#include "services/network/public/mojom/network_context.mojom.h"
++#include "services/network/public/mojom/network_service.mojom.h"
++#include "services/network/public/mojom/network_service_test.mojom.h"
++#include "services/network/public/proto/sct_audit_report.pb.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace {
++
++using component_updater::PKIMetadataComponentInstallerService;
++
++// Each check visits a host of its own, so that no connection or verification
++// is reused from the check before. The test server's certificate names all.
++// A public authority's certificate names hosts under a real top-level domain;
++// one for a name like "a.test" is refused for that reason alone.
++constexpr char kLocalHost[] = "local.test";
++constexpr char kLocalGoogleHost[] = "local-pins.google.com";
++constexpr char kPublicHost[] = "public.example.com";
++constexpr char kPublicGoogleHost[] = "pins.google.com";
++constexpr char kStaleHost[] = "stale.example.com";
++
++int64_t SecondsSinceEpoch(base::Time time) {
++  return (time - base::Time::UnixEpoch()).InSeconds();
++}
++
++class CertificateChecksTest
++    : public InProcessBrowserTest,
++      public PKIMetadataComponentInstallerService::Observer {
++ protected:
++  // The certificate component, as it is on disk before the browser starts:
++  // a log list and a pin list, both dated now. The pin list names one key
++  // for every google.com site, a key no test certificate has, as Chrome's
++  // own list names Google's.
++  void SetUpInProcessBrowserTestFixture() override {
++    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
++    PKIMetadataComponentInstallerService::GetInstance()->AddObserver(this);
++    ASSERT_TRUE(component_dir_.CreateUniqueTempDir());
++
++    chrome_browser_certificate_transparency::CTConfig logs;
++    logs.mutable_log_list()->mutable_timestamp()->set_seconds(
++        SecondsSinceEpoch(base::Time::Now()));
++    ASSERT_TRUE(PKIMetadataComponentInstallerService::GetInstance()
++                    ->WriteCTDataForTesting(component_dir_.GetPath(),
++                                            logs.SerializeAsString()));
++
++    chrome_browser_key_pinning::PinList pins;
++    pins.mutable_timestamp()->set_seconds(SecondsSinceEpoch(base::Time::Now()));
++    chrome_browser_key_pinning::PinSet* const google = pins.add_pinsets();
++    google->set_name("google");
++    google->add_static_spki_hashes_sha256(std::string(32, '\x5a'));
++    chrome_browser_key_pinning::PinSetInfo* const pinned =
++        pins.add_host_pins();
++    pinned->set_hostname("google.com");
++    pinned->set_pinset_name("google");
++    pinned->set_include_subdomains(true);
++    // The component's file name, kKPConfigProtoFileName in
++    // pki_metadata_component_installer.cc.
++    ASSERT_TRUE(base::WriteFile(
++        component_dir_.GetPath().AppendASCII("kp_pinslist.pb"),
++        pins.SerializeAsString()));
++  }
++
++  void TearDownInProcessBrowserTestFixture() override {
++    PKIMetadataComponentInstallerService::GetInstance()->RemoveObserver(this);
++    InProcessBrowserTest::TearDownInProcessBrowserTestFixture();
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    net::EmbeddedTestServer::ServerCertificateConfig certificate;
++    certificate.dns_names = {kLocalHost, kLocalGoogleHost, kPublicHost,
++                             kPublicGoogleHost, kStaleHost};
++    https_.SetSSLConfig(certificate);
++    https_.AddDefaultHandlers(GetChromeTestDataDir());
++    ASSERT_TRUE(https_.Start());
++  }
++
++  // PKIMetadataComponentInstallerService::Observer:
++  void OnCTLogListConfigured() override { ++log_lists_loaded_; }
++
++  content::WebContents* page() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  // Visits `host` and returns the navigation's error: net::OK when the page
++  // loaded.
++  int Visit(const char* host) {
++    content::TestNavigationObserver observer(page());
++    EXPECT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), https_.GetURL(host, "/title1.html")));
++    return observer.last_net_error_code();
++  }
++
++  net::CertStatus CertificateErrors() {
++    content::NavigationEntry* const entry =
++        page()->GetController().GetLastCommittedEntry();
++    return entry ? entry->GetSSL().cert_status & net::CERT_STATUS_ALL_ERRORS
++                 : 0;
++  }
++
++  int log_lists_loaded_ = 0;
++
++ private:
++  base::ScopedTempDir component_dir_;
++  net::EmbeddedTestServer https_{net::EmbeddedTestServer::TYPE_HTTPS};
++};
++
++IN_PROC_BROWSER_TEST_F(CertificateChecksTest,
++                       UnloggedAndUnpinnedCertificatesAreRefused) {
++  ASSERT_TRUE(SystemNetworkContextManager::IsCertificateTransparencyEnabled())
++      << "kCertificateTransparencyAskBeforeEnabling is off";
++  {
++    // The component's log list reached the certificate verifier; its pin
++    // list went to the network service on the same pass.
++    SCOPED_TRACE("the component's lists load");
++    ASSERT_TRUE(base::test::RunUntil([&]() { return log_lists_loaded_ > 0; }))
++        << "the component's log list was never loaded";
++    content::RunAllTasksUntilIdle();
++    content::FlushNetworkServiceInstanceForTesting();
++  }
++  {
++    SCOPED_TRACE("a root the user added needs no log and no pin");
++    EXPECT_EQ(net::OK, Visit(kLocalHost));
++    EXPECT_EQ(0u, CertificateErrors());
++    EXPECT_EQ(net::OK, Visit(kLocalGoogleHost));
++    EXPECT_EQ(0u, CertificateErrors());
++  }
++
++  // From here on the test server's root counts as a public authority's, as
++  // the roots in the root store do.
++  scoped_refptr<net::X509Certificate> root =
++      net::ImportCertFromFile(net::EmbeddedTestServer::GetRootCertPemPath());
++  ASSERT_TRUE(root);
++  net::ScopedTestKnownRoot public_root(root.get());
++  {
++    SCOPED_TRACE("a fresh log list refuses an unlogged certificate");
++    EXPECT_EQ(net::ERR_CERTIFICATE_TRANSPARENCY_REQUIRED, Visit(kPublicHost));
++    ssl_test_util::CheckSecurityState(
++        page(), net::CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED,
++        security_state::DANGEROUS,
++        ssl_test_util::AuthState::SHOWING_INTERSTITIAL);
++  }
++  {
++    // The pin error wins over the log error the same connection has.
++    SCOPED_TRACE("a Google site refuses a key Google did not pin");
++    EXPECT_EQ(net::ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN,
++              Visit(kPublicGoogleHost));
++    EXPECT_TRUE(CertificateErrors() & net::CERT_STATUS_PINNED_KEY_MISSING);
++  }
++  {
++    // Ten weeks without an update: Chromium stops enforcing rather than
++    // refuse certificates from logs it no longer knows.
++    SCOPED_TRACE("a stale log list enforces nothing");
++    base::test::TestFuture<void> loaded;
++    content::GetCertVerifierServiceFactory()->UpdateCtLogList(
++        {}, base::Time::Now() - base::Days(71), loaded.GetCallback());
++    ASSERT_TRUE(loaded.Wait());
++    EXPECT_EQ(net::OK, Visit(kStaleHost));
++    EXPECT_EQ(0u, CertificateErrors());
++  }
++}
++
++// Three SCTs a public certificate carries, from three logs.
++void AddScts(net::SignedCertificateTimestampAndStatusList* scts) {
++  for (char log : {'\x01', '\x02', '\x03'}) {
++    auto sct = base::MakeRefCounted<net::ct::SignedCertificateTimestamp>();
++    sct->version = net::ct::SignedCertificateTimestamp::V1;
++    sct->log_id = std::string(32, log);
++    sct->timestamp = base::Time::Now();
++    sct->signature.signature_data = std::string("signature") + log;
++    sct->origin = net::ct::SignedCertificateTimestamp::SCT_EMBEDDED;
++    scts->push_back(
++        net::SignedCertificateTimestampAndStatus(sct, net::ct::SCT_STATUS_OK));
++  }
++}
++
++// The connections carry valid SCTs, which is what Chromium samples for its
++// reports; a report, or the lookup that comes first, would reach this test's
++// own server, never Google's.
++class CertificateReportsTest : public CertVerifierBrowserTest {
++ public:
++  CertificateReportsTest() {
++    SCTReportingService::SetSamplingRateForTesting(1.0);
++    std::ignore = report_server_.InitializeAndListen();
++    SCTReportingService::GetReportURLInstance() = report_server_.GetURL("/");
++    SCTReportingService::GetHashdanceLookupQueryURLInstance() =
++        report_server_.GetURL("/hashdance/length/$1/prefix/$2");
++  }
++
++ protected:
++  void SetUpOnMainThread() override {
++    host_resolver()->AddRule("*", "127.0.0.1");
++    report_server_.RegisterRequestHandler(base::BindRepeating(
++        &CertificateReportsTest::OnReport, base::Unretained(this)));
++    report_server_.StartAcceptingConnections();
++    https_.AddDefaultHandlers(GetChromeTestDataDir());
++    ASSERT_TRUE(https_.Start());
++
++    scoped_refptr<net::X509Certificate> certificate =
++        net::CreateCertificateChainFromFile(net::GetTestCertsDirectory(),
++                                            "ct-test-embedded-cert.pem",
++                                            net::X509Certificate::FORMAT_AUTO);
++    ASSERT_TRUE(certificate);
++    net::CertVerifyResult verified;
++    verified.verified_cert = certificate;
++    verified.is_issued_by_known_root = true;
++    AddScts(&verified.scts);
++    mock_cert_verifier()->set_default_result(net::OK);
++    for (const char* host : {"a.test", "b.test"}) {
++      mock_cert_verifier()->AddResultForCertAndHost(
++          https_.GetCertificate().get(), host, verified, net::OK);
++    }
++    CertVerifierBrowserTest::SetUpOnMainThread();
++
++    // A report goes out at once instead of after Chromium's first delay of
++    // 30 seconds, so the visit below would be seen at once too.
++    content::GetNetworkService()->BindTestInterfaceForTesting(
++        network_service_test_.BindNewPipeAndPassReceiver());
++    base::test::TestFuture<void> set;
++    network_service_test_->SetSCTAuditingRetryDelay(base::TimeDelta(),
++                                                    set.GetCallback());
++    ASSERT_TRUE(set.Wait());
++  }
++
++  network::mojom::SCTAuditingMode Mode() {
++    SCTReportingService* const service =
++        SCTReportingServiceFactory::GetForBrowserContext(GetProfile());
++    EXPECT_TRUE(service);
++    return service ? service->GetReportingMode()
++                   : network::mojom::SCTAuditingMode::kDisabled;
++  }
++
++  // The report server answers on its own thread, which wakes this one.
++  void WaitForReports(size_t count) {
++    while (true) {
++      base::RunLoop run_loop;
++      {
++        base::AutoLock lock(lock_);
++        if (reports_.size() >= count) {
++          return;
++        }
++        report_arrived_ = run_loop.QuitClosure();
++      }
++      run_loop.Run();
++    }
++  }
++
++  std::vector<std::string> ReportedHosts() {
++    base::AutoLock lock(lock_);
++    std::vector<std::string> hosts;
++    for (const std::string& report : reports_) {
++      sct_auditing::SCTClientReport parsed;
++      if (!parsed.ParseFromString(report) ||
++          parsed.certificate_report_size() == 0) {
++        hosts.push_back("(a request that is not a report)");
++        continue;
++      }
++      hosts.push_back(
++          parsed.certificate_report(0).context().origin().hostname());
++    }
++    return hosts;
++  }
++
++  net::EmbeddedTestServer https_{net::EmbeddedTestServer::TYPE_HTTPS};
++
++ private:
++  std::unique_ptr<net::test_server::HttpResponse> OnReport(
++      const net::test_server::HttpRequest& request) {
++    {
++      base::AutoLock lock(lock_);
++      reports_.push_back(request.has_content ? request.content
++                                             : request.relative_url);
++      if (report_arrived_) {
++        std::move(report_arrived_).Run();
++      }
++    }
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    response->set_code(net::HTTP_OK);
++    return response;
++  }
++
++  net::EmbeddedTestServer report_server_{net::EmbeddedTestServer::TYPE_HTTPS};
++  mojo::Remote<network::mojom::NetworkServiceTest> network_service_test_;
++  base::Lock lock_;
++  std::vector<std::string> reports_;
++  base::OnceClosure report_arrived_;
++};
++
++IN_PROC_BROWSER_TEST_F(CertificateReportsTest, NoCertificateIsReported) {
++  ASSERT_TRUE(SystemNetworkContextManager::IsCertificateTransparencyEnabled());
++  PrefService* const prefs = GetProfile()->GetPrefs();
++  {
++    // With Safe Browsing on, Chromium would look each sampled certificate up
++    // at Google, then report it.
++    SCOPED_TRACE("Safe Browsing on");
++    prefs->SetBoolean(prefs::kSafeBrowsingEnabled, true);
++    EXPECT_EQ(network::mojom::SCTAuditingMode::kDisabled, Mode());
++  }
++  {
++    // With the user's extra reporting on, it would report straight away.
++    SCOPED_TRACE("Safe Browsing's extra reporting on");
++    if (base::FeatureList::IsEnabled(
++            safe_browsing::kExtendedReportingRemovePrefDependency)) {
++      prefs->SetBoolean(prefs::kSafeBrowsingEnhanced, true);
++    } else {
++      prefs->SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled, true);
++    }
++    EXPECT_EQ(network::mojom::SCTAuditingMode::kDisabled, Mode());
++  }
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), https_.GetURL("a.test", "/title1.html")));
++  {
++    // The proof that nothing went: switched on below Stedding's settings,
++    // in the network service itself, the reports arrive at this test's
++    // server, and the first one is the next site's.
++    SCOPED_TRACE("the visit before was never reported");
++    GetProfile()->GetDefaultStoragePartition()->GetNetworkContext()
++        ->SetSCTAuditingMode(
++            network::mojom::SCTAuditingMode::kEnhancedSafeBrowsingReporting);
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), https_.GetURL("b.test", "/title1.html")));
++    WaitForReports(1);
++    EXPECT_EQ(std::vector<std::string>{"b.test"}, ReportedHosts());
++  }
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/defaults_browsertest.cc b/chrome/test/stedding/defaults_browsertest.cc
+index bd998ac4c3023..33fd489697678 100644
+--- a/chrome/test/stedding/defaults_browsertest.cc
++++ b/chrome/test/stedding/defaults_browsertest.cc
+@@ -24,6 +24,11 @@
+ // No build runs Chromium's field-trial testing config, and the 2026 desktop
+ // refresh it had switched on stays on by its own defaults (privacy Q10).
+ //
++// What Chrome launched to all its Stable users by field trial, which Stedding
++// never receives, is on by its own defaults (BACKLOG S-236, S-237). Among it:
++// a web page's unload handler no longer runs, while a chrome:// page keeps
++// its own.
++//
+ // On Windows the network service runs in its own sandbox (windows N15).
+ 
+ #include <optional>
+@@ -33,6 +38,7 @@
+ #include "base/test/run_until.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_features.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_window.h"
+@@ -41,6 +47,7 @@
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -52,6 +59,7 @@
+ #include "components/javascript_dialogs/app_modal_dialog_controller.h"
+ #include "components/javascript_dialogs/app_modal_dialog_view.h"
+ #include "components/omnibox/browser/omnibox_pref_names.h"
++#include "components/payments/core/features.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tab_groups/features.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+@@ -59,13 +67,21 @@
+ #include "components/variations/service/buildflags.h"
+ #include "components/variations/service/variations_field_trial_creator.h"
+ #include "components/variations/service/variations_service.h"
++#include "content/public/browser/back_forward_cache.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_delegate.h"
++#include "content/public/common/content_features.h"
++#include "content/public/test/back_forward_cache_util.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/test_navigation_observer.h"
++#include "net/base/features.h"
+ #include "net/dns/mock_host_resolver.h"
++#include "net/http/structured_headers.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
++#include "pdf/buildflags.h"
++#include "services/network/public/cpp/features.h"
++#include "sql/database.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/base/window_open_disposition.h"
+@@ -76,6 +92,10 @@
+ #include "ui/views/widget/widget.h"
+ #include "url/gurl.h"
+ 
++#if BUILDFLAG(ENABLE_PDF)
++#include "pdf/pdf_features.h"
++#endif
++
+ #if BUILDFLAG(IS_WIN)
+ #include "content/public/browser/browser_child_process_host_iterator.h"
+ #include "content/public/browser/child_process_data.h"
+@@ -177,11 +197,12 @@ class DefaultsTest : public InProcessBrowserTest {
+ 
+ // A fresh profile holds its defaults, and after Stay the bookkeeping still
+ // runs: no field-trial testing config ran and the 2026 refresh is on
+-// (privacy Q10), a link from a pinned tab navigates it (Peek is off), the
+-// address bar shows the whole address and takes the row (toolbar T28, T29), a
+-// hovered link's address follows its switch (page U9), and Stay at "Leave
+-// site?" leaves a tab, a folder, a Space, a pin and a move working (PLAN.md
+-// TAB-7).
++// (privacy Q10), what Chrome launched by field trial is on and a web page's
++// unload handler does not run (BACKLOG S-236), a link from a pinned tab
++// navigates it (Peek is off), the address bar shows the whole address and
++// takes the row (toolbar T28, T29), a hovered link's address follows its
++// switch (page U9), and Stay at "Leave site?" leaves a tab, a folder, a
++// Space, a pin and a move working (PLAN.md TAB-7).
+ IN_PROC_BROWSER_TEST_F(DefaultsTest, AFreshProfileHoldsAndWorksAfterStay) {
+   {
+     // privacy Q10: testing/variations/fieldtrial_testing_config.json switches
+@@ -208,6 +229,62 @@ IN_PROC_BROWSER_TEST_F(DefaultsTest, AFreshProfileHoldsAndWorksAfterStay) {
+       EXPECT_TRUE(base::FeatureList::IsEnabled(*feature)) << feature->name;
+     }
+   }
++  {
++    // BACKLOG S-236, S-237: Chrome turns these on for every Stable user by
++    // field trial, which Stedding never receives, so Stedding turns them on in
++    // their definitions. Certificate Transparency and Google's key pins are
++    // seen at work in certificate_checks_browsertest.cc.
++    SCOPED_TRACE("Chrome's field-trial launches are on");
++    for (const base::Feature* const feature : {
++             &features::kCertificateTransparencyAskBeforeEnabling,
++             &net::features::kIgnoreQuicCryptoConfigMemoryPressure,
++             &net::structured_headers::kStructuredHeadersInRust,
++             &network::features::kDeprecateUnload,
++             &network::features::kDeprecateUnloadByBucket,
++             &payments::features::kPaymentRequestRejectTooSmallWindows,
++             &sql::kCheckAutoCommitInCommitAndRollback,
++             &tabs::kTabSearchCjkWordBoundary,
++#if BUILDFLAG(ENABLE_PDF)
++             &chrome_pdf::features::kPdfBufferedPaintManager,
++#endif
++#if BUILDFLAG(IS_MAC)
++             &features::kAperitifHelpers,
++#endif
++         }) {
++      EXPECT_TRUE(base::FeatureList::IsEnabled(*feature)) << feature->name;
++    }
++  }
++  {
++    // A web page's unload handler no longer runs, as in Chrome, so the page
++    // can go into the back/forward cache. The cache is off for this tab, so a
++    // handler that was registered would run on the next same-origin page,
++    // and before it commits. A chrome:// page keeps its handlers: both
++    // features together leave every other scheme alone.
++    SCOPED_TRACE("a web page's unload handler does not run");
++    content::WebContents* const page = tabs()->GetActiveWebContents();
++    content::DisableBackForwardCacheForTesting(
++        page, content::BackForwardCache::TEST_USES_UNLOAD_EVENT);
++    constexpr char kAllowed[] =
++        "document.featurePolicy.allowsFeature('unload')";
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(),
++        embedded_test_server()->GetURL("unload.test", "/title1.html")));
++    EXPECT_EQ(false, content::EvalJs(page, kAllowed));
++    ASSERT_TRUE(content::ExecJs(
++        page,
++        "localStorage.setItem('unload', 'no');"
++        "addEventListener('unload', () => {"
++        "  localStorage.setItem('unload', 'ran'); });"));
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(),
++        embedded_test_server()->GetURL("unload.test", "/title2.html")));
++    EXPECT_EQ("no", content::EvalJs(page, "localStorage.getItem('unload')"));
++
++    ASSERT_TRUE(
++        ui_test_utils::NavigateToURL(browser(), GURL("chrome://version")));
++    EXPECT_EQ(true, content::EvalJs(page, kAllowed))
++        << "a chrome:// page keeps its unload handlers";
++  }
+   {
+     SCOPED_TRACE("pinned link navigates in place");
+     EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(
+diff --git a/chrome/test/stedding/sleep_gate_browsertest.cc b/chrome/test/stedding/sleep_gate_browsertest.cc
+index 3d2448bec7444..37ed07732729b 100644
+--- a/chrome/test/stedding/sleep_gate_browsertest.cc
++++ b/chrome/test/stedding/sleep_gate_browsertest.cc
+@@ -40,12 +40,14 @@ class SleepGateTest : public InProcessBrowserTest {
+ 
+   TabStripModel* tabs() { return browser()->GetTabStripModel(); }
+ 
+-  // The first tab loads a page and runs `script` in it, with or without a
++  // The first tab loads `path` and runs `script` in it, with or without a
+   // user gesture; a second tab then takes the screen, as a sleep needs.
+-  tabs::TabInterface* PageInTheBackground(const std::string& script,
+-                                          bool gesture) {
++  tabs::TabInterface* PageInTheBackground(
++      const std::string& script,
++      bool gesture,
++      const std::string& path = "/title1.html") {
+     EXPECT_TRUE(ui_test_utils::NavigateToURL(
+-        browser(), embedded_test_server()->GetURL("/title1.html")));
++        browser(), embedded_test_server()->GetURL(path)));
+     tabs::TabInterface* const tab = tabs()->GetActiveTab();
+     EXPECT_TRUE(content::ExecJs(
+         tab->GetContents(), script,
+@@ -100,10 +102,16 @@ IN_PROC_BROWSER_TEST_F(SleepGateTest, OnlyABusyPageOrTheScreenStaysAwake) {
+         << "without a gesture the page could never ask, so nothing is lost";
+   }
+   {
++    // Unload handlers no longer run on a web page unless it opts back in
++    // (BACKLOG S-236), so this page does, and its handler is a real one.
+     SCOPED_TRACE("unload sleeps");
+-    tabs::TabInterface* const tab =
+-        PageInTheBackground("window.addEventListener('unload', () => {});",
+-                            /*gesture=*/true);
++    tabs::TabInterface* const tab = PageInTheBackground(
++        "window.addEventListener('unload', () => {});", /*gesture=*/true,
++        "/set-header?Permissions-Policy: unload%3D*");
++    EXPECT_EQ(true, content::EvalJs(
++                        tab->GetContents(),
++                        "document.featurePolicy.allowsFeature('unload')"))
++        << "the page's unload handler is allowed to run";
+     stedding::SleepTabList({tab});
+     EXPECT_TRUE(base::test::RunUntil([&]() { return Slept(tab); }));
+   }
+diff --git a/components/payments/core/features.cc b/components/payments/core/features.cc
+index 0fdc7053b04f7..359d8d3ff92b5 100644
+--- a/components/payments/core/features.cc
++++ b/components/payments/core/features.cc
+@@ -76,8 +76,12 @@ BASE_FEATURE(kSecurePaymentConfirmationStoreCredentialsInOS,
+ BASE_FEATURE(kPaymentRequestUseRendererUrlLoader,
+              base::FEATURE_DISABLED_BY_DEFAULT);
+ 
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// by field trial, which Stedding never receives. Stedding's little window
++// (1000x700 at most) holds the dialog; one shrunk to the 400x300 floor on a
++// small screen refuses a payment request, as Chrome's popups do.
+ BASE_FEATURE(kPaymentRequestRejectTooSmallWindows,
+-             base::FEATURE_DISABLED_BY_DEFAULT);
++             base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kPaymentHandlerDialogUseInitiatorInUrlLoad,
+ #if BUILDFLAG(IS_ANDROID)
+diff --git a/content/public/common/content_features.cc b/content/public/common/content_features.cc
+index 499ba9f14a50e..5301a5e8eec88 100644
+--- a/content/public/common/content_features.cc
++++ b/content/public/common/content_features.cc
+@@ -38,7 +38,10 @@ BASE_FEATURE(kAndroidCaptureKeyEvents, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ #if BUILDFLAG(IS_MAC)
+ // Enables Aperitif helper executables.
+-BASE_FEATURE(kAperitifHelpers, base::FEATURE_DISABLED_BY_DEFAULT);
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// on the Mac by field trial, which Stedding never receives. The app bundle
++// already carries the Aperitif helpers and libaperitif.dylib.
++BASE_FEATURE(kAperitifHelpers, base::FEATURE_ENABLED_BY_DEFAULT);
+ #endif
+ 
+ // DevTools frontend for Android.
+diff --git a/net/base/features.cc b/net/base/features.cc
+index 2876df4285aa6..cf878d9d8de0c 100644
+--- a/net/base/features.cc
++++ b/net/base/features.cc
+@@ -966,8 +966,10 @@ BASE_FEATURE(kPermitTcpSocketPoolConnectBackupJobs,
+ 
+ BASE_FEATURE(kLocalNetworkPermissionCheck, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// by field trial, which Stedding never receives.
+ BASE_FEATURE(kIgnoreQuicCryptoConfigMemoryPressure,
+-             base::FEATURE_DISABLED_BY_DEFAULT);
++             base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kIgnoreQuicCryptoConfigMemoryPressureForDoh,
+              base::FEATURE_ENABLED_BY_DEFAULT);
+diff --git a/net/http/structured_headers.cc b/net/http/structured_headers.cc
+index 7d42bf25b1f9a..b85b3da460cd5 100644
+--- a/net/http/structured_headers.cc
++++ b/net/http/structured_headers.cc
+@@ -126,7 +126,9 @@ auto ParseAndRecordMetrics(std::string_view time_metric,
+ 
+ }  // namespace
+ 
+-BASE_FEATURE(kStructuredHeadersInRust, base::FEATURE_DISABLED_BY_DEFAULT);
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// by field trial, which Stedding never receives.
++BASE_FEATURE(kStructuredHeadersInRust, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ namespace {
+ 
+diff --git a/net/http/transport_security_state.cc b/net/http/transport_security_state.cc
+index a154c324378f4..dfb565571119e 100644
+--- a/net/http/transport_security_state.cc
++++ b/net/http/transport_security_state.cc
+@@ -239,7 +239,11 @@ TransportSecurityState::TransportSecurityState(
+     std::vector<std::string> hsts_host_bypass_list) {
+ // Static pinning is only enabled for official builds to make sure that
+ // others don't end up with pins that cannot be easily updated.
+-#if !BUILDFLAG(GOOGLE_CHROME_BRANDING) || BUILDFLAG(IS_IOS)
++// Stedding (BACKLOG S-236): on, as in Chrome. Stedding receives the pin list
++// with the same certificate component updates Chrome does, and a list more
++// than ten weeks old switches the pins off (IsStaticPKPListTimely()). A
++// violation is refused; it is reported nowhere.
++#if BUILDFLAG(IS_IOS)
+   enable_static_pins_ = false;
+ #endif
+   // Check that there no invalid entries in the static HSTS bypass list.
+diff --git a/pdf/pdf_features.cc b/pdf/pdf_features.cc
+index 709fdd7b6089d..c90ff9783c418 100644
+--- a/pdf/pdf_features.cc
++++ b/pdf/pdf_features.cc
+@@ -22,7 +22,9 @@ bool g_is_oopif_pdf_policy_enabled = true;
+ BASE_FEATURE(kPdfBrotliDecode, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ // Reuse buffers in PaintManager.
+-BASE_FEATURE(kPdfBufferedPaintManager, base::FEATURE_DISABLED_BY_DEFAULT);
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// by field trial, which Stedding never receives.
++BASE_FEATURE(kPdfBufferedPaintManager, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ // "Incremental loading" refers to loading the PDF as it arrives.
+ // TODO(crbug.com/40123601): Remove this once incremental loading is fixed.
+diff --git a/services/network/public/cpp/features.cc b/services/network/public/cpp/features.cc
+index fbdd973c66d6a..aafd64ff24870 100644
+--- a/services/network/public/cpp/features.cc
++++ b/services/network/public/cpp/features.cc
+@@ -351,7 +351,11 @@ BASE_FEATURE(kCloneDevToolsConnectionOnlyIfRequested,
+ 
+ // Enables unload handler deprecation via Permissions-Policy.
+ // https://crbug.com/1324111
+-BASE_FEATURE(kDeprecateUnload, base::FEATURE_DISABLED_BY_DEFAULT);
++// Stedding (BACKLOG S-236): on, with kDeprecateUnloadByBucket below, as Chrome
++// launched both to all its Stable users by field trial, which Stedding never
++// receives. Together they apply to http(s) pages only, so chrome:// pages keep
++// their unload handlers (UnloadDeprecationAllowedForOrigin()).
++BASE_FEATURE(kDeprecateUnload, base::FEATURE_ENABLED_BY_DEFAULT);
+ // If < 100, each user experiences the deprecation on this % of origins. Which
+ // origins varies by which bucket the user is in. This parameter only takes
+ // effect if DeprecateUnloadByBucket is enabled. They are are separated so that
+@@ -381,7 +385,11 @@ BASE_FEATURE_PARAM(std::string,
+ // another study to control what fraction of users experience a specific value
+ // of `kDeprecateUnloadPercent`. Doing both in one study greatly complicates the
+ // study because we must deal in 100 1% groups.
+-BASE_FEATURE(kDeprecateUnloadByBucket, base::FEATURE_DISABLED_BY_DEFAULT);
++// Stedding (BACKLOG S-236): on, with kDeprecateUnload above, as Chrome
++// launched both to all its Stable users by field trial, which Stedding never
++// receives. At kDeprecateUnloadPercent's 100 every http(s) host is included;
++// without this feature every scheme would be, chrome:// pages too.
++BASE_FEATURE(kDeprecateUnloadByBucket, base::FEATURE_ENABLED_BY_DEFAULT);
+ // This buckets users, with users in each bucket having a consistent experience
+ // of the unload deprecation rollout.
+ BASE_FEATURE_PARAM(int,
+diff --git a/sql/database.cc b/sql/database.cc
+index 528c012f79561..cd1009bae1281 100644
+--- a/sql/database.cc
++++ b/sql/database.cc
+@@ -83,8 +83,10 @@ namespace sql {
+ 
+ // When enabled, don't commit or rollback transactions if they have already been
+ // rolled back by a statement error (e.g. SQLITE_FULL).
++// Stedding (BACKLOG S-236): on, as Chrome launched it to all its Stable users
++// by field trial, which Stedding never receives.
+ BASE_FEATURE(kCheckAutoCommitInCommitAndRollback,
+-             base::FEATURE_DISABLED_BY_DEFAULT);
++             base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ namespace {
+ 

@@ -54,6 +54,11 @@ bug. Report it through SECURITY.md.
 - No Autofill server queries or votes: Chromium asks `content-autofill.googleapis.com`
   about every form a page shows and reports what was submitted; Stedding turns that off
   (since 2026-10-15, `features/privacy.md` Q14). Autofill fills from its own heuristics.
+- No certificate reports. Chrome sends Google a sample of the certificates its users
+  meet once it enforces Certificate Transparency (SCT auditing, with lookups at
+  `sctauditing-pa.googleapis.com`). Stedding enforces Certificate Transparency and
+  reports nothing, whatever the Safe Browsing setting (`S-237`,
+  `CertificateReportsTest.NoCertificateIsReported`).
 
 ### What a fresh profile contacted: a recorded run
 
@@ -104,6 +109,15 @@ stay on your disk, in the `Crashpad` folder of Stedding's data folder, and goes
 nowhere. An opt-in
 reporter is not on the roadmap; adding one would need its own ADR and an entry here
 first.
+
+### Certificates — checked as in Chrome
+
+A public authority's certificate must carry proof that it was written to the public
+Certificate Transparency logs, and Google's own sites accept only the keys Google pinned
+for them (`S-236`, `S-237`). Both lists come with the certificate component update that
+already brings the root store; nothing extra is fetched, and nothing is reported. A list
+more than ten weeks old turns its check off rather than refuse sites, as in Chromium. A
+certificate from a root the user added needs neither.
 
 ### Default search engine — chosen by the user
 

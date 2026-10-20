@@ -468,6 +468,13 @@ features that users expect from a real product just to make a purity claim.
   pings: removed or disabled.** Features are controlled by build flags and our own
   defaults, never by server-side experiments. Opt-in crash reporting to *our*
   infrastructure may come later (per `PRIVACY.md`).
+- **Certificate Transparency and Google's static key pins: on, as in Google Chrome**
+  (patch 0074, `S-236`, `S-237`); the certificate audit reports Chrome sends with them
+  are off in code.
+- **Features Chrome launches by field trial: their code defaults turned on.** Stedding
+  receives no trials, so `tooling/field-trials` compares Chrome Stable's seed with the
+  pin's defaults at every pin move, and patch 0074 flips the launches that need no
+  Google service (`S-236`, `S-240`).
 - **Safe Browsing: meant to be kept, hash-prefix variant -- not working.**
   Dropping it silently makes users less safe; keeping Google's real-time endpoints
   leaks browsing signals. The intent is recorded in `PRIVACY.md`: standard
