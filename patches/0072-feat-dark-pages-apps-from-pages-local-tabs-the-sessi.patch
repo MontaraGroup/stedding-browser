@@ -101,8 +101,8 @@ patches of their own and folds each fix into the patch that owns its code
  .../ui/cocoa/main_menu_builder_unittest.mm    |   54 +
  .../browser/ui/navigator/browser_navigator.cc |   16 +
  chrome/browser/ui/spaces/BUILD.gn             |   24 +
- chrome/browser/ui/spaces/app_jar.cc           |  208 +++
- chrome/browser/ui/spaces/app_jar.h            |   94 ++
+ chrome/browser/ui/spaces/app_jar.cc           |  216 ++++
+ chrome/browser/ui/spaces/app_jar.h            |  101 ++
  chrome/browser/ui/spaces/app_jars_unittest.cc |  126 ++
  chrome/browser/ui/spaces/isolation_mark.cc    |   40 +
  chrome/browser/ui/spaces/isolation_mark.h     |   46 +
@@ -252,7 +252,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/test/base/chrome_unit_test_suite.h     |    9 +
  chrome/test/stedding/BUILD.gn                 |   38 +
  .../test/stedding/address_band_browsertest.cc |  272 +++-
- chrome/test/stedding/app_jar_browsertest.cc   |  802 ++++++++++++
+ chrome/test/stedding/app_jar_browsertest.cc   |  812 ++++++++++++
  .../test/stedding/clear_space_browsertest.cc  |   61 +
  .../test/stedding/command_bar_browsertest.cc  |   24 +
  .../stedding/dark_pages_app_browsertest.cc    |  245 ++++
@@ -287,7 +287,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 228 files changed, 18101 insertions(+), 330 deletions(-)
+ 228 files changed, 18126 insertions(+), 330 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -3684,10 +3684,10 @@ index 0105c9906a236..4f9a416592e56 100644
      "//components/bookmarks/browser",
 diff --git a/chrome/browser/ui/spaces/app_jar.cc b/chrome/browser/ui/spaces/app_jar.cc
 new file mode 100644
-index 0000000000000..6d71da612541e
+index 0000000000000..5bf09dab14716
 --- /dev/null
 +++ b/chrome/browser/ui/spaces/app_jar.cc
-@@ -0,0 +1,208 @@
+@@ -0,0 +1,216 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -3895,13 +3895,21 @@ index 0000000000000..6d71da612541e
 +      {u"This also signs the tabs of “", name, u"” out of the site."});
 +}
 +
++std::u16string WithClearDataSpaceNote(std::u16string_view label,
++                                      std::u16string_view note) {
++  if (note.empty()) {
++    return std::u16string(label);
++  }
++  return base::StrCat({label, u". ", note});
++}
++
 +}  // namespace spaces
 diff --git a/chrome/browser/ui/spaces/app_jar.h b/chrome/browser/ui/spaces/app_jar.h
 new file mode 100644
-index 0000000000000..c676fb9f8fb34
+index 0000000000000..8bee1fee90d02
 --- /dev/null
 +++ b/chrome/browser/ui/spaces/app_jar.h
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,101 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -3992,6 +4000,13 @@ index 0000000000000..c676fb9f8fb34
 +// site."; empty for an app on the shared session.
 +std::u16string AppClearDataSpaceNote(content::BrowserContext* browser_context,
 +                                     std::string_view app_id);
++
++// web apps Wa18: the "Also clear data" label with the note after it, as two
++// sentences; the label alone when there is no note. Chromium's label ends
++// without a full stop: "Remove this app's data from Stedding. This also signs
++// the tabs of “Work” out of the site."
++std::u16string WithClearDataSpaceNote(std::u16string_view label,
++                                      std::u16string_view note);
 +
 +}  // namespace spaces
 +
@@ -13143,7 +13158,7 @@ index 682d2fc8c6677..a09766ab3a2b5 100644
    auto dialog = views::BubbleDialogModelHost::CreateModal(
        std::move(dialog_model), ui::mojom::ModalType::kChild);
 diff --git a/chrome/browser/ui/views/web_apps/web_app_uninstall_dialog_view.cc b/chrome/browser/ui/views/web_apps/web_app_uninstall_dialog_view.cc
-index 88a20bb5f5b47..bcdfb718fdf30 100644
+index 88a20bb5f5b47..0a00feb98ed57 100644
 --- a/chrome/browser/ui/views/web_apps/web_app_uninstall_dialog_view.cc
 +++ b/chrome/browser/ui/views/web_apps/web_app_uninstall_dialog_view.cc
 @@ -8,12 +8,16 @@
@@ -13173,7 +13188,7 @@ index 88a20bb5f5b47..bcdfb718fdf30 100644
 +      if (const std::u16string note =
 +              spaces::AppClearDataSpaceNote(profile_, app_id_);
 +          !note.empty()) {
-+        checkbox_label = base::StrCat({checkbox_label, u" ", note});
++        checkbox_label = spaces::WithClearDataSpaceNote(checkbox_label, note);
 +      }
 +    }
  
@@ -15666,10 +15681,10 @@ index f979524b0bb67..a51c6a7083a57 100644
  // startup -- anchors to the top container. The app menu button is not drawn,
 diff --git a/chrome/test/stedding/app_jar_browsertest.cc b/chrome/test/stedding/app_jar_browsertest.cc
 new file mode 100644
-index 0000000000000..fea18886ffefd
+index 0000000000000..1a007cfdd60d3
 --- /dev/null
 +++ b/chrome/test/stedding/app_jar_browsertest.cc
-@@ -0,0 +1,802 @@
+@@ -0,0 +1,812 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -15731,6 +15746,7 @@ index 0000000000000..fea18886ffefd
 +#include "chrome/browser/web_applications/web_app_ui_manager.h"
 +#include "chrome/common/pref_names.h"
 +#include "chrome/common/stedding/web_apps.h"
++#include "chrome/grit/branded_strings.h"
 +#include "chrome/test/base/ui_test_utils.h"
 +#include "chrome/test/stedding/web_app_test_base.h"
 +#include "components/apps/link_capturing/intent_picker_info.h"
@@ -15752,6 +15768,7 @@ index 0000000000000..fea18886ffefd
 +#include "services/network/public/mojom/cookie_manager.mojom.h"
 +#include "third_party/skia/include/core/SkColor.h"
 +#include "ui/base/base_window.h"
++#include "ui/base/l10n/l10n_util.h"
 +#include "ui/base/page_transition_types.h"
 +#include "ui/base/window_open_disposition.h"
 +#include "ui/views/controls/label.h"
@@ -16456,6 +16473,14 @@ index 0000000000000..fea18886ffefd
 +  ASSERT_EQ(std::vector<std::string>{"jar=shared"}, CookiesIn(shared_jar));
 +  EXPECT_EQ(u"This also signs the tabs of “Work” out of the site.",
 +            spaces::AppClearDataSpaceNote(profile(), app_id));
++  // As the dialog's checkbox reads it: two sentences (the PC's live check of
++  // 2026-10-20 read "...from Stedding This also signs...").
++  EXPECT_EQ(
++      u"Remove this app's data from Stedding. This also signs the tabs of "
++      u"“Work” out of the site.",
++      spaces::WithClearDataSpaceNote(
++          l10n_util::GetStringUTF16(IDS_APP_ALSO_DELETE_APPS_DATA),
++          spaces::AppClearDataSpaceNote(profile(), app_id)));
 +
 +  extensions::ScopedTestDialogAutoConfirm accept_and_clear(
 +      extensions::ScopedTestDialogAutoConfirm::ACCEPT_AND_OPTION);
