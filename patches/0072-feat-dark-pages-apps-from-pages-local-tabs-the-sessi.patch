@@ -176,7 +176,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../ui/views/session_crashed_bubble_view.cc   |    8 +
  chrome/browser/ui/views/spaces/BUILD.gn       |    6 +
  .../browser/ui/views/spaces/space_dialogs.cc  |  100 +-
- .../ui/views/spaces/space_switcher_view.cc    |  116 +-
+ .../ui/views/spaces/space_switcher_view.cc    |  151 ++-
  .../ui/views/spaces/space_switcher_view.h     |    1 +
  chrome/browser/ui/views/stedding/BUILD.gn     |   26 +
  .../ui/views/stedding/isolation_mark_view.cc  |  172 +++
@@ -192,13 +192,13 @@ patches of their own and folds each fix into the patch that owns its code
  .../views/tabs/common/folder_drag_target.cc   |   15 +-
  .../ui/views/tabs/common/folder_drag_target.h |    7 +
  .../common/folder_drag_target_unittest.cc     |   23 +
- .../ui/views/tabs/common/split_tab_view.cc    |   24 +-
+ .../ui/views/tabs/common/split_tab_view.cc    |   30 +-
  .../tabs/common/stedding_tab_row_rules.cc     |   75 ++
  .../tabs/common/stedding_tab_row_rules.h      |   79 ++
  .../common/stedding_tab_row_rules_unittest.cc |  388 ++++++
  .../ui/views/tabs/common/tab_strip_view.cc    |   91 ++
  .../ui/views/tabs/common/tab_strip_view.h     |    6 +
- .../browser/ui/views/tabs/common/tab_view.cc  |  202 +++
+ .../browser/ui/views/tabs/common/tab_view.cc  |  214 +++-
  .../browser/ui/views/tabs/common/tab_view.h   |   34 +
  .../tabs/common/tab_view_vertical_layout.cc   |   46 +
  chrome/browser/ui/views/toolbar/BUILD.gn      |    5 +
@@ -259,6 +259,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../test/stedding/dark_pages_browsertest.cc   | 1081 ++++++++++++++++
  .../dark_pages_menu_mac_browsertest.mm        |   92 ++
  chrome/test/stedding/defaults_browsertest.cc  |   37 +
+ .../test/stedding/folder_tabs_browsertest.cc  |  177 +++
  .../stedding/isolation_mark_browsertest.cc    |  938 ++++++++++++++
  .../test/stedding/local_tabs_browsertest.cc   | 1121 +++++++++++++++++
  chrome/test/stedding/make_app_browsertest.cc  |  423 +++++++
@@ -271,7 +272,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../stedding/sidebar_forms_browsertest.cc     |  130 +-
  chrome/test/stedding/sidebar_test_util.cc     |   10 +
  chrome/test/stedding/sidebar_test_util.h      |   22 +
- .../test/stedding/space_switch_browsertest.cc |   69 +-
+ .../test/stedding/space_switch_browsertest.cc |  156 ++-
  chrome/test/stedding/tab_drop_browsertest.cc  |  408 +++++-
  chrome/test/stedding/web_app_test_base.h      |   48 +
  .../core/browser/content_settings_registry.cc |    6 +-
@@ -286,7 +287,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 227 files changed, 17795 insertions(+), 319 deletions(-)
+ 228 files changed, 18101 insertions(+), 330 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -4253,10 +4254,10 @@ index c359a497eefec..90bff3f9f19a7 100644
        source_model ? source_model->FindSpaceForTab(tab) : std::nullopt;
    if (!id || !model.GetSpace(*id)) {
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index bede54d496da7..b6edac838010d 100644
+index f5fc17fe89d63..c803bc9f2d0e2 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
-@@ -2221,6 +2221,17 @@ void SpaceModel::MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
+@@ -2225,6 +2225,17 @@ void SpaceModel::MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
  SpaceModel::LastRoute::LastRoute(tabs::TabHandle tab, SpaceId from, SpaceId to)
      : tab(tab), from(from), to(to) {}
  
@@ -4274,7 +4275,7 @@ index bede54d496da7..b6edac838010d 100644
  SpaceModel::ScopedRoutingPause::ScopedRoutingPause(SpaceModel* model)
      : model_(model) {
    if (model_) {
-@@ -2394,6 +2405,100 @@ bool SpaceModel::UndoLastRoute() {
+@@ -2398,6 +2409,100 @@ bool SpaceModel::UndoLastRoute() {
    return true;
  }
  
@@ -4375,7 +4376,7 @@ index bede54d496da7..b6edac838010d 100644
  bool SpaceModel::IsTabInActiveSpace(const tabs::TabInterface* tab) const {
    if (!tab) {
      return true;
-@@ -2537,6 +2642,8 @@ void SpaceModel::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
+@@ -2541,6 +2646,8 @@ void SpaceModel::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
      essential_homes_.erase(tab->GetHandle());
    }
    if (tab->IsPinned()) {
@@ -4384,7 +4385,7 @@ index bede54d496da7..b6edac838010d 100644
      // An essential sits above every Space, so it is no Space's pin: a pin it
      // had goes, and the session hears so. The pin's home becomes the
      // essential's, so the tab still goes back to the page the user pinned
-@@ -2644,6 +2751,21 @@ void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
+@@ -2648,6 +2755,21 @@ void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
                                         tab) == TabStripModel::kNoTab) {
                           return;
                         }
@@ -9834,7 +9835,7 @@ index 7ecfde797bcaf..bffbb0737ca49 100644
    // Space with another window's delete: the answer looks both up again.
    ConfirmInWindow(
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-index 2aa0252f2eb1b..53872a41aa93e 100644
+index 2aa0252f2eb1b..bcee2fee97a80 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
 @@ -20,13 +20,17 @@
@@ -9877,7 +9878,21 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
  
  // Colours for the Spaces a user makes, walked in order so two Spaces made in a
  // row do not look alike.
-@@ -207,6 +218,58 @@ class SpaceChipButton : public views::LabelButton {
+@@ -194,6 +205,13 @@ class SpaceChipButton : public views::LabelButton {
+         pixels - label()->font_list().GetFontSize()));
+   }
+ 
++  // The width the chip's text takes in the glyph's font, all of it: what a
++  // chip showing a chord needs (tabs R11, BACKLOG S-144).
++  int TextWidth() const {
++    return label()->GetPreferredSize(views::SizeBounds()).width() +
++           GetInsets().width();
++  }
++
+   // The chip's text is its glyph, a badge or nothing (a dot), and SetText
+   // makes that the accessible name; the Space's name stands in for it, as no
+   // tooltip names the chip in the open sidebar (BACKLOG S-70).
+@@ -207,6 +225,58 @@ class SpaceChipButton : public views::LabelButton {
      new_name = space_name_;
    }
  
@@ -9936,7 +9951,7 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
    void OnMouseEntered(const ui::MouseEvent& event) override {
      views::LabelButton::OnMouseEntered(event);
      hovered_.Run(true);
-@@ -224,6 +287,8 @@ class SpaceChipButton : public views::LabelButton {
+@@ -224,6 +294,8 @@ class SpaceChipButton : public views::LabelButton {
    gfx::Point press_point_;
    bool dragging_ = false;
    std::u16string space_name_;
@@ -9945,7 +9960,7 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
  };
  
  BEGIN_METADATA(SpaceChipButton)
-@@ -418,6 +483,13 @@ void SpaceSwitcherView::Rebuild() {
+@@ -418,6 +490,13 @@ void SpaceSwitcherView::Rebuild() {
      const size_t chip_index = chips_.size();
  
      const std::u16string name = model_->DisplayName(space.id());
@@ -9959,7 +9974,7 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
      // A Space the user has not given an icon still gets a glyph, taken from
      // the same list the context menu offers, so chips are never blank discs.
      auto button = std::make_unique<SpaceChipButton>(
-@@ -445,7 +517,7 @@ void SpaceSwitcherView::Rebuild() {
+@@ -445,7 +524,7 @@ void SpaceSwitcherView::Rebuild() {
                self->hover_callback_.Run(entered ? name : std::u16string(),
                                          bounds);
              },
@@ -9968,7 +9983,7 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
          base::BindRepeating(&SpaceSwitcherView::OnChipDragged,
                              base::Unretained(this), chip_index),
          base::BindRepeating(&SpaceSwitcherView::OnChipReleased,
-@@ -456,6 +528,7 @@ void SpaceSwitcherView::Rebuild() {
+@@ -456,6 +535,7 @@ void SpaceSwitcherView::Rebuild() {
      button->SetPreferredSize(gfx::Size(kIconSize, kIconSize));
      // The tooltip is ApplyOverflow's: the rail's alone.
      button->SetSpaceName(name);
@@ -9976,9 +9991,21 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
      button->set_context_menu_controller(this);
      // The reference shows the bare emoji, no disc: the active Space at full
      // strength, the others faded through the glyph's alpha.
-@@ -542,22 +615,38 @@ void SpaceSwitcherView::ApplyOverflow() {
-     chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
-                                : gfx::Size(kIconSize, kIconSize));
+@@ -512,6 +592,8 @@ void SpaceSwitcherView::ApplyOverflow() {
+   const int gap = row_gap.value_or(kSwitcherChipGap);
+   const auto& spaces = model_->spaces();
+   std::vector<int> widths;
++  // The widest chip across the row's axis: the rail's column is as wide.
++  int widest = kIconSize;
+   for (size_t i = 0; i < chips_.size(); ++i) {
+     auto* const chip = views::AsViewClass<SpaceChipButton>(chips_[i].first);
+     if (!chip) {
+@@ -539,25 +621,50 @@ void SpaceSwitcherView::ApplyOverflow() {
+         (row_hovered_ || drop_target_.has_value()) && !collapsed_);
+     widths.push_back(chip_width);
+     const bool dot = chip_width == kSwitcherDot;
+-    chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
+-                               : gfx::Size(kIconSize, kIconSize));
      std::u16string text = dot ? std::u16string() : GlyphFor(space, model_index);
 +    bool chord = false;
  #if BUILDFLAG(IS_MAC)
@@ -9991,6 +10018,17 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
      }
  #endif
      chip->SetText(text);
++    // tabs R11 (BACKLOG S-144): a chord takes the width its text needs. The
++    // chip is sized for the emoji, and at the glyph's size most chords are
++    // wider than that on the Mac's system font: ⌃3 drew as "…", where ⌃1
++    // and ⌃2 happened to fit.
++    const int full_width =
++        chord ? std::max(kIconSize, chip->TextWidth()) : kIconSize;
++    chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
++                               : gfx::Size(full_width, kIconSize));
++    if (!dot) {
++      widest = std::max(widest, full_width);
++    }
 +    // sessions S32, spaces B38: the badge is on every full chip of a Space
 +    // with an Independent session, the rail's too, faded less than the glyph
 +    // on a chip not on screen. A dot has no room for it, and the chord drawn
@@ -10018,7 +10056,34 @@ index 2aa0252f2eb1b..53872a41aa93e 100644
      if (dot) {
        chip->SetBackground(
            views::CreateRoundedRectBackground(space.color(), kSwitcherDot / 2));
-@@ -1088,7 +1177,24 @@ void SpaceSwitcherView::OnTabRouted(tabs::TabInterface* tab,
+@@ -570,8 +677,13 @@ void SpaceSwitcherView::ApplyOverflow() {
+     chip->SetEnabledTextColors(
+         SkColorSetA(SK_ColorWHITE, active || drop ? 0xFF : kInactiveAlpha));
+     if (!collapsed_) {
+-      chip->SetProperty(views::kMarginsKey,
+-                        gfx::Insets::TLBR(0, gap / 2, 0, gap - gap / 2));
++      // A chip widened for its chord takes the room from its own gap, while
++      // the gap has it: the chips stay where they were, give or take a
++      // pixel, and the row is as wide as SwitcherChipGap counted it.
++      const int chip_gap = std::max(0, gap - (full_width - kIconSize));
++      chip->SetProperty(
++          views::kMarginsKey,
++          gfx::Insets::TLBR(0, chip_gap / 2, 0, chip_gap - chip_gap / 2));
+     }
+   }
+   if (collapsed_) {
+@@ -580,7 +692,9 @@ void SpaceSwitcherView::ApplyOverflow() {
+     // dots were 6 DIP, and a Space added in the rail never reached the row
+     // this view sits in, which kept its old height (operator,
+     // 2026-09-09). The parent hears about it through PreferredSizeChanged.
+-    SetPreferredSize(gfx::Size(kIconSize, SwitcherStackHeight(widths)));
++    // As wide as its widest chip, a chord's while ⌘ is held: a column one
++    // emoji wide cut the chord's ends off.
++    SetPreferredSize(gfx::Size(widest, SwitcherStackHeight(widths)));
+   }
+   icon_row_->InvalidateLayout();
+ }
+@@ -1088,7 +1202,24 @@ void SpaceSwitcherView::OnTabRouted(tabs::TabInterface* tab,
      return;
    }
    ToastParams params(ToastId::kSteddingRouted);
@@ -11138,7 +11203,7 @@ index 84329bf4d95ca..0f66ab7f901a8 100644
  TEST_F(FolderDragTargetTest, DroppingAFoldersOnlyTabOnItselfKeepsIt) {
    AddTab(browser(), GURL("https://example.com/"));
 diff --git a/chrome/browser/ui/views/tabs/common/split_tab_view.cc b/chrome/browser/ui/views/tabs/common/split_tab_view.cc
-index a0df4945deef7..d8e6c1e573075 100644
+index a0df4945deef7..340e489b4ae56 100644
 --- a/chrome/browser/ui/views/tabs/common/split_tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/split_tab_view.cc
 @@ -6,9 +6,11 @@
@@ -11153,7 +11218,24 @@ index a0df4945deef7..d8e6c1e573075 100644
  #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_drag_handler.h"
-@@ -102,13 +104,22 @@ void SplitTabView::OnPaint(gfx::Canvas* canvas) {
+@@ -72,11 +74,15 @@ void SplitTabView::AddedToWidget() {
+           &SplitTabView::UpdateBorder, base::Unretained(this)));
+ 
+   OnDataChanged();
+-  UpdateHovered(IsMouseHovered());
++  // Stedding (BACKLOG S-143): as a row's (TabView::AddedToWidget), a split
++  // added back to the window stays unhovered until the next pointer move
++  // enters it: asked here, the pointer was read against the split's old place
++  // in a parent not laid out yet, and nothing ended the hover it took.
+ }
+ 
+ void SplitTabView::RemovedFromWidget() {
+   paint_as_active_subscription_ = {};
++  UpdateHovered(false);
+ }
+ 
+ void SplitTabView::OnMouseEntered(const ui::MouseEvent& event) {
+@@ -102,13 +108,22 @@ void SplitTabView::OnPaint(gfx::Canvas* canvas) {
          !children.empty()
              ? views::AsViewClass<TabView>(children[0])->GetBackgroundColor()
              : std::nullopt;
@@ -11179,7 +11261,7 @@ index a0df4945deef7..d8e6c1e573075 100644
        canvas->DrawRoundRect(GetContentsBounds(), corner_radius, flags);
      }
    }
-@@ -201,7 +212,12 @@ void SplitTabView::OnDataChanged() {
+@@ -201,7 +216,12 @@ void SplitTabView::OnDataChanged() {
  }
  
  void SplitTabView::UpdateBorder() {
@@ -11991,7 +12073,7 @@ index a78554be3214f..a09eacf4dad7e 100644
    void ApplySpaceTitleForm();
    // The title row's rename (BeginSpaceTitleRename): the field over the row,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index ca605d234e93a..93ba085438297 100644
+index ca605d234e93a..fd83d18334b54 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -4,6 +4,7 @@
@@ -12164,7 +12246,26 @@ index ca605d234e93a..93ba085438297 100644
  }
  
  void TabView::AddedToWidget() {
-@@ -1105,6 +1211,11 @@ void TabView::OnThemeChanged() {
+@@ -987,11 +1093,13 @@ void TabView::AddedToWidget() {
+   // Recompute accessible name when the structure changes.
+   UpdateAccessibleName();
+ 
+-  // Recompute the hovered state as mouse events are not processed if a view
+-  // removed from the widget and added.
+-  if (!split_) {
+-    UpdateHovered(IsMouseHovered());
+-  }
++  // Stedding (tabs R1, R4; BACKLOG S-143): a row added back to the window
++  // stays unhovered, as RemovedFromWidget() left it, until the window's next
++  // pointer move enters it, which a move away then ends. The pointer used to
++  // be asked here, against the row's old place: its new parent had not laid
++  // it out yet. A row moved into a new folder from its menu took a hover from
++  // the pointer resting where the menu had been, the window never ended it,
++  // and the row kept a fill and its close button after it slept.
+ }
+ 
+ void TabView::RemovedFromWidget() {
+@@ -1105,6 +1213,11 @@ void TabView::OnThemeChanged() {
    if (drift_slash_ && !stedding::SameFont(drift_slash_->font_list(), font)) {
      drift_slash_->SetFontList(font);
    }
@@ -12176,7 +12277,7 @@ index ca605d234e93a..93ba085438297 100644
    UpdateColors();
  }
  
-@@ -1370,6 +1481,14 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1370,6 +1483,14 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    if (old_data.last_committed_url != tab_data_.last_committed_url) {
      // The slash's visibility is decided at layout time.
      InvalidateLayout();
@@ -12191,7 +12292,7 @@ index ca605d234e93a..93ba085438297 100644
    }
    UpdateResetBadge();
    UpdateTitle(tab_data_.title, tab_data_.should_render_loading_title);
-@@ -1417,6 +1536,76 @@ void TabView::UpdateResetBadge() {
+@@ -1417,6 +1538,76 @@ void TabView::UpdateResetBadge() {
    }
  }
  
@@ -12268,7 +12369,7 @@ index ca605d234e93a..93ba085438297 100644
  bool TabView::HasDriftedFromHome() const {
    if (!collection_node_) {
      return false;
-@@ -1458,6 +1647,13 @@ void TabView::UpdateBorder() {
+@@ -1458,6 +1649,13 @@ void TabView::UpdateBorder() {
        // Insets for border handled by the `SplitTabView`.
        SetBorder(views::CreateEmptyBorder(gfx::Insets(GetLayoutConstant(
            LayoutConstant::kVerticalTabPinnedBorderThickness))));
@@ -12282,7 +12383,7 @@ index ca605d234e93a..93ba085438297 100644
      } else {
        SetBorder(views::CreateRoundedRectBorder(
            GetLayoutConstant(LayoutConstant::kVerticalTabPinnedBorderThickness),
-@@ -1507,6 +1703,12 @@ void TabView::UpdateColors() {
+@@ -1507,6 +1705,12 @@ void TabView::UpdateColors() {
      // pins H12: muted, as Arc draws it.
      drift_slash_->SetEnabledColor(SkColorSetA(colors.foreground_color, 0x99));
    }
@@ -18005,6 +18106,231 @@ index 92b95c4c544db..bd998ac4c3023 100644
 +#endif  // BUILDFLAG(IS_WIN)
 +
  }  // namespace
+diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
+index e2b57b4eb822e..0364372066880 100644
+--- a/chrome/test/stedding/folder_tabs_browsertest.cc
++++ b/chrome/test/stedding/folder_tabs_browsertest.cc
+@@ -20,6 +20,8 @@
+ 
+ #include <algorithm>
+ #include <memory>
++#include <optional>
++#include <set>
+ #include <string>
+ #include <vector>
+ 
+@@ -54,10 +56,12 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/contents_web_view.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_header_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+@@ -85,11 +89,15 @@
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
+ #include "ui/color/color_provider.h"
++#include "ui/display/display.h"
++#include "ui/display/screen.h"
+ #include "ui/events/event.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/native_ui_types.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/focus/focus_manager.h"
+@@ -129,6 +137,91 @@ class NavigationCounter : public content::WebContentsObserver {
+   raw_ptr<int> count_;
+ };
+ 
++// The screen as it is, but with the pointer resting at `point` for as long as
++// this lives: a browser test cannot move the real pointer, and a row asks the
++// screen where the pointer is when the row is added to the window. Every other
++// question goes to the real screen, which keeps its displays and observers.
++class PointerRestingAt : public display::Screen {
++ public:
++  explicit PointerRestingAt(const gfx::Point& point)
++      : real_(display::Screen::SetScreenInstance(nullptr)), point_(point) {
++    // A screen is not replaced in place; the real one is set aside above and
++    // put back below.
++    display::Screen::SetScreenInstance(this);
++  }
++  PointerRestingAt(const PointerRestingAt&) = delete;
++  PointerRestingAt& operator=(const PointerRestingAt&) = delete;
++  ~PointerRestingAt() override {
++    display::Screen::SetScreenInstance(nullptr);
++    display::Screen::SetScreenInstance(real_);
++  }
++
++  // display::Screen:
++  gfx::Point GetCursorScreenPoint() override { return point_; }
++  bool IsWindowUnderCursor(gfx::NativeWindow window) override {
++    return real_->IsWindowUnderCursor(window);
++  }
++  gfx::NativeWindow GetWindowAtScreenPoint(const gfx::Point& point) override {
++    return real_->GetWindowAtScreenPoint(point);
++  }
++  gfx::NativeWindow GetLocalProcessWindowAtPoint(
++      const gfx::Point& point,
++      const std::set<gfx::NativeWindow>& ignore) override {
++    return real_->GetLocalProcessWindowAtPoint(point, ignore);
++  }
++  int GetNumDisplays() const override { return real_->GetNumDisplays(); }
++  const std::vector<display::Display>& GetAllDisplays() const override {
++    return real_->GetAllDisplays();
++  }
++  display::Display GetDisplayNearestWindow(
++      gfx::NativeWindow window) const override {
++    return real_->GetDisplayNearestWindow(window);
++  }
++  display::Display GetDisplayNearestView(
++      gfx::NativeView view) const override {
++    return real_->GetDisplayNearestView(view);
++  }
++  display::Display GetDisplayNearestPoint(
++      const gfx::Point& point) const override {
++    return real_->GetDisplayNearestPoint(point);
++  }
++  display::Display GetDisplayMatching(
++      const gfx::Rect& match_rect) const override {
++    return real_->GetDisplayMatching(match_rect);
++  }
++  display::Display GetPrimaryDisplay() const override {
++    return real_->GetPrimaryDisplay();
++  }
++  void AddObserver(display::DisplayObserver* observer) override {
++    real_->AddObserver(observer);
++  }
++  void RemoveObserver(display::DisplayObserver* observer) override {
++    real_->RemoveObserver(observer);
++  }
++  gfx::Rect ScreenToDIPRectInWindow(
++      gfx::NativeWindow window,
++      const gfx::Rect& screen_rect) const override {
++    return real_->ScreenToDIPRectInWindow(window, screen_rect);
++  }
++  gfx::Rect DIPToScreenRectInWindow(gfx::NativeWindow window,
++                                    const gfx::Rect& dip_rect) const override {
++    return real_->DIPToScreenRectInWindow(window, dip_rect);
++  }
++  std::optional<float> GetPreferredScaleFactorForWindow(
++      gfx::NativeWindow window) const override {
++    return real_->GetPreferredScaleFactorForWindow(window);
++  }
++  std::optional<float> GetPreferredScaleFactorForView(
++      gfx::NativeView view) const override {
++    return real_->GetPreferredScaleFactorForView(view);
++  }
++  bool IsHeadless() const override { return real_->IsHeadless(); }
++
++ private:
++  const raw_ptr<display::Screen> real_;
++  const gfx::Point point_;
++};
++
+ class FolderTabsTest
+     : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+  protected:
+@@ -670,6 +763,90 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, AHoverDrawsNothingOfTheFolder) {
+   }
+ }
+ 
++// tabs R1, R4 (BACKLOG S-143, seen on beta 20): the row on screen, moved into
++// a folder of its own inside its folder from its menu, then put to sleep from
++// the command bar, is drawn as any row at rest once the pointer has left it:
++// no fill and no close button. Added back to the window inside the new folder,
++// the row asked the screen for the pointer before the folder had laid it out,
++// at its old place, where the pointer still rested after the menu; it took a
++// hover that the window never ended, and kept it until the pointer crossed
++// it again.
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, ARowMovedFromUnderThePointerRests) {
++  CloseDownToOne();
++  tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
++  ASSERT_TRUE(folder);
++  tabs::TabInterface* const tab = tab_strip_model()->GetTabAtIndex(2);
++  tab_strip_model()->ActivateTabAt(2);
++  TabView* row = DrawnRow(tab);
++  ASSERT_TRUE(row);
++
++  // The pointer moves to `point` on the screen, as the window hands a real
++  // move to its views.
++  const auto pointer_to = [&](gfx::Point point) {
++    views::View* const root = widget()->GetRootView();
++    views::View::ConvertPointFromScreen(root, &point);
++    root->OnMouseMoved(ui::MouseEvent(ui::EventType::kMouseMoved, point, point,
++                                      base::TimeTicks::Now(), ui::EF_NONE,
++                                      ui::EF_NONE));
++  };
++  // The pointer rests on the row, as when its menu is opened there.
++  const gfx::Point rest = row->GetBoundsInScreen().CenterPoint();
++  pointer_to(rest);
++  ASSERT_TRUE(row->IsHoverAnimationActive()) << "the row never saw the pointer";
++
++  // Move Tab to New Folder, the pointer still where the menu was.
++  {
++    PointerRestingAt pointer(rest);
++    tab_strip_model()->ExecuteContextMenuCommand(
++        tab_strip_model()->GetIndexOfTab(tab),
++        TabStripModel::CommandMoveTabToNewFolder);
++  }
++  const tabs::TabCollection* const nested = tab->GetParentCollection();
++  ASSERT_EQ(tabs::TabCollection::Type::FOLDER, nested->type());
++  ASSERT_EQ(folder, nested->GetParentCollection())
++      << "the row's new folder is not inside its old one";
++  row = DrawnRow(tab);
++  ASSERT_TRUE(row);
++  ASSERT_FALSE(row->GetBoundsInScreen().Contains(rest))
++      << "the row did not move from under the pointer";
++
++  // The pointer leaves for the page; Sleep Tab from the command bar.
++  pointer_to(BrowserView::GetBrowserViewForBrowser(browser())
++                 ->contents_web_view_for_testing()
++                 ->GetBoundsInScreen()
++                 .CenterPoint());
++  stedding::SleepTabs(browser(), tab, stedding::SleepScope::kThisTab);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return tab->GetContents()->WasDiscarded(); }));
++  ASSERT_NE(tab, tab_strip_model()->GetActiveTab());
++  ASSERT_FALSE(
++      tab_strip_model()->IsTabSelected(tab_strip_model()->GetIndexOfTab(tab)));
++
++  row = DrawnRow(tab);
++  ASSERT_TRUE(row);
++  EXPECT_FALSE(row->IsActive());
++  EXPECT_TRUE(
++      base::test::RunUntil([&]() { return !row->IsHoverAnimationActive(); }))
++      << "the slept row kept a hover the pointer had left";
++  views::test::RunScheduledLayout(widget());
++  EXPECT_FALSE(row->close_button_for_testing()->GetVisible())
++      << "the slept row shows its close button with the pointer away";
++  // Drawn as the first row, which the pointer never visited: no fill.
++  TabView* const resting = DrawnRow(tab_strip_model()->GetTabAtIndex(0));
++  ASSERT_TRUE(resting);
++  ASSERT_FALSE(resting->IsActive());
++  const auto fill = [](TabView* view) {
++    gfx::Canvas canvas(view->size(), 1.0f, /*is_opaque=*/true);
++    canvas.DrawColor(SK_ColorRED);
++    // The row's own paint, its fill: the favicon, the title and the close
++    // button are its children.
++    view->PaintRowForTesting(&canvas);
++    return canvas.GetBitmap().getColor(view->width() / 2, view->height() / 2);
++  };
++  EXPECT_EQ(fill(resting), fill(row))
++      << "the slept row is drawn with a fill the resting row does not have";
++}
++
+ // PLAN.md TAB-13, folders F19: Close Folder's Tabs closes this Space's tabs
+ // and wakes nothing, and the close is one Recently Closed entry that comes
+ // back by its header's name.
 diff --git a/chrome/test/stedding/isolation_mark_browsertest.cc b/chrome/test/stedding/isolation_mark_browsertest.cc
 new file mode 100644
 index 0000000000000..2ef4268337f5e
@@ -22737,10 +23063,32 @@ index d0ef3d071aff4..33757350334f6 100644
  // new folder or split grows from nothing over 200 ms, and a click or a drop
  // lands where a person's would only once a row has its size. False if the
 diff --git a/chrome/test/stedding/space_switch_browsertest.cc b/chrome/test/stedding/space_switch_browsertest.cc
-index c053842005a7e..d589dd5cddc0d 100644
+index c053842005a7e..a8d89fb0ced25 100644
 --- a/chrome/test/stedding/space_switch_browsertest.cc
 +++ b/chrome/test/stedding/space_switch_browsertest.cc
-@@ -1442,23 +1442,6 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchTest, ASwipeFollowsTheFingers) {
+@@ -17,6 +17,7 @@
+ #include <string>
+ #include <string_view>
+ #include <tuple>
++#include <utility>
+ #include <vector>
+ 
+ #include "base/command_line.h"
+@@ -26,11 +27,13 @@
+ #include "base/scoped_observation.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/test/run_until.h"
+ #include "base/time/time.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_process.h"
+ #include "chrome/browser/extensions/api/tabs/tabs_api.h"
+ #include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -1442,23 +1445,6 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchTest, ASwipeFollowsTheFingers) {
  }
  #endif  // BUILDFLAG(IS_MAC)
  
@@ -22764,7 +23112,7 @@ index c053842005a7e..d589dd5cddc0d 100644
  // spaces B36: a Space switch re-themes the window for the Space's tint, and
  // the theme change reaches every row of every Space. A row whose font did
  // not change asks for no layout. Each row used to set its title's font
-@@ -1475,7 +1458,7 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchTest, ARethemeDoesNotLayOutTheListPerRow) {
+@@ -1475,7 +1461,7 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchTest, ARethemeDoesNotLayOutTheListPerRow) {
    const TabStripView* const strip = FindTabStripView(
        browser_view()->vertical_tab_strip_region_view_for_testing());
    ASSERT_TRUE(strip);
@@ -22773,7 +23121,98 @@ index c053842005a7e..d589dd5cddc0d 100644
    window->ThemeChanged();
    EXPECT_LT(list.count(), kRows / 3)
        << "the list was told to lay out again " << list.count()
-@@ -2732,7 +2715,10 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest,
+@@ -2723,6 +2709,90 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest,
+ #endif  // BUILDFLAG(IS_MAC)
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++// tabs R11 (BACKLOG S-144): a chip that shows its chord shows all of it, ⌃1
++// to ⌃9, at every density, in the open sidebar and in the rail. On 0.2.0
++// beta 20 the third chip drew "…" for ⌃3, the one chip under Focus on Space 3
++// too (live, 2026-10-20): the chord went into a chip sized for the emoji, and
++// at the glyph's size most chords are wider than that on the Mac's system
++// font, while ⌃1 and ⌃2 happened to fit.
++IN_PROC_BROWSER_TEST_F(NumberBadgeTest, EveryChordShowsWhole) {
++  ASSERT_NO_FATAL_FAILURE(MakeThreeSpaces());
++  for (int number = 4; number <= 9; ++number) {
++    ids_.push_back(model()
++                       ->AddSpace("Space " + base::NumberToString(number),
++                                  SK_ColorGRAY)
++                       ->id());
++  }
++  ASSERT_EQ(ids_, Order());
++
++  // The chip's text as drawn: the label a LabelButton keeps to itself.
++  const auto label_of = [](views::View* chip) -> views::Label* {
++    for (views::View* const child : chip->children()) {
++      if (auto* const label = views::AsViewClass<views::Label>(child)) {
++        return label;
++      }
++    }
++    return nullptr;
++  };
++  const auto chip_of = [&](const spaces::SpaceId& id) -> views::View* {
++    views::test::RunScheduledLayout(widget());
++    spaces::SpaceSwitcherView* const switcher = Switcher();
++    return switcher ? switcher->ChipForTesting(id) : nullptr;
++  };
++  const auto set_rail = [&](bool rail) {
++    vertical_tab_strip_state_controller()->RequestCollapse(rail);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return !BrowserAnimationController::From(browser())->IsAnimating(
++          TabStripAnimations::kVerticalTabStrip);
++    }));
++    ASSERT_EQ(rail, vertical_tab_strip_state_controller()->IsCollapsed());
++  };
++
++  PrefService* const local_state = g_browser_process->local_state();
++  constexpr std::pair<int, const char*> kDensities[] = {
++      {0, "Comfortable"}, {1, "Compact"}, {2, "Dense"}};
++  for (const auto& [density, density_name] : kDensities) {
++    SCOPED_TRACE(density_name);
++    // As Settings and the command bar's actions set it (sidebar Y1, Y4).
++    local_state->SetInteger(stedding::prefs::kSidebarDensity, density);
++    for (const bool rail : {false, true}) {
++      SCOPED_TRACE(rail ? "the rail" : "the open sidebar");
++      ASSERT_NO_FATAL_FAILURE(set_rail(rail));
++      for (const spaces::SpaceId& id : ids_) {
++        const std::u16string chord = ChordFor(id);
++        SCOPED_TRACE(base::UTF16ToUTF8(chord));
++        // The active Space's chip is never a dot (spaces B24, sidebar Y13).
++        model()->SetActiveSpace(id);
++        ASSERT_NO_FATAL_FAILURE(NumbersKey(/*down=*/true));
++        ASSERT_TRUE(base::test::RunUntil([&]() {
++          views::View* const chip = chip_of(id);
++          views::Label* const label = chip ? label_of(chip) : nullptr;
++          return label && label->GetText() == chord;
++        })) << "the chip never showed its chord";
++        views::View* const chip = chip_of(id);
++        ASSERT_TRUE(chip);
++        views::Label* const label = label_of(chip);
++        ASSERT_TRUE(label);
++        EXPECT_FALSE(label->IsDisplayTextTruncated())
++            << "drawn as \""
++            << base::UTF16ToUTF8(label->GetDisplayTextForTesting())
++            << "\" in " << label->width() << " DIP of a "
++            << chip->bounds().ToString() << " chip; the chord needs "
++            << label->GetPreferredSize({}).width();
++        EXPECT_GE(label->width(), label->GetPreferredSize({}).width());
++        // Not cut off by the row or by the rail's column either.
++        EXPECT_EQ(chip->GetLocalBounds(), chip->GetVisibleBounds())
++            << "a chip of " << chip->bounds().ToString() << " is cut off";
++        ASSERT_NO_FATAL_FAILURE(NumbersKey(/*down=*/false));
++      }
++    }
++  }
++  ASSERT_NO_FATAL_FAILURE(set_rail(false));
++  local_state->SetInteger(stedding::prefs::kSidebarDensity, 0);
++}
++#endif  // BUILDFLAG(IS_MAC)
++
+ // PLAN.md TST-9, switcher X2, X3: Ctrl-Tab with Ctrl held down and let go as
+ // a keyboard's are, where the strip's window monitor hears them: on the Mac
+ // through -[NSApp sendEvent:], elsewhere into the window, Tab through its
+@@ -2732,7 +2802,10 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest,
  // another window, takes the release elsewhere -- ends the run there and
  // then, on the tab it reached, and the next Ctrl-Tab starts a new run. The
  // run had stayed open with the strip over the page, and the next Ctrl-Tab
@@ -22785,7 +23224,7 @@ index c053842005a7e..d589dd5cddc0d 100644
  IN_PROC_BROWSER_TEST_F(NumberBadgeTest, CtrlTabEndsWithTheKeyOrTheWindow) {
    ASSERT_NO_FATAL_FAILURE(MakeThreeSpaces());
    AppendTab();
-@@ -2778,6 +2764,22 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest, CtrlTabEndsWithTheKeyOrTheWindow) {
+@@ -2778,6 +2851,22 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest, CtrlTabEndsWithTheKeyOrTheWindow) {
  #endif
      base::RunLoop().RunUntilIdle();
    };
@@ -22808,7 +23247,7 @@ index c053842005a7e..d589dd5cddc0d 100644
    const auto escape = [&]() {
      generator()->PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_CONTROL_DOWN);
      base::RunLoop().RunUntilIdle();
-@@ -2854,6 +2856,35 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest, CtrlTabEndsWithTheKeyOrTheWindow) {
+@@ -2854,6 +2943,35 @@ IN_PROC_BROWSER_TEST_F(NumberBadgeTest, CtrlTabEndsWithTheKeyOrTheWindow) {
      ASSERT_TRUE(base::test::RunUntil([&]() { return !model()->in_cycle(); }));
      EXPECT_EQ(one[0], active()) << "the next Ctrl-Tab went on from the old run";
    }

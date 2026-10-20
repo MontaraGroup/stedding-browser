@@ -76,6 +76,8 @@ user's path where a test can ask the question, with the faults they found:
   buttons 28, so a container measured mid-slide never fitted, hid, and
   had no size to grow back from. The pinned-actions and extensions
   containers are measured by the row's width alone (S-250).
+- A Space model going before its window's tab strip left its detach
+  callback, which holds it unretained, on the strip.
 
 Why: each item is behaviour its spec states, a defect a user meets, or a
 crash.
@@ -103,7 +105,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/browser/ui/spaces/folder_commands.cc   |   4 +-
  chrome/browser/ui/spaces/sidebar_backup.cc    |   9 +-
  .../ui/spaces/sidebar_backup_unittest.cc      |  39 +-
- chrome/browser/ui/spaces/space_model.cc       | 121 ++-
+ chrome/browser/ui/spaces/space_model.cc       | 125 ++-
  chrome/browser/ui/spaces/space_model.h        |  27 +-
  .../browser/ui/spaces/space_model_unittest.cc |  13 -
  .../ui/spaces/space_model_window_unittest.cc  |  22 +-
@@ -210,7 +212,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 128 files changed, 11182 insertions(+), 765 deletions(-)
+ 128 files changed, 11186 insertions(+), 765 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -1607,7 +1609,7 @@ index 90ef4fb16da94..375242bac1228 100644
  }  // namespace
  }  // namespace spaces
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index bbfbe09b67d98..bede54d496da7 100644
+index bbfbe09b67d98..f5fc17fe89d63 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -54,6 +54,7 @@
@@ -1635,7 +1637,18 @@ index bbfbe09b67d98..bede54d496da7 100644
  
    // Membership is decided on insertion (B1). The window's features are built
    // before its first tab, so this normally observes an empty strip; any tab
-@@ -573,6 +580,13 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+@@ -368,6 +375,10 @@ SpaceModel::~SpaceModel() {
+         TabStripModel::HiddenTabPredicate());
+     tab_strip_model_->SetBeforeCloseTabsCallback(
+         TabStripModel::BeforeCloseTabsCallback());
++    // The detach callback holds this model unretained too: a tab leaving the
++    // strip after this model would call into freed memory.
++    tab_strip_model_->SetBeforeDetachTabsCallback(
++        TabStripModel::BeforeCloseTabsCallback());
+     tab_strip_model_->RemoveObserver(this);
+     tab_strip_model_ = nullptr;
+   }
+@@ -573,6 +584,13 @@ void SpaceModel::SyncWithRegistry(bool seed) {
      jars[entry.id] = jar;
    }
    effective_jars_ = std::move(jars);
@@ -1649,7 +1662,7 @@ index bbfbe09b67d98..bede54d496da7 100644
    // The tabs of every Space that went join the Space this window shows next,
    // so the tab on screen stays there. The jars are wiped by the window that
    // deleted the Space, once, after these moves (RemoveSpace).
-@@ -580,14 +594,12 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+@@ -580,14 +598,12 @@ void SpaceModel::SyncWithRegistry(bool seed) {
      last_active_.erase(id);
      history_.erase(id);
      sleep_timers_.erase(id);
@@ -1665,7 +1678,7 @@ index bbfbe09b67d98..bede54d496da7 100644
      SettleAfterSwitch(previous, /*tell_registry=*/false,
                        /*essential_gives_way=*/true);
    }
-@@ -719,6 +731,16 @@ bool SpaceModel::RemoveSpace(const SpaceId& space_id,
+@@ -719,6 +735,16 @@ bool SpaceModel::RemoveSpace(const SpaceId& space_id,
      std::move(wipe_done).Run();
      return true;
    }
@@ -1682,7 +1695,7 @@ index bbfbe09b67d98..bede54d496da7 100644
    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
        FROM_HERE,
        base::BindOnce(
-@@ -1033,27 +1055,28 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+@@ -1033,27 +1059,28 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
    }
  }
  
@@ -1720,7 +1733,7 @@ index bbfbe09b67d98..bede54d496da7 100644
          tab->GetContents()->NeedToFireBeforeUnloadOrUnloadEvents()) {
        return;
      }
-@@ -1217,6 +1240,24 @@ void SpaceModel::OnTabStripModelChanged(
+@@ -1217,6 +1244,24 @@ void SpaceModel::OnTabStripModelChanged(
    if (change.type() == TabStripModelChange::Type::kRemoved) {
      for (const TabStripModelChange::RemovedTab& removed :
           change.GetRemove()->contents) {
@@ -1745,7 +1758,7 @@ index bbfbe09b67d98..bede54d496da7 100644
        tab_spaces_.erase(removed.tab->GetHandle());
        space_pin_homes_.erase(removed.tab->GetHandle());
        essential_homes_.erase(removed.tab->GetHandle());
-@@ -1935,10 +1976,29 @@ const SpaceId& SpaceModel::SpaceForTab(tabs::TabInterface* tab) {
+@@ -1935,10 +1980,29 @@ const SpaceId& SpaceModel::SpaceForTab(tabs::TabInterface* tab) {
        it != tab_spaces_.end()) {
      return it->second;
    }
@@ -1775,7 +1788,7 @@ index bbfbe09b67d98..bede54d496da7 100644
    return it->second;
  }
  
-@@ -2670,6 +2730,39 @@ int SpaceModel::CountPagesAJarChangeReloads(const SpaceId& id) const {
+@@ -2670,6 +2734,39 @@ int SpaceModel::CountPagesAJarChangeReloads(const SpaceId& id) const {
    return pages;
  }
  
