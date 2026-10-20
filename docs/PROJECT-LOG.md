@@ -51,6 +51,20 @@ for the tab strip on top to look right. Beta 21 was to follow once the checks pa
   Mac's way; the four mock-clock unit tests that stalled only in the scheduled task were starved
   by its default priority 7, which lowers disk and memory priority (traps 67 and 99): made at
   priority 4, the unit leg takes 19 seconds.
+- **Beta 21** (`v0.2.0-beta.21`, tag at `f57fc2f`, 76 patches): the Mac's release build 997
+  unit, 56 component and 407 browser tests; the PC's release, checks and ASan builds 988 unit
+  and 491 browser tests each, no DCHECK, no report; the installer over beta 20, uninstalled
+  keeping the profile and installed fresh, `chrome.dll` matching each time. The local n-1 on
+  both: the Mac's copy of beta 20 showed the pill at 28 seconds and came back as 10020.21 with
+  the thank-you page; the PC's installed beta 20 showed it at 20 seconds and restarted into
+  156.2.0.21 two seconds after the press, through UI Automation once the click was refused
+  (trap 118). Published from the Mac (the DMG, sha256 `5b173e57…ac32`, 179 MB) and the PC (the
+  installer, `f1c8d94e…a410`, 168.1 MB); both downloads matched and Gatekeeper accepted the
+  app. Both feeds pushed (`52f2811`, `4e816ae`) and read back from GitHub. **Real updates
+  through the published feeds:** a Mac copy of beta 20 showed the pill at 38 seconds and
+  relaunched as 10020.21, on the person's own profile, which the published bundle names (trap
+  117); the PC's installed beta 20 at 25 seconds, restarting into 156.2.0.21 in two. The site
+  rebuild was started.
 
 ## 2026-10-19, evening -- a review of betas 18 and 19, and beta 20 for both platforms
 

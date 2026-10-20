@@ -2,8 +2,9 @@
 The Windows updater's n-1 check (docs/HANDOFF.md, "The updater (Windows)"; docs/features/updates.md
 Up14-Up19): the installed Stedding, on a scratch profile and pointed at a local feed that lists the
 next build, finds it, downloads it, checks it, installs it beside itself and shows the sidebar's pill;
-a real click on the pill restarts into the new version. Real input goes only into the test window,
-through tooling\win\drive.ps1's guards, so it needs the operator's yes like any drive.ps1 run.
+pressing the pill restarts into the new version. The pill is pressed through UI Automation, which
+needs neither the pointer nor the foreground (docs/HANDOFF.md, trap 118): a one-off task's window
+could not take the foreground, and drive.ps1 refused the click.
 
 Run it in the operator's own session, from a one-off scheduled task (trap 40: a process of the
 agent's app sees a virtualised %LOCALAPPDATA% and HKCU):
@@ -67,9 +68,17 @@ $null = Drive-Shot 'n1-pill'
 
 if ($pill) {
   $oldPid = $script:Drive.Pid
-  $null = Drive-Focus
-  $null = Drive-Click $pill.X $pill.Y
-  Say 'clicked the pill'
+  Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+  $rootEl = [System.Windows.Automation.AutomationElement]::FromHandle($script:Drive.Hwnd)
+  $all = $rootEl.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+  $target = $null
+  foreach ($el in $all) {
+    if ($el.Current.Name -like '*New Stedding Version Available*' -and $el.Current.ControlType.ProgrammaticName -eq 'ControlType.Button') { $target = $el; break }
+  }
+  if ($target) {
+    $target.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Say 'pressed the pill through UI Automation'
+  } else { Say 'no pill element for UI Automation' }
   # The old process goes, the swap runs, and the new version opens on the same profile.
   $back = [IntPtr]::Zero
   $until = (Get-Date).AddSeconds(90)
