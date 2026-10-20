@@ -1786,6 +1786,21 @@ version at once, `gh workflow run rebuild.yml -R ysalitrynskyi/stedding.dev`
 (the deploy hook; working since 2026-09-18) or push to the site's `main`, which
 Cloudflare builds on its own.
 
+**Release at least every five weeks, each time on a newer pin.** Chromium uses its built-in
+list of sites that must load only over HTTPS (the HSTS preload list) only while the build is
+less than 70 days old: `TransportSecurityState::IsBuildTimely()` in
+`net/http/transport_security_state.cc` is `return (base::Time::Now() - build_time).InDays()
+< 70 /* 10 weeks */;`, and `GetStaticSTSState()` answers nothing once it is false. A build's
+date is its pin's, not the day it was built: `build/compute_build_timestamp.py` reads the commit
+time `gclient sync` recorded in `build/util/LASTCHANGE.committime` (the pin's upstream
+commit; the series' commits come later and do not move it), and a build that is not official,
+as the recipe above builds (`S-168`), rounds that down to the first Sunday of the month or of
+the month before. So a release can be five weeks old the day it ships, and a release on the
+same pin keeps the old date: betas 17 to 20 share a pin committed on 2026-10-13, so all are
+dated 2026-10-04 (the Mac's `out/release/gen/base/generated_build_date.h` says so) and all
+lose the list on 2026-12-13. The updaters only deliver what is released; an official build
+would take the commit's own date.
+
 The push moved ahead of the publish on purpose. `gh release create` cuts the tag on
 the remote, so publishing from an unpushed commit tagged whatever the remote's default
 branch happened to be; `publish-release` now pins the tag to this commit with

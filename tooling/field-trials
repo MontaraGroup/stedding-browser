@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+"""What Chrome Stable turns on or off by field trial where Stedding's code defaults differ.
+
+Usage:
+  tooling/field-trials                     fetch Chrome Stable's seeds for the pin and compare
+  tooling/field-trials --save DIR          the same, keeping DIR/seed-mac.pb and DIR/seed-win.pb
+  tooling/field-trials --seed F --seed G   compare saved seeds instead: no network at all
+  tooling/field-trials --min 100           only what Chrome sets for every client
+
+Stedding receives no field trials (docs/PRIVACY.md), so a feature Chrome launches by trial
+reaches it only when upstream changes the default, and one Chrome turns off stays on: that is
+how S-236 was missed. A standing step of every pin move (docs/AGENT-LOOP.md).
+
+Chrome's half: the seed Chrome downloads, asked for with the pin's platform, channel and
+milestone only (no cookie, no identifier; the server answers for the requester's country),
+decoded with the field numbers of the checkout's components/variations/proto. A study counts
+if it applies today to Stable desktop at the pin; Googler-only studies are left out, other
+limits (country, locale, OS version, managed, layer) noted. Shares are of all clients.
+Stedding's half: the checkout's working tree, patches included; each BASE_FEATURE's default
+for IS_MAC and IS_WIN through its #if context, and Blink's runtime_enabled_features.json5.
+"?" is a default this cannot resolve (read the file:line). A switch or a FeatureList override
+in a patch is not seen. Exit status: 0 when the comparison ran; 2 when a seed could not be
+fetched or read, or there is no checkout.
+"""
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SEED_URL = ("https://clientservices.googleapis.com/chrome-variations/seed"
+            "?osname={}&channel=stable&milestone={}")
+PLATFORMS = {"mac": "PLATFORM_MAC", "win": "PLATFORM_WINDOWS"}
+# The build flags a #if may test, as Stedding's desktop builds set them; any other is unknown.
+OFF = ("IS_LINUX IS_CHROMEOS IS_ANDROID IS_IOS IS_FUCHSIA IS_OZONE IS_DESKTOP_ANDROID IS_CASTOS "
+       "IS_IOS_TVOS USE_OZONE GOOGLE_CHROME_BRANDING FIELDTRIAL_TESTING_ENABLED").split()
+ON = "CHROMIUM_BRANDING ENABLE_EXTENSIONS ENABLE_PDF ENABLE_PRINTING USE_BLINK ENABLE_SPELLCHECK".split()
+FLAGS = {p: dict(dict.fromkeys(OFF, 0), **dict.fromkeys(ON, 1), IS_MAC=p == "mac", IS_APPLE=p == "mac",
+                 IS_POSIX=p == "mac", IS_WIN=p == "win") for p in PLATFORMS}
+LIMITS = ("country", "exclude_country", "locale", "exclude_locale", "min_os_version",
+          "max_os_version", "hardware_class", "exclude_hardware_class", "cpu_architecture",
+          "exclude_cpu_architecture", "hardware_manufacturer", "enterprise_group")
+
+
+def checkout(arg):
+    """The checkout's src directory, found the way tooling/lib.sh finds it."""
+    named = arg or os.environ.get("STEDDING_CHROMIUM_SRC") or os.environ.get("CHROMIUM_SRC")
+    root, local = os.environ.get("CHROMIUM_ROOT"), ROOT / ".stedding-local"
+    if not named and not root and local.is_file():
+        found = re.findall(r"^CHROMIUM_ROOT=(.+)$", local.read_text(encoding="utf-8"), re.M)
+        root = found[-1] if found else None
+    return Path(named) if named else Path(root or Path.home() / "chromium") / "src"
+
+
+def schema(src):
+    """{'Study.Filter': {'channel': 4, ...}, 'Study.Channel': {'STABLE': 3, ...}, ...}."""
+    out, stack = {}, []
+    for name in ("variations_seed", "study", "layer"):
+        path = src / "components" / "variations" / "proto" / f"{name}.proto"
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.split("//")[0].strip()
+            block = re.match(r"(?:message|enum)\s+(\w+)\s*\{", line)
+            field = re.match(r"(?:repeated\s+)?(?:[\w.]+\s+)?(\w+)\s*=\s*(-?\d+)\b", line)
+            if block:
+                stack.append(block.group(1))
+                out.setdefault(".".join(stack), {})
+            elif line.startswith("}") and stack:
+                stack.pop()
+            elif field and stack and not line.startswith(("option", "reserved")):
+                out[".".join(stack)][field.group(1)] = int(field.group(2))
+    return out
+
+
+def varint(buf, i):
+    value = shift = 0
+    while True:
+        value, shift, i = value | (buf[i] & 0x7F) << shift, shift + 7, i + 1
+        if buf[i - 1] < 0x80:
+            return value, i
+
+
+class Msg:
+    """One protobuf message, read by the field names of its schema entry."""
+
+    def __init__(self, buf, fields):
+        self.fields, self.raw, i = fields, {}, 0
+        while i < len(buf):
+            key, i = varint(buf, i)
+            if key & 7 == 0:
+                value, i = varint(buf, i)
+            elif key & 7 in (1, 2, 5):
+                size, i = {1: (8, i), 5: (4, i)}.get(key & 7) or varint(buf, i)
+                value, i = bytes(buf[i:i + size]), i + size
+            else:
+                raise ValueError(f"wire type {key & 7} at byte {i}: not a VariationsSeed")
+            self.raw.setdefault(key >> 3, []).append(value)
+
+    def all(self, name):  # a field this checkout's .proto lacks reads as absent
+        return self.raw.get(self.fields.get(name, -1), [])
+
+    def one(self, name, default=None):
+        return (self.all(name) or [default])[-1]
+
+    def text(self, name, default=""):
+        return self.one(name, default.encode()).decode("utf-8", "replace")
+
+    def ints(self, name):
+        out = []
+        for value in self.all(name):  # a repeated int may come packed
+            while isinstance(value, bytes) and value:
+                item, i = varint(value, 0)
+                out, value = out + [item], value[i:]
+            out += [value] if isinstance(value, int) else []
+        return [v - (1 << 64) if v >= 1 << 63 else v for v in out]
+
+
+def vercmp(version, spec):
+    """-1, 0 or 1: the pin's version against a seed's version ('156.*' allowed)."""
+    for mine, part in zip(version + [0] * 4, spec.strip().split(".")):
+        if not part.isdigit():
+            return 0
+        if mine != int(part):
+            return -1 if mine < int(part) else 1
+    return 0
+
+
+def chrome(seed, sch, plat, version, now):
+    """feature -> [(share %, 'on' | 'off', study, limits)] for Chrome Stable on one platform."""
+    layers = {}
+    for raw in seed.all("layers"):
+        layer, members = Msg(raw, sch["Layer"]), {}
+        for member in (Msg(m, sch["Layer.LayerMember"]) for m in layer.all("members")):
+            spans = [Msg(r, sch["Layer.LayerMember.SlotRange"]) for r in member.all("slots")]
+            members[member.one("id", 0)] = sum(s.one("end", 0) - s.one("start", 0) + 1 for s in spans)
+        layers[layer.one("id", 0)] = (layer.one("num_slots", 0), members)
+    desktop, out = sch["Study.FormFactor"]["DESKTOP"], {}
+    for study in (Msg(raw, sch["Study"]) for raw in seed.all("study")):
+        f = Msg(study.one("filter", b""), sch["Study.Filter"])
+        start, end, expiry = f.ints("start_date") + [0], f.ints("end_date") + [now], study.ints("expiry_date") + [now]
+        if (f.ints("channel") and sch["Study.Channel"]["STABLE"] not in f.ints("channel")
+                or sch["Study.Platform"][PLATFORMS[plat]] not in f.ints("platform")
+                or f.ints("form_factor") and desktop not in f.ints("form_factor")
+                or desktop in f.ints("exclude_form_factor") or start[0] > now or min(end[0], expiry[0]) < now
+                or vercmp(version, f.text("min_version", "0")) < 0
+                or vercmp(version, f.text("max_version", "*")) > 0
+                or f.all("google_group") or f.one("is_low_end_device") == 1
+                or f.one("policy_restriction") == sch["Study.PolicyRestriction"]["CRITICAL_ONLY"]):
+            continue
+        limits, part = [k for k in LIMITS if f.all(k)], 1.0
+        if f.all("is_enterprise"):
+            limits.append("managed only" if f.one("is_enterprise") else "unmanaged only")
+        if study.all("layer"):
+            ref = Msg(study.one("layer"), sch["LayerMemberReference"])
+            slots, members = layers.get(ref.one("layer_id", 0), (0, {}))
+            ids = set(ref.ints("layer_member_id") + ref.ints("layer_member_ids"))
+            part, limits = sum(members.get(i, 0) for i in ids) / slots if slots else 0.0, limits + ["layer"]
+        groups = [Msg(e, sch["Study.Experiment"]) for e in study.all("experiment")]
+        total, share = sum(g.one("probability_weight", 0) for g in groups), {}
+        for group in groups:
+            weight = group.one("probability_weight", 0)
+            fa = Msg(group.one("feature_association", b""), sch["Study.Experiment.FeatureAssociation"])
+            for kind, field in (("on", "enable_feature"), ("off", "disable_feature")):
+                for name in fa.all(field) if weight else []:
+                    key = (name.decode("utf-8", "replace"), kind)
+                    share[key] = share.get(key, 0) + 100.0 * weight / total * part
+        for (feature, kind), pct in share.items():
+            out.setdefault(feature, []).append((round(pct, 1), kind, study.text("name"), ", ".join(limits)))
+    return out
+
+
+def holds(context, plat):
+    """Whether a stack of #if / #elif / #else branches is taken on a platform (None: unknown)."""
+    def cond(expr):
+        if expr == "1":  # an #else
+            return True
+        expr = re.sub(r"(?:PA_)?BUILDFLAG\((\w+)\)|defined\s*\(?\s*\w+\s*\)?", lambda m: {
+            1: " True ", 0: " False "}.get(FLAGS[plat].get(m.group(1) or ""), " U "), expr)
+        expr = re.sub(r"!(?!=)", " not ", expr.replace("&&", " and ").replace("||", " or "))
+        if re.search(r"[\w\\]", re.sub(r"\b(True|False|U|and|or|not)\b", "", expr)):
+            return None
+        try:  # nothing but True, False, U, and, or, not and brackets is left to evaluate
+            values = {eval(expr, {"__builtins__": {}}, {"U": u}) for u in (True, False)}
+        except SyntaxError:
+            return None
+        return values.pop() if len(values) == 1 else None
+    result = True
+    for branches in context:
+        values = [cond(c) for c in branches]
+        if values[-1] is False or True in values[:-1]:
+            return False
+        result = None if None in values else result
+    return result
+
+
+def stedding(src, wanted):
+    """feature -> ({'mac': 'on' | 'off' | '?' | 'not built', 'win': ...}, where it is declared)."""
+    found, out = {}, {}
+    files = subprocess.run(["git", "-C", str(src), "grep", "-l", "-F", "BASE_FEATURE(k", "--",
+                            "*.cc", "*.mm", "*.h"], capture_output=True, text=True, check=True)
+    for rel in files.stdout.split():
+        lines, stack, decl = (src / rel).read_text("utf-8", "replace").splitlines(), [], None
+        for i in range(len(lines) - 1, 0, -1):  # join continued lines, keeping line numbers
+            if lines[i - 1].endswith("\\"):
+                lines[i - 1], lines[i] = lines[i - 1][:-1] + " " + lines[i], ""
+        for no, line in enumerate(lines, 1):
+            s = line.split("//")[0].strip()
+            pre = re.match(r"#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)", s)
+            if pre:
+                kind, c = pre.group(1), pre.group(2).strip()
+                c = {"ifdef": f"defined({c})", "ifndef": f"!defined({c})", "else": "1"}.get(kind, c)
+                if kind.startswith("if"):
+                    stack.append([c])
+                elif stack:
+                    stack.pop() if kind == "endif" else stack[-1].append(c)
+            decl = [no, " ".join(lines[no - 1:no + 2]), []] if "BASE_FEATURE(k" in s else decl
+            if decl:
+                said = set(re.findall(r"\b(?:FEATURE_)?(EN|DIS)ABLED(?:_BY_DEFAULT)?\b", s))
+                if said:
+                    decl[2].append(([list(b) for b in stack], "?" if len(said) > 1 else
+                                    "on" if "EN" in said else "off"))
+                if ");" in s:
+                    m = re.search(r'BASE_FEATURE\(\s*k(\w+)\s*,\s*(?:"(\w+)"\s*,)?', decl[1])
+                    if m and (m.group(2) or m.group(1)) in wanted:
+                        found.setdefault(m.group(2) or m.group(1), []).append(
+                            (f"{rel}:{decl[0]}", decl[2] or [([], "?")]))
+                    decl = None
+    for name, decls in found.items():
+        per = {}
+        for plat in PLATFORMS:
+            taken = [(holds(ctx, plat), v) for _, values in decls for ctx, v in values]
+            pick = {v for h, v in taken if h} or {v for h, v in taken if h is None}
+            per[plat] = pick.pop() if len(pick) == 1 else "?" if pick else "not built"
+        out[name] = (per, decls[0][0])
+    sys.path.insert(0, str(src / "third_party" / "pyjson5" / "src"))
+    import json5  # the checkout's own copy: Blink's feature list is json5
+    blink = src / "third_party" / "blink" / "renderer" / "platform" / "runtime_enabled_features.json5"
+    for entry in json5.loads(blink.read_text(encoding="utf-8"))["data"]:
+        name, status = entry.get("base_feature") or entry["name"], entry.get("status", "")
+        if name in wanted and name not in out:
+            forced = {"enabled": "on", "disabled": "off"}.get(entry.get("base_feature_status", ""))
+            levels = {p: status.get(k, status.get("default")) if isinstance(status, dict) else status
+                      for p, k in (("mac", "Mac"), ("win", "Win"))}
+            out[name] = ({p: forced or ("on" if v == "stable" else "off") for p, v in levels.items()},
+                         "runtime_enabled_features.json5")
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--seed", action="append", help="a saved seed (repeatable): no network")
+    ap.add_argument("--save", help="keep the fetched seeds in this directory")
+    ap.add_argument("--src", help="the checkout's src (default: as tooling/lib.sh finds it)")
+    ap.add_argument("--min", type=float, default=0, help="the least share to list, in percent")
+    args = ap.parse_args()
+    text = (ROOT / "tooling" / "chromium-version").read_text(encoding="utf-8")
+    pin, src = dict(re.findall(r"^(CHROMIUM_\w+)=(\S+)", text, re.M)), checkout(args.src)
+    if not (src / "components" / "variations" / "proto" / "study.proto").is_file():
+        print(f"xx no Chromium checkout at {src}: set STEDDING_CHROMIUM_SRC or pass --src", file=sys.stderr)
+        return 2
+    version, sch, seeds, state = [int(p) for p in pin["CHROMIUM_TAG"].split(".")], schema(src), [], {}
+    try:
+        for path in args.seed or []:
+            seeds.append((path, Msg(Path(path).read_bytes(), sch["VariationsSeed"])))
+        for plat in [] if args.seed else PLATFORMS:
+            url = SEED_URL.format(plat, pin["CHROMIUM_MILESTONE"])
+            request = urllib.request.Request(url, headers={"User-Agent": "stedding-field-trials"})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data, country = response.read(), response.headers.get("X-Country", "?")
+            if args.save:
+                Path(args.save).mkdir(parents=True, exist_ok=True)
+                (Path(args.save) / f"seed-{plat}.pb").write_bytes(data)
+            seeds.append((f"live {plat} seed (country {country})", Msg(data, sch["VariationsSeed"])))
+        for plat in PLATFORMS:  # each platform from the seed with the most studies for it
+            state[plat], label = max(((chrome(s, sch, plat, version, time.time()), label) for label, s in seeds),
+                                     key=lambda r: len(r[0]))
+            print(f"Chrome Stable {plat}: {len(state[plat])} features set by trial, from {label}")
+    except (OSError, ValueError, IndexError, TypeError) as error:
+        print(f"xx could not read the seed: {error}", file=sys.stderr)
+        return 2
+    wanted = set(state["mac"]) | set(state["win"])
+    code, rows = stedding(src, wanted), []
+    for feature in sorted(set(code) & wanted):
+        (per, where), cells, differs, top, notes = code[feature], {}, False, 0.0, set()
+        for plat in PLATFORMS:
+            hits = sorted(state[plat].get(feature, []), reverse=True)
+            cells[plat] = ", ".join(f"{kind} {pct:g}%" for pct, kind, _, _ in hits[:2]) or "-"
+            for pct, kind, study, limits in hits:
+                top, differs = max(top, pct), differs or per[plat] in ("?", {"on": "off", "off": "on"}[kind])
+                notes.add(study + (f" ({limits})" if limits else ""))
+        if differs and top >= args.min:
+            sted = per["mac"] if per["mac"] == per["win"] else f"{per['mac']} / {per['win']}"
+            rows.append((-top, feature, cells["mac"], cells["win"], sted, "; ".join(sorted(notes)) + f"; {where}"))
+    rows = [r[1:] for r in sorted(rows)]
+    head = ("feature", "Chrome mac", "Chrome win", "Stedding mac / win", "study (limits); default at")
+    widths = [max(len(r[i]) for r in rows + [head]) for i in range(4)] + [0]
+    print(f"pin {pin['CHROMIUM_TAG']}; checkout {src}")
+    for row in [head] + rows:
+        print("  ".join(c.ljust(w) for c, w in zip(row, widths)).rstrip())
+    full = sum(1 for r in rows if "100%" in r[1] + r[2])
+    print(f"{len(rows)} features differ, {full} of them at 100% on a platform; {len(wanted)} features "
+          f"in the seed, {len(wanted - set(code))} not declared in the checkout")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -477,8 +477,14 @@ features that users expect from a real product just to make a purity claim.
   empty (docs/history/plan-2026-09-26.md WEB-5, 2026-09-28; `PRIVACY.md`, the recorded run).
 - **Component updater: kept, to be pointed at infrastructure we control where feasible.**
   Some components matter for security and site compatibility (certificate revocation
-  lists, Widevine for DRM playback). Today every component comes from Google, as in
-  stock Chromium; which ones to mirror, proxy or remove is decided before 1.0.
+  lists among them). Today every component Stedding registers comes from Google, as in
+  stock Chromium; which ones to mirror, proxy or remove is decided before 1.0 (`BACKLOG.md`
+  `S-241`).
+- **Widevine (DRM playback): not built.** `third_party/widevine/cdm/widevine.gni` turns
+  `enable_widevine` on for Google Chrome builds only, and no `tooling/args/*.gn` sets it, so
+  Stedding has neither the CDM nor its component: Netflix, Disney+ and Spotify's web player
+  do not play. Shipping it needs a licence agreement with Google, and for some services a
+  signing step through Google or castlabs; that is the owner's decision (`S-241`).
 - **Default search, suggestions, spellcheck, translate, DNS/preconnect defaults:**
   privacy-preserving defaults per `PRIVACY.md`. Up to beta 14 a fresh profile also
   checked Google's account list and registered with Google's push service unasked; beta 15
@@ -597,9 +603,10 @@ That decision removes the update *server* from the project: the feed is a file i
 repository and the image is the release's own, so there is nothing extra to run, secure or
 pay for. The Mac updates itself from beta 16 on (ADR 0022, `docs/features/updates.md`):
 Sparkle reads the signed feed once a day, checks the image's EdDSA signature and the app's
-Developer ID, and installs at the quit or at a click on the sidebar's pill. Windows and
-Linux are planned in ADR 0023 (`BACKLOG.md` S-215, S-216). Full-size updates before
-deltas; correctness and signature verification before either.
+Developer ID, and installs at the quit or at a click on the sidebar's pill. Windows has
+updated itself since beta 19, with an updater, a feed and a key of its own (ADR 0023,
+ADR 0026, `docs/features/updates.md`); Linux is planned (`BACKLOG.md` S-216). Full-size
+updates before deltas; correctness and signature verification before either.
 
 **stedding.dev is a website, not infrastructure.** Separate repository (`ysalitrynskyi/stedding.dev`, live since 2026-09-16), Astro, static, Cloudflare Pages.
 Download link, release notes, security policy, source link. Deliberately not on the path

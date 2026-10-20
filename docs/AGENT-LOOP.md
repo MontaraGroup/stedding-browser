@@ -211,6 +211,12 @@ The suites were cut by merging and deleting what repeated itself; keep them that
 - **Never edit the checkout while a build runs.** siso samples sources at build start; a
   mid-build edit silently misses the binary. `tooling/dev build` refuses to start while
   another build is running.
+- **Every pin move reads Chrome's field trials.** After `tooling/update-pin --apply`, run
+  `tooling/field-trials --save <dir>`: it lists what Chrome Stable turns on or off by field
+  trial at the new pin where Stedding's code defaults differ. Stedding receives no trials, so
+  a launch Chrome makes that way reaches it only when upstream flips the default (`S-236` was
+  missed that way). Each row at 100% that needs no Google service is flipped in the series or
+  gets a backlog row saying why not (`S-240`).
 - **Numbers in docs come from `tooling/dev status`.** Do not hand-type test counts, patch
   counts, or the pin. `tooling/check-repo truth` fails on known stale phrases.
 - **One backlog.** `BACKLOG.md`, by S- id, is the order of work. Ids of the 2026-09-26 audit

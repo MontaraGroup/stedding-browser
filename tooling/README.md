@@ -40,6 +40,7 @@ PowerShell.
 | `fold-fix` | Folds fixes made in the working tree into an earlier commit of the series with git plumbing, no checkout: the fixed files are the only ones whose modification time changes, so siso rebuilds nothing else (HANDOFF trap 44). A conflict stops it before anything moves, and the branch moves only when the new tip's tree is the old tip's plus the fix. Run `update-patches` and `check-repo` after it. |
 | `repair-checkout` | Rewrites git cache paths after a checkout is moved. |
 | `update-pin` | Moves the Chromium pin to the newest stable and checks the series still applies. |
+| `field-trials` | What Chrome Stable turns on or off by field trial (Google's variations seed, which Stedding never receives) where the checkout's code defaults differ: feature, Chrome's share on the Mac and on Windows (100% is a launch, less a rollout), Stedding's default per platform, the study, its limits and the `file:line` of the default. Reads the seed Chrome downloads, asked for with the pin's platform, channel and milestone only, decoded with the checkout's own `components/variations/proto`; `--save DIR` keeps it and `--seed FILE` reads a saved one with no network. A standing step of every pin move ([docs/AGENT-LOOP.md](../docs/AGENT-LOOP.md); `S-240`). |
 | `check-pin` | Is the pin current? Reports `current`, `behind` or `ahead` against stable on every desktop platform; `--self-test` runs the verdict on offline fixtures. The `upstream` workflow calls it. |
 | `sign-release` | **(macOS)** Sign and notarise a built app with Chromium's signing pipeline; `--check` lists what is missing (identity, notary profile, packaging dir) |
 | `publish-release` | GitHub pre-release from `dist/`: tag `v<VERSION>`, notes from `docs/release-notes/<tag>.md`; the platform that publishes second adds its image to the same release; `--check` first. Only with the operator's word in chat (`AGENTS.md`, red lines) |
@@ -87,6 +88,7 @@ and `win/package-installer.ps1` makes the installer; both read `STEDDING_CHROMIU
 ```bash
 tooling/update-pin                # is there a newer stable? changes nothing
 tooling/update-pin --apply        # take it, sync, check the series still applies
+tooling/field-trials --save DIR   # what Chrome turns on by field trial that the new pin leaves off
 ```
 
 A scheduled workflow (`.github/workflows/upstream.yml`) runs the same comparison daily

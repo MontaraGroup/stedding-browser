@@ -39,7 +39,8 @@ PC's own (ADR 0026, `tooling/win/update-key.ps1`); `tooling/win/publish-appcast.
 release. The installer's version is the product's (`S-72`): `tooling/win/build.ps1` writes it
 into the checkout's `chrome/VERSION`, and what the web and Google's services see keeps
 Chromium's (`version_info::GetChromiumVersionNumber`). On Linux the package system updates
-Stedding, and the pill follows what Chromium's upgrade detector sees (`S-216`).
+Stedding (`S-216`); the pill cannot follow Chromium's upgrade detector there as ADR 0023
+planned, because Stedding's builds never start it (the ADR's note of 2026-10-19).
 `updates/appcast.xml` stays the Mac's alone.
 
 ## Behaviours

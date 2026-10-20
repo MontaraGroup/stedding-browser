@@ -1,6 +1,6 @@
 # 0023 — Updates on Windows and Linux: the plan, and what keeps it open
 
-Status: Accepted; partly superseded by 0026 (its "one key" rule, for Windows)
+Status: Accepted; partly superseded by 0026 (its "one key" rule, for Windows); corrected by the note of 2026-10-19
 Date: 2026-10-16
 
 ## Context
@@ -71,3 +71,17 @@ design now and build nothing yet. Read for it the same day:
   way the EdDSA key is.
 - WinSparkle stays the fallback if the browser's own updater proves too costly to
   keep; it would bring its own windows.
+
+## Note, 2026-10-19: the upgrade detector does not run in Stedding
+
+Context and Decision above say that Chromium's upgrade detector notices a newer installed
+version and that the sidebar's pill follows it. In Stedding's builds it does not: the
+detector polls the installed version only with `enable_update_notifications`, which
+`chrome/browser/buildflags.gni` sets to `is_chrome_branded`, so `UpgradeDetectorImpl::Init`
+never creates its `InstalledVersionPoller`. The text above is left as written. What was
+built instead (patch 0073, `S-215`): the Windows updater takes its own path to the pill.
+`stedding::AppUpdater` runs the installer beside the running copy and then reports the update
+ready itself, as the Mac's does, also at a launch after an update installed and not yet
+restarted into (`docs/features/updates.md` Up17); the restart is Chromium's own. Linux's
+pill (`S-216`) needs the same correction: the detector turned on, or a check of Stedding's
+own.
