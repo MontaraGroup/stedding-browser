@@ -81,13 +81,13 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/tab_restore_service_unittest.cc  |   75 ++
  chrome/browser/ui/BUILD.gn                    |   13 +
  chrome/browser/ui/accelerator_table.cc        |    4 +
- chrome/browser/ui/archive/BUILD.gn            |   15 +-
- chrome/browser/ui/archive/archive_mark.h      |   16 +
- chrome/browser/ui/archive/archived_tabs.cc    |  253 ++++
- chrome/browser/ui/archive/archived_tabs.h     |   62 +-
- .../ui/archive/archived_tabs_unittest.cc      |  299 +++++
- chrome/browser/ui/archive/closed_folder.cc    |   48 +
- chrome/browser/ui/archive/closed_folder.h     |   23 +-
+ chrome/browser/ui/archive/BUILD.gn            |   18 +-
+ chrome/browser/ui/archive/archive_mark.h      |   26 +
+ chrome/browser/ui/archive/archived_tabs.cc    |  407 ++++++
+ chrome/browser/ui/archive/archived_tabs.h     |   82 +-
+ .../ui/archive/archived_tabs_unittest.cc      |  457 +++++++
+ chrome/browser/ui/archive/closed_folder.cc    |   50 +
+ chrome/browser/ui/archive/closed_folder.h     |   25 +-
  .../browser/ui/browser_command_controller.cc  |   60 +-
  chrome/browser/ui/browser_commands.cc         |   72 +-
  .../ui/browser_tab_menu_model_delegate.cc     |   80 +-
@@ -264,7 +264,7 @@ patches of their own and folds each fix into the patch that owns its code
  chrome/test/stedding/make_app_browsertest.cc  |  423 +++++++
  .../test/stedding/make_app_mac_browsertest.mm |  328 +++++
  .../stedding/make_app_quiet_browsertest.cc    |  148 +++
- chrome/test/stedding/restore_browsertest.cc   |  529 ++++++++
+ chrome/test/stedding/restore_browsertest.cc   |  724 ++++++++++-
  .../stedding/restored_title_browsertest.cc    |  311 +++++
  .../test/stedding/screenshot_browsertest.cc   |   67 +
  .../stedding/settings_spaces_browsertest.cc   |  181 +++
@@ -286,7 +286,7 @@ patches of their own and folds each fix into the patch that owns its code
  .../sessions/core/tab_restore_service_impl.cc |   50 +
  .../sessions/core/tab_restore_service_impl.h  |    4 +
  sandbox/policy/features.cc                    |   12 +
- 227 files changed, 17253 insertions(+), 317 deletions(-)
+ 227 files changed, 17795 insertions(+), 319 deletions(-)
  create mode 100644 chrome/browser/mac/dock_tile_unittest.mm
  create mode 100644 chrome/browser/ui/spaces/app_jar.cc
  create mode 100644 chrome/browser/ui/spaces/app_jar.h
@@ -1676,7 +1676,7 @@ index 6271aefd159a8..936f8f83c257e 100644
      // The system print dialog, from Ctrl+Shift+P (the command bar's now):
      // the Mac's Option-Cmd-P.
 diff --git a/chrome/browser/ui/archive/BUILD.gn b/chrome/browser/ui/archive/BUILD.gn
-index e726930b86cb3..2ac915b4116a5 100644
+index e726930b86cb3..aebbdb9eb3879 100644
 --- a/chrome/browser/ui/archive/BUILD.gn
 +++ b/chrome/browser/ui/archive/BUILD.gn
 @@ -16,8 +16,9 @@ source_set("mark") {
@@ -1710,12 +1710,14 @@ index e726930b86cb3..2ac915b4116a5 100644
      "//content/public/browser",
      "//ui/base",
      "//url",
-@@ -116,11 +122,14 @@ source_set("unit_tests") {
+@@ -116,20 +122,28 @@ source_set("unit_tests") {
      ":undo",
      "//base",
      "//base/test:test_support",
 +    "//chrome/browser:browser_process",
 +    "//chrome/browser/prefs:util",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/sessions",
      "//chrome/browser/ui/spaces",
      "//chrome/browser/ui/stedding:little_window",
      "//chrome/browser/ui/stedding:prefs",
@@ -1725,7 +1727,9 @@ index e726930b86cb3..2ac915b4116a5 100644
      "//chrome/test:test_support",
      "//components/prefs",
      "//components/sessions",
-@@ -129,7 +138,9 @@ source_set("unit_tests") {
++    "//components/keyed_service/core",
+     "//components/sessions:test_support",
+     "//components/split_tabs",
      "//components/sync_preferences:test_support",
      "//components/tabs:public",
      "//content/test:test_support",
@@ -1736,10 +1740,10 @@ index e726930b86cb3..2ac915b4116a5 100644
    ]
  }
 diff --git a/chrome/browser/ui/archive/archive_mark.h b/chrome/browser/ui/archive/archive_mark.h
-index 76bd755370664..2ad785c100be1 100644
+index 76bd755370664..d8c445896eaf4 100644
 --- a/chrome/browser/ui/archive/archive_mark.h
 +++ b/chrome/browser/ui/archive/archive_mark.h
-@@ -59,6 +59,22 @@ inline constexpr char kClosedFolderOrderKey[] = "stedding.closedfolder.order";
+@@ -59,6 +59,32 @@ inline constexpr char kClosedFolderOrderKey[] = "stedding.closedfolder.order";
  // placement. The batch and the order are what an open tab keeps.
  inline constexpr char kClosedFolderSlotKey[] = "stedding.closedfolder.slot";
  
@@ -1747,29 +1751,44 @@ index 76bd755370664..2ad785c100be1 100644
 +// window that the next launch opens again, "Continue where you left off"
 +// being on or a restart pending. Chromium's list keeps that window; its tabs
 +// are not closed tabs, and the archive does not list them. Once a launch has
-+// reopened it, ⇧⌘T and the Recently Closed menus pass it over (A15).
++// reopened it, ⇧⌘T and the Recently Closed menus pass it over (A15). A launch
++// that does not restore the session after all takes the mark off, and the
++// window is a close again.
 +inline constexpr char kArchiveReopensKey[] = "stedding.archive.reopens";
-+// The value for a window a quit, an exit or a restart closed, or one the run
++// The value for a window that is open again: one a launch reopened (it had
++// one of the two values below until that launch settled it), or one the run
 +// itself opened again (a session restore in the run, the crash bubble's
 +// Restore).
 +inline constexpr char kArchiveReopensYes[] = "1";
++// The value for a window a quit, an exit or a restart closed: the next launch
++// opens it again if it restores the profile's last session, which only that
++// launch knows. Its first window of the profile settles the mark: the value
++// above when it restored the session, none when it did not (A13, BACKLOG
++// S-230).
++inline constexpr char kArchiveReopensAtNextLaunch[] = "next";
 +// The value for the profile's last window, closed while the run went on: the
 +// next launch opens it again unless a window of the profile opens first
 +// without bringing it back, which makes the close final and takes the mark
-+// off (A13).
++// off (A13). Left at the end of the run, it is settled by the next launch as
++// the value above is.
 +inline constexpr char kArchiveReopensUnlessAWindowOpens[] = "last";
 +
  struct ClosedFolderMark {
    std::string batch;
    std::string name;
 diff --git a/chrome/browser/ui/archive/archived_tabs.cc b/chrome/browser/ui/archive/archived_tabs.cc
-index 9230706391b1c..67c0707b3f78a 100644
+index 9230706391b1c..9b91c5d137699 100644
 --- a/chrome/browser/ui/archive/archived_tabs.cc
 +++ b/chrome/browser/ui/archive/archived_tabs.cc
-@@ -9,11 +9,21 @@
+@@ -8,12 +8,27 @@
+ #include <utility>
  #include <variant>
  
++#include "base/callback_list.h"
++#include "base/functional/bind.h"
  #include "base/json/json_reader.h"
++#include "base/memory/ptr_util.h"
++#include "base/memory/raw_ptr.h"
 +#include "base/scoped_observation.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/strings/utf_string_conversions.h"
@@ -1778,6 +1797,7 @@ index 9230706391b1c..67c0707b3f78a 100644
 +#include "chrome/browser/lifetime/browser_shutdown.h"
 +#include "chrome/browser/prefs/session_startup_pref.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/exit_type_service.h"
 +#include "chrome/browser/sessions/session_restore.h"
 +#include "chrome/browser/sessions/session_service_factory.h"
 +#include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -1788,7 +1808,7 @@ index 9230706391b1c..67c0707b3f78a 100644
  #include "chrome/browser/ui/spaces/space.h"
  #include "chrome/browser/ui/spaces/space_colors.h"
  #include "chrome/browser/ui/spaces/space_model.h"
-@@ -23,10 +33,13 @@
+@@ -23,10 +38,13 @@
  #include "chrome/browser/ui/stedding/tab_names.h"
  #include "chrome/browser/ui/tabs/stedding_folder_session.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -1802,7 +1822,7 @@ index 9230706391b1c..67c0707b3f78a 100644
  #include "components/sessions/core/tab_restore_types.h"
  #include "components/tabs/public/folder_tab_collection.h"
  #include "components/tabs/public/tab_collection.h"
-@@ -39,6 +52,9 @@ namespace stedding {
+@@ -39,6 +57,9 @@ namespace stedding {
  
  namespace {
  
@@ -1812,7 +1832,7 @@ index 9230706391b1c..67c0707b3f78a 100644
  std::string Lookup(const std::map<std::string, std::string>& extra_data,
                     const char* key) {
    const auto it = extra_data.find(key);
-@@ -157,6 +173,79 @@ void RefileInFolder(TabStripModel& strip,
+@@ -157,6 +178,206 @@ void RefileInFolder(TabStripModel& strip,
    }
  }
  
@@ -1828,8 +1848,8 @@ index 9230706391b1c..67c0707b3f78a 100644
 +
 +// A13: a window this run recorded as the profile's last, whose fate the next
 +// window of the profile decides. One read from the list's file is not: the
-+// run that recorded it ended with it still waiting, so the launch after
-+// reopened it.
++// run that recorded it ended with it still waiting, and the launch after it
++// settles it (SettleWhatTheLaunchReopened).
 +bool AwaitsAWindow(const sessions::tab_restore::Entry& entry) {
 +  if (entry.type != sessions::tab_restore::WINDOW ||
 +      entry.original_id.is_valid()) {
@@ -1889,10 +1909,137 @@ index 9230706391b1c..67c0707b3f78a 100644
 +      observation_{this};
 +};
 +
++// A13 (BACKLOG S-230): a window the run before this launch marked as one the
++// next launch opens again, read back from the list's file: a quit's window,
++// or the profile's last window still waiting when that run ended. A window
++// marked reopened was settled already, by its launch or by its run.
++bool LeftByTheRunBefore(const sessions::tab_restore::Entry& entry) {
++  if (entry.type != sessions::tab_restore::WINDOW ||
++      !entry.original_id.is_valid()) {
++    return false;
++  }
++  for (const std::unique_ptr<sessions::tab_restore::Tab>& tab :
++       static_cast<const sessions::tab_restore::Window&>(entry).tabs) {
++    const std::string mark = Lookup(tab->extra_data, kArchiveReopensKey);
++    if (mark == kArchiveReopensAtNextLaunch ||
++        mark == kArchiveReopensUnlessAWindowOpens) {
++      return true;
++    }
++  }
++  return false;
++}
++
++// The key of the profile's LaunchSettlement.
++const char kLaunchSettlementKey[] = "stedding.archive.launch_settlement";
++
++// A13 (BACKLOG S-230): settles what the run before left
++// (SettleWhatTheLaunchReopened) as the profile's first window the session
++// keeps opens in this launch, once that launch's session restore has ended
++// and the list has loaded. Stays on the profile for the rest of the run, so
++// that the windows after that one leave the marks alone.
++class LaunchSettlement : public base::SupportsUserData::Data,
++                         public sessions::TabRestoreServiceObserver {
++ public:
++  static void StartFor(Profile* profile) {
++    if (profile->GetUserData(kLaunchSettlementKey)) {
++      return;
++    }
++    std::unique_ptr<LaunchSettlement> owned =
++        base::WrapUnique(new LaunchSettlement(profile));
++    LaunchSettlement* const settlement = owned.get();
++    profile->SetUserData(kLaunchSettlementKey, std::move(owned));
++    settlement->Start();
++  }
++
++  LaunchSettlement(const LaunchSettlement&) = delete;
++  LaunchSettlement& operator=(const LaunchSettlement&) = delete;
++  ~LaunchSettlement() override = default;
++
++ private:
++  explicit LaunchSettlement(Profile* profile) : profile_(profile) {}
++
++  void Start() {
++    sessions::TabRestoreService* const service =
++        TabRestoreServiceFactory::GetForProfile(profile_);
++    // A profile with no list has recorded nothing (a test profile).
++    if (!service) {
++      return;
++    }
++    // After a crash or a forced shutdown, Chromium adds the windows of the
++    // session that ended to the list as it loads, unless that session was
++    // restored first; the crash bubble's Restore marks them
++    // (MarkTheCrashedSessionReopened). The run's marked windows were in that
++    // session -- its last window still waiting, or a quit's that the crash
++    // cut short -- and those windows stand for them: one row each until the
++    // Restore, none after it.
++    const ExitType last_exit =
++        ExitTypeService::GetLastSessionExitType(profile_);
++    if (last_exit == ExitType::kCrashed ||
++        last_exit == ExitType::kForcedShutdown) {
++      Settle(*service, /*reopened=*/true);
++      return;
++    }
++    // The session is restoring its last session, into this window or into
++    // windows of its own. What it brought back is known when it ends:
++    // nothing, when the session's file could not be read.
++    if (SessionRestore::IsRestoring(profile_)) {
++      restored_ =
++          SessionRestore::RegisterOnSessionRestoredCallback(base::BindRepeating(
++              &LaunchSettlement::OnSessionRestored, base::Unretained(this)));
++      return;
++    }
++    // No session restore is making this window. A restore that brings back
++    // a window the session keeps makes it, so whatever this launch restored
++    // before (an app's window, or nothing, as the Mac's launch at login
++    // makes no window for an empty session) brought back none of the marked
++    // windows, which are all normal windows.
++    Settle(*service, /*reopened=*/false);
++  }
++
++  void OnSessionRestored(Profile* profile, int tabs_restored) {
++    if (profile != profile_) {
++      return;
++    }
++    restored_ = {};
++    if (sessions::TabRestoreService* const service =
++            TabRestoreServiceFactory::GetForProfileIfExisting(profile_)) {
++      Settle(*service, tabs_restored > 0);
++    }
++  }
++
++  // Settles the marks now when the list has loaded, else once it has.
++  void Settle(sessions::TabRestoreService& service, bool reopened) {
++    if (service.IsLoaded()) {
++      SettleWhatTheLaunchReopened(service, reopened);
++      return;
++    }
++    reopened_ = reopened;
++    observation_.Observe(&service);
++    service.LoadTabsFromLastSession();
++  }
++
++  // sessions::TabRestoreServiceObserver:
++  void TabRestoreServiceLoaded(sessions::TabRestoreService* service) override {
++    observation_.Reset();
++    SettleWhatTheLaunchReopened(*service, reopened_);
++  }
++  void TabRestoreServiceDestroyed(
++      sessions::TabRestoreService* service) override {
++    observation_.Reset();
++  }
++
++  const raw_ptr<Profile> profile_;
++  bool reopened_ = false;
++  base::CallbackListSubscription restored_;
++  base::ScopedObservation<sessions::TabRestoreService,
++                          sessions::TabRestoreServiceObserver>
++      observation_{this};
++};
++
  }  // namespace
  
  tabs::TabInterface* FindRestoredTab(
-@@ -184,6 +273,18 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
+@@ -184,6 +405,18 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
      return;
    }
    content::WebContents* const contents = tab->GetContents();
@@ -1902,7 +2049,7 @@ index 9230706391b1c..67c0707b3f78a 100644
 +    case NextLaunch::kLeavesItClosed:
 +      break;
 +    case NextLaunch::kReopensIt:
-+      (*extra_data)[kArchiveReopensKey] = kArchiveReopensYes;
++      (*extra_data)[kArchiveReopensKey] = kArchiveReopensAtNextLaunch;
 +      break;
 +    case NextLaunch::kReopensItUnlessAWindowOpens:
 +      (*extra_data)[kArchiveReopensKey] = kArchiveReopensUnlessAWindowOpens;
@@ -1911,7 +2058,7 @@ index 9230706391b1c..67c0707b3f78a 100644
    // The mark was for this close only (PLAN.md WEB-6).
    if (const std::optional<ArchiveReason> reason = TakeArchiveMark(contents)) {
      (*extra_data)[kArchiveReasonKey] = ArchiveReasonName(*reason);
-@@ -229,6 +330,145 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
+@@ -229,6 +462,167 @@ void PopulateArchiveExtraData(tabs::TabInterface* tab,
    }
  }
  
@@ -1994,6 +2141,10 @@ index 9230706391b1c..67c0707b3f78a 100644
 +      BrowserInitState::From(opened)->omit_from_session_restore()) {
 +    return;
 +  }
++  // BACKLOG S-230: the profile's first such window in this launch shows
++  // whether the launch restored the session, which reopened the windows the
++  // run before marked, or not.
++  LaunchSettlement::StartFor(profile);
 +  // A window that waits was recorded through the list, which therefore
 +  // exists; a profile without one has none.
 +  sessions::TabRestoreService* const service =
@@ -2018,6 +2169,24 @@ index 9230706391b1c..67c0707b3f78a 100644
 +    }
 +  }
 +  for (const SessionID id : waiting) {
++    service.SetWindowTabsExtraData(
++        id, kArchiveReopensKey,
++        reopened ? std::optional<std::string>(kArchiveReopensYes)
++                 : std::nullopt);
++  }
++}
++
++void SettleWhatTheLaunchReopened(sessions::TabRestoreService& service,
++                                 bool reopened) {
++  // Read first: each change notifies the list's observers.
++  std::vector<SessionID> left;
++  for (const std::unique_ptr<sessions::tab_restore::Entry>& entry :
++       service.entries()) {
++    if (LeftByTheRunBefore(*entry)) {
++      left.push_back(entry->id);
++    }
++  }
++  for (const SessionID id : left) {
 +    service.SetWindowTabsExtraData(
 +        id, kArchiveReopensKey,
 +        reopened ? std::optional<std::string>(kArchiveReopensYes)
@@ -2057,7 +2226,7 @@ index 9230706391b1c..67c0707b3f78a 100644
  ArchivedTab::ArchivedTab() = default;
  ArchivedTab::ArchivedTab(const ArchivedTab& other) = default;
  ArchivedTab& ArchivedTab::operator=(const ArchivedTab& other) = default;
-@@ -244,6 +484,15 @@ std::vector<ArchivedTab> ListArchivedTabs(
+@@ -244,6 +638,15 @@ std::vector<ArchivedTab> ListArchivedTabs(
      if (tab.navigations.empty()) {
        return;
      }
@@ -2073,7 +2242,7 @@ index 9230706391b1c..67c0707b3f78a 100644
      if (!when.is_null() && now - when > keep) {
        return;
      }
-@@ -282,6 +531,10 @@ std::vector<ArchivedTab> ListArchivedTabs(
+@@ -282,6 +685,10 @@ std::vector<ArchivedTab> ListArchivedTabs(
        case sessions::tab_restore::WINDOW: {
          const auto& window =
              static_cast<const sessions::tab_restore::Window&>(*entry);
@@ -2085,7 +2254,7 @@ index 9230706391b1c..67c0707b3f78a 100644
               window.tabs) {
            add(*tab, time_of(*tab, window.timestamp), "window",
 diff --git a/chrome/browser/ui/archive/archived_tabs.h b/chrome/browser/ui/archive/archived_tabs.h
-index f3f4407d83c2c..541f93c3f3764 100644
+index f3f4407d83c2c..733335a32959b 100644
 --- a/chrome/browser/ui/archive/archived_tabs.h
 +++ b/chrome/browser/ui/archive/archived_tabs.h
 @@ -10,6 +10,7 @@
@@ -2104,7 +2273,7 @@ index f3f4407d83c2c..541f93c3f3764 100644
  class TabStripModel;
  
  namespace sessions {
-@@ -48,15 +50,69 @@ inline constexpr char kArchiveSpaceRawNameKey[] = "stedding.spacename.own";
+@@ -48,15 +50,89 @@ inline constexpr char kArchiveSpaceRawNameKey[] = "stedding.spacename.own";
  // park the path on the tab and the next session restore would build a second
  // folder with the same id.
  inline constexpr char kArchiveFolderPathKey[] = "stedding.archive.folderpath";
@@ -2126,7 +2295,8 @@ index f3f4407d83c2c..541f93c3f3764 100644
 +enum class NextLaunch {
 +  // Leaves it closed: its tabs are closed tabs.
 +  kLeavesItClosed,
-+  // Opens it again: a quit's, an exit's or a restart's window.
++  // Opens it again when it restores the session: a quit's, an exit's or a
++  // restart's window (kArchiveReopensAtNextLaunch).
 +  kReopensIt,
 +  // Opens it again unless a window of the profile opens first in this run
 +  // without bringing it back: the profile's last window, closed while the
@@ -2152,13 +2322,32 @@ index f3f4407d83c2c..541f93c3f3764 100644
 +// settled as the session settles it: reopened when the session is restoring
 +// its last session (into `opened`, or `opened` is one of the windows that
 +// restore makes), else closed for good, since the session has committed the
-+// close.
++// close. The profile's first such window in a launch settles what the run
++// before left as well (SettleWhatTheLaunchReopened).
 +void SettleLastWindowCloses(BrowserWindowInterface* opened);
 +
 +// The same over `service`, `reopened` when the session restores its last
 +// session. Exposed for tests.
 +void SettleLastWindowCloses(sessions::TabRestoreService& service,
 +                            bool reopened);
++
++// A13 (BACKLOG S-230): settles the windows the run before marked as ones the
++// next launch opens again (kArchiveReopensAtNextLaunch, and
++// kArchiveReopensUnlessAWindowOpens left at its end), read back from
++// `service`'s file: marked reopened when this launch restored the profile's
++// last session (`reopened`), unmarked when it did not, so that their tabs
++// are closed tabs again, archive rows and ⇧⌘T's to reopen. Called once per
++// launch, from SettleLastWindowCloses at the profile's first window the
++// session keeps, after that launch's session restore and once the list has
++// loaded.
++// A launch that did not restore: the New Tab page at startup after the
++// setting changed, a window from the Mac's Dock or menu bar after a launch
++// with no window, a little window first, a session file that brought nothing
++// back. After a crash or a forced shutdown, `reopened`: Chromium adds the
++// session that ended to the list as windows of its own, which stand for the
++// marked ones. Exposed for tests.
++void SettleWhatTheLaunchReopened(sessions::TabRestoreService& service,
++                                 bool reopened);
 +
 +// A13: the crash bubble's Restore, which calls this after
 +// SessionRestore::RestoreSessionAfterCrash, opens the windows of the session
@@ -2175,7 +2364,7 @@ index f3f4407d83c2c..541f93c3f3764 100644
  // One row of the archive (A9).
  struct ArchivedTab {
    ArchivedTab();
-@@ -84,7 +140,9 @@ struct ArchivedTab {
+@@ -84,7 +160,9 @@ struct ArchivedTab {
  
  // The closed tabs of `entries` no older than `keep`, newest first (A11): a tab
  // closed on its own, and each tab of a window, split or group closed whole,
@@ -2187,10 +2376,10 @@ index f3f4407d83c2c..541f93c3f3764 100644
      const sessions::TabRestoreService::Entries& entries,
      base::Time now,
 diff --git a/chrome/browser/ui/archive/archived_tabs_unittest.cc b/chrome/browser/ui/archive/archived_tabs_unittest.cc
-index a80438705192f..d4987c08d4678 100644
+index a80438705192f..5d86335a7616a 100644
 --- a/chrome/browser/ui/archive/archived_tabs_unittest.cc
 +++ b/chrome/browser/ui/archive/archived_tabs_unittest.cc
-@@ -4,12 +4,20 @@
+@@ -4,12 +4,23 @@
  
  #include "chrome/browser/ui/archive/archived_tabs.h"
  
@@ -2203,20 +2392,26 @@ index a80438705192f..d4987c08d4678 100644
  #include <vector>
  
 +#include "base/auto_reset.h"
++#include "base/functional/bind.h"
  #include "base/time/time.h"
 +#include "chrome/browser/browser_process.h"
 +#include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/sessions/exit_type_service.h"
++#include "chrome/browser/sessions/tab_restore_service_factory.h"
  #include "chrome/browser/ui/archive/archive_mark.h"
 +#include "chrome/browser/ui/archive/closed_folder.h"
  #include "chrome/browser/ui/browser.h"
  #include "chrome/browser/ui/spaces/space.h"
  #include "chrome/browser/ui/spaces/space_colors.h"
-@@ -18,12 +26,19 @@
+@@ -18,12 +29,23 @@
  #include "chrome/browser/ui/stedding/tab_names.h"
  #include "chrome/browser/ui/tabs/stedding_folder_session.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/common/pref_names.h"
  #include "chrome/test/base/browser_with_test_window_test.h"
++#include "chrome/test/base/testing_profile.h"
++#include "chrome/test/base/testing_profile_manager.h"
++#include "components/keyed_service/core/keyed_service.h"
 +#include "components/prefs/pref_service.h"
 +#include "components/sessions/core/mock_tab_restore_service.h"
  #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
@@ -2225,13 +2420,14 @@ index a80438705192f..d4987c08d4678 100644
  #include "components/sessions/core/tab_restore_types.h"
  #include "components/tabs/public/folder_tab_collection.h"
  #include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/browser_context.h"
 +#include "testing/gmock/include/gmock/gmock.h"
  #include "testing/gtest/include/gtest/gtest.h"
 +#include "ui/base/window_open_disposition.h"
  
  namespace stedding {
  namespace {
-@@ -50,6 +65,29 @@ std::unique_ptr<sessions::tab_restore::Tab> ClosedTab(int id,
+@@ -50,6 +72,29 @@ std::unique_ptr<sessions::tab_restore::Tab> ClosedTab(int id,
    return tab;
  }
  
@@ -2261,7 +2457,7 @@ index a80438705192f..d4987c08d4678 100644
  // A11: what is older than the retention is not shown; the rest carries its
  // Space, reason and address.
  TEST(ArchivePageTest, RetentionFiltersOldEntries) {
-@@ -137,6 +175,206 @@ TEST(ArchivePageTest, AClosedWindowsAndSplitsTabsAreRows) {
+@@ -137,10 +182,293 @@ TEST(ArchivePageTest, AClosedWindowsAndSplitsTabsAreRows) {
        << "the retention reads the close's time";
  }
  
@@ -2465,17 +2661,105 @@ index a80438705192f..d4987c08d4678 100644
 +  MarkTheCrashedSessionReopened(service);
 +}
 +
++// A13 (BACKLOG S-230): a launch settles the windows the run before marked as
++// ones it opens again -- a quit's, and the last window still waiting when
++// that run ended, both read back from the list's file -- by what it did:
++// reopened when it restored the profile's last session, closed again when it
++// did not, so that their tabs are rows and ⇧⌘T's once more. A window a launch
++// or a run reopened before, the windows this run recorded, a window closed
++// for good and a tab are left alone. Until the launch has settled them,
++// ⇧⌘T passes the marked windows over.
++TEST(ArchiveReopenedTest, ALaunchSettlesWhatTheRunBeforeLeft) {
++  const base::Time now = base::Time::Now();
++  sessions::TabRestoreService::Entries entries;
++  entries.push_back(ClosedWindow(10, "https://quit.example/",
++                                 kArchiveReopensAtNextLaunch,
++                                 /*from_file=*/true, now));
++  entries.push_back(ClosedWindow(20, "https://last.example/",
++                                 kArchiveReopensUnlessAWindowOpens,
++                                 /*from_file=*/true, now));
++  entries.push_back(ClosedWindow(30, "https://reopened.example/",
++                                 kArchiveReopensYes, /*from_file=*/true, now));
++  entries.push_back(ClosedWindow(40, "https://quitting.example/",
++                                 kArchiveReopensAtNextLaunch,
++                                 /*from_file=*/false, now));
++  entries.push_back(ClosedWindow(50, "https://waiting.example/",
++                                 kArchiveReopensUnlessAWindowOpens,
++                                 /*from_file=*/false, now));
++  entries.push_back(ClosedWindow(60, "https://closed.example/", nullptr,
++                                 /*from_file=*/true, now));
++  entries.push_back(
++      ClosedTab(70, "https://tab.example/", u"Tab", now, nullptr));
++  EXPECT_TRUE(NextLaunchReopened(*entries.front()))
++      << "a quit's window, before the launch settles it";
++  EXPECT_TRUE(NextLaunchReopened(**std::next(entries.begin(), 3)))
++      << "a window this run's quit closed";
++
++  for (const bool reopened : {false, true}) {
++    testing::StrictMock<MockTabRestoreService> service;
++    EXPECT_CALL(service, entries()).WillRepeatedly(testing::ReturnRef(entries));
++    const std::optional<std::string> mark =
++        reopened ? std::optional<std::string>(kArchiveReopensYes)
++                 : std::nullopt;
++    for (const int id : {10, 20}) {
++      EXPECT_CALL(service, SetWindowTabsExtraData(
++                               SessionID::FromSerializedValue(id),
++                               std::string(kArchiveReopensKey), mark));
++    }
++    SettleWhatTheLaunchReopened(service, reopened);
++  }
++}
++
  class ArchivePageWindowTest : public BrowserWithTestWindowTest {
   protected:
    spaces::SpaceModel& model() { return *spaces::SpaceModel::From(browser()); }
-@@ -280,5 +518,66 @@ TEST_F(ArchivePageWindowTest, PopulateNamesNoSpaceForAnEssential) {
+   TabStripModel& tabs() { return *browser()->tab_strip_model(); }
++
++  // A13 (BACKLOG S-230): a new profile whose list, loaded, holds
++  // `launch_entries_`, what the run before left.
++  TestingProfile* AddProfileWithAList(const std::string& name) {
++    TestingProfile::TestingFactories factories;
++    factories.emplace_back(
++        TabRestoreServiceFactory::GetInstance(),
++        base::BindRepeating(
++            [](const sessions::TabRestoreService::Entries* entries,
++               content::BrowserContext*) -> std::unique_ptr<KeyedService> {
++              auto list =
++                  std::make_unique<testing::NiceMock<MockTabRestoreService>>();
++              ON_CALL(*list, IsLoaded()).WillByDefault(testing::Return(true));
++              ON_CALL(*list, entries())
++                  .WillByDefault(testing::ReturnRef(*entries));
++              return list;
++            },
++            base::Unretained(&launch_entries_)));
++    return profile_manager()->CreateTestingProfile(name, std::move(factories));
++  }
++
++  static MockTabRestoreService& ListOf(Profile* profile) {
++    return *static_cast<MockTabRestoreService*>(
++        TabRestoreServiceFactory::GetForProfile(profile));
++  }
++
++  std::unique_ptr<BrowserWindowInterface> OpenWindow(Profile* profile) {
++    std::unique_ptr<BrowserWindowInterface> window =
++        CreateBrowser(profile, Browser::TYPE_NORMAL, /*hosted_app=*/false);
++    window->GetTabStripModel()->CloseAllTabs();
++    return window;
++  }
++
++  sessions::TabRestoreService::Entries launch_entries_;
+ };
+ 
+ // A9, PLAN.md WEB-7: a restore finds its Space by id, a deleted one by the
+@@ -280,5 +608,134 @@ TEST_F(ArchivePageWindowTest, PopulateNamesNoSpaceForAnEssential) {
    EXPECT_FALSE(extra_data.contains(kArchiveSpaceNameKey));
  }
  
 +// A13: while a window the next launch opens again is recorded, each of its
-+// tabs carries the mark, an essential too: a quit's window as reopened, the
-+// profile's last window as reopened unless a window opens first. A window
-+// closed for good, and a record made after any of them, carry none.
++// tabs carries the mark, an essential too: a quit's window as reopened by the
++// next launch if it restores the session, the profile's last window as
++// reopened unless a window opens first. A window closed for good, and a
++// record made after any of them, carry none.
 +TEST_F(ArchivePageWindowTest, ARecordOfAWindowThatReopensIsMarked) {
 +  AddTab(browser(), GURL("https://calendar.example/"));
 +  AddTab(browser(), GURL("https://a.example/"));
@@ -2488,7 +2772,7 @@ index a80438705192f..d4987c08d4678 100644
 +  PopulateArchiveExtraData(page, &extra_data);
 +  EXPECT_FALSE(extra_data.contains(kArchiveReopensKey)) << "a plain close";
 +  for (const auto [next_launch, mark] :
-+       {std::pair(NextLaunch::kReopensIt, kArchiveReopensYes),
++       {std::pair(NextLaunch::kReopensIt, kArchiveReopensAtNextLaunch),
 +        std::pair(NextLaunch::kReopensItUnlessAWindowOpens,
 +                  kArchiveReopensUnlessAWindowOpens)}) {
 +    const base::AutoReset<NextLaunch> reopens =
@@ -2511,6 +2795,73 @@ index a80438705192f..d4987c08d4678 100644
 +  PopulateArchiveExtraData(page, &extra_data);
 +  EXPECT_FALSE(extra_data.contains(kArchiveReopensKey))
 +      << "the mark outlived the record";
++}
++
++// A13 (BACKLOG S-230): the profile's first window the session keeps settles,
++// once in a launch, what the run before left: closed again when no session
++// restore makes that window (the New Tab page at startup, a window from the
++// Mac's Dock after a launch with no window), even after a restore that made
++// no window, and reopened after a crash or a forced shutdown, whose session
++// Chromium lists as windows of its own. A private window opened first, and
++// the windows after the first, leave the marks alone. A launch that restores
++// the session is settled when its restore ends (browser tests).
++TEST_F(ArchivePageWindowTest,
++       TheProfilesFirstWindowSettlesWhatTheRunBeforeLeft) {
++  const base::Time now = base::Time::Now();
++  launch_entries_.push_back(ClosedWindow(10, "https://quit.example/",
++                                         kArchiveReopensAtNextLaunch,
++                                         /*from_file=*/true, now));
++  launch_entries_.push_back(ClosedWindow(20, "https://last.example/",
++                                         kArchiveReopensUnlessAWindowOpens,
++                                         /*from_file=*/true, now));
++  launch_entries_.push_back(ClosedWindow(30, "https://reopened.example/",
++                                         kArchiveReopensYes,
++                                         /*from_file=*/true, now));
++  // The first window of `profile` gives the two windows the run before
++  // marked `mark`, and changes nothing else.
++  const auto expect_the_launch_settles =
++      [](Profile* profile, const std::optional<std::string>& mark) {
++        MockTabRestoreService& list = ListOf(profile);
++        EXPECT_CALL(list, SetWindowTabsExtraData).Times(0);
++        for (const int id : {10, 20}) {
++          EXPECT_CALL(list, SetWindowTabsExtraData(
++                                SessionID::FromSerializedValue(id),
++                                std::string(kArchiveReopensKey), mark));
++        }
++      };
++
++  TestingProfile* const closed = AddProfileWithAList("Closed");
++  {
++    EXPECT_CALL(ListOf(closed), SetWindowTabsExtraData).Times(0);
++    std::unique_ptr<BrowserWindowInterface> private_window =
++        OpenWindow(closed->GetPrimaryOTRProfile(/*create_if_needed=*/true));
++    testing::Mock::VerifyAndClearExpectations(&ListOf(closed));
++  }
++  expect_the_launch_settles(closed, std::nullopt);
++  std::unique_ptr<BrowserWindowInterface> first = OpenWindow(closed);
++  testing::Mock::VerifyAndClearExpectations(&ListOf(closed));
++  EXPECT_CALL(ListOf(closed), SetWindowTabsExtraData).Times(0);
++  std::unique_ptr<BrowserWindowInterface> second = OpenWindow(closed);
++  testing::Mock::VerifyAndClearExpectations(&ListOf(closed));
++
++  TestingProfile* const restored_nothing = AddProfileWithAList("Nothing");
++  restored_nothing->set_restored_last_session(true);
++  expect_the_launch_settles(restored_nothing, std::nullopt);
++  std::unique_ptr<BrowserWindowInterface> after_the_restore =
++      OpenWindow(restored_nothing);
++  testing::Mock::VerifyAndClearExpectations(&ListOf(restored_nothing));
++
++  std::vector<std::unique_ptr<BrowserWindowInterface>> windows;
++  for (const ExitType last_exit :
++       {ExitType::kCrashed, ExitType::kForcedShutdown}) {
++    TestingProfile* const ended = AddProfileWithAList(
++        last_exit == ExitType::kCrashed ? "Crashed" : "ForcedShutdown");
++    ExitTypeService::GetInstanceForProfile(ended)
++        ->SetLastSessionExitTypeForTest(last_exit);
++    expect_the_launch_settles(ended, std::string(kArchiveReopensYes));
++    windows.push_back(OpenWindow(ended));
++    testing::Mock::VerifyAndClearExpectations(&ListOf(ended));
++  }
 +}
 +
 +// A13: the next launch opens a window again only when it continues where
@@ -2536,10 +2887,10 @@ index a80438705192f..d4987c08d4678 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/archive/closed_folder.cc b/chrome/browser/ui/archive/closed_folder.cc
-index 3bdc8e3810e87..f1a286f8e2fcf 100644
+index 3bdc8e3810e87..fe7932843a7e2 100644
 --- a/chrome/browser/ui/archive/closed_folder.cc
 +++ b/chrome/browser/ui/archive/closed_folder.cc
-@@ -292,4 +292,52 @@ WindowOpenDisposition FolderRestoreDispositionForClick(
+@@ -292,4 +292,54 @@ WindowOpenDisposition FolderRestoreDispositionForClick(
               : WindowOpenDisposition::UNKNOWN;
  }
  
@@ -2555,8 +2906,10 @@ index 3bdc8e3810e87..f1a286f8e2fcf 100644
 +    }
 +    if (it->second == kArchiveReopensUnlessAWindowOpens) {
 +      // Read from the list's file: the run that recorded it ended before
-+      // another window opened, so the launch after it reopened the window.
-+      // Recorded in this run: the window is closed still.
++      // another window opened, so this launch reopens the window, unless its
++      // first window shows that it did not restore the session, which takes
++      // the mark off (SettleWhatTheLaunchReopened). Recorded in this run: the
++      // window is closed still.
 +      return entry.original_id.is_valid();
 +    }
 +    return true;
@@ -2593,7 +2946,7 @@ index 3bdc8e3810e87..f1a286f8e2fcf 100644
 +
  }  // namespace stedding
 diff --git a/chrome/browser/ui/archive/closed_folder.h b/chrome/browser/ui/archive/closed_folder.h
-index 8d61b9c667fd0..14c3b0c37b1c6 100644
+index 8d61b9c667fd0..3a3c844e515f1 100644
 --- a/chrome/browser/ui/archive/closed_folder.h
 +++ b/chrome/browser/ui/archive/closed_folder.h
 @@ -27,7 +27,8 @@ namespace stedding {
@@ -2606,7 +2959,7 @@ index 8d61b9c667fd0..14c3b0c37b1c6 100644
  
  // The batch of the Close Folder's Tabs that recorded `entry`, or "" for an
  // entry any other close made.
-@@ -77,6 +78,26 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
+@@ -77,6 +78,28 @@ std::vector<sessions::LiveTab*> RestoreClosedFolder(
  WindowOpenDisposition FolderRestoreDispositionForClick(
      WindowOpenDisposition clicked);
  
@@ -2615,7 +2968,9 @@ index 8d61b9c667fd0..14c3b0c37b1c6 100644
 +// after a relaunch opened a second copy of every tab of the last session;
 +// ⇧⌘T and the Recently Closed menus pass it over. The profile's last window
 +// that this run closed and that still waits for the next window is not one:
-+// it is closed, and ⇧⌘T with no window open brings it back.
++// it is closed, and ⇧⌘T with no window open brings it back. A window the run
++// before marked counts as reopened until this launch's first window settles
++// it (SettleWhatTheLaunchReopened in archived_tabs.h).
 +bool NextLaunchReopened(const sessions::tab_restore::Entry& entry);
 +
 +// The entry ⇧⌘T brings back: the first of `entries` that is not a window the
@@ -20639,10 +20994,22 @@ index 0000000000000..c585a69889d26
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/restore_browsertest.cc b/chrome/test/stedding/restore_browsertest.cc
-index 350a0f82b108c..840f6b3ff4c99 100644
+index 350a0f82b108c..418089b750128 100644
 --- a/chrome/test/stedding/restore_browsertest.cc
 +++ b/chrome/test/stedding/restore_browsertest.cc
-@@ -37,11 +37,15 @@
+@@ -25,9 +25,11 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/files/file_enumerator.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/path_service.h"
+ #include "base/run_loop.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -37,11 +39,16 @@
  #include "base/test/test_future.h"
  #include "base/threading/thread_restrictions.h"
  #include "base/time/time.h"
@@ -20652,13 +21019,14 @@ index 350a0f82b108c..840f6b3ff4c99 100644
 +#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 +#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
  #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_manager.h"
  #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
  #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 +#include "chrome/browser/sessions/exit_type_service.h"
  #include "chrome/browser/sessions/session_restore.h"
  #include "chrome/browser/sessions/session_service.h"
  #include "chrome/browser/sessions/session_service_factory.h"
-@@ -49,6 +53,7 @@
+@@ -49,6 +56,7 @@
  #include "chrome/browser/sessions/tab_restore_service_factory.h"
  #include "chrome/browser/ui/archive/archive_mark.h"
  #include "chrome/browser/ui/archive/archived_tabs.h"
@@ -20666,7 +21034,7 @@ index 350a0f82b108c..840f6b3ff4c99 100644
  #include "chrome/browser/ui/archive/tab_archiver.h"
  #include "chrome/browser/ui/browser_commands.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-@@ -58,12 +63,14 @@
+@@ -58,12 +66,14 @@
  #include "chrome/browser/ui/spaces/space_model.h"
  #include "chrome/browser/ui/spaces/space_storage_partition.h"
  #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
@@ -20681,7 +21049,7 @@ index 350a0f82b108c..840f6b3ff4c99 100644
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "chrome/browser/ui/tabs/tab_model.h"
-@@ -74,6 +81,7 @@
+@@ -74,27 +84,35 @@
  #include "chrome/browser/ui/toasts/toast_view.h"
  #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -20689,7 +21057,12 @@ index 350a0f82b108c..840f6b3ff4c99 100644
  #include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
  #include "chrome/browser/ui/views/tabs/common/folder_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_view.h"
-@@ -83,12 +91,15 @@
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+ #include "chrome/browser/web_applications/web_app_command_manager.h"
+ #include "chrome/browser/web_applications/web_app_provider.h"
++#include "chrome/common/chrome_constants.h"
++#include "chrome/common/chrome_paths.h"
++#include "chrome/common/chrome_switches.h"
  #include "chrome/common/pref_names.h"
  #include "chrome/common/stedding/space_partitions.h"
  #include "chrome/common/webui_url_constants.h"
@@ -20705,7 +21078,14 @@ index 350a0f82b108c..840f6b3ff4c99 100644
  #include "components/prefs/pref_service.h"
  #include "components/prefs/scoped_user_pref_update.h"
  #include "components/sessions/content/session_tab_helper.h"
-@@ -113,6 +124,7 @@
+ #include "components/sessions/core/command_storage_manager.h"
+ #include "components/sessions/core/command_storage_read_status.h"
+ #include "components/sessions/core/session_command.h"
++#include "components/sessions/core/session_constants.h"
+ #include "components/sessions/core/session_id.h"
+ #include "components/sessions/core/session_service_commands.h"
+ #include "components/sessions/core/session_types.h"
+@@ -113,6 +131,7 @@
  #include "net/dns/mock_host_resolver.h"
  #include "net/test/embedded_test_server/embedded_test_server.h"
  #include "third_party/skia/include/core/SkColor.h"
@@ -20713,7 +21093,7 @@ index 350a0f82b108c..840f6b3ff4c99 100644
  #include "ui/base/window_open_disposition.h"
  #include "ui/events/event.h"
  #include "ui/events/event_constants.h"
-@@ -121,6 +133,7 @@
+@@ -121,6 +140,7 @@
  #include "ui/gfx/geometry/point.h"
  #include "ui/views/controls/button/md_text_button.h"
  #include "ui/views/controls/label.h"
@@ -20721,7 +21101,23 @@ index 350a0f82b108c..840f6b3ff4c99 100644
  #include "ui/views/controls/textfield/textfield.h"
  #include "ui/views/test/button_test_api.h"
  #include "ui/views/test/views_test_utils.h"
-@@ -1961,6 +1974,522 @@ IN_PROC_BROWSER_TEST_F(ArchiveRestoreTest, ThePageListsItAfterARestart) {
+@@ -137,8 +157,13 @@ class RestoreTest : public InProcessBrowserTest {
+     InProcessBrowserTest::SetUpOnMainThread();
+     host_resolver()->AddRule("*", "127.0.0.1");
+     ASSERT_TRUE(embedded_test_server()->Start());
+-    SessionStartupPref::SetStartupPref(
+-        browser()->GetProfile(), SessionStartupPref(SessionStartupPref::LAST));
++    // A launch with no window (--no-startup-window) has no browser() yet;
++    // its profile keeps the setting the run before it left.
++    if (browser()) {
++      SessionStartupPref::SetStartupPref(
++          browser()->GetProfile(),
++          SessionStartupPref(SessionStartupPref::LAST));
++    }
+   }
+ 
+   TabStripModel* tabs() { return browser()->GetTabStripModel(); }
+@@ -1961,6 +1986,701 @@ IN_PROC_BROWSER_TEST_F(ArchiveRestoreTest, ThePageListsItAfterARestart) {
    }
  }
  
@@ -20937,6 +21333,11 @@ index 350a0f82b108c..840f6b3ff4c99 100644
 +  EXPECT_TRUE(ListHoldsAWindowWith("page-f.test"))
 +      << "Chromium's list dropped the quit's window";
 +  ASSERT_NO_FATAL_FAILURE(ExpectTheOpenTabsAreNotArchived());
++  const sessions::tab_restore::Window* const quit = WindowWith("page-f.test");
++  ASSERT_TRUE(quit);
++  EXPECT_EQ(stedding::kArchiveReopensYes, MarkOf(*quit))
++      << "the launch that restored the session left the quit's window "
++         "unsettled (BACKLOG S-230)";
 +
 +  BrowserWindowInterface* const second =
 +      CreateBrowser(browser()->GetProfile());
@@ -21239,6 +21640,180 @@ index 350a0f82b108c..840f6b3ff4c99 100644
 +  ASSERT_TRUE(Find("crashed.test")) << "the session did not come back";
 +  EXPECT_EQ(0u, ArchiveRowsFor("crashed.test"))
 +      << "the crashed session's window lost its mark in the relaunch";
++}
++
++// A13 (BACKLOG S-230): a launch that does not restore the session after
++// all. The quit marked its windows as ones the next launch opens again, and
++// the archive, ⇧⌘T and Recently Closed passed them over though nothing had
++// reopened them. The launch settles the mark at the profile's first window.
++// The last step here starts with no window, as the Mac's browser starts
++// hidden at login, and is given one as the Dock and the menu bar give it,
++// which starts no session restore.
++class ArchiveWindowlessLaunchTest : public ArchiveReopenTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    ArchiveReopenTest::SetUpCommandLine(command_line);
++    if (GetTestPreCount() == 0) {
++      command_line->AppendSwitch(switches::kNoStartupWindow);
++      command_line->AppendSwitch(switches::kKeepAliveForTest);
++    }
++  }
++
++  // The window entries of `profile`'s list that hold a tab on `host`,
++  // newest first.
++  std::vector<const sessions::tab_restore::Window*> WindowsWith(
++      const std::string& host,
++      Profile* profile) {
++    std::vector<const sessions::tab_restore::Window*> windows;
++    for (const std::unique_ptr<sessions::tab_restore::Entry>& entry :
++         TabRestoreServiceFactory::GetForProfile(profile)->entries()) {
++      if (entry->type != sessions::tab_restore::WINDOW) {
++        continue;
++      }
++      const auto& window =
++          static_cast<const sessions::tab_restore::Window&>(*entry);
++      for (const std::unique_ptr<sessions::tab_restore::Tab>& tab :
++           window.tabs) {
++        if (!tab->navigations.empty() &&
++            tab->navigations[tab->normalized_navigation_index()]
++                    .virtual_url()
++                    .host() == host) {
++          windows.push_back(&window);
++          break;
++        }
++      }
++    }
++    return windows;
++  }
++};
++
++// The first run: a tab, then the quit.
++IN_PROC_BROWSER_TEST_F(ArchiveWindowlessLaunchTest,
++                       PRE_PRE_AQuitsWindowNothingReopenedIsArchived) {
++  Open("unrestored.test");
++}
++
++// The second run: the session came back, and the launch settled the first
++// quit's window as reopened. This run's quit records the window again.
++IN_PROC_BROWSER_TEST_F(ArchiveWindowlessLaunchTest,
++                       PRE_AQuitsWindowNothingReopenedIsArchived) {
++  ASSERT_NO_FATAL_FAILURE(WaitForTheLastRunsEntries());
++  ASSERT_TRUE(Find("unrestored.test")) << "the session did not come back";
++  const sessions::tab_restore::Window* const window =
++      WindowWith("unrestored.test");
++  ASSERT_TRUE(window);
++  EXPECT_EQ(stedding::kArchiveReopensYes, MarkOf(*window))
++      << "the launch that restored the session left the quit's window "
++         "unsettled";
++  EXPECT_EQ(0u, ArchiveRowsFor("unrestored.test"));
++}
++
++// The third run, with no window at first, and then a window that restores
++// nothing: the second quit's window is closed, one row of the archive and of
++// the bar, and ⇧⌘T's to reopen. The first quit's window, which the second
++// launch reopened, stays out of the archive.
++IN_PROC_BROWSER_TEST_F(ArchiveWindowlessLaunchTest,
++                       AQuitsWindowNothingReopenedIsArchived) {
++  ASSERT_EQ(0u, GetAllBrowserWindowInterfaces().size())
++      << "the launch opened a window";
++  Profile* const profile = ProfileManager::GetLastUsedProfileIfLoaded();
++  ASSERT_TRUE(profile);
++  sessions::TabRestoreService* const list =
++      TabRestoreServiceFactory::GetForProfile(profile);
++  ASSERT_TRUE(list);
++  list->LoadTabsFromLastSession();
++  ASSERT_TRUE(base::test::RunUntil([&]() { return list->IsLoaded(); }));
++  std::vector<const sessions::tab_restore::Window*> windows =
++      WindowsWith("unrestored.test", profile);
++  ASSERT_EQ(2u, windows.size()) << "the list lost a quit's window";
++  EXPECT_TRUE(stedding::NextLaunchReopened(*windows[0]));
++  EXPECT_NE(stedding::kArchiveReopensYes, MarkOf(*windows[0]))
++      << "settled before a window showed what the launch did";
++
++  ui_test_utils::BrowserCreatedObserver opened;
++  chrome::NewEmptyWindow(profile, /*should_trigger_session_restore=*/false);
++  BrowserWindowInterface* const next = opened.Wait();
++  ASSERT_TRUE(next);
++  SetBrowser(next);
++  EXPECT_FALSE(SessionRestore::IsRestoring(profile));
++  ASSERT_EQ(0u, TabsOn("unrestored.test")) << "the session came back";
++  windows = WindowsWith("unrestored.test", profile);
++  ASSERT_EQ(2u, windows.size());
++  EXPECT_EQ("", MarkOf(*windows[0]))
++      << "a launch that restored nothing left the quit's window marked as "
++         "reopened";
++  EXPECT_EQ(stedding::kArchiveReopensYes, MarkOf(*windows[1]))
++      << "a window an earlier launch reopened became a close";
++  EXPECT_EQ(1u, ArchiveRowsFor("unrestored.test"))
++      << "the quit's tab is not in the archive once";
++  EXPECT_EQ(1u, BarArchivedRowsFor(u"unrestored"));
++  const auto most_recent = stedding::MostRecentClose(list->entries());
++  ASSERT_NE(list->entries().end(), most_recent);
++  EXPECT_EQ(windows[0]->id, (*most_recent)->id)
++      << "⇧⌘T passes over the window nothing reopened";
++
++  chrome::ExecuteCommand(browser(), IDC_RESTORE_TAB);  // ⇧⌘T
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return TabsOn("unrestored.test") == 1u;
++  })) << "⇧⌘T did not bring the quit's window back";
++}
++
++// A13 (BACKLOG S-230): a launch whose session file brings nothing back. The
++// launch restores the session, and its session restore makes a new window
++// of its own when the file holds no window, so the quit's window is closed
++// after all. The session's files are gone before the last step, the list's
++// stay.
++class ArchiveUnreadSessionTest : public ArchiveReopenTest {
++ protected:
++  bool SetUpUserDataDirectory() override {
++    if (!ArchiveReopenTest::SetUpUserDataDirectory()) {
++      return false;
++    }
++    if (GetTestPreCount() > 0) {
++      return true;
++    }
++    base::FilePath user_data;
++    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data)) {
++      return false;
++    }
++    const base::FilePath profile_dir =
++        user_data.AppendASCII(chrome::kInitialProfile);
++    for (const base::FilePath::StringViewType dir :
++         {sessions::kSessionsDirectory,
++          sessions::kEncryptedSessionsDirectory}) {
++      base::FileEnumerator files(profile_dir.Append(dir), /*recursive=*/false,
++                                 base::FileEnumerator::FILES,
++                                 FILE_PATH_LITERAL("Session_*"));
++      for (base::FilePath file = files.Next(); !file.empty();
++           file = files.Next()) {
++        if (!base::DeleteFile(file)) {
++          return false;
++        }
++      }
++    }
++    return true;
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(ArchiveUnreadSessionTest,
++                       PRE_AQuitsWindowAnUnreadSessionLeftIsArchived) {
++  Open("unread.test");
++}
++
++IN_PROC_BROWSER_TEST_F(ArchiveUnreadSessionTest,
++                       AQuitsWindowAnUnreadSessionLeftIsArchived) {
++  ASSERT_NO_FATAL_FAILURE(WaitForTheLastRunsEntries());
++  ASSERT_FALSE(Find("unread.test")) << "the session came back";
++  const sessions::tab_restore::Window* const window = WindowWith("unread.test");
++  ASSERT_TRUE(window) << "the list lost the quit's window";
++  EXPECT_EQ("", MarkOf(*window))
++      << "a launch that restored nothing left the quit's window marked as "
++         "reopened";
++  EXPECT_EQ(1u, ArchiveRowsFor("unread.test"));
++  EXPECT_EQ(1u, BarArchivedRowsFor(u"unread"));
++  const auto most_recent = stedding::MostRecentClose(service()->entries());
++  ASSERT_NE(service()->entries().end(), most_recent);
++  EXPECT_EQ(window->id, (*most_recent)->id);
 +}
 +
  // docs/features/tabs.md R25-R27, R30 (BACKLOG S-97): a close the user makes
