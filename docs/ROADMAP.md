@@ -171,7 +171,8 @@ Acceptance criteria:
 > below had the bar replace the address bar; real use kept the address row instead -- the
 > whole address always shown (toolbar T28 to T30) -- and ⌘L opens the bar with the address
 > in it. With the address row hidden (a setting, off by default), the row's extension
-> actions, media button and page info are not in the bar yet (toolbar T13, `S-104`).
+> actions, media controls and page info are rows of the bar's actions mode, and ⌘E runs an
+> extension (toolbar T13, T39, T40; commandbar K31–K33; `S-104`, 2026-10-20).
 
 **Goal:** a keyboard-first launcher for navigation and browser actions.
 

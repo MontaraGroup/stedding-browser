@@ -34,6 +34,10 @@ On Windows every chord below is the Mac's with ⌘ read as Ctrl and ⌥⌘ as Ct
 - `RecentTabs()` follows the history with the Space's never-activated tabs in
   sidebar order (`SpaceWindowTest.RecentTabsFallBackToSidebarOrder`),
   so the strip always has somewhere to go, as Chrome's MRU does with creation times.
+- The same history picks the row shown after the tab on screen closes, leaves for
+  another window or goes to sleep (tabs R33-R37, BACKLOG S-112): the row a tap would
+  show, without the essentials, which a close shows only once the Space has no row of
+  its own.
 - Chromium's `kCtrlTabMru` stays off; the command controller asks
   `spaces::CycleRecentTab()` first, which declines in popup and private windows
   and when the setting is off, so those keep Chromium's strip order.

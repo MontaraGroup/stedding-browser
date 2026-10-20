@@ -82,9 +82,28 @@ looked at for** (6 hours to 7 days). Then idle loose tabs move to the Archived v
 bottom of the sidebar, by day and Space, one click from coming back. Pinned tabs never archive;
 ⌘W puts a pin to sleep instead.
 
+**Why do most tabs look dimmed after a restart?**
+They are asleep. A launch loads only the tab you were on (both sides of a split), so a long
+sidebar costs nothing until you open a tab, which loads it with its history. Settings →
+Stedding → Tabs → **On startup, load** can load the essentials too, or every tab of the Space
+on screen.
+
+**Can tabs I am not using free their memory?**
+Yes. Settings → Stedding → Tabs → **Put tabs to sleep after** (5 minutes to 4 hours; Never by
+default) puts a tab you have not looked at for that long to sleep: its row stays, and it
+reloads when you open it. Essentials, and tabs playing sound, in a call or holding typed text,
+stay awake. The command bar's **Sleep Other Tabs** does it at once for every Space and window.
+When memory runs short, the tab seen longest ago sleeps first.
+
 **I closed a tab by mistake.**
 The toast after a close has **Undo**, which puts the tabs back in their Space and folder. ⇧⌘T
 (Ctrl+Shift+T) reopens closed tabs one at a time after the toast has gone.
+
+**Which tab do I see after I close one?**
+The tab you used before it in the same Space: the one a quick ⌃⇥ (Ctrl+Tab) would show. If you
+have not used another tab there since the browser started, the tab below it, else the one above.
+Putting a tab to sleep, and ⌘W on a pinned tab, land on the same tab. When a Space's last tab
+closes, it shows the essential you used there last, or opens a new tab if you have none.
 
 **Can I be signed into the same site twice?**
 Yes. Right-click a Space chip and turn on **Independent session**: that Space keeps its own
@@ -97,11 +116,19 @@ No: there is no account anywhere in the product. Export a Space as a file (Setti
 Spaces → Export Space…) and import it on the other machine.
 
 **Do my extensions work?**
-Yes. It is Chromium; extensions install from the Chrome Web Store.
+Yes. It is Chromium; extensions install from the Chrome Web Store. ⌘E (Ctrl+Alt+E on Windows)
+runs one from the keyboard: keep the keys down and press E again to choose, let go to run it.
+The command bar's actions mode lists them too, which matters when the address row is hidden.
 
 **Why does ⌃1 switch desktops instead of Spaces?**
 With a second desktop, macOS Mission Control takes ⌃1–⌃9 before the browser sees them. The
 Spaces menu keeps every command reachable ([SHORTCUTS.md](SHORTCUTS.md)).
+
+**How do I put two pages side by side?**
+Drag a tab, from the sidebar or the tab strip, onto the page you are looking at. The left or
+right half lights in the Space's colour; let go, and the two pages share the window, the one you
+dragged on that half. ⌃⌘N (Alt+Shift+N) splits the current tab with a new one, and a tab's
+right-click menu has **New Split View with Current Tab**.
 
 **Why does ⌥⌘N open Arc?**
 While Arc runs it takes ⌥⌘N from every app for Little Arc. From beta 20, split with ⌃⌘N, which
@@ -127,6 +154,11 @@ engine. Most are switches in Settings → Stedding → Privacy.
 **Where is my data?**
 On your machine only: `~/Library/Application Support/Stedding` on macOS,
 `%LOCALAPPDATA%\Stedding` on Windows.
+
+**Does the hover card keep pictures of my tabs?**
+Only in memory. Hovering a tab that is not on screen shows a picture of its page as you last
+saw it; the picture is never written to disk or sent, and it goes when the tab closes or the
+browser quits. Settings → Appearance → **Show tab preview images** turns the pictures off.
 
 ## Contributing
 

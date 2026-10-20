@@ -198,6 +198,18 @@ window is kept in memory for that session only. A page can learn that the reader
 dark, the signal a dark window already gives, and, through a trick Chrome documents, that
 automatic darkening is on; it cannot read the lists.
 
+### Pictures of pages in hover cards — in memory only
+
+Hovering a tab that is not on screen shows a small picture of its page as it was last seen
+(`features/pins.md` H19–H23): Chromium's tab preview images, on in Windows builds as in
+Chrome there, and on the Mac from the release after beta 20. The picture is copied from the
+tab itself, when the tab leaves the screen or while its hover card waits for one, and is
+kept as a JPEG in the browser's memory. It is never written to disk, never put in the saved
+session and never sent anywhere; it goes when the tab closes or the browser quits, so none
+comes back after a restart. A sleeping tab keeps its picture until then. Private windows
+work the same way. Settings → Appearance → **Show tab preview images** turns the pictures
+off.
+
 ### Apps made from pages — the page's own server only
 
 Making an app of a page (**Add to Dock…** on the Mac, **Install page as app…** on Windows;

@@ -36,6 +36,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
 | Open the bar in actions mode (⇥ in an empty bar does the same; ⇥ after the start of a search engine's name makes a search chip for that site instead) | ⇧⌘P | Ctrl+Shift+P |
 | Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
+| Run an extension: the bar lists your extensions; keep the keys down and press E again (or ↓ ↑) to choose, let go to run it; Esc runs none | ⌘E | Ctrl+Alt+E |
 | Jump to one of the first eight rows you can see, or to the last one with 9 (hold ⌘ / Ctrl a moment to see the numbers) | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
 | Next tab / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+PgDn / Ctrl+PgUp |
 | Next tab down the sidebar / previous tab up the sidebar | ⌥⌘↓ / ⌥⌘↑ | Ctrl+Alt+↓ / Ctrl+Alt+↑ |
@@ -44,6 +45,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Move the row down / up (a folder beside it is one row) | ⌥⇧⌘↓ / ⌥⇧⌘↑ | Ctrl+Alt+Shift+↓ / ↑ |
 | Collapse the Space's folders, or expand them all when none is open | ⇧⌘E | Ctrl+Shift+E |
 | Split the current tab with a new one | ⌥⌘N (⌃⌘N too from beta 20) | Alt+Shift+N |
+| Split with the page on screen: drag a tab onto the page's left or right half, and let go when it lights | drag | drag |
 | Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
 | Reopen closed tabs, one at a time, each in its Space and folder (the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
 | Put a pinned tab to sleep (instead of closing it) | ⌘W | Ctrl+W |
@@ -87,10 +89,17 @@ its menu item; only the key moves.
 | ⌥⌘→ / ⌥⌘← | Next / previous Space | Next / previous tab |
 | ⌥⌘↓ / ⌥⌘↑ | Next / previous tab in the sidebar | Focus the next / previous pane (now F6 / ⇧F6) |
 | ⇧⌘K / Ctrl+Shift+K | Clear the Space | unbound |
+| ⌘E | Run an extension | Use Selection for Find (keeps its Edit › Find menu row) |
 
 The four keys added in beta 14 (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
 Ctrl+Alt+Shift+P and Ctrl+Alt+Shift+R) were free in Chromium on both platforms, so they move
 none of its keys.
+
+Running an extension is ⌘E on the Mac, as in Arc, and Ctrl+Alt+E on Windows, where Ctrl+E
+stays the search key and Ctrl+Alt+E was free. With the address row hidden, the command bar's
+actions mode (⇧⌘P / Ctrl+Shift+P) also lists each extension, **Show Media Controls** while
+something plays, and **View Site Information**; on a keyboard with AltGr, press Ctrl+Alt+E
+with the left Alt.
 
 Independent session is not a shortcut: it is a check item on the Space chip
 menu, a toggle on each Space in Settings → Stedding → Spaces, and an **Independent

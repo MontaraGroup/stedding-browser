@@ -92,8 +92,9 @@ yet, `docs/features/library.md`) and a `+`.
 - **Previews on hover** **[post-1.0]** — hovering a pinned tab glances the site: recent
   mail, calendar events, open pull requests. Deferred because each site is a bespoke
   integration. The hover affordance itself is **[1.0]**, as a screenshot of the tab with
-  no model (ADR 0020; `S-115`). Today a pinned tab's hover card names its Space and
-  home (`features/pins.md` H8).
+  no model (ADR 0020; `S-115`): every row not on screen shows a picture of its page as last
+  seen, held in memory only, on the Mac and on Windows, and a pinned tab's card also names
+  its Space and home (`features/pins.md` H8, H19–H23).
 - **Rename tab** **[1.0]** — double-click (`features/tabs.md` R14–R17).
 - **Multi-select tabs** **[1.0]** — ⌘-click and ⇧-click, then every verb acts on the
   selection (`features/tabs.md` R20–R22).
@@ -199,7 +200,9 @@ yet, `docs/features/library.md`) and a `+`.
 - **Split View** **[1.0]** — two pages side by side in one window, on Chromium's own split
   view. Made with `⌃⌘N` on the Mac (the current tab and a new one; Chromium's `⌥⌘N`
   too, except while Arc runs and takes it, `S-79`) or from a tab's menu; the command
-  bar has no row for it. Making one by dragging a row onto the page: `S-113`. More than two
+  bar has no row for it. Dragging a tab onto the page makes one too, from the sidebar or the
+  horizontal strip: the half under the pointer lights in the Space's colour, and the dropped
+  page takes that half (`features/splits.md` J10–J15; asked for in GitHub issue 7). More than two
   panes, or panes stacked vertically, are **[post-1.0]** (`ROADMAP.md` M5).
 - **A split is a tab** **[1.0]** — one sidebar row and one unit for every verb: pin,
   sleep, move to a Space, rename. This is the part most clones miss
@@ -336,8 +339,9 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   it off (`features/local-tabs.md`; released in beta 18, on Windows so far). Arc's other
   developer affordances: `S-117`.
 - **Extensions** **[1.0]** — full Chrome Web Store compatibility, a hard requirement
-  (`AGENTS.md`). `⌘E` to cycle extension actions is planned (`features/toolbar.md` T13;
-  `S-104`).
+  (`AGENTS.md`). `⌘E` (Ctrl+Alt+E) runs one, as in Arc: hold to choose, let go to run; the
+  command bar's actions mode lists each extension, so they stay reachable with the address
+  row hidden (`features/toolbar.md` T13, T39, T40; `S-104`).
 - **Import from another browser** **[1.0]** — Arc in one click on the Mac
   (`features/import.md`; Windows is `S-81`); Chromium's own importer for Safari and
   Firefox on macOS and for Firefox, Internet Explorer and the old Edge on Windows
