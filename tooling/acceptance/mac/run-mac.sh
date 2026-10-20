@@ -68,11 +68,15 @@ drive() {
   [ "$status" -eq 0 ] || exit "$status"
 }
 
-# fresh <name>: a seeded profile with the fixture built by 10-setup, in $PROFILE.
+# fresh <name>: a seeded profile with the fixture built by 10-setup, in $PROFILE. Each
+# part's fixture keeps its own captures (<name>-setup-*.png): with one set of names, `all`
+# kept only the last part's.
 fresh() {
   PROFILE="$RUN/profiles/$1"
   python3 -I "$HERE/seed-profile.py" "$PROFILE" || exit 1
-  drive "$PROFILE" 10-setup "${EXTRA[@]}" "${URLS[@]}"
+  sed -e "s#$RUN/shots/setup-#$RUN/shots/$1-setup-#g" "$RUN/steps/10-setup.steps" \
+    > "$RUN/steps/10-setup-$1.steps"
+  drive "$PROFILE" "10-setup-$1" "${EXTRA[@]}" "${URLS[@]}"
 }
 
 if [ "$mode" = layout ]; then
