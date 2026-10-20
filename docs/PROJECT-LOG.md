@@ -48,6 +48,9 @@ built and released on both platforms together.
   from GitHub within 30 seconds and swapped it in at the quit. The Mac's installed copy
   updated itself through the real feed as well. Beta 18 and 19's notes and release pages now
   say the Mac's image of that work is beta 20's.
+- **The Mac's checks build, after the release:** unit 964 and components 56 with no DCHECK;
+  browser 358 of 361, the three intermittent: a tab row's dangling pointer, never read after
+  the free, and two slow-build timings, filed as `S-250`.
 
 ## 2026-10-19, afternoon -- the Windows updater, beta 19
 
