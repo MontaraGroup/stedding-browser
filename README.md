@@ -38,20 +38,23 @@ account, no telemetry, BSD-3-Clause.
 
 The rest is in the [release notes](docs/release-notes/v0.3.0-beta.1.md).
 
-## Five things Arc never had
+## What Arc never had
 
-1. **Dark pages.** One switch turns every website dark from its first frame, with no white
+1. **Open source, with no account.** Stedding is BSD-licensed and asks you to sign up for
+   nothing: download it and use it. Arc needed an account before it would open, and its code
+   is closed.
+2. **Spaces with their own sign-ins, in one profile.** Give a Space an Independent session and
+   it keeps its own cookies and site data, so the same site can be signed in as work in one
+   Space and as you in another. Extensions, settings, history and saved passwords stay shared.
+   Arc keeps sign-ins apart only by giving a Space a whole separate profile.
+   [Spec](docs/features/sessions.md)
+3. **Dark pages.** One switch turns every website dark from its first frame, with no white
    flash: the moon by the address row, or ⌥⇧⌘D (Ctrl+Alt+Shift+D). Keep some sites light, or
    darken only the ones you list. [Spec](docs/features/dark-pages.md)
-2. **Apps from any page.** Add to Dock on the Mac, Install page as app on Windows: the page
+4. **Apps from any page.** Add to Dock on the Mac, Install page as app on Windows: the page
    gets a window and an icon of its own and keeps the session of the Space it was made in, so
    it stays signed in as that Space is. Arc does not install web apps.
    [Spec](docs/features/web-apps.md)
-3. **Undo for every close.** Close a tab, a folder or a Space's loose tabs and a toast offers
-   Undo, which puts each tab back in its Space and folder. [Spec](docs/features/tabs.md)
-4. **The whole address, in the page's colour.** Arc has no address row. Stedding keeps the
-   full address on the top edge of the page, tinted with the page's own colour; ⇧⌘D hides it
-   when you want the room. [Spec](docs/features/toolbar.md)
 5. **Site cleanup in one step.** Clear Site Cookies and Reload (⌥⇧⌘R) signs you out of the
    site in front of you and nothing else; Close Duplicate Tabs is one command away.
    [Spec](docs/features/commandbar.md)
@@ -82,8 +85,8 @@ with 0.2.0 beta 20 on the Mac.
 - **Copy the link** clean of trackers (⇧⌘C) or as Markdown, **screenshots** by key, mute and
   picture in picture by key.
 - **Arc in one click** (Mac): Spaces, essentials, pins, folders, tabs, history and passwords.
-- **Arc's keyboard** on both platforms, and **updates** in the sidebar: signed, once a day,
-  with a switch to turn them off.
+- **Arc's keyboard** on both platforms, and **updates** in the sidebar: signed, looked for at
+  launch and every six hours, with a switch to turn them off.
 
 Each feature has a specification naming the test behind every behaviour:
 [docs/features/](docs/features/).
