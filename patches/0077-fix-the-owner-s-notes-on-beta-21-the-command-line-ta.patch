@@ -188,7 +188,7 @@ its own (patches/README.md).
  chrome/test/stedding/sidebar_test_util.h      |   27 +
  .../test/stedding/sleep_timer_browsertest.cc  |   50 +
  .../test/stedding/space_switch_browsertest.cc |   92 ++
- .../test/stedding/space_wheel_browsertest.cc  |  422 +++++
+ .../test/stedding/space_wheel_browsertest.cc  |  434 +++++
  .../test/stedding/startup_load_browsertest.cc |  368 ++++-
  chrome/test/stedding/tab_drop_browsertest.cc  |  491 ++++++
  .../stedding/window_buttons_browsertest.mm    |    7 +
@@ -199,7 +199,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 128 files changed, 10274 insertions(+), 387 deletions(-)
+ 128 files changed, 10286 insertions(+), 387 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -12826,10 +12826,10 @@ index f197f8567b25b..2962ecd2c8b4e 100644
  // PLAN.md TST-9, switcher X2, X3: Ctrl-Tab with Ctrl held down and let go as
 diff --git a/chrome/test/stedding/space_wheel_browsertest.cc b/chrome/test/stedding/space_wheel_browsertest.cc
 new file mode 100644
-index 0000000000000..76398a94a237a
+index 0000000000000..7ec8b500295a5
 --- /dev/null
 +++ b/chrome/test/stedding/space_wheel_browsertest.cc
-@@ -0,0 +1,422 @@
+@@ -0,0 +1,434 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -13185,13 +13185,25 @@ index 0000000000000..76398a94a237a
 +IN_PROC_BROWSER_TEST_F(SpaceWheelTest, AVerticalScrollStillScrollsTheList) {
 +  ASSERT_NO_FATAL_FAILURE(MakeThreeSpaces(40));
 +  const gfx::Point over_list = ListCentre();
-+  ASSERT_EQ(0, ListTop());
++  // The last tab opened is the active one, and the list keeps the active row
++  // in view, so it rests at its foot; the first row made active brings it
++  // back to its top, where the steps below scroll down from.
++  // The rows above the first tab's may keep it a little short of 0.
++  tab_strip_model()->ActivateTabAt(0);
++  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  int start = -1;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    const int now = ListTop();
++    const bool still = now == start;
++    start = now;
++    return still && now < 200;
++  })) << "the list did not come back near its top: " << ListTop();
 +
 +  Notch(over_list, 0, 1);
 +  Notch(over_list, 0, 1);
 +  EXPECT_EQ(0, Showing());
 +  const int after_notches = ListTop();
-+  EXPECT_GT(after_notches, 0) << "the wheel did not scroll the list";
++  EXPECT_GT(after_notches, start) << "the wheel did not scroll the list";
 +
 +  std::vector<gfx::Vector2dF> drifting;
 +  for (int i = 0; i < 20; ++i) {
