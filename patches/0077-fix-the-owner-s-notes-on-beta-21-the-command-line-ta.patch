@@ -143,7 +143,7 @@ its own (patches/README.md).
  .../tabs/browser_tab_strip_controller.cc      |    9 +
  chrome/browser/ui/views/tabs/common/BUILD.gn  |    1 +
  .../tabs/common/dragged_tabs_container.cc     |    2 +-
- .../ui/views/tabs/common/folder_view.cc       |  368 ++++-
+ .../ui/views/tabs/common/folder_view.cc       |  368 +++-
  .../ui/views/tabs/common/folder_view.h        |   44 +-
  .../tabs/common/pinned_tab_container_view.cc  |   18 +-
  .../tabs/common/root_tab_collection_node.cc   |   49 +
@@ -162,36 +162,36 @@ its own (patches/README.md).
  .../unpinned_tab_container_view_layout.cc     |    9 +-
  chrome/browser/ui/views/tabs/tab_strip.cc     |    9 +
  .../browser/ui/views/tabs/vertical/BUILD.gn   |    5 +-
- ...rtical_tab_strip_focus_swipe_controller.cc |   95 +-
- ...ertical_tab_strip_focus_swipe_controller.h |   35 +-
+ ...rtical_tab_strip_focus_swipe_controller.cc |  110 +-
+ ...ertical_tab_strip_focus_swipe_controller.h |   41 +-
  .../vertical_tab_strip_top_container.cc       |   13 +-
  chrome/browser/ui/views/toolbar/BUILD.gn      |    3 +
  .../toolbar/stedding_little_promote_button.cc |  133 ++
  .../toolbar/stedding_little_promote_button.h  |   66 +
  .../browser/ui/views/toolbar/toolbar_view.cc  |  111 +-
- chrome/test/stedding/BUILD.gn                 |   11 +
- .../test/stedding/address_band_browsertest.cc |  554 ++++++-
- .../test/stedding/folder_tabs_browsertest.cc  |  152 ++
+ chrome/test/stedding/BUILD.gn                 |   12 +
+ .../test/stedding/address_band_browsertest.cc |  554 +++++-
+ .../test/stedding/folder_tabs_browsertest.cc  |  183 +-
  .../hidden_row_controls_browsertest.cc        |  289 +++-
- .../stedding/horizontal_strip_browsertest.cc  |   95 ++
+ .../stedding/horizontal_strip_browsertest.cc  |  101 ++
  .../hover_card_picture_browsertest.cc         |  144 ++
  .../stedding/little_window_browsertest.cc     |  346 +++-
  .../little_window_menu_mac_browsertest.mm     |  154 ++
  .../little_window_row_mac_browsertest.mm      |  487 ++++++
  .../test/stedding/local_tabs_browsertest.cc   |   17 +-
- .../stedding/motion_frames_browsertest.cc     | 1465 +++++++++++++++++
- .../test/stedding/pinned_run_browsertest.cc   |  459 ++++++
+ .../stedding/motion_frames_browsertest.cc     | 1479 +++++++++++++++++
+ .../test/stedding/pinned_run_browsertest.cc   |  459 +++++
  .../popup_over_full_screen_browsertest.mm     |  163 ++
  chrome/test/stedding/scroll_events_mac.h      |   43 +
  chrome/test/stedding/scroll_events_mac.mm     |   73 +
- .../stedding/sidebar_click_browsertest.cc     |  554 ++++++-
+ .../stedding/sidebar_click_browsertest.cc     |  554 +++++-
  .../test/stedding/sidebar_rail_browsertest.cc |  437 ++++-
- chrome/test/stedding/sidebar_test_util.cc     |   25 +
- chrome/test/stedding/sidebar_test_util.h      |   27 +
+ chrome/test/stedding/sidebar_test_util.cc     |   43 +
+ chrome/test/stedding/sidebar_test_util.h      |   35 +
  .../test/stedding/sleep_timer_browsertest.cc  |   50 +
- .../test/stedding/space_switch_browsertest.cc |   92 ++
- .../test/stedding/space_wheel_browsertest.cc  |  434 +++++
- .../test/stedding/startup_load_browsertest.cc |  368 ++++-
+ .../test/stedding/space_switch_browsertest.cc |   92 +
+ .../test/stedding/space_wheel_browsertest.cc  |  442 +++++
+ .../test/stedding/startup_load_browsertest.cc |  368 +++-
  chrome/test/stedding/tab_drop_browsertest.cc  |  491 ++++++
  .../stedding/window_buttons_browsertest.mm    |    7 +
  .../test/stedding/window_top_browsertest.mm   |  340 ++++
@@ -201,7 +201,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 130 files changed, 10978 insertions(+), 395 deletions(-)
+ 130 files changed, 11084 insertions(+), 396 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -6387,7 +6387,7 @@ index cb471907a5f23..879928fccd8d0 100644
    deps = [
      "//base",
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.cc
-index b2e1740cfd61a..93d62b3fcc8b8 100644
+index b2e1740cfd61a..f0e2c7265a258 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.cc
 @@ -4,7 +4,9 @@
@@ -6502,7 +6502,7 @@ index b2e1740cfd61a..93d62b3fcc8b8 100644
  void VerticalTabStripFocusSwipeController::EndSpaceSwipe() {
    give_up_timer_.Stop();
    const float offset = cumulative_x_;
-@@ -309,6 +371,33 @@ bool VerticalTabStripFocusSwipeController::SpaceSwipeIsFlick() const {
+@@ -309,6 +371,48 @@ bool VerticalTabStripFocusSwipeController::SpaceSwipeIsFlick() const {
  }
  #endif  // BUILDFLAG(IS_MAC)
  
@@ -6514,6 +6514,21 @@ index b2e1740cfd61a..93d62b3fcc8b8 100644
 +  if (!region_view_ || region_view_->IsDragging()) {
 +    return;
 +  }
++  // Off the Mac, views::RootView hands a wheel event to the view under the
++  // pointer and then to each view above it until one takes it, and each of
++  // those dispatches runs this handler, the region's pre-target handler,
++  // again. The wheel reads an event once. Read again, a touchpad's first
++  // message counted once for every view between the row and the list, and a
++  // vertical two-finger scroll that began with a little sideways was locked
++  // as a sideways one: the wheel took every message after it, and the list
++  // did not scroll.
++  const uintptr_t event_address = reinterpret_cast<uintptr_t>(event);
++  if (event_address == last_wheel_event_ &&
++      event->time_stamp() == last_wheel_event_time_) {
++    return;
++  }
++  last_wheel_event_ = event_address;
++  last_wheel_event_time_ = event->time_stamp();
 +  stedding::SpaceWheel::Event wheel;
 +  wheel.time = event->time_stamp();
 +  wheel.right = right;
@@ -6537,10 +6552,18 @@ index b2e1740cfd61a..93d62b3fcc8b8 100644
    if (!region_view_ || !region_view_->tab_strip_model()) {
      return;
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h
-index 9abcc209ffed4..a3399c67e10b2 100644
+index 9abcc209ffed4..ecc6dcb020a44 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h
-@@ -13,9 +13,11 @@
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_FOCUS_SWIPE_CONTROLLER_H_
+ #define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_FOCUS_SWIPE_CONTROLLER_H_
+ 
++#include <cstdint>
+ #include <utility>
+ 
+ #include "base/containers/circular_deque.h"
+@@ -13,9 +14,11 @@
  #include "base/time/time.h"
  #include "base/timer/timer.h"
  #include "build/build_config.h"
@@ -6552,7 +6575,7 @@ index 9abcc209ffed4..a3399c67e10b2 100644
  class ScrollEvent;
  }
  
-@@ -36,16 +38,20 @@ class VerticalTabStripFocusSwipeController : public ui::EventHandler {
+@@ -36,16 +39,20 @@ class VerticalTabStripFocusSwipeController : public ui::EventHandler {
    // moved across the sidebar since it began, in DIPs, negative to the left;
    // when they lift, `on_end` runs with that distance and whether the last
    // moves were a flick. The momentum that follows is the swipe's.
@@ -6574,7 +6597,7 @@ index 9abcc209ffed4..a3399c67e10b2 100644
    };
    // A flick: the fingers' speed over their last moves, in DIPs a
    // millisecond, and how far back those moves go.
-@@ -54,6 +60,13 @@ class VerticalTabStripFocusSwipeController : public ui::EventHandler {
+@@ -54,6 +61,13 @@ class VerticalTabStripFocusSwipeController : public ui::EventHandler {
    static constexpr base::TimeDelta kFlickMinSpan = base::Milliseconds(20);
    // A swipe whose lift never arrived ends this long after its last move.
    static constexpr base::TimeDelta kSpaceSwipeGiveUp = base::Seconds(2);
@@ -6588,7 +6611,7 @@ index 9abcc209ffed4..a3399c67e10b2 100644
  
    VerticalTabStripFocusSwipeController(VerticalTabStripRegionView* region_view,
                                         SpaceSwipe space_swipe);
-@@ -99,11 +112,31 @@ class VerticalTabStripFocusSwipeController : public ui::EventHandler {
+@@ -99,11 +113,36 @@ class VerticalTabStripFocusSwipeController : public ui::EventHandler {
    void EndSpaceSwipe();
    bool SpaceSwipeIsFlick() const;
  
@@ -6613,6 +6636,11 @@ index 9abcc209ffed4..a3399c67e10b2 100644
    base::circular_deque<std::pair<base::TimeTicks, float>> recent_moves_;
    base::OneShotTimer give_up_timer_;
 +  stedding::SpaceWheel space_wheel_{kSpaceWheelNotch};
++  // The wheel event `space_wheel_` read last, by its address and its time,
++  // so a dispatch of the same event to the next view up is not read again
++  // (see OnSpaceWheel). The address is only compared, never followed.
++  uintptr_t last_wheel_event_ = 0;
++  base::TimeTicks last_wheel_event_time_;
 +#if BUILDFLAG(IS_MAC)
 +  bool phased_stream_ = false;
 +  base::TimeTicks last_phased_event_;
@@ -7080,7 +7108,7 @@ index 62c4bb94e34e5..de503f30cd68b 100644
    // Call super implementation to ensure layout manager and child layouts
    // happen.
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
-index 7d6b53d1051d3..5c6cb2d6c9354 100644
+index 7d6b53d1051d3..34f96fba945d1 100644
 --- a/chrome/test/stedding/BUILD.gn
 +++ b/chrome/test/stedding/BUILD.gn
 @@ -44,6 +44,7 @@ test("stedding_browser_tests") {
@@ -7107,7 +7135,15 @@ index 7d6b53d1051d3..5c6cb2d6c9354 100644
      "//components/certificate_transparency:proto",
      "//components/payments/core",
      "//components/safe_browsing/core/common:features",
-@@ -279,10 +282,16 @@ test("stedding_browser_tests") {
+@@ -254,6 +257,7 @@ test("stedding_browser_tests") {
+     "//ui/compositor",
+     "//ui/display",
+     "//ui/events:test_support",
++    "//ui/events/platform",
+     "//ui/gfx/codec",
+     "//ui/message_center/public/cpp",
+     "//ui/shell_dialogs",
+@@ -279,10 +283,16 @@ test("stedding_browser_tests") {
    if (is_mac) {
      sources += [
        "dark_pages_menu_mac_browsertest.mm",
@@ -7124,7 +7160,7 @@ index 7d6b53d1051d3..5c6cb2d6c9354 100644
      ]
      deps += [
        "//chrome/browser:app_controller_mac",
-@@ -293,6 +302,8 @@ test("stedding_browser_tests") {
+@@ -293,6 +303,8 @@ test("stedding_browser_tests") {
        "//components/remote_cocoa/app_shim",
        "//ui/base:test_support",
        "//ui/gfx:test_support",
@@ -7816,7 +7852,7 @@ index 033e450900933..d9e41cc0094f2 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index 0364372066880..71dc486d63178 100644
+index 0364372066880..ddc403ca67c1a 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -62,6 +62,7 @@
@@ -7827,15 +7863,78 @@ index 0364372066880..71dc486d63178 100644
  #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
-@@ -93,6 +94,7 @@
+@@ -93,7 +94,9 @@
  #include "ui/display/screen.h"
  #include "ui/events/event.h"
  #include "ui/events/event_constants.h"
 +#include "ui/events/event_utils.h"
  #include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/events/platform/platform_event_source.h"
  #include "ui/gfx/canvas.h"
  #include "ui/gfx/geometry/point.h"
-@@ -847,6 +849,156 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ARowMovedFromUnderThePointerRests) {
+ #include "ui/gfx/geometry/rect.h"
+@@ -106,6 +109,10 @@
+ #include "ui/views/widget/widget.h"
+ #include "url/gurl.h"
+ 
++#if defined(USE_AURA)
++#include "ui/aura/env.h"
++#endif
++
+ namespace {
+ 
+ // The drawn header of a tab group under `view`, or null: the sidebar's, not
+@@ -141,17 +148,37 @@ class NavigationCounter : public content::WebContentsObserver {
+ // this lives: a browser test cannot move the real pointer, and a row asks the
+ // screen where the pointer is when the row is added to the window. Every other
+ // question goes to the real screen, which keeps its displays and observers.
++// Off the Mac the real pointer is held off too: the system's own mouse events
++// are dropped (the switch Chromium's tests set for this,
++// ui::PlatformEventSource::SetIgnoreNativePlatformEvents), and the events
++// aura makes itself when a window changes, an exit or a move, are not made
++// or are made where the pointer is said to rest. With the real pointer
++// resting over the test's window, both took the hover from the row under
++// the test's pointer (8 of 15 runs on the PC, 2026-10-21).
+ class PointerRestingAt : public display::Screen {
+  public:
+   explicit PointerRestingAt(const gfx::Point& point)
+-      : real_(display::Screen::SetScreenInstance(nullptr)), point_(point) {
++      : real_(display::Screen::SetScreenInstance(nullptr)),
++        point_(point),
++        ignored_native_events_(
++            ui::PlatformEventSource::ShouldIgnoreNativePlatformEvents()) {
+     // A screen is not replaced in place; the real one is set aside above and
+     // put back below.
+     display::Screen::SetScreenInstance(this);
++    ui::PlatformEventSource::SetIgnoreNativePlatformEvents(true);
++#if defined(USE_AURA)
++    real_mouse_location_ = aura::Env::GetInstance()->last_mouse_location();
++    aura::Env::GetInstance()->SetLastMouseLocation(point_);
++#endif
+   }
+   PointerRestingAt(const PointerRestingAt&) = delete;
+   PointerRestingAt& operator=(const PointerRestingAt&) = delete;
+   ~PointerRestingAt() override {
++#if defined(USE_AURA)
++    aura::Env::GetInstance()->SetLastMouseLocation(real_mouse_location_);
++#endif
++    ui::PlatformEventSource::SetIgnoreNativePlatformEvents(
++        ignored_native_events_);
+     display::Screen::SetScreenInstance(nullptr);
+     display::Screen::SetScreenInstance(real_);
+   }
+@@ -220,6 +247,10 @@ class PointerRestingAt : public display::Screen {
+  private:
+   const raw_ptr<display::Screen> real_;
+   const gfx::Point point_;
++  const bool ignored_native_events_;
++#if defined(USE_AURA)
++  gfx::Point real_mouse_location_;
++#endif
+ };
+ 
+ class FolderTabsTest
+@@ -847,6 +878,156 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ARowMovedFromUnderThePointerRests) {
        << "the slept row is drawn with a fill the resting row does not have";
  }
  
@@ -8357,7 +8456,7 @@ index 0abe7970579c9..0a0fde1557f9a 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/horizontal_strip_browsertest.cc b/chrome/test/stedding/horizontal_strip_browsertest.cc
-index 37f742b15e021..f5680ceaa6f4e 100644
+index 37f742b15e021..a50d607cd478a 100644
 --- a/chrome/test/stedding/horizontal_strip_browsertest.cc
 +++ b/chrome/test/stedding/horizontal_strip_browsertest.cc
 @@ -26,6 +26,8 @@
@@ -8388,7 +8487,7 @@ index 37f742b15e021..f5680ceaa6f4e 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/gfx/geometry/vector2d.h"
-@@ -405,4 +410,94 @@ IN_PROC_BROWSER_TEST_F(HorizontalStripTest, ASplitHalfIsAsWideAsATab) {
+@@ -405,4 +410,100 @@ IN_PROC_BROWSER_TEST_F(HorizontalStripTest, ASplitHalfIsAsWideAsATab) {
    }
  }
  
@@ -8408,6 +8507,12 @@ index 37f742b15e021..f5680ceaa6f4e 100644
 +  stedding::test::KeepAboveOtherWindows(widget);
 +  ASSERT_TRUE(base::test::RunUntil(
 +      [&]() { return !strip()->IsAnimatingInTabStrip(); }));
++  // The drag asks the system which window is under each point it passes,
++  // and passes over a window the system last saw covered: run beside other
++  // tests' windows, this one was, and the drag ended as it began. Nothing
++  // runs between this wait and the release.
++  ASSERT_TRUE(stedding::test::WaitUntilUncovered(widget))
++      << "another window still covers this one";
 +  views::test::RunScheduledLayout(browser_view());
 +  ASSERT_EQ(3, strip()->GetTabCount());
 +  const gfx::Point from =
@@ -9737,10 +9842,10 @@ index e21ca86924af3..ddf49ee4b67ae 100644
  // Lt9: a split is two rows under one. While it is on screen the local pane
 diff --git a/chrome/test/stedding/motion_frames_browsertest.cc b/chrome/test/stedding/motion_frames_browsertest.cc
 new file mode 100644
-index 0000000000000..2d7cb9b246067
+index 0000000000000..0a414fa62d576
 --- /dev/null
 +++ b/chrome/test/stedding/motion_frames_browsertest.cc
-@@ -0,0 +1,1465 @@
+@@ -0,0 +1,1479 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -10395,10 +10500,13 @@ index 0000000000000..2d7cb9b246067
 +
 +  // The omnibox's popup windows (its results dropdown and the AI mode one),
 +  // which the window keeps, hidden, between their shows; or the one showing.
++  // They are the window's owned widgets: on Windows a popup's aura window is
++  // a child of the root window and only owned by the browser's (a transient
++  // child), so the browser window's child widgets never include it.
 +  std::vector<views::Widget*> OmniboxPopups(bool showing) {
 +    std::vector<views::Widget*> popups;
 +    for (views::Widget* const child :
-+         views::Widget::GetAllChildWidgets(widget()->GetNativeView())) {
++         views::Widget::GetAllOwnedWidgets(widget()->GetNativeView())) {
 +      if (child != widget() && child->IsVisible() == showing &&
 +          child->GetNativeWindowProperty(views::kWidgetIdentifierKey) ==
 +              omnibox::kOmniboxWebUIPopupWidgetId) {
@@ -10461,18 +10569,29 @@ index 0000000000000..2d7cb9b246067
 +  }
 +
 +  // Types into the omnibox and waits for its results dropdown.
-+  [[nodiscard]] bool OpenTheDropdown() {
++  [[nodiscard]] testing::AssertionResult OpenTheDropdown() {
 +    chrome::FocusLocationBar(browser());
 +    if (!base::test::RunUntil(
 +            [&]() { return location_bar()->omnibox_view()->HasFocus(); })) {
-+      return false;
++      return testing::AssertionFailure()
++             << "the field never took the focus (the window is "
++             << (widget()->IsActive() ? "active" : "not active") << ")";
 +    }
 +    location_bar()->omnibox_view()->SetUserText(u"a.test",
 +                                                /*update_popup=*/true);
-+    return base::test::RunUntil([&]() {
-+      return location_bar()->GetOmniboxController()->IsPopupOpen() &&
-+             Dropdown();
-+    });
++    if (!base::test::RunUntil([&]() {
++          return location_bar()->GetOmniboxController()->IsPopupOpen() &&
++                 Dropdown();
++        })) {
++      return testing::AssertionFailure()
++             << "the dropdown never showed (the popup is "
++             << (location_bar()->GetOmniboxController()->IsPopupOpen()
++                     ? "open"
++                     : "closed")
++             << ", " << OmniboxPopups(false).size()
++             << " popup windows hidden)";
++    }
++    return testing::AssertionSuccess();
 +  }
 +  [[nodiscard]] bool CloseTheDropdown() {
 +    location_bar()->omnibox_view()->RevertAll();
@@ -13323,7 +13442,7 @@ index a14c5772a7192..da7d730d617a2 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/sidebar_test_util.cc b/chrome/test/stedding/sidebar_test_util.cc
-index 5ae9a0dba59b6..549a0ff024739 100644
+index 5ae9a0dba59b6..ef95ec4e1d069 100644
 --- a/chrome/test/stedding/sidebar_test_util.cc
 +++ b/chrome/test/stedding/sidebar_test_util.cc
 @@ -5,6 +5,7 @@
@@ -13350,7 +13469,39 @@ index 5ae9a0dba59b6..549a0ff024739 100644
  #include "ui/views/background.h"
  #include "ui/views/controls/label.h"
  #include "ui/views/test/views_test_utils.h"
-@@ -247,6 +250,28 @@ void ClickLeftMouse(views::Widget* widget, const gfx::Point& screen_point) {
+@@ -41,6 +44,11 @@
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ 
++#if BUILDFLAG(IS_WIN)
++#include "ui/aura/window.h"
++#include "ui/aura/window_tree_host.h"
++#endif
++
+ namespace stedding::test {
+ 
+ namespace {
+@@ -217,6 +225,19 @@ void KeepAboveOtherWindows(views::Widget* widget) {
+   widget->SetZOrderLevel(ui::ZOrderLevel::kFloatingWindow);
+ }
+ 
++bool WaitUntilUncovered(views::Widget* widget) {
++#if BUILDFLAG(IS_WIN)
++  return base::test::RunUntil([&]() {
++    return widget->GetNativeWindow()
++               ->GetHost()
++               ->GetNativeWindowOcclusionState() !=
++           aura::Window::OcclusionState::OCCLUDED;
++  });
++#else
++  return true;
++#endif
++}
++
+ void SendLeftMouse(views::Widget* widget,
+                    ui::EventType type,
+                    const gfx::Point& screen_point) {
+@@ -247,6 +268,28 @@ void ClickLeftMouse(views::Widget* widget, const gfx::Point& screen_point) {
    SendLeftMouse(widget, ui::EventType::kMouseReleased, screen_point);
  }
  
@@ -13380,7 +13531,7 @@ index 5ae9a0dba59b6..549a0ff024739 100644
  #if !BUILDFLAG(IS_MAC)
    command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor, "1");
 diff --git a/chrome/test/stedding/sidebar_test_util.h b/chrome/test/stedding/sidebar_test_util.h
-index 33757350334f6..0fc387bda799b 100644
+index 33757350334f6..a700579271134 100644
 --- a/chrome/test/stedding/sidebar_test_util.h
 +++ b/chrome/test/stedding/sidebar_test_util.h
 @@ -8,6 +8,7 @@
@@ -13399,10 +13550,18 @@ index 33757350334f6..0fc387bda799b 100644
  
  namespace base {
  class CommandLine;
-@@ -140,6 +142,31 @@ void ClickLeftMouse(views::Widget* widget, const gfx::Point& screen_point);
+@@ -140,6 +142,39 @@ void ClickLeftMouse(views::Widget* widget, const gfx::Point& screen_point);
  // foreground right, so this holds where activation would not.
  void KeepAboveOtherWindows(views::Widget* widget);
  
++// Waits until the system no longer counts `widget` as covered by another
++// window. On Windows a tab drag's search for the window under a point passes
++// over a window the native occlusion tracker last saw covered
++// (display::win::LocalProcessWindowFinder), and the tracker learns of a change
++// in the z-order a moment later: a drag begun in that moment, beside other
++// tests' windows, found no window of its own and ended. True elsewhere.
++[[nodiscard]] bool WaitUntilUncovered(views::Widget* widget);
++
 +// BACKLOG S-221: the test's word on the pointer in place of the machine's
 +// real one, for as long as this lives: whether the pointer is on the strip
 +// (VerticalTabStripRegionView::SetHoveredForTesting) and where it is
@@ -13658,10 +13817,10 @@ index f197f8567b25b..2962ecd2c8b4e 100644
  // PLAN.md TST-9, switcher X2, X3: Ctrl-Tab with Ctrl held down and let go as
 diff --git a/chrome/test/stedding/space_wheel_browsertest.cc b/chrome/test/stedding/space_wheel_browsertest.cc
 new file mode 100644
-index 0000000000000..7ec8b500295a5
+index 0000000000000..076ba4060fa9e
 --- /dev/null
 +++ b/chrome/test/stedding/space_wheel_browsertest.cc
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,442 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -13760,6 +13919,15 @@ index 0000000000000..7ec8b500295a5
 +class SpaceWheelTest
 +    : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
 + protected:
++#if BUILDFLAG(IS_WIN)
++  void SetUpOnMainThread() override {
++    VerticalTabsBrowserTestMixin<InProcessBrowserTest>::SetUpOnMainThread();
++    // The host resolver's rules are frozen once the set-up has run
++    // (docs/HANDOFF.md, trap 119).
++    host_resolver()->AddRule("*", "127.0.0.1");
++  }
++#endif
++
 +  spaces::SpaceModel* model() { return spaces::SpaceModel::From(browser()); }
 +  BrowserView* browser_view() {
 +    return BrowserView::GetBrowserViewForBrowser(browser());
@@ -14078,7 +14246,6 @@ index 0000000000000..7ec8b500295a5
 +  EXPECT_EQ(0, Showing()) << "Ctrl and the wheel up: back";
 +  EXPECT_EQ(0, ListTop()) << "Ctrl and the wheel scrolled the list";
 +
-+  host_resolver()->AddRule("*", "127.0.0.1");
 +  ASSERT_TRUE(embedded_test_server()->Start());
 +  content::WebContents* const page = browser_view()->GetActiveWebContents();
 +  ASSERT_TRUE(content::NavigateToURL(
