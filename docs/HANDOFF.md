@@ -37,17 +37,17 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and eighteen traps follow. Read the one for the topic in front of you, not the list.
+A hundred and twenty-three traps follow. Read the one for the topic in front of you, not the list.
 
 | Topic | Traps |
 |---|---|
-| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100 |
+| Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100, 123 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122 |
 | Release and signing | 44, 47, 49, 62, 85, 117, 118 |
-| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113 |
+| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113, 122 |
 
 ## Where things live
 
@@ -1589,6 +1589,50 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     Automation's Invoke pattern, as the Mac's check presses it through accessibility, which
     needs neither the pointer nor the foreground: beta 21's local and real checks restarted
     into the new version two seconds after the press.
+
+119. **A browser test's `host_resolver()` rules do not reach the tabs a launch opens.** Rules
+    added in `SetUpOnMainThread` reach the network service only after the startup browser
+    creator has opened the command line's addresses, so those tabs commit "name not resolved"
+    error pages; `CommandLineTabsTest.EveryAddressLoadsAtLaunch` passed that way for a day,
+    checking only the committed URL (2026-10-20, S-251). Map names for launch tabs with
+    `--host-resolver-rules` in `SetUpCommandLine`, and check a page's title, not its URL.
+
+120. **Python's `http.server` resets bursts on the Mac.** Its accept queue is five; macOS resets
+    the connections that overflow it, and Chromium does not retry a fresh connection that is
+    reset. A launch whose tabs all reconnect at once (S-251) lost tabs against it and none
+    against a server with a queue of 64. For a live check that opens several tabs at once,
+    serve with a larger queue (`ThreadingHTTPServer` with `request_queue_size = 64`).
+
+121. **On the PC, keys sent while an elevated window is in front are lost, and the modifiers stay
+    down.** Task Manager runs there at high integrity; a script's injected keys are medium, and
+    Windows drops them while a higher window has the foreground (UIPI). A quit by Ctrl+Shift+W
+    closes the browser mid-chord, the foreground falls to Task Manager, and the chord's key-ups
+    are dropped: the system holds Ctrl and Shift down, the next launch reads them as held with
+    no input event, and its first Ctrl+W quit it as Ctrl+Shift+W (2026-10-20, beta 21's live
+    run). While the elevated window is in front, `GetAsyncKeyState` from the script reads no key
+    at all, so the stuck keys show only once a medium window is in front again. Not the
+    product: with the script's own window right behind the browser, the same quit leaves no
+    key down. Close Task Manager before a run, quit through `Quit` (WM_CLOSE) where the keys
+    are not the subject, and let go of stuck modifiers (`Unstick`) with a medium window in
+    front.
+
+122. **Windows takes some chords before the window hears them.** Escape with Alt down is
+    Alt+Esc, Ctrl down or not: the window that has the foreground goes to the back of the
+    others, and it is sent no key message for the Escape, so no handling of WM_KEYDOWN,
+    WM_SYSKEYDOWN or WM_SYSCOMMAND can stop it. A hot key comes first: `RegisterHotKey` for
+    the chord (or a low-level keyboard hook) gets the key instead, and Windows does nothing
+    else with it (toolbar T39's hold registers Ctrl+Alt+Escape). Another program's hot key
+    wins the same way: on the PC another program holds Ctrl+Alt+Space, and that chord brings
+    it forward. Ctrl+Alt+F4 and Ctrl+Alt+Space are not Alt+F4 and Alt+Space to Windows
+    (2026-10-20, a probe window's message log).
+
+123. **Files copied to the PC with `tar xf` keep their Mac times, and the build may skip them.**
+    tar restores each file's modification time. A file edited on the Mac before the PC last
+    built that object, from another copy of it, arrives older than the object, and the build
+    does not compile it again: on 2026-10-20 the PC's link failed with seven undefined
+    symbols, every one defined in a file the copy had brought (`PageBarColorSupplier`'s new
+    constructor among them). Extract with `tar xmf`, which stamps the files with the time of
+    the copy.
 
 ## The Windows build
 
