@@ -85,8 +85,8 @@ with 0.2.0 beta 20 on the Mac.
 - **Copy the link** clean of trackers (⇧⌘C) or as Markdown, **screenshots** by key, mute and
   picture in picture by key.
 - **Arc in one click** (Mac): Spaces, essentials, pins, folders, tabs, history and passwords.
-- **Arc's keyboard** on both platforms, and **updates** in the sidebar: signed, looked for at
-  launch and every six hours, with a switch to turn them off.
+- **Arc's keyboard** on both platforms, and **updates** in the sidebar: signed, once a day,
+  with a switch to turn them off.
 
 Each feature has a specification naming the test behind every behaviour:
 [docs/features/](docs/features/).
