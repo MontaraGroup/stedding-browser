@@ -8,10 +8,13 @@ Spaces, pinned tabs and folders, and a command bar. It is Chromium plus a docume
 patches. See the [README](../README.md).
 
 **What does it have that Arc did not, and the other way round?**
-Dark pages for every website, apps made from any page, Undo after every close, the whole
-address in the page's colour, and one-step site cleanup; and no account at all. Arc still has
-Peek, Boosts, Easels, the sidebar's mini player, sync and AI. Both lists are at the top of the
-[README](../README.md#five-things-arc-never-had).
+It is open source and needs no account. A Space can keep its own sign-ins inside one profile,
+so one site can be signed in as work in one Space and as you in another. One switch turns
+every website dark, any page can become an app with a window of its own, and one step signs
+you out of the site in front of you and nothing else. Arc still has Peek, Boosts, Easels, the
+sidebar's mini player, the Library panel and Live Folders, sync and AI. The README has both
+lists: [What Arc never had](../README.md#what-arc-never-had) and
+[what Arc has that Stedding does not, yet](../README.md#what-arc-has-that-stedding-does-not-yet).
 
 **Is it a fork of Arc?**
 No. Arc is closed source, so nothing of it can be reused. Everything here was written for this
