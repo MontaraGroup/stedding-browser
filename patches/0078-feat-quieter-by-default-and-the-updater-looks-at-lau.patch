@@ -1,0 +1,1720 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 21 Oct 2026 18:52:21 -0400
+Subject: feat: quieter by default, and the updater looks at launch and every
+ six hours
+
+The owner's choices of 2026-10-21 after 0.3.0 beta 1, in one patch because
+they share the preferences, Settings' Stedding page and the updater:
+
+- Hints off by default, each with a switch in Settings > Stedding: the toast
+  offering Undo after a close (tabs R30, settings T17), the routed "Opened in
+  <Space> - Undo" notice (routing D4, "Show notices about Spaces"), and the
+  note on how to leave a full screen the person started (toolbar T45, "Show
+  how to leave full screen"); a page's own full screen keeps Chromium's note,
+  which guards against a page drawing a fake browser. The warning that pinning
+  a tab out of a Space with an Independent session signs it out stays on, with
+  a switch of its own (sessions S33, "Warn when pinning signs a tab out").
+- The updater checks at a launch when the last check is over an hour old,
+  and every six hours while the browser runs, on the Mac through Sparkle's
+  schedule and a background check at launch, on Windows through its own
+  schedule (updates Up1, Up6, Up7, Up14, Up20). A copy that checked in the
+  morning had not been offered an evening's release until the next day.
+
+Tests: UndoCloseByDefaultTest, IsolationMarkTest's two notice tests,
+FullscreenHintTest (a person's full screen and a page's), AppUpdaterMacTest
+and WinAppUpdaterTest's schedule tests; each fails without its change, and the
+toast tests turn their switch on.
+
+Why: the owner found the hints in the way and the release late to arrive.
+Removable when: never as a whole; the next re-cut gives each part a patch of
+its own (patches/README.md).
+---
+ chrome/app/app-Info.plist                     |  10 +-
+ .../api/settings_private/prefs_util.cc        |   9 +
+ .../stedding_page/stedding_page.html.ts       |  21 ++
+ chrome/browser/ui/archive/closed_tabs_undo.h  |   3 +-
+ .../ui/archive/closed_tabs_undo_unittest.cc   |  17 +-
+ chrome/browser/ui/exclusive_access/BUILD.gn   |   2 +
+ .../exclusive_access_manager.cc               |  19 ++
+ .../exclusive_access_manager.h                |   5 +
+ chrome/browser/ui/stedding/BUILD.gn           |   7 +
+ chrome/browser/ui/stedding/app_updater.cc     |   4 +
+ chrome/browser/ui/stedding/app_updater.h      |  15 ++
+ chrome/browser/ui/stedding/app_updater_mac.h  |  30 +++
+ chrome/browser/ui/stedding/app_updater_mac.mm |  47 ++++-
+ .../ui/stedding/app_updater_mac_unittest.mm   | 191 ++++++++++++++++++
+ chrome/browser/ui/stedding/app_updater_win.cc |  51 +++--
+ .../ui/stedding/app_updater_win_unittest.cc   |  95 ++++++++-
+ chrome/browser/ui/stedding/stedding_prefs.cc  |  11 +-
+ chrome/browser/ui/stedding/stedding_prefs.h   |  16 +-
+ .../ui/stedding/stedding_prefs_unittest.cc    |  20 +-
+ chrome/browser/ui/views/spaces/BUILD.gn       |   2 +
+ .../ui/views/spaces/space_switcher_view.cc    |  21 +-
+ .../ui/views/spaces/space_switcher_view.h     |   3 +
+ .../browser/ui/webui/settings/settings_ui.cc  |  28 +++
+ chrome/test/stedding/BUILD.gn                 |   4 +
+ .../test/stedding/address_band_browsertest.cc |   6 +
+ .../stedding/fullscreen_hint_browsertest.cc   | 190 +++++++++++++++++
+ .../stedding/isolation_mark_browsertest.cc    |  99 +++++++++
+ chrome/test/stedding/restore_browsertest.cc   |  69 ++++++-
+ .../stedding/settings_spaces_browsertest.cc   |  28 +++
+ chrome/test/stedding/tab_drop_browsertest.cc  |   8 +-
+ 30 files changed, 967 insertions(+), 64 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/app_updater_mac.h
+ create mode 100644 chrome/browser/ui/stedding/app_updater_mac_unittest.mm
+ create mode 100644 chrome/test/stedding/fullscreen_hint_browsertest.cc
+
+diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
+index 7f1942bcd47dd..66f7cfae2fd90 100644
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -727,9 +727,11 @@
+ 	</array>
+ 	<!-- Stedding's updater (docs/features/updates.md, ADR 0022): Sparkle reads
+ 	     the signed feed the release tooling publishes, accepts only archives
+-	     and feeds signed with this public key, checks once a day without
+-	     sending anything about the machine, and downloads in the background.
+-	     The browser sets the two automatic keys from its own setting. -->
++	     and feeds signed with this public key, checks every six hours
++	     (stedding::kUpdateCheckInterval; the browser adds a check at launch)
++	     without sending anything about the machine, and downloads in the
++	     background. The browser sets the two automatic keys from its own
++	     setting. -->
+ 	<key>SUFeedURL</key>
+ 	<string>https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast.xml</string>
+ 	<key>SUPublicEDKey</key>
+@@ -743,7 +745,7 @@
+ 	<key>SUAutomaticallyUpdate</key>
+ 	<true/>
+ 	<key>SUScheduledCheckInterval</key>
+-	<integer>86400</integer>
++	<integer>21600</integer>
+ 	<key>SUEnableSystemProfiling</key>
+ 	<false/>
+ </dict>
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 63a3b66edc276..a89cb85d6b368 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -376,6 +376,15 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kUndoToast] =
+       settings_api::PrefType::kBoolean;
++  // routing D4, settings T23.
++  (*s_allowlist)[stedding::prefs::kSpaceNotices] =
++      settings_api::PrefType::kBoolean;
++  // sessions S33, settings T25.
++  (*s_allowlist)[stedding::prefs::kPinSignoutWarning] =
++      settings_api::PrefType::kBoolean;
++  // toolbar T45, settings T24.
++  (*s_allowlist)[stedding::prefs::kFullscreenHint] =
++      settings_api::PrefType::kBoolean;
+   (*s_allowlist)[contextual_search::kDriveConsentState] =
+       settings_api::PrefType::kNumber;
+   (*s_allowlist)[::prefs::kShowForwardButton] =
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index af27c6d570c46..4bf373e24b2ad 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -259,6 +259,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingLinkAddressLabel}"
+       sub-label="$i18n{steddingLinkAddressSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="fullscreenHint"
++      class="hr"
++      pref-key="stedding.window.fullscreen_hint"
++      label="$i18n{steddingFullscreenHintLabel}"
++      sub-label="$i18n{steddingFullscreenHintSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="darkPages"
+       class="hr"
+@@ -428,6 +435,20 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       <div class="secondary">$i18n{steddingSpacesIntro}</div>
+     </div>
+   </div>
++  <settings-toggle-button
++      id="spaceNotices"
++      class="hr"
++      pref-key="stedding.spaces.notices"
++      label="$i18n{steddingSpaceNoticesLabel}"
++      sub-label="$i18n{steddingSpaceNoticesSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="pinSignoutWarning"
++      class="hr"
++      pref-key="stedding.spaces.pin_signout_warning"
++      label="$i18n{steddingPinSignoutWarningLabel}"
++      sub-label="$i18n{steddingPinSignoutWarningSubLabel}">
++  </settings-toggle-button>
+   <div class="hr settings-box" id="externalDefault">
+     <div class="flex">
+       <div class="label">$i18n{steddingExternalDefaultLabel}</div>
+diff --git a/chrome/browser/ui/archive/closed_tabs_undo.h b/chrome/browser/ui/archive/closed_tabs_undo.h
+index 39542f855a2dd..9c58286d633d5 100644
+--- a/chrome/browser/ui/archive/closed_tabs_undo.h
++++ b/chrome/browser/ui/archive/closed_tabs_undo.h
+@@ -43,7 +43,8 @@ struct LeavingTab {
+   bool user_gesture = false;
+   // The close made an entry in the recently-closed list.
+   bool recorded = false;
+-  // stedding.tabs.undo_toast (R30): the user has not turned the toast off.
++  // stedding.tabs.undo_toast (R30): the user has turned the toast on; it is
++  // off by default.
+   bool undo_toast_on = false;
+   // The archive's mark on the entry (archive A8): "auto" for the sweep,
+   // "clear" for Clear, empty for a plain close.
+diff --git a/chrome/browser/ui/archive/closed_tabs_undo_unittest.cc b/chrome/browser/ui/archive/closed_tabs_undo_unittest.cc
+index ebb21c27c9f83..65c32e3ca522e 100644
+--- a/chrome/browser/ui/archive/closed_tabs_undo_unittest.cc
++++ b/chrome/browser/ui/archive/closed_tabs_undo_unittest.cc
+@@ -106,25 +106,26 @@ TEST(ClosedTabsUndoTest, AUserCloseOffersUndo) {
+   EXPECT_FALSE(OffersUndo(closing_all)) << "the window or the app closing";
+ }
+ 
+-// tabs R30: stedding.tabs.undo_toast is on by default, and while it is off
+-// no close offers Undo, so no toast is shown.
++// tabs R30: stedding.tabs.undo_toast is off by default (the owner,
++// 2026-10-21), and while it is off no close offers Undo, so no toast is
++// shown; turned on, a close offers it.
+ TEST(ClosedTabsUndoTest, TheSettingTurnsTheToastOff) {
+   sync_preferences::TestingPrefServiceSyncable service;
+   prefs::RegisterProfilePrefs(service.registry());
+   ASSERT_TRUE(service.FindPreference(prefs::kUndoToast));
+-  EXPECT_TRUE(UndoToastOn(&service)) << "on by default";
++  EXPECT_FALSE(UndoToastOn(&service)) << "off by default";
+ 
+   LeavingTab close = UserClose();
+   close.undo_toast_on = UndoToastOn(&service);
+-  EXPECT_TRUE(OffersUndo(close));
++  EXPECT_FALSE(OffersUndo(close)) << "no toast by default";
+ 
+-  service.SetBoolean(prefs::kUndoToast, false);
++  service.SetBoolean(prefs::kUndoToast, true);
+   close.undo_toast_on = UndoToastOn(&service);
+-  EXPECT_FALSE(OffersUndo(close)) << "no toast while the setting is off";
++  EXPECT_TRUE(OffersUndo(close)) << "the setting on";
+ 
+-  service.SetBoolean(prefs::kUndoToast, true);
++  service.SetBoolean(prefs::kUndoToast, false);
+   close.undo_toast_on = UndoToastOn(&service);
+-  EXPECT_TRUE(OffersUndo(close)) << "and back on";
++  EXPECT_FALSE(OffersUndo(close)) << "no toast while the setting is off";
+   EXPECT_FALSE(UndoToastOn(nullptr));
+ }
+ 
+diff --git a/chrome/browser/ui/exclusive_access/BUILD.gn b/chrome/browser/ui/exclusive_access/BUILD.gn
+index 909760e08cf43..5309a16506cd0 100644
+--- a/chrome/browser/ui/exclusive_access/BUILD.gn
++++ b/chrome/browser/ui/exclusive_access/BUILD.gn
+@@ -46,6 +46,8 @@ source_set("exclusive_access") {
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui:ui_features",
+     "//chrome/browser/ui/browser_window",
++    # Stedding (toolbar T45): "Show how to leave full screen".
++    "//chrome/browser/ui/stedding:prefs",
+     "//chrome/common:constants",
+     "//components/content_settings/core/browser",
+     "//components/fullscreen_control",
+diff --git a/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc b/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc
+index b925b516a95f4..5937edb990cf4 100644
+--- a/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc
++++ b/chrome/browser/ui/exclusive_access/exclusive_access_manager.cc
+@@ -11,12 +11,15 @@
+ #include "base/metrics/histogram_functions.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/app_mode/app_mode_utils.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+ #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+ #include "chrome/browser/ui/exclusive_access/pointer_lock_controller.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "components/input/native_web_keyboard_event.h"
++#include "components/prefs/pref_service.h"
+ #include "content/public/browser/web_contents.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+@@ -136,12 +139,28 @@ ExclusiveAccessManager::GetExclusiveAccessExitBubbleType() const {
+   }
+ 
+   if (fullscreen_controller_.IsControllerInitiatedFullscreen() && !app_mode) {
++    // Stedding (toolbar T45): full screen the person starts -- the menu, the
++    // green button, the chord, F11, the command bar -- shows no note on how
++    // to leave it, and nor does a press of Esc in it, unless "Show how to
++    // leave full screen" is on. A page's own full screen, Keyboard Lock and
++    // Pointer Lock are answered above and keep their notes, which name the
++    // site and guard against a page posing as the browser; so does a full
++    // screen an extension asks for.
++    if (!ShowsBrowserFullscreenHint()) {
++      return EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE;
++    }
+     return EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION;
+   }
+ 
+   return EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE;
+ }
+ 
++bool ExclusiveAccessManager::ShowsBrowserFullscreenHint() const {
++  Profile* const profile = exclusive_access_context_->GetProfile();
++  return profile &&
++         profile->GetPrefs()->GetBoolean(stedding::prefs::kFullscreenHint);
++}
++
+ void ExclusiveAccessManager::UpdateBubble(
+     ExclusiveAccessBubbleHideCallback first_hide_callback,
+     bool force_update) {
+diff --git a/chrome/browser/ui/exclusive_access/exclusive_access_manager.h b/chrome/browser/ui/exclusive_access/exclusive_access_manager.h
+index 03c1ff341c4a8..611b4231ebc56 100644
+--- a/chrome/browser/ui/exclusive_access/exclusive_access_manager.h
++++ b/chrome/browser/ui/exclusive_access/exclusive_access_manager.h
+@@ -114,6 +114,11 @@ class ExclusiveAccessManager {
+  private:
+   void HandleUserHeldEscape();
+ 
++  // Stedding (toolbar T45): the profile's "Show how to leave full screen"
++  // (stedding.window.fullscreen_hint, off by default), for full screen the
++  // person starts. False without a profile.
++  bool ShowsBrowserFullscreenHint() const;
++
+   // The timer starts on Esc key down event and stops on Esc key up event. It
+   // invokes `HandleUserHeldEscape()` when the timer is fired.
+   base::OneShotTimer esc_key_hold_timer_;
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 7a9c335e0ba38..ea5bbf3f21165 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -444,6 +444,7 @@ source_set("app_updater") {
+   sources = [ "app_updater.cc" ]
+   public_deps = [ "//base" ]
+   if (is_mac) {
++    public += [ "app_updater_mac.h" ]
+     sources += [ "app_updater_mac.mm" ]
+     deps = [
+       ":prefs",
+@@ -690,6 +691,12 @@ source_set("unit_tests") {
+     "//ui/gfx/animation",
+     "//url",
+   ]
++  if (is_mac) {
++    # updates Up1, Up6: the Mac updater's schedule, over a stand-in for
++    # Sparkle.
++    sources += [ "app_updater_mac_unittest.mm" ]
++    deps += [ ":app_updater" ]
++  }
+   if (is_win) {
+     # updates Up14-Up20: the Windows updater's flow, on a test key.
+     sources += [ "app_updater_win_unittest.cc" ]
+diff --git a/chrome/browser/ui/stedding/app_updater.cc b/chrome/browser/ui/stedding/app_updater.cc
+index 60bbd995dba04..c169aa177d759 100644
+--- a/chrome/browser/ui/stedding/app_updater.cc
++++ b/chrome/browser/ui/stedding/app_updater.cc
+@@ -96,6 +96,10 @@ bool OffersRestart(AppUpdater::State state) {
+          state == AppUpdater::State::kAvailable;
+ }
+ 
++bool LaunchCheckIsDue(base::Time last, base::Time now) {
++  return last.is_null() || now - last > kLaunchCheckAge;
++}
++
+ #if !BUILDFLAG(IS_MAC)
+ // Not the Mac's way: Windows starts its updater with a URL loader factory
+ // (app_updater_win.cc); elsewhere there is none yet, releases are installed
+diff --git a/chrome/browser/ui/stedding/app_updater.h b/chrome/browser/ui/stedding/app_updater.h
+index 6a8e5fe86f0dc..0d3fb28cb4d41 100644
+--- a/chrome/browser/ui/stedding/app_updater.h
++++ b/chrome/browser/ui/stedding/app_updater.h
+@@ -11,6 +11,7 @@
+ #include "base/memory/scoped_refptr.h"
+ #include "base/observer_list.h"
+ #include "base/observer_list_types.h"
++#include "base/time/time.h"
+ #include "build/build_config.h"
+ 
+ class PrefService;
+@@ -104,6 +105,20 @@ class AppUpdater {
+   base::ObserverList<Observer> observers_;
+ };
+ 
++// updates Up1, Up14 (the owner's decision of 2026-10-21): with automatic
++// updates on, the browser checks at launch when the last check is more than
++// an hour old, and every six hours while it runs; never more often than once
++// an hour, however often it is launched. Sparkle's schedule on the Mac
++// (SUScheduledCheckInterval in chrome/app/app-Info.plist) is the same six
++// hours.
++inline constexpr base::TimeDelta kUpdateCheckInterval = base::Hours(6);
++inline constexpr base::TimeDelta kLaunchCheckAge = base::Hours(1);
++
++// Whether a launch at `now` checks for updates, the last check having been
++// made at `last` (null: never). A last check later than `now` (the clock was
++// set back) counts as a recent one.
++bool LaunchCheckIsDue(base::Time last, base::Time now);
++
+ // updates Up3, Up4: the states in which the sidebar shows its "New Stedding
+ // Version Available" button and the command bar its Restart to Update row.
+ bool OffersRestart(AppUpdater::State state);
+diff --git a/chrome/browser/ui/stedding/app_updater_mac.h b/chrome/browser/ui/stedding/app_updater_mac.h
+new file mode 100644
+index 0000000000000..5b40151681182
+--- /dev/null
++++ b/chrome/browser/ui/stedding/app_updater_mac.h
+@@ -0,0 +1,30 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_APP_UPDATER_MAC_H_
++#define CHROME_BROWSER_UI_STEDDING_APP_UPDATER_MAC_H_
++
++#include <objc/objc.h>
++
++#include <memory>
++
++#include "base/functional/callback.h"
++
++class PrefService;
++
++namespace stedding {
++
++class AppUpdater;
++
++// The Mac's updater over `updater_class`: Sparkle's SPUUpdater, loaded from
++// the app bundle, or a test's stand-in for it. It is AppUpdater::Get() while
++// it lives. For tests: the browser makes it through StartAppUpdater.
++std::unique_ptr<AppUpdater> CreateSparkleAppUpdater(
++    Class updater_class,
++    PrefService* local_state,
++    base::RepeatingClosure prepare_restart);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_APP_UPDATER_MAC_H_
+diff --git a/chrome/browser/ui/stedding/app_updater_mac.mm b/chrome/browser/ui/stedding/app_updater_mac.mm
+index 91ed9b176f58f..c4d500dafd1b5 100644
+--- a/chrome/browser/ui/stedding/app_updater_mac.mm
++++ b/chrome/browser/ui/stedding/app_updater_mac.mm
+@@ -2,7 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-#include "chrome/browser/ui/stedding/app_updater.h"
++#include "chrome/browser/ui/stedding/app_updater_mac.h"
+ 
+ #import <Foundation/Foundation.h>
+ #include <Security/Security.h>
+@@ -25,6 +25,7 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
+ #include "base/timer/timer.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/stedding_version.h"
+ #include "components/prefs/pref_change_registrar.h"
+@@ -68,10 +69,12 @@ constexpr NSInteger kSparkleInstallationCanceledError = 4007;
+                           delegate:(id)delegate;
+ - (BOOL)startUpdater:(NSError**)error;
+ - (void)checkForUpdates;
++- (void)checkForUpdatesInBackground;
+ @property(nonatomic) BOOL automaticallyChecksForUpdates;
+ @property(nonatomic) BOOL automaticallyDownloadsUpdates;
+ @property(nonatomic) BOOL sendsSystemProfile;
+ @property(nonatomic, readonly) BOOL canCheckForUpdates;
++@property(nonatomic, readonly, copy) NSDate* lastUpdateCheckDate;
+ @end
+ 
+ @protocol SteddingSparkleItem <NSObject>
+@@ -99,7 +102,7 @@ namespace {
+ // How long a restart may take before the button comes back: a page's "Leave
+ // site?" or the downloads' warning can stop the quit (updates Up3).
+ constexpr base::TimeDelta kQuitGrace = base::Seconds(20);
+-// The first scheduled check waits for startup to settle.
++// Sparkle starts, and a launch's check is made, once startup has settled.
+ constexpr base::TimeDelta kStartDelay = base::Seconds(10);
+ 
+ class SparkleAppUpdater;
+@@ -399,7 +402,27 @@ class SparkleAppUpdater : public AppUpdater {
+   }
+ 
+  private:
+-  void StartOnSchedule() { Start(); }
++  // updates Up1 (the owner's decision of 2026-10-21): Sparkle's schedule
++  // checks every six hours from the last check (SUScheduledCheckInterval), and
++  // a launch more than an hour after the last check checks at once: the same
++  // background check, asked for right after Sparkle starts, as its
++  // documentation says to, so that it stands in for the schedule's first.
++  void StartOnSchedule() {
++    // The setting went off during the delay.
++    if (!Automatic()) {
++      return;
++    }
++    // Started already: the user's Check for Updates was the launch's check.
++    const bool started_already = started_;
++    if (!Start() || started_already) {
++      return;
++    }
++    NSDate* const last = updater_.lastUpdateCheckDate;
++    if (LaunchCheckIsDue(last ? base::Time::FromNSDate(last) : base::Time(),
++                         base::Time::Now())) {
++      [updater_ checkForUpdatesInBackground];
++    }
++  }
+ 
+   // Starts Sparkle's schedule; false if Sparkle refused its configuration.
+   bool Start() {
+@@ -478,6 +501,18 @@ class SparkleAppUpdater : public AppUpdater {
+   base::WeakPtrFactory<SparkleAppUpdater> weak_factory_{this};
+ };
+ 
++}  // namespace
++
++std::unique_ptr<AppUpdater> CreateSparkleAppUpdater(
++    Class updater_class,
++    PrefService* local_state,
++    base::RepeatingClosure prepare_restart) {
++  return std::make_unique<SparkleAppUpdater>(updater_class, local_state,
++                                             std::move(prepare_restart));
++}
++
++namespace {
++
+ // ADR 0022: whether the running browser is signed by a team -- a release,
+ // or a test build signed the same way. A build made here is signed ad hoc,
+ // and it must never be replaced by a release at its next quit.
+@@ -533,9 +568,9 @@ void StartAppUpdater(PrefService* local_state,
+     return;
+   }
+   // The process's for as long as it runs.
+-  static base::NoDestructor<std::unique_ptr<SparkleAppUpdater>> updater;
+-  *updater = std::make_unique<SparkleAppUpdater>(updater_class, local_state,
+-                                                 std::move(prepare_restart));
++  static base::NoDestructor<std::unique_ptr<AppUpdater>> updater;
++  *updater = CreateSparkleAppUpdater(updater_class, local_state,
++                                     std::move(prepare_restart));
+ }
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/app_updater_mac_unittest.mm b/chrome/browser/ui/stedding/app_updater_mac_unittest.mm
+new file mode 100644
+index 0000000000000..587bcb2150fed
+--- /dev/null
++++ b/chrome/browser/ui/stedding/app_updater_mac_unittest.mm
+@@ -0,0 +1,191 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/app_updater_mac.h"
++
++#import <Foundation/Foundation.h>
++
++#include <memory>
++#include <optional>
++
++#include "base/apple/foundation_util.h"
++#include "base/base_paths.h"
++#include "base/files/file_path.h"
++#include "base/functional/callback_helpers.h"
++#include "base/path_service.h"
++#include "base/test/task_environment.h"
++#include "base/time/time.h"
++#include "chrome/browser/ui/stedding/app_updater.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/prefs/testing_pref_service.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace {
++
++// What the browser asked of the stand-in for Sparkle.
++struct FakeSparkle {
++  NSDate* __strong last_check = nil;
++  int starts = 0;
++  int background_checks = 0;
++  int user_checks = 0;
++};
++
++FakeSparkle* g_sparkle = nullptr;
++
++}  // namespace
++
++// A stand-in for Sparkle's SPUUpdater: it answers as Sparkle does and counts
++// what it is asked to do. Sparkle's own schedule is not run.
++@interface SteddingFakeSparkleUpdater : NSObject
++@property(nonatomic) BOOL automaticallyChecksForUpdates;
++@property(nonatomic) BOOL automaticallyDownloadsUpdates;
++@property(nonatomic) BOOL sendsSystemProfile;
++@end
++
++@implementation SteddingFakeSparkleUpdater
++
++@synthesize automaticallyChecksForUpdates = _automaticallyChecksForUpdates;
++@synthesize automaticallyDownloadsUpdates = _automaticallyDownloadsUpdates;
++@synthesize sendsSystemProfile = _sendsSystemProfile;
++
++- (instancetype)initWithHostBundle:(NSBundle*)hostBundle
++                 applicationBundle:(NSBundle*)applicationBundle
++                        userDriver:(id)userDriver
++                          delegate:(id)delegate {
++  return [super init];
++}
++
++- (BOOL)startUpdater:(NSError**)error {
++  ++g_sparkle->starts;
++  return YES;
++}
++
++- (void)checkForUpdates {
++  ++g_sparkle->user_checks;
++}
++
++- (void)checkForUpdatesInBackground {
++  ++g_sparkle->background_checks;
++}
++
++- (BOOL)canCheckForUpdates {
++  return YES;
++}
++
++- (NSDate*)lastUpdateCheckDate {
++  return g_sparkle->last_check;
++}
++
++@end
++
++namespace stedding {
++namespace {
++
++class AppUpdaterMacTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    prefs::RegisterLocalStatePrefs(local_state_.registry());
++    g_sparkle = &sparkle_;
++  }
++
++  void TearDown() override {
++    updater_.reset();
++    g_sparkle = nullptr;
++  }
++
++  // A launch, `since_last_check` after Sparkle's last check (none: it never
++  // checked).
++  void Launch(std::optional<base::TimeDelta> since_last_check) {
++    updater_.reset();
++    sparkle_ = FakeSparkle();
++    if (since_last_check) {
++      sparkle_.last_check = (base::Time::Now() - *since_last_check).ToNSDate();
++    }
++    updater_ = CreateSparkleAppUpdater([SteddingFakeSparkleUpdater class],
++                                       &local_state_, base::DoNothing());
++  }
++
++  base::test::TaskEnvironment task_environment_{
++      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
++  TestingPrefServiceSimple local_state_;
++  FakeSparkle sparkle_;
++  std::unique_ptr<AppUpdater> updater_;
++};
++
++// updates Up1 (the owner's decision of 2026-10-21): ten seconds after a launch
++// more than an hour after the last check, the browser starts Sparkle and asks
++// it for a background check; a launch within the hour of a check only starts
++// Sparkle, whose six-hour schedule makes the next.
++TEST_F(AppUpdaterMacTest, ALaunchChecksWhenTheLastCheckIsOverAnHourOld) {
++  Launch(base::Minutes(30));
++  task_environment_.FastForwardBy(base::Seconds(10));
++  EXPECT_EQ(1, sparkle_.starts) << "Sparkle's schedule runs";
++  EXPECT_EQ(0, sparkle_.background_checks) << "half an hour after a check";
++
++  Launch(base::Hours(2));
++  task_environment_.FastForwardBy(base::Seconds(9));
++  EXPECT_EQ(0, sparkle_.starts) << "nothing before ten seconds";
++  EXPECT_EQ(0, sparkle_.background_checks);
++  task_environment_.FastForwardBy(base::Seconds(1));
++  EXPECT_EQ(1, sparkle_.starts);
++  EXPECT_EQ(1, sparkle_.background_checks) << "two hours after a check";
++  task_environment_.FastForwardBy(base::Days(1));
++  EXPECT_EQ(1, sparkle_.background_checks)
++      << "after the launch's check, Sparkle's schedule makes the next";
++
++  Launch(std::nullopt);
++  task_environment_.FastForwardBy(base::Seconds(10));
++  EXPECT_EQ(1, sparkle_.background_checks) << "a copy that never checked";
++  EXPECT_EQ(0, sparkle_.user_checks);
++}
++
++// updates Up6: with automatic updates off a launch neither starts Sparkle nor
++// checks, and turning them off during the ten seconds is as good.
++TEST_F(AppUpdaterMacTest, WithAutomaticUpdatesOffALaunchMakesNoCheck) {
++  local_state_.SetBoolean(prefs::kUpdatesAutomatic, false);
++  Launch(base::Hours(2));
++  task_environment_.FastForwardBy(base::Days(1));
++  EXPECT_EQ(0, sparkle_.starts);
++  EXPECT_EQ(0, sparkle_.background_checks);
++
++  local_state_.SetBoolean(prefs::kUpdatesAutomatic, true);
++  Launch(base::Hours(2));
++  task_environment_.FastForwardBy(base::Seconds(5));
++  local_state_.SetBoolean(prefs::kUpdatesAutomatic, false);
++  task_environment_.FastForwardBy(base::Days(1));
++  EXPECT_EQ(0, sparkle_.background_checks);
++}
++
++// updates Up7: Check for Updates during the ten seconds is the launch's
++// check; no background check follows it.
++TEST_F(AppUpdaterMacTest, ACheckTheUserAsksForAtLaunchIsTheLaunchsCheck) {
++  Launch(base::Hours(2));
++  updater_->CheckNow();
++  EXPECT_EQ(1, sparkle_.user_checks);
++  EXPECT_EQ(AppUpdater::State::kChecking, updater_->state());
++  task_environment_.FastForwardBy(base::Seconds(10));
++  EXPECT_EQ(1, sparkle_.starts);
++  EXPECT_EQ(0, sparkle_.background_checks);
++}
++
++// updates Up1: Sparkle's schedule, which the app's Info.plist sets, is the
++// browser's six hours.
++TEST_F(AppUpdaterMacTest, SparklesScheduleIsSixHours) {
++  base::FilePath src;
++  ASSERT_TRUE(base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &src));
++  NSDictionary* const plist = [NSDictionary
++      dictionaryWithContentsOfURL:base::apple::FilePathToNSURL(src.AppendASCII(
++                                      "chrome/app/app-Info.plist"))];
++  ASSERT_TRUE(plist);
++  NSNumber* const interval =
++      base::apple::ObjCCast<NSNumber>(plist[@"SUScheduledCheckInterval"]);
++  ASSERT_TRUE(interval);
++  EXPECT_EQ(kUpdateCheckInterval.InSeconds(), interval.longLongValue);
++  EXPECT_EQ(21600, interval.longLongValue);
++  EXPECT_TRUE([base::apple::ObjCCast<NSNumber>(
++      plist[@"SUEnableAutomaticChecks"]) boolValue]);
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/app_updater_win.cc b/chrome/browser/ui/stedding/app_updater_win.cc
+index fd14a4c65ccb4..20ab49fcaab76 100644
+--- a/chrome/browser/ui/stedding/app_updater_win.cc
++++ b/chrome/browser/ui/stedding/app_updater_win.cc
+@@ -4,7 +4,8 @@
+ 
+ // docs/features/updates.md Up14-Up21, ADR 0023, ADR 0026: Stedding updates
+ // itself on Windows, as on the Mac, but with no Sparkle: the browser reads
+-// its signed feed once a day, downloads a later per-user installer, checks
++// its signed feed at launch when the last check is more than an hour old and
++// every six hours while it runs, downloads a later per-user installer, checks
+ // its length and its Ed25519 signature, and runs it hidden beside the running
+ // browser. The installer puts the new version beside the old one and leaves
+ // new_chrome.exe; the sidebar's pill then offers the restart, and Chromium's
+@@ -62,10 +63,10 @@ namespace {
+ 
+ using State = AppUpdater::State;
+ 
+-// updates Up14: as the Mac's, ten seconds after launch when a day has passed
+-// since the last check, then once a day.
++// updates Up14: as the Mac's, ten seconds after a launch more than an hour
++// after the last check (kLaunchCheckAge), then every six hours
++// (kUpdateCheckInterval).
+ constexpr base::TimeDelta kStartDelay = base::Seconds(10);
+-constexpr base::TimeDelta kCheckInterval = base::Days(1);
+ // A quit the browser cancelled ("Leave site?", downloads) brings the pill
+ // back (updates Up3).
+ constexpr base::TimeDelta kQuitGrace = base::Seconds(20);
+@@ -77,7 +78,7 @@ constexpr base::TimeDelta kInstallTimeout = base::Minutes(10);
+ constexpr base::TimeDelta kFeedTimeout = base::Minutes(1);
+ constexpr base::TimeDelta kDownloadTimeout = base::Hours(2);
+ // A check that could not reach the feed tries again within the hour rather
+-// than a day later: a copy offline at launch is not left a day behind.
++// than six hours later: a copy offline at launch is not left behind.
+ constexpr base::TimeDelta kRetryDelay = base::Hours(1);
+ // What the downloads' folders are called (base::CreateNewTempDirectory adds
+ // to it), and how old one must be before a launch clears it away.
+@@ -102,13 +103,14 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+         semantics {
+           sender: "Stedding updater"
+           description:
+-            "Once a day, and when the user asks, Stedding on Windows reads "
+-            "its signed update feed from the project's GitHub repository and, "
+-            "when a later version is listed, downloads its installer from the "
+-            "project's GitHub releases."
++            "Every six hours, and when the user asks, Stedding on Windows "
++            "reads its signed update feed from the project's GitHub "
++            "repository and, when a later version is listed, downloads its "
++            "installer from the project's GitHub releases."
+           trigger:
+-            "Ten seconds after launch when a day has passed since the last "
+-            "check, once a day after that, or the user's Check for Updates."
++            "Ten seconds after a launch more than an hour after the last "
++            "check, every six hours after that, or the user's Check for "
++            "Updates."
+           data: "None: the request carries no cookies and no machine data."
+           destination: OTHER
+           destination_other:
+@@ -117,7 +119,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+             "(release-assets.githubusercontent.com)."
+           # Contact: the repository's Security tab (SECURITY.md).
+           user_data { type: NONE }
+-          last_reviewed: "2026-10-19"
++          last_reviewed: "2026-10-21"
+         }
+         policy {
+           cookies_allowed: NO
+@@ -271,7 +273,7 @@ class WinAppUpdater : public AppUpdater {
+       SetState(State::kReady);
+       return;
+     }
+-    ScheduleCheck();
++    ScheduleCheck(/*at_launch=*/true);
+   }
+ 
+   ~WinAppUpdater() override = default;
+@@ -315,17 +317,22 @@ class WinAppUpdater : public AppUpdater {
+     return local_state_->GetBoolean(prefs::kUpdatesAutomatic);
+   }
+ 
+-  // updates Up14, Up20: the next check, a day after the last one and never
+-  // sooner than ten seconds after launch; with automatic updates off, none.
+-  void ScheduleCheck() {
++  // updates Up14, Up20 (the owner's decision of 2026-10-21): the next check,
++  // ten seconds after a launch more than an hour after the last one,
++  // otherwise six hours after the last one and never sooner than ten seconds
++  // from now; with automatic updates off, none. A last check later than now
++  // (the clock was set back) waits six hours, not longer.
++  void ScheduleCheck(bool at_launch = false) {
+     timer_.Stop();
+     if (!Automatic()) {
+       return;
+     }
+     const base::Time last = local_state_->GetTime(prefs::kUpdatesLastCheck);
++    const base::Time now = base::Time::Now();
+     base::TimeDelta delay = kStartDelay;
+-    if (!last.is_null()) {
+-      delay = std::max(delay, last + kCheckInterval - base::Time::Now());
++    if (!last.is_null() && !(at_launch && LaunchCheckIsDue(last, now))) {
++      delay = std::clamp(last + kUpdateCheckInterval - now, kStartDelay,
++                         kUpdateCheckInterval);
+     }
+     timer_.Start(FROM_HERE, delay,
+                  base::BindOnce(&WinAppUpdater::Check, base::Unretained(this)));
+@@ -355,12 +362,12 @@ class WinAppUpdater : public AppUpdater {
+   void OnFeed(std::optional<std::string> body) {
+     loader_.reset();
+     if (!body) {
+-      // Not the day's check: the next one comes within the hour.
++      // Not a check that counts: the next one comes within the hour.
+       retry_soon_ = true;
+       Fail(u"Stedding could not reach its update server.");
+       return;
+     }
+-    // updates Up14: the server answered, so this was the day's check.
++    // updates Up14: the server answered, so this was a check.
+     local_state_->SetTime(prefs::kUpdatesLastCheck, base::Time::Now());
+     // updates Up15: nothing in a feed is read until its signature verifies.
+     const std::optional<std::string_view> signed_body =
+@@ -512,8 +519,8 @@ class WinAppUpdater : public AppUpdater {
+ 
+   // A check that found nothing, or failed: an answer for the user who asked,
+   // or for anyone watching once a download had begun (the pill, About), and
+-  // the next check a day on. A background check that found nothing, or could
+-  // not reach the feed, says nothing.
++  // the next check six hours on. A background check that found nothing, or
++  // could not reach the feed, says nothing.
+   void Finish(State result) {
+     busy_ = false;
+     if (user_asked_ || state() == State::kChecking ||
+diff --git a/chrome/browser/ui/stedding/app_updater_win_unittest.cc b/chrome/browser/ui/stedding/app_updater_win_unittest.cc
+index 2c8f60d81a9e2..02409a9e7c930 100644
+--- a/chrome/browser/ui/stedding/app_updater_win_unittest.cc
++++ b/chrome/browser/ui/stedding/app_updater_win_unittest.cc
+@@ -131,6 +131,14 @@ class WinAppUpdaterTest : public testing::Test, public AppUpdater::Observer {
+     loader_factory_.AddResponse(kInstallerUrl, installer);
+   }
+ 
++  // A feed listing beta 19, for a copy that runs beta 19.
++  void ServeNothingLater() {
++    const std::string installer = "MZ the beta 19 installer";
++    Serve(
++        SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()),
++        installer);
++  }
++
+   // AppUpdater::Observer:
+   void OnAppUpdaterChanged() override { states_.push_back(updater_->state()); }
+ 
+@@ -238,7 +246,8 @@ TEST_F(WinAppUpdaterTest, NothingLaterIsUpToDateAndAFailedInstallSaysSo) {
+ }
+ 
+ // updates Up20: with automatic updates off no request is made until the
+-// user asks; a check a day ago means the next one is a day after it.
++// user asks, not even at a launch two hours after the last check; turning
++// them on schedules the next check six hours after the last one.
+ TEST_F(WinAppUpdaterTest, AutomaticOffAsksNothingUntilTheUserDoes) {
+   const std::string installer = "MZ the beta 19 installer";
+   Serve(SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()),
+@@ -254,16 +263,86 @@ TEST_F(WinAppUpdaterTest, AutomaticOffAsksNothingUntilTheUserDoes) {
+   EXPECT_EQ(State::kReady, updater_->state());
+ 
+   updater_.reset();
+-  local_state_.SetBoolean(prefs::kUpdatesAutomatic, true);
+   local_state_.SetTime(prefs::kUpdatesLastCheck,
+-                       base::Time::Now() - base::Hours(6));
++                       base::Time::Now() - base::Hours(2));
+   const size_t before = loader_factory_.total_requests();
+-  Start();
+-  task_environment_.FastForwardBy(base::Hours(17));
++  // Running beta 19 now: a check is the feed's request alone.
++  Start(/*running=*/"156.2.0.19");
++  task_environment_.FastForwardBy(base::Hours(1));
++  EXPECT_EQ(before, loader_factory_.total_requests())
++      << "off: a launch two hours after a check makes none";
++  local_state_.SetBoolean(prefs::kUpdatesAutomatic, true);
++  task_environment_.FastForwardBy(base::Hours(2) + base::Minutes(59));
+   EXPECT_EQ(before, loader_factory_.total_requests())
+-      << "a check six hours ago: the next is due in eighteen";
+-  task_environment_.FastForwardBy(base::Hours(2));
+-  EXPECT_LT(before, loader_factory_.total_requests());
++      << "turned on three hours after a check: the next is due in three";
++  task_environment_.FastForwardBy(base::Minutes(2));
++  EXPECT_EQ(before + 1, loader_factory_.total_requests());
++}
++
++// updates Up14 (the owner's decision of 2026-10-21): a launch half an hour
++// after a check makes none; the next comes six hours after that check.
++TEST_F(WinAppUpdaterTest, ALaunchWithinAnHourOfACheckMakesNone) {
++  ServeNothingLater();
++  local_state_.SetTime(prefs::kUpdatesLastCheck,
++                       base::Time::Now() - base::Minutes(30));
++  Start(/*running=*/"156.2.0.19");
++  task_environment_.FastForwardBy(base::Hours(5) + base::Minutes(29));
++  EXPECT_EQ(0u, loader_factory_.total_requests());
++  task_environment_.FastForwardBy(base::Minutes(2));
++  EXPECT_EQ(1u, loader_factory_.total_requests())
++      << "six hours after the last check";
++}
++
++// updates Up14: a launch two hours after a check makes one, ten seconds in,
++// and says nothing when there is nothing later.
++TEST_F(WinAppUpdaterTest, ALaunchTwoHoursAfterACheckMakesOne) {
++  ServeNothingLater();
++  const base::Time last = base::Time::Now() - base::Hours(2);
++  local_state_.SetTime(prefs::kUpdatesLastCheck, last);
++  Start(/*running=*/"156.2.0.19");
++  task_environment_.FastForwardBy(base::Seconds(9));
++  EXPECT_EQ(0u, loader_factory_.total_requests()) << "not before ten seconds";
++  task_environment_.FastForwardBy(base::Seconds(2));
++  EXPECT_EQ(1u, loader_factory_.total_requests());
++  EXPECT_LT(last, local_state_.GetTime(prefs::kUpdatesLastCheck));
++  EXPECT_EQ(State::kIdle, updater_->state());
++}
++
++// updates Up14: a running browser checks every six hours after its last
++// check.
++TEST_F(WinAppUpdaterTest, ARunningBrowserChecksEverySixHours) {
++  ServeNothingLater();
++  Start(/*running=*/"156.2.0.19");
++  task_environment_.FastForwardBy(base::Seconds(11));
++  EXPECT_EQ(1u, loader_factory_.total_requests());
++  task_environment_.FastForwardBy(base::Hours(6) - base::Seconds(2));
++  EXPECT_EQ(1u, loader_factory_.total_requests());
++  task_environment_.FastForwardBy(base::Seconds(2));
++  EXPECT_EQ(2u, loader_factory_.total_requests());
++  task_environment_.FastForwardBy(base::Hours(6));
++  EXPECT_EQ(3u, loader_factory_.total_requests());
++}
++
++// updates Up14: however often the browser is launched, it checks no more
++// than once an hour.
++TEST_F(WinAppUpdaterTest, LaunchesCheckNoMoreThanOnceAnHour) {
++  ServeNothingLater();
++  Start(/*running=*/"156.2.0.19");
++  task_environment_.FastForwardBy(base::Seconds(11));
++  EXPECT_EQ(1u, loader_factory_.total_requests());
++  for (int launch = 0; launch < 3; ++launch) {
++    updater_.reset();
++    task_environment_.FastForwardBy(base::Minutes(15));
++    Start(/*running=*/"156.2.0.19");
++    task_environment_.FastForwardBy(base::Seconds(11));
++    EXPECT_EQ(1u, loader_factory_.total_requests()) << "launch " << launch;
++  }
++  updater_.reset();
++  task_environment_.FastForwardBy(base::Minutes(15));
++  Start(/*running=*/"156.2.0.19");
++  task_environment_.FastForwardBy(base::Seconds(11));
++  EXPECT_EQ(2u, loader_factory_.total_requests())
++      << "the first launch more than an hour after the check";
+ }
+ 
+ // updates Up17: an update installed and not yet restarted into offers the
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index b5ed193301331..b5f4f80486abe 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -54,7 +54,16 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kHoldCmdNumbers, true);
+   registry->RegisterBooleanPref(kMarkLocalTabs, true);
+   registry->RegisterBooleanPref(kCtrlTabMru, true);
+-  registry->RegisterBooleanPref(kUndoToast, true);
++  // tabs R30, routing D4, toolbar T45: hints are off until the user asks for
++  // them (the owner, 2026-10-21). A profile that never wrote
++  // the undo toast's setting takes the new default; only the Settings switch
++  // ever wrote it, so a profile that has a value keeps its user's choice.
++  registry->RegisterBooleanPref(kUndoToast, false);
++  registry->RegisterBooleanPref(kSpaceNotices, false);
++  registry->RegisterBooleanPref(kFullscreenHint, false);
++  // sessions S33: the warning that a pin signs a tab out stays on (the owner,
++  // 2026-10-21).
++  registry->RegisterBooleanPref(kPinSignoutWarning, true);
+   registry->RegisterListPref(kArcImportedIds);
+   registry->RegisterDictionaryPref(kArcImportedSpaces);
+   registry->RegisterDictionaryPref(kArcImportedFolders);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 69dfdc7473000..e4c02d838563c 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -129,8 +129,22 @@ inline constexpr char kSidebarPageFlush[] = "stedding.sidebar.page_flush";
+ // it walks the sidebar in order.
+ inline constexpr char kCtrlTabMru[] = "stedding.tabs.ctrl_tab_mru";
+ // tabs R30 (BACKLOG S-97): a close the user makes shows a toast whose Undo
+-// reopens it where it was (R25-R27). On by default.
++// reopens it where it was (R25-R27). Off by default since 2026-10-21 (the
++// owner): Shift-Cmd-T still reopens closed tabs.
+ inline constexpr char kUndoToast[] = "stedding.tabs.undo_toast";
++// routing D4, settings T23: "Opened in <Space>", with Undo, after a routed
++// open. Off by default (the owner, 2026-10-21).
++inline constexpr char kSpaceNotices[] = "stedding.spaces.notices";
++// sessions S33, settings T25: the warning, with Undo, when a pin takes a tab
++// out of its Space's Independent session and so signs it out. On by default
++// (the owner, 2026-10-21).
++inline constexpr char kPinSignoutWarning[] =
++    "stedding.spaces.pin_signout_warning";
++// toolbar T45, settings T24: full screen the person starts (the menu, the
++// green button, the chord, F11, the command bar) shows Chromium's note on how
++// to leave it. Off by default (the owner, 2026-10-21). A page's own full
++// screen always shows its note.
++inline constexpr char kFullscreenHint[] = "stedding.window.fullscreen_hint";
+ // import I12: Arc's item ids already brought over, and Arc's Space ids to
+ // the Spaces they became, so a second import adds nothing twice.
+ inline constexpr char kArcImportedIds[] = "stedding.import.arc_ids";
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index cafee129be5af..eb3f97ddc1e63 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -13,24 +13,28 @@ namespace stedding::prefs {
+ namespace {
+ 
+ // settings T2: every Stedding preference registers with the default its
+-// spec names: on, the link address on hover (page U9) and the undo toast
+-// (tabs R30) among them, except Peek, which is off while it is rebuilt, the
+-// address row's hiding with the sidebar, off since 2026-10-01 (toolbar T8),
+-// the page flush against the window, off until the user chooses it (sidebar
+-// Y23), the Space sleep timer, which is Never until sleep is gated, and
+-// auto-archive, Never since 2026-10-11 (archive A6).
++// spec names: on, the link address on hover (page U9) and the warning that a
++// pin signs a tab out (sessions S33) among them, except
++// Peek, which is off while it is rebuilt, the address row's hiding with the
++// sidebar, off since 2026-10-01 (toolbar T8), the page flush against the
++// window, off until the user chooses it (sidebar Y23), the hints the owner
++// turned off on 2026-10-21 -- the undo toast (tabs R30), the routed notice
++// (routing D4) and the note on how to leave full screen
++// (toolbar T45) --, the Space sleep timer, which is Never until sleep is
++// gated, and auto-archive, Never since 2026-10-11 (archive A6).
+ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   sync_preferences::TestingPrefServiceSyncable service;
+   RegisterProfilePrefs(service.registry());
+   for (const char* name :
+        {kNewTabShowHint, kNewTabShowShortcuts, kCopyStripTracking, kUiAnimate,
+         kShowLinkAddress, kPinsCloseSleeps, kMenusShort, kHoldCmdNumbers,
+-        kDarkPagesButton, kMarkLocalTabs, kLittleEnabled, kUndoToast}) {
++        kDarkPagesButton, kMarkLocalTabs, kLittleEnabled, kPinSignoutWarning}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_TRUE(service.GetBoolean(name)) << name;
+   }
+   for (const char* name :
+-       {kPeekEnabled, kToolbarHideWithSidebar, kSidebarPageFlush}) {
++       {kPeekEnabled, kToolbarHideWithSidebar, kSidebarPageFlush, kUndoToast,
++        kSpaceNotices, kFullscreenHint}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_FALSE(service.GetBoolean(name)) << name;
+   }
+diff --git a/chrome/browser/ui/views/spaces/BUILD.gn b/chrome/browser/ui/views/spaces/BUILD.gn
+index 15f3b875f466a..c033f9a43e6e1 100644
+--- a/chrome/browser/ui/views/spaces/BUILD.gn
++++ b/chrome/browser/ui/views/spaces/BUILD.gn
+@@ -36,6 +36,8 @@ source_set("spaces") {
+     "//chrome/browser/ui/color:color_headers",
+     "//chrome/browser/ui/toasts",
+     "//chrome/browser/ui/toasts/api:toasts",
++    # routing D4, sessions S33: the switches for their notices.
++    "//chrome/browser/ui/stedding:prefs",
+     # splits J10 (BACKLOG S-113): Chromium's "Create split view" words.
+     "//chrome/app:generated_resources",
+     "//chrome/browser/ui/views/stedding:glyph_ink",
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index 055d5a6bc5770..e653b2d66b856 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -19,12 +19,14 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "build/build_config.h"
+ #include "cc/paint/paint_flags.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/spaces/isolation_mark.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_colors.h"
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/toasts/api/toast_id.h"
+ #include "chrome/browser/ui/toasts/toast_controller.h"
+@@ -33,6 +35,7 @@
+ #include "chrome/browser/ui/views/stedding/glyph_ink.h"
+ #include "chrome/browser/ui/views/stedding/isolation_mark_view.h"
+ #include "chrome/browser/ui/views/stedding/rename_field_watcher.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/vector_icons/vector_icons.h"
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -1258,7 +1261,11 @@ void SpaceSwitcherView::OnSpaceMetadataChanged(const SpaceId& id) {
+ void SpaceSwitcherView::OnTabRouted(tabs::TabInterface* tab,
+                                     const SpaceId& from,
+                                     const SpaceId& to) {
+-  // routing D4: "Opened in <Space> · Undo".
++  // routing D4: "Opened in <Space> · Undo", while "Show notices about Spaces"
++  // is on (off by default, settings T23).
++  if (!ProfilePrefOn(stedding::prefs::kSpaceNotices)) {
++    return;
++  }
+   ToastController* const toasts = ToastController::From(&*browser_);
+   if (!toasts) {
+     return;
+@@ -1275,7 +1282,12 @@ void SpaceSwitcherView::OnTabRouted(tabs::TabInterface* tab,
+ }
+ 
+ void SpaceSwitcherView::OnTabsPinnedOutOfSession(const SpaceId& from) {
+-  // sessions S33: "Essentials use the shared session, not Work's · Undo".
++  // sessions S33: "Essentials use the shared session, not Work's · Undo",
++  // while "Warn when pinning signs a tab out" is on (on by default, settings
++  // T25).
++  if (!ProfilePrefOn(stedding::prefs::kPinSignoutWarning)) {
++    return;
++  }
+   ToastController* const toasts = ToastController::From(&*browser_);
+   if (!toasts) {
+     return;
+@@ -1285,6 +1297,11 @@ void SpaceSwitcherView::OnTabsPinnedOutOfSession(const SpaceId& from) {
+   toasts->MaybeShowToast(std::move(params));
+ }
+ 
++bool SpaceSwitcherView::ProfilePrefOn(const char* name) const {
++  const Profile* const profile = browser_->GetProfile();
++  return profile && profile->GetPrefs()->GetBoolean(name);
++}
++
+ void SpaceSwitcherView::OnThemeChanged() {
+   views::View::OnThemeChanged();
+   Rebuild();
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.h b/chrome/browser/ui/views/spaces/space_switcher_view.h
+index 093749b5a4cbd..c7f3dc3da4c21 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.h
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.h
+@@ -163,6 +163,9 @@ class SpaceSwitcherView : public views::View,
+                       const ui::KeyEvent& event) override;
+ 
+  private:
++  // routing D4, sessions S33: the profile's boolean preference `name`, the
++  // switch for the notice it gates (settings T23, T25).
++  bool ProfilePrefOn(const char* name) const;
+   // Discards the pills and builds them again from the model. The row is at most
+   // a handful of buttons, so rebuilding is simpler and less error-prone than
+   // reconciling, and it happens only when Spaces change.
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 577b199fc88a9..b272475c602d7 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -889,6 +889,21 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingHoverDelay5s", "After 5 seconds");
+   html_source->AddString("steddingArchiveKeep30d", "30 days");
+   html_source->AddString("steddingArchiveKeep90d", "90 days");
++  // routing D4, settings T23 (the owner, 2026-10-21): off by default.
++  html_source->AddString("steddingSpaceNoticesLabel",
++                         "Show notices about Spaces");
++  html_source->AddString(
++      "steddingSpaceNoticesSubLabel",
++      "\u201COpened in Work\u201D, with Undo, when a site\u2019s rule "
++      "below opens it in its Space.");
++  // sessions S33, settings T25 (the owner, 2026-10-21): on by default.
++  html_source->AddString("steddingPinSignoutWarningLabel",
++                         "Warn when pinning signs a tab out");
++  html_source->AddString(
++      "steddingPinSignoutWarningSubLabel",
++      "Essentials use the shared session, so making a tab of a Space with "
++      "an Independent session an essential signs it out of that Space\u2019s "
++      "sites. The warning\u2019s Undo puts it back, still signed in.");
+   html_source->AddString("steddingExternalDefaultLabel",
+                          "Open links from other apps in");
+   html_source->AddString("steddingExternalDefaultSubLabel",
+@@ -1020,6 +1035,19 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingLinkAddressSubLabel",
+       "The address of the link under the pointer shows at the page\u2019s "
+       "bottom corner.");
++  // toolbar T45, settings T24 (the owner, 2026-10-21): off by default.
++  html_source->AddString("steddingFullscreenHintLabel",
++                         "Show how to leave full screen");
++  html_source->AddString(
++      "steddingFullscreenHintSubLabel",
++      key("With it on, full screen you start (\u2303\u2318F, the green "
++          "button) shows a note at the top: press and hold Esc to leave. Off, "
++          "\u2303\u2318F or a held Esc still leaves. A page that fills the "
++          "screen by itself, such as a video, always shows its note.",
++          "With it on, full screen you start (F11) shows a note at the top: "
++          "press and hold Esc to leave. Off, F11 or a held Esc still leaves. "
++          "A page that fills the screen by itself, such as a video, always "
++          "shows its note."));
+   // dark-pages Dk1, Dk16, Dk17, Dk20.
+   html_source->AddString("steddingDarkPagesLabel", "Dark pages");
+   html_source->AddString(
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 34f96fba945d1..e2dcc7b9218cd 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -32,6 +32,7 @@ test("stedding_browser_tests") {
+     "downloads_browsertest.cc",
+     "external_extensions_browsertest.cc",
+     "folder_tabs_browsertest.cc",
++    "fullscreen_hint_browsertest.cc",
+     "hidden_row_controls_browsertest.cc",
+     "horizontal_strip_browsertest.cc",
+     "hover_card_picture_browsertest.cc",
+@@ -137,6 +138,9 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/actions:actions_headers",
+     "//chrome/browser/ui/animation",
+     "//chrome/browser/ui/archive",
++    # toolbar T45: the note on how to leave full screen.
++    "//chrome/browser/ui/exclusive_access",
++    "//components/input",
+     # tabs R42: Chromium's discards, run on the performance manager's graph.
+     "//chrome/browser/performance_manager",
+     "//chrome/browser/ui/archive:closed_folder",
+diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
+index d9e41cc0094f2..2aa3b18233360 100644
+--- a/chrome/test/stedding/address_band_browsertest.cc
++++ b/chrome/test/stedding/address_band_browsertest.cc
+@@ -314,7 +314,10 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest,
+   {
+     // A toast sits in the page, under the address row, not half over it:
+     // the undo toast after every close hid the whole address (2026-10-11).
++    // The toast is off by default since 2026-10-21 (tabs R30): on here.
+     SCOPED_TRACE("toast sits under the row");
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kUndoToast, true);
+     ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+       browser(), embedded_test_server()->GetURL("b.test", "/title1.html"),
+       WindowOpenDisposition::NEW_FOREGROUND_TAB,
+@@ -707,6 +710,9 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, AToastSitsUnderTheInfobars) {
+ 
+   {
+     SCOPED_TRACE("the window's toast, from the user's Ctrl+W");
++    // Off by default since 2026-10-21 (tabs R30): on here.
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kUndoToast, true);
+     ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+         browser(), embedded_test_server()->GetURL("b.test", "/title1.html"),
+         WindowOpenDisposition::NEW_FOREGROUND_TAB,
+diff --git a/chrome/test/stedding/fullscreen_hint_browsertest.cc b/chrome/test/stedding/fullscreen_hint_browsertest.cc
+new file mode 100644
+index 0000000000000..6c79c90b76acf
+--- /dev/null
++++ b/chrome/test/stedding/fullscreen_hint_browsertest.cc
+@@ -0,0 +1,190 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// The note on how to leave full screen (docs/features/toolbar.md T45,
++// settings T24). Full screen the person starts -- the menu, the green button,
++// the chord, F11, the command bar -- shows Chromium's note ("Press and hold
++// Esc to exit full screen") only while "Show how to leave full screen" is on,
++// which it is not by default (the owner, 2026-10-21). A page's own full
++// screen always shows its note, which names the site: it is what tells a
++// person that a page filling the screen is not the browser.
++
++#include "base/memory/scoped_refptr.h"
++#include "base/run_loop.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/test/run_until.h"
++#include "base/test/test_mock_time_task_runner.h"
++#include "base/time/time.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
++#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/input/native_web_keyboard_event.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/blink/public/common/input/web_input_event.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++
++namespace {
++
++class FullscreenHintTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  ExclusiveAccessManager* manager() {
++    return ExclusiveAccessManager::From(browser());
++  }
++  FullscreenController* fullscreen() {
++    return manager()->fullscreen_controller();
++  }
++  PrefService* prefs() { return browser()->GetProfile()->GetPrefs(); }
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  // The note is on screen, or on its way: Chromium's own tests ask the same.
++  bool NoteShown() {
++    return manager()->context()->IsExclusiveAccessBubbleDisplayed();
++  }
++
++  // Runs what is already posted: the window's change of state updates the
++  // note in its turn, so after this it shows or it never will.
++  static void RunPostedTasks() {
++    base::RunLoop run_loop;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, run_loop.QuitClosure());
++    run_loop.Run();
++  }
++
++  // Esc down or up, as the window hands a key to the full-screen manager.
++  void SendEsc(bool down) {
++    input::NativeWebKeyboardEvent event(
++        down ? blink::WebInputEvent::Type::kRawKeyDown
++             : blink::WebInputEvent::Type::kKeyUp,
++        blink::WebInputEvent::kNoModifiers,
++        blink::WebInputEvent::GetStaticTimeStampForTests());
++    event.windows_key_code = ui::VKEY_ESCAPE;
++    manager()->HandleUserKeyEvent(event);
++  }
++
++  // The page asks for full screen, as a video's button does, and gets it.
++  void PageEntersFullScreen() {
++    ASSERT_TRUE(content::ExecJs(contents(),
++                                "document.documentElement.requestFullscreen()"));
++    ui_test_utils::FullscreenWaiter(browser(), {.tab_fullscreen = true}).Wait();
++    ASSERT_TRUE(fullscreen()->IsTabFullscreen());
++  }
++
++  void PageLeavesFullScreen() {
++    ASSERT_TRUE(content::ExecJs(contents(), "document.exitFullscreen()"));
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return !fullscreen()->IsTabFullscreen(); }));
++  }
++};
++
++// toolbar T45: by default full screen the person starts shows no note, and
++// nor does Esc pressed in it, which Chromium answers with the note after half
++// a second. With "Show how to leave full screen" on, the next full screen
++// shows Chromium's note.
++IN_PROC_BROWSER_TEST_F(FullscreenHintTest,
++                       YourOwnFullScreenShowsNoNoteUntilTheSwitchIsOn) {
++  EXPECT_FALSE(prefs()->GetBoolean(stedding::prefs::kFullscreenHint))
++      << "on by default";
++
++  {
++    SCOPED_TRACE("the switch off");
++    ui_test_utils::ToggleFullscreenModeAndWait(browser());
++    ASSERT_TRUE(fullscreen()->IsFullscreenForBrowser());
++    RunPostedTasks();
++    EXPECT_EQ(EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE,
++              manager()->GetExclusiveAccessExitBubbleType());
++    EXPECT_FALSE(NoteShown()) << "full screen showed how to leave it";
++
++    {
++      auto task_runner = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
++      base::TestMockTimeTaskRunner::ScopedContext scoped_context(
++          task_runner.get());
++      SendEsc(/*down=*/true);
++      task_runner->FastForwardBy(base::Milliseconds(600));
++      EXPECT_FALSE(NoteShown()) << "Esc held in it showed the note";
++      SendEsc(/*down=*/false);
++    }
++    EXPECT_TRUE(fullscreen()->IsFullscreenForBrowser())
++        << "a short press of Esc left full screen";
++
++    ui_test_utils::ToggleFullscreenModeAndWait(browser());
++    ASSERT_FALSE(fullscreen()->IsFullscreenForBrowser());
++  }
++
++  {
++    SCOPED_TRACE("the switch on");
++    prefs()->SetBoolean(stedding::prefs::kFullscreenHint, true);
++    ui_test_utils::ToggleFullscreenModeAndWait(browser());
++    ASSERT_TRUE(fullscreen()->IsFullscreenForBrowser());
++    EXPECT_EQ(EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION,
++              manager()->GetExclusiveAccessExitBubbleType());
++    EXPECT_TRUE(base::test::RunUntil([&]() { return NoteShown(); }))
++        << "with the switch on, full screen did not say how to leave it";
++    ui_test_utils::ToggleFullscreenModeAndWait(browser());
++  }
++}
++
++// toolbar T45: with the switch off, a page's own full screen shows Chromium's
++// note, on its own and over a full screen the person started; when the page
++// leaves, the person's full screen goes back to showing nothing.
++IN_PROC_BROWSER_TEST_F(FullscreenHintTest, APagesFullScreenAlwaysShowsItsNote) {
++  ASSERT_FALSE(prefs()->GetBoolean(stedding::prefs::kFullscreenHint));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("video.test", "/title1.html")));
++
++  {
++    SCOPED_TRACE("a page's full screen");
++    ASSERT_NO_FATAL_FAILURE(PageEntersFullScreen());
++    EXPECT_EQ(EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION,
++              manager()->GetExclusiveAccessExitBubbleType());
++    EXPECT_TRUE(base::test::RunUntil([&]() { return NoteShown(); }))
++        << "a page took the screen without a note";
++    ASSERT_NO_FATAL_FAILURE(PageLeavesFullScreen());
++    ui_test_utils::FullscreenWaiter(
++        browser(), ui_test_utils::FullscreenWaiter::kNoFullscreen)
++        .Wait();
++  }
++
++  {
++    SCOPED_TRACE("a page's full screen over the person's");
++    ui_test_utils::ToggleFullscreenModeAndWait(browser());
++    ASSERT_TRUE(fullscreen()->IsFullscreenForBrowser());
++    RunPostedTasks();
++    ASSERT_FALSE(NoteShown());
++    ASSERT_NO_FATAL_FAILURE(PageEntersFullScreen());
++    EXPECT_EQ(EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION,
++              manager()->GetExclusiveAccessExitBubbleType());
++    EXPECT_TRUE(base::test::RunUntil([&]() { return NoteShown(); }))
++        << "a page took the screen without a note";
++    ASSERT_NO_FATAL_FAILURE(PageLeavesFullScreen());
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return fullscreen()->IsFullscreenForBrowser(); }));
++    EXPECT_EQ(EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE,
++              manager()->GetExclusiveAccessExitBubbleType());
++    EXPECT_TRUE(base::test::RunUntil([&]() { return !NoteShown(); }))
++        << "the page's note stayed over the person's own full screen";
++    ui_test_utils::ToggleFullscreenModeAndWait(browser());
++  }
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/isolation_mark_browsertest.cc b/chrome/test/stedding/isolation_mark_browsertest.cc
+index 2ef4268337f5e..90707112ea954 100644
+--- a/chrome/test/stedding/isolation_mark_browsertest.cc
++++ b/chrome/test/stedding/isolation_mark_browsertest.cc
+@@ -44,6 +44,7 @@
+ #include "chrome/browser/ui/spaces/space_router.h"
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_menu_model.h"
+ #include "chrome/browser/ui/tabs/tab_menu_model_delegate.h"
+@@ -64,6 +65,7 @@
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/page_navigator.h"
+ #include "content/public/browser/web_contents.h"
+@@ -516,6 +518,52 @@ class IsolationMarkTest : public InProcessBrowserTest {
+         spaces::StoragePartitionConfigForWebContents(tab->GetContents()));
+   }
+ 
++  // routing D4, settings T23: "Show notices about Spaces", off by default
++  // since 2026-10-21 (the owner). The pin's warning (sessions S33, settings
++  // T25) has its own switch, on by default.
++  PrefService* prefs() { return browser()->GetProfile()->GetPrefs(); }
++  void ShowSpaceNotices() {
++    prefs()->SetBoolean(stedding::prefs::kSpaceNotices, true);
++  }
++
++  // The toast `id` is on screen.
++  bool Showing(ToastId id) {
++    return toasts() && toasts()->IsShowingToast() &&
++           toasts()->GetCurrentToastId() == id;
++  }
++
++  // Routes routed.test to Work, opens it from Home in a new tab in front, and
++  // returns that tab, which the route moved to Work. Opened from Work it
++  // would already be in its Space, and nothing would move.
++  tabs::TabInterface* OpenRouted() {
++    model()->SetActiveSpace(home_);
++    EXPECT_EQ(home_, model()->active_id());
++    if (spaces::ReadRoutes(prefs()).empty()) {
++      spaces::Route route;
++      route.match = spaces::Route::Match::kHost;
++      route.pattern = "routed.test";
++      route.space = work_.ToString();
++      spaces::AddRoute(prefs(), route);
++    }
++    EXPECT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), Url("routed.test"),
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    tabs::TabInterface* const tab = tabs()->GetActiveTab();
++    EXPECT_EQ(work_, model()->SpaceForTab(tab)) << "the route was not followed";
++    return tab;
++  }
++
++  // The tab made an essential from its menu, as Add to Essentials does.
++  void AddToEssentials(tabs::TabInterface* tab) {
++    const int index = tabs()->GetIndexOfTab(tab);
++    ASSERT_TRUE(tabs()->IsContextMenuCommandEnabled(
++        index, TabStripModel::CommandTogglePinned));
++    tabs()->ExecuteContextMenuCommand(index,
++                                      TabStripModel::CommandTogglePinned);
++    ASSERT_TRUE(tab->IsPinned());
++  }
++
+   raw_ptr<spaces::SpaceModel> model_ = nullptr;
+   spaces::SpaceId home_ = spaces::SpaceId::CreateEmpty();
+   spaces::SpaceId work_ = spaces::SpaceId::CreateEmpty();
+@@ -661,6 +709,7 @@ IN_PROC_BROWSER_TEST_F(IsolationMarkTest,
+ // session off, none marks Work.
+ IN_PROC_BROWSER_TEST_F(IsolationMarkTest,
+                        TheMenusTheToastAndTheArchiveMarkTheSpace) {
++  ShowSpaceNotices();
+   model()->SetSpaceIsolated(work_, true);
+   const std::u16string work_name = model()->DisplayName(work_);
+   const std::u16string home_name = model()->DisplayName(home_);
+@@ -822,6 +871,56 @@ IN_PROC_BROWSER_TEST_F(IsolationMarkTest,
+   }
+ }
+ 
++// routing D4, sessions S33, settings T23, T25 (the owner, 2026-10-21): on a
++// profile nobody has set, a routed open still lands in Work without a word,
++// and a pin out of Work's session still warns, with its Undo.
++IN_PROC_BROWSER_TEST_F(IsolationMarkTest,
++                       ByDefaultThePinWarnsAndTheRouteSaysNothing) {
++  EXPECT_FALSE(prefs()->GetBoolean(stedding::prefs::kSpaceNotices))
++      << "the routed notice is on by default";
++  EXPECT_TRUE(prefs()->GetBoolean(stedding::prefs::kPinSignoutWarning))
++      << "the pin's warning is off by default";
++  model()->SetSpaceIsolated(work_, true);
++
++  tabs::TabInterface* const tab = OpenRouted();
++  ASSERT_TRUE(tab);
++  RunPostedTasks();
++  EXPECT_FALSE(Showing(ToastId::kSteddingRouted))
++      << "a routed open said so by default";
++  ASSERT_TRUE(base::test::RunUntil([&]() { return InASpacesJar(tab); }))
++      << "the routed tab is not in Work's jar";
++  ASSERT_NO_FATAL_FAILURE(AddToEssentials(tab));
++  ASSERT_NO_FATAL_FAILURE(WaitForToast(
++      ToastId::kSteddingPinLeftSession,
++      l10n_util::GetStringFUTF16(IDS_STEDDING_PIN_LEFT_SESSION_TOAST_BODY,
++                                 model()->DisplayName(work_))));
++}
++
++// routing D4, sessions S33, settings T23, T25: each switch governs only its
++// own notice. The routed notice on and the pin's warning off: the routed open
++// says so, and the pin leaves Work's jar without a word.
++IN_PROC_BROWSER_TEST_F(IsolationMarkTest, EachSpaceSwitchGovernsOnlyItsNotice) {
++  ShowSpaceNotices();
++  prefs()->SetBoolean(stedding::prefs::kPinSignoutWarning, false);
++  model()->SetSpaceIsolated(work_, true);
++
++  tabs::TabInterface* const tab = OpenRouted();
++  ASSERT_TRUE(tab);
++  ASSERT_NO_FATAL_FAILURE(WaitForToast(
++      ToastId::kSteddingRouted,
++      l10n_util::GetStringFUTF16(
++          IDS_STEDDING_ROUTED_TOAST_BODY,
++          spaces::NameWithIsolationMark(model()->DisplayName(work_)))));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return InASpacesJar(tab); }))
++      << "the routed tab is not in Work's jar";
++  ASSERT_NO_FATAL_FAILURE(AddToEssentials(tab));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return !InASpacesJar(tab); }))
++      << "the essential stayed in Work's jar";
++  RunPostedTasks();
++  EXPECT_FALSE(Showing(ToastId::kSteddingPinLeftSession))
++      << "the pin warned with its switch off";
++}
++
+ // sessions S32, sidebar Y14: the floating name of a Space with an
+ // Independent session is its name and the mark's words, which do not fit a
+ // narrow sidebar beside a long name: it is elided inside the sidebar, where
+diff --git a/chrome/test/stedding/restore_browsertest.cc b/chrome/test/stedding/restore_browsertest.cc
+index 418089b750128..5abb5fbeac9a5 100644
+--- a/chrome/test/stedding/restore_browsertest.cc
++++ b/chrome/test/stedding/restore_browsertest.cc
+@@ -2683,9 +2683,22 @@ IN_PROC_BROWSER_TEST_F(ArchiveUnreadSessionTest,
+ 
+ // docs/features/tabs.md R25-R27, R30 (BACKLOG S-97): a close the user makes
+ // shows a toast, and its Undo brings that close back in place, through the
+-// recently-closed list.
++// recently-closed list. The toast is off by default since 2026-10-21 (the
++// owner); these tests are about the toast, so they turn "Offer Undo after
++// closing tabs" on first. UndoCloseByDefaultTest leaves it as it is.
+ class UndoCloseTest : public RestoreTest {
+  protected:
++  void SetUpOnMainThread() override {
++    RestoreTest::SetUpOnMainThread();
++    if (offer_undo_) {
++      browser()->GetProfile()->GetPrefs()->SetBoolean(
++          stedding::prefs::kUndoToast, true);
++    }
++  }
++
++  // Whether SetUpOnMainThread turns the toast on.
++  bool offer_undo_ = true;
++
+   // A new foreground tab on `host` showing a page titled "Title Of
+   // Awesomeness", loaded.
+   tabs::TabInterface* OpenTitled(const std::string& host) {
+@@ -3025,7 +3038,7 @@ IN_PROC_BROWSER_TEST_F(UndoCloseTest, NoToastForACloseTheUserDidNotMake) {
+   {
+     SCOPED_TRACE("the setting off");
+     ASSERT_TRUE(prefs->GetBoolean(stedding::prefs::kUndoToast))
+-        << "on by default";
++        << "on, as the fixture set it";
+     prefs->SetBoolean(stedding::prefs::kUndoToast, false);
+     Open("a.test");
+     OpenTitled("b.test");
+@@ -3048,6 +3061,58 @@ IN_PROC_BROWSER_TEST_F(UndoCloseTest, NoToastForACloseTheUserDidNotMake) {
+   }
+ }
+ 
++// R30, settings T17 (the owner, 2026-10-21): on a profile where nobody has
++// touched "Offer Undo after closing tabs", ⌘W closes the tab with no toast,
++// the close is still in the recently-closed list and ⇧⌘T brings it back. The
++// switch turned on, the next close offers Undo.
++class UndoCloseByDefaultTest : public UndoCloseTest {
++ public:
++  UndoCloseByDefaultTest() { offer_undo_ = false; }
++};
++
++IN_PROC_BROWSER_TEST_F(UndoCloseByDefaultTest,
++                       ACloseOffersNoUndoUntilTheSettingIsOn) {
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  const PrefService::Preference* const setting =
++      prefs->FindPreference(stedding::prefs::kUndoToast);
++  ASSERT_TRUE(setting);
++  EXPECT_TRUE(setting->IsDefaultValue()) << "nothing wrote the setting";
++  EXPECT_FALSE(prefs->GetBoolean(stedding::prefs::kUndoToast))
++      << "on by default";
++  sessions::TabRestoreService* const service =
++      TabRestoreServiceFactory::GetForProfile(browser()->GetProfile());
++  ASSERT_TRUE(service);
++
++  {
++    SCOPED_TRACE("⌘W, the setting untouched");
++    Open("a.test");
++    OpenTitled("b.test");
++    const size_t recorded = service->entries().size();
++    chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
++    ASSERT_FALSE(Find("b.test"));
++    RunPostedTasks();
++    EXPECT_FALSE(UndoToastShowing()) << "a close offered Undo by default";
++    EXPECT_EQ(recorded + 1, service->entries().size()) << "in the list";
++  }
++
++  {
++    SCOPED_TRACE("⇧⌘T reopens it");
++    chrome::ExecuteCommand(browser(), IDC_RESTORE_TAB);
++    EXPECT_TRUE(
++        base::test::RunUntil([&]() { return Find("b.test") != nullptr; }))
++        << "⇧⌘T did not bring the tab back";
++  }
++
++  {
++    SCOPED_TRACE("the setting on");
++    prefs->SetBoolean(stedding::prefs::kUndoToast, true);
++    OpenTitled("c.test");
++    chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
++    ASSERT_NO_FATAL_FAILURE(
++        WaitForUndoToast(u"“Title Of Awesomeness” closed"));
++  }
++}
++
+ // spaces B10 and B21, pins H6, tabs R17 and archive A8 on tabs that came
+ // back from a session (PLAN.md TST-4). What the user does to a restored tab
+ // holds as it does on a tab opened in this run, and holds across the next
+diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
+index 332df625369a9..c1e809a950931 100644
+--- a/chrome/test/stedding/settings_spaces_browsertest.cc
++++ b/chrome/test/stedding/settings_spaces_browsertest.cc
+@@ -434,6 +434,34 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
+         << keys;
+     EXPECT_NE(std::string::npos, keys.find("stedding.page.dark_pages_button"))
+         << keys;
++    // settings T17, T23, T24, T25: the hints' switches.
++    for (const char* key :
++         {"stedding.tabs.undo_toast", "stedding.spaces.notices",
++          "stedding.window.fullscreen_hint",
++          "stedding.spaces.pin_signout_warning"}) {
++      EXPECT_NE(std::string::npos, keys.find(key)) << key << " in " << keys;
++    }
++  }
++  {
++    // tabs R30, routing D4, toolbar T45: the hints are off on a fresh
++    // profile, as the page reads them (the owner, 2026-10-21).
++    SCOPED_TRACE("the hints' switches are off, the pin's warning on");
++    for (const char* key :
++         {"stedding.tabs.undo_toast", "stedding.spaces.notices",
++          "stedding.window.fullscreen_hint"}) {
++      EXPECT_EQ(false,
++                content::EvalJs(
++                    page, content::JsReplace("chrome.settingsPrivate.getPref($1)"
++                                             ".then(pref => pref.value)",
++                                             key)))
++          << key;
++    }
++    // sessions S33, settings T25: the warning that a pin signs a tab out
++    // stays on.
++    EXPECT_EQ(true, content::EvalJs(
++                        page, "chrome.settingsPrivate.getPref("
++                              "'stedding.spaces.pin_signout_warning')"
++                              ".then(pref => pref.value)"));
+   }
+   {
+     SCOPED_TRACE("archive menu is Never through 7 days");
+diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
+index 966c464a674da..43cea0a14156e 100644
+--- a/chrome/test/stedding/tab_drop_browsertest.cc
++++ b/chrome/test/stedding/tab_drop_browsertest.cc
+@@ -308,7 +308,12 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+   }
+ 
+   // A drop re-routes nothing, so no "Opened in" toast shows (routing D4;
+-  // PLAN.md TAB-9).
++  // PLAN.md TAB-9). The toast is off by default since 2026-10-21 (settings
++  // T23), so the check turns "Show notices about Spaces" on before the drop.
++  void ShowSpaceNotices() {
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kSpaceNotices, true);
++  }
+   void ExpectNoRoutedToast() {
+     ToastController* const toasts = ToastController::From(browser());
+     ASSERT_TRUE(toasts);
+@@ -891,6 +896,7 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, RailDropsJoinTheFolderAndMoveToTheChip) {
+   route.pattern = "routed-rail.test";
+   route.space = work.ToString();
+   spaces::AddRoute(browser()->GetProfile()->GetPrefs(), route);
++  ShowSpaceNotices();
+   tabs::TabInterface* const moves = Open("moves-rail.test");
+   tabs::TabInterface* const b = Open("b-rail.test");
+   tabs::TabInterface* const c = Open("c-rail.test");

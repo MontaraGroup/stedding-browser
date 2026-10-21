@@ -38,7 +38,9 @@ signature over the image made with a key only the project holds.
   that the key did not sign. The private key lives in the release machine's
   keychain and in the owner's backup, never here.
 - **On by default** (the owner, 2026-10-16), checked once a day, with a switch in
-  Settings › Stedding › Updates. Off, the browser does not start Sparkle at all,
+  Settings › Stedding › Updates. Since the owner's decision of 2026-10-21 it checks at
+  a launch more than an hour after the last check and every six hours
+  (`docs/features/updates.md` Up1). Off, the browser does not start Sparkle at all,
   so it makes no update request until the user chooses Check for Updates.
 - **A locally built copy never updates itself.** Only a bundle signed by a
   team (a release, or a test build signed the same way) starts the updater, so

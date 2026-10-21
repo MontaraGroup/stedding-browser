@@ -35,15 +35,17 @@ design now and build nothing yet. Read for it the same day:
   the other platforms' downloads from the release. `updates/appcast.xml` stays the
   Mac's alone, because every Mac build carries its URL. Windows reads
   `updates/appcast-windows.xml`, in the same format, one entry per architecture.
-- **Windows: the browser's own updater, not WinSparkle,** because it must be as
-  silent as the Mac's. It sits behind `stedding::AppUpdater`, under the same setting
-  (`stedding.updates.automatic`): once a day it reads the feed through Chromium's
-  network stack, downloads a later per-user installer, checks its length and its
-  signature (BoringSSL's Ed25519) before running it, and runs it silently while the
-  browser runs. The upgrade detector then sees the new version, and the sidebar
-  shows "New Stedding Version Available"; a click restarts into it. The About page
-  (an `AppUpdater`-backed updater in place of `version_updater_basic.cc`), the
-  command bar's rows and the Settings switch are the Mac's (`docs/features/updates.md`).
+- **Windows: the browser's own updater, not WinSparkle,** because it must be as silent
+  as the Mac's. It sits behind `stedding::AppUpdater`, under the same setting
+  (`stedding.updates.automatic`): once a day (since 2026-10-21, at a launch more than
+  an hour after the last check and every six hours, updates Up14) it reads the feed
+  through Chromium's network stack, downloads a later per-user installer, checks its
+  length and its signature (BoringSSL's Ed25519) before running it, and runs it
+  silently while the browser runs. The upgrade detector then sees the new version, and
+  the sidebar shows "New Stedding Version Available"; a click restarts into it. The
+  About page (an `AppUpdater`-backed updater in place of `version_updater_basic.cc`),
+  the command bar's rows and the Settings switch are the Mac's
+  (`docs/features/updates.md`).
 - **The Windows version numbers come first** (`S-72`). Every Windows release gets a
   higher installer version than every release before it, and the first field stays
   Chromium's milestone, so neither the installer nor the profile ever sees a number

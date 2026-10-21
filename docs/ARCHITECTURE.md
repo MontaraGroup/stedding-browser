@@ -611,7 +611,8 @@ so the rerun signs again.
 **Update checks go to GitHub, never to a server of ours** —
 `decisions/0014-github-releases-as-update-channel.md`, partly superseded by
 `decisions/0022-sparkle-updates-the-mac.md`. On the Mac the browser reads a signed feed kept
-in this repository, `updates/appcast.xml`, once a day, and downloads the release's own image;
+in this repository, `updates/appcast.xml`, at launch when the last check is more than an
+hour old and every six hours (the owner, 2026-10-21), and downloads the release's own image;
 it is on by default, with a switch in Settings › Stedding › Updates. No account, no
 identifier, no telemetry; GitHub sees an IP and a timing pattern, and `PRIVACY.md` names
 both endpoints rather than glossing them.
@@ -619,7 +620,7 @@ both endpoints rather than glossing them.
 That decision removes the update *server* from the project: the feed is a file in this
 repository and the image is the release's own, so there is nothing extra to run, secure or
 pay for. The Mac updates itself from beta 16 on (ADR 0022, `docs/features/updates.md`):
-Sparkle reads the signed feed once a day, checks the image's EdDSA signature and the app's
+Sparkle reads the signed feed on that schedule, checks the image's EdDSA signature and the app's
 Developer ID, and installs at the quit or at a click on the sidebar's pill. Windows has
 updated itself since beta 19, with an updater, a feed and a key of its own (ADR 0023,
 ADR 0026, `docs/features/updates.md`); Linux is planned (`BACKLOG.md` S-216). Full-size

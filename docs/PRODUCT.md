@@ -122,7 +122,8 @@ yet, `docs/features/library.md`) and a `+`.
 - **Child tabs** **[M10]** — a link opened in a new tab sits under its opener, and Back
   returns to it (`S-92`).
 - **Undo after closing tabs** **[M10]** — after a close, a toast with Undo that reopens those
-  tabs in their Space and folder; a setting turns it off (`features/tabs.md` R25–R28, R30).
+  tabs in their Space and folder; off by default since 2026-10-21 (the owner), a setting turns
+  it on (`features/tabs.md` R25–R28, R30).
 - **The sidebar on the right** **[M10]** — a setting (`S-96`).
 
 ## 2. Spaces
