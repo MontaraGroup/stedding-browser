@@ -60,13 +60,19 @@ nothing is said, labelled or closed there (`AGENTS.md`; `PLAN.md` decision 16).
   (spaces B39; `PLAN.md` decision 15): over the sidebar a sideways scroll steps one Space, from
   a tilt wheel or Shift with the wheel, and on Windows also from a touchpad's sideways scroll
   and Ctrl with the wheel. On the Mac its unit and browser tests pass on the release build,
-  and real wheel events posted to the window stepped as specified; on Windows it is written,
-  its run TBD. Issue 9, the little window's way into the main window, was being built as this
-  entry was written: an "Open in Stedding" button at the right end of its bar, rows in the
-  page's menu and the File menu, and a new window when none is open (little E7, `S-157`); its
-  state at the release is TBD. Issue 8, essentials of one Space, is declined by the owner:
+  and real wheel events posted to the window stepped as specified. Its first Windows run found
+  a real fault: off the Mac the root view hands one wheel event to every view on its way up, and
+  the handler read it at each, so a vertical touchpad scroll with a little sideways drift was
+  swallowed and the tab list did not scroll; each event is now read once, and its tests pass
+  on all three Windows builds (a real touchpad and tilt wheel are still to be tried there).
+  Issue 9, the little window's way into the main window, is built: an "Open in Stedding" button
+  at the right end of its bar, rows in the page's menu and the File menu, Show as Tab doing the
+  same move, and a new window when none is open; the window has no title bar, its traffic
+  lights in Stedding's own address row in the page's colour, light or dark as the main window
+  (little E7 to E9, `S-157`). A single quit hang with a little window open, seen once while it
+  was built, did not come back in eight timed quits (0.7 s each). Issue 8, essentials of one Space, is declined by the owner:
   essentials stay shared by every Space, as in Arc (`S-254`; `PLAN.md` decision 14).
-- **The owner's pass on the Mac's release build** (2026-10-21) found what no test had asked
+- **A by-hand pass on the Mac's release build** (2026-10-21) found what no test had asked
   about: a pin closed while it played kept its speaker mark (pins H24); a double click renamed
   the row the list had moved under the pointer, and a row moved away kept its hover (tabs R14,
   R1); the chords on the Space chips read 2.5:1 on the light ground (tabs R11); the address
@@ -80,7 +86,26 @@ nothing is said, labelled or closed there (`AGENTS.md`; `PLAN.md` decision 16).
   `e94ae63`).
 - **Tooling.** `tooling/drive` takes a `move` step (the pointer along a timed path) and a
   `wheel` step (a mouse wheel's notches); traps 117 to 123.
-- **Release:** TBD.
+- **Late in the round:** a pinned folder moves among the pins as a pin does, a bar showing
+  where it lands (folders F38, the owner's question); a split's row keeps each pane's edge
+  through a dark pages switch, where both parts had shown the page's declared colour for two
+  frames (dark-pages Dk8, seen in the README recording); the hidden omnibox popups follow the
+  field once a motion ends instead of moving at every frame (motion O8). The Windows runs found
+  four tests at fault there (an owned popup widget, a late resolver rule, a window reported
+  covered at a drag's press, the real cursor reaching a test), all made right.
+- **Release:** `v0.3.0-beta.1` (tag at `7031160`, 77 patches on 156.0.8078.48), the first
+  published as the repository's latest release rather than a pre-release (the owner's wish, so
+  it shows on the repository's page; `tooling/publish-release`). Mac release build: 1008 unit,
+  56 component and 468 browser tests, one shutdown overrun passing on a rerun (`S-257`). PC:
+  999 unit and 561 browser tests on each of the release, DCHECK and ASan builds, with no
+  report. The installer upgraded 0.2.0 beta 21, uninstalled keeping the profile and installed
+  fresh, `chrome.dll` matching each time. Local n-1 on both platforms, then published (DMG
+  `0ca31dc3…7c3b`, installer `ccbcfc34…628d`), both downloads matching and Gatekeeper accepting
+  the app; both feeds pushed (`0ecfa30`, `ccdfe5d`) and read back. Real updates through the
+  published feeds: the PC's installed 0.2.0 beta 21 at 25 seconds, restarting into 156.3.0.1 in
+  two; a Mac copy of 0.2.0 beta 21 at 43 seconds, relaunching as 10030.1. stedding.dev went out
+  the same hour with a Support button, a "What's new in 0.3" section of clips, a new hero and
+  the footer's link to YS Progress Inc.
 
 ## 2026-10-19 night to 2026-10-20 -- the planned fixes, six features, the owner's look notes, beta 21
 
