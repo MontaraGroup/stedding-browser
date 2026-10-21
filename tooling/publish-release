@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Publish the image in dist/ as a GitHub pre-release, or add this platform's image
-# to the release the other platform already made.
+# Publish the image in dist/ as a GitHub release, or add this platform's image to the
+# release the other platform already made.
 #
 # Usage:
-#   tooling/publish-release --check      # what would be published; touches nothing
-#   tooling/publish-release              # create the release, or upload into it
+#   tooling/publish-release --check        # what would be published; touches nothing
+#   tooling/publish-release                # create the release, or upload into it
+#   tooling/publish-release --prerelease   # create it marked as a pre-release
+#
+# A release is created as the repository's latest release, so GitHub shows it on the
+# repository's page and /releases/latest returns it (the owner, 2026-10-21; until 0.2.0
+# beta 21 every release was a pre-release). --prerelease keeps a test release off that
+# place. Uploading the second platform's image leaves the flag as the first one set it.
 #
 # The tag is v<VERSION> (the VERSION file at the repository root). Per ADR 0014 the tag
 # is what the browser's updater compares against, so its shape is checked here:
@@ -42,10 +48,12 @@ sha256_of() {
 
 main() {
     CHECK=0
+    PRERELEASE=0
     while [ $# -gt 0 ]; do
       case "$1" in
-        --check)   CHECK=1; shift ;;
-        -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+        --check)      CHECK=1; shift ;;
+        --prerelease) PRERELEASE=1; shift ;;
+        -h|--help)    sed -n '2,36p' "$0"; exit 0 ;;
         *)         die "unknown argument: $1" ;;
       esac
     done
@@ -196,10 +204,12 @@ main() {
     fi
     log "publishing $tag: $title"
     log "from $(git -C "$STEDDING_ROOT" rev-parse --short HEAD) with $(basename "$asset")"
+    local kind=(--latest)
+    [ "$PRERELEASE" -eq 1 ] && kind=(--prerelease)
     gh release create "$tag" \
       --repo "$repo" \
       --target "$head" \
-      --prerelease \
+      "${kind[@]}" \
       --title "$title" \
       --notes-file "$notes" \
       "$asset" "$asset.sha256" || die "gh release create failed"

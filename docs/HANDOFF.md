@@ -1826,9 +1826,11 @@ seconds. A real click restarted into 156.2.0.19 in about two seconds, with `pv` 
 
 ## Release channel
 
-Pre-releases on GitHub Releases: the Mac's DMG, with the app in it signed with the
-Developer ID and notarized (since beta 10; the image itself is not signed), the Windows
-installer an unsigned preview, each with its sha256 beside it. The Mac's order, all from the repo root with a clean tree: bump
+Releases on GitHub Releases, each the repository's latest release from 0.3.0 beta 1 (the
+owner, 2026-10-21, so the repository's page shows it; every release up to 0.2.0 beta 21 was
+a pre-release; `tooling/publish-release --prerelease` still makes one): the Mac's DMG, with
+the app in it signed with the Developer ID and notarized (since beta 10; the image itself is
+not signed), the Windows installer an unsigned preview, each with its sha256 beside it. The Mac's order, all from the repo root with a clean tree: bump
 `VERSION`, `tooling/dev build release chrome` (the About line is a build flag), empty
 `dist/`, `tooling/sign-release release` (`--check` first; it signs, notarizes and staples
 into `dist/signed/stable/Stedding.app`), `tooling/verify-build --app
