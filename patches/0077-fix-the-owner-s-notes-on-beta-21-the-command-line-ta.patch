@@ -105,7 +105,7 @@ its own (patches/README.md).
  .../stedding/theme/page_bar_color_supplier.cc |  101 +-
  .../stedding/theme/page_bar_color_supplier.h  |   19 +-
  .../theme/page_bar_color_supplier_unittest.cc |   52 +
- .../theme/page_theme_color_controller.cc      |   82 +-
+ .../theme/page_theme_color_controller.cc      |  113 +-
  .../theme/page_theme_color_controller.h       |    3 +
  .../page_theme_color_controller_unittest.cc   |  115 ++
  chrome/browser/ui/stedding_ui_metrics.cc      |   32 +
@@ -168,7 +168,7 @@ its own (patches/README.md).
  .../toolbar/stedding_little_promote_button.h  |   66 +
  .../browser/ui/views/toolbar/toolbar_view.cc  |  111 +-
  chrome/test/stedding/BUILD.gn                 |   11 +
- .../test/stedding/address_band_browsertest.cc |  452 ++++-
+ .../test/stedding/address_band_browsertest.cc |  554 ++++++-
  .../test/stedding/folder_tabs_browsertest.cc  |  152 ++
  .../hidden_row_controls_browsertest.cc        |  289 +++-
  .../stedding/horizontal_strip_browsertest.cc  |   95 ++
@@ -199,7 +199,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 128 files changed, 10286 insertions(+), 387 deletions(-)
+ 128 files changed, 10412 insertions(+), 394 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -2473,7 +2473,7 @@ index a4a75b3582c98..f103a67f3d402 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
-index 131c017227f9c..039f786c0fba0 100644
+index 131c017227f9c..64860f932f909 100644
 --- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
 +++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
 @@ -5,6 +5,7 @@
@@ -2634,6 +2634,65 @@ index 131c017227f9c..039f786c0fba0 100644
  }
  
  void PageThemeColorController::OnBackgroundColorChanged() {
+@@ -344,10 +388,27 @@ void PageThemeColorController::OnDarkPagesChanged() {
+            contents->GetOrCreateWebPreferences().force_dark_mode_enabled !=
+                DarkPagesApplyTo(contents);
+   };
+-  // The edge read before the change is the page as it was: the row would
+-  // keep its old colour until the next read, and for a tab in the background
+-  // until a moment after it is shown again. Without it the row follows the
+-  // theme colour and the background Blink reports once the page has
++  // toolbar T41: a page on screen, the active one or a split's other pane,
++  // has its edge read again after its restyle (below), and until then keeps
++  // the edge read before, put through the rule Blink darkens a background
++  // by. Dropped, its part of the row fell back to the page's declared
++  // colour, which can be far from its edge: Arch Linux's blue #027BC2
++  // between two reads of the same dark grey header, for about two frames
++  // (the README recording, 2026-10-21).
++  const auto carry_sample = [&forget_sample](content::WebContents* contents) {
++    PageTopSample* const sample =
++        PageTopSample::GetForPage(contents->GetPrimaryPage());
++    if (sample && sample->color) {
++      sample->color =
++          ThemeColorUnderDarkPages(*sample->color, DarkPagesApplyTo(contents));
++    } else {
++      forget_sample(contents->GetPrimaryPage());
++    }
++  };
++  // A tab in the background has no read until it is shown again. The edge
++  // read before the change is the page as it was: the row would keep its old
++  // colour until a moment after the tab is shown. Without it the row follows
++  // the theme colour and the background Blink reports once the page has
+   // repainted.
+   TabStripModel* const model = browser_->GetTabStripModel();
+   bool any_change = false;
+@@ -357,7 +418,7 @@ void PageThemeColorController::OnDarkPagesChanged() {
+       continue;
+     }
+     any_change = true;
+-    if (tab != web_contents()) {
++    if (tab != web_contents() && tab != partner()) {
+       forget_sample(tab->GetPrimaryPage());
+     }
+   }
+@@ -372,6 +433,7 @@ void PageThemeColorController::OnDarkPagesChanged() {
+   // toolbar T41: a split's other pane is on screen too, and its part of the
+   // row follows its page the way the active page's does.
+   if (decision_changes(partner())) {
++    carry_sample(partner());
+     RefreshPartner();
+     ScheduleTopSamples({kSampleAfterStyle, kSampleAfterLoad});
+   }
+@@ -379,8 +441,7 @@ void PageThemeColorController::OnDarkPagesChanged() {
+   if (!decision_changes(contents)) {
+     return;
+   }
+-  // The active page's edge is read again after its restyle.
+-  forget_sample(contents->GetPrimaryPage());
++  carry_sample(contents);
+   Refresh();
+   ScheduleTopSamples({kSampleAfterStyle, kSampleAfterLoad});
+ }
 diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
 index 008814fe781e8..0f57e28a7ad7c 100644
 --- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
@@ -6733,7 +6792,7 @@ index 7d6b53d1051d3..5c6cb2d6c9354 100644
      frameworks = [ "Carbon.framework" ]
      data_deps += [
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index 033e450900933..3a251c5938ef5 100644
+index 033e450900933..d9e41cc0094f2 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -21,6 +21,7 @@
@@ -6810,7 +6869,7 @@ index 033e450900933..3a251c5938ef5 100644
  #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
  #include "chrome/browser/ui/views/session_restore_infobar/session_restore_infobar_delegate.h"
  #include "chrome/browser/ui/views/session_restore_infobar/session_restore_infobar_manager.h"
-@@ -88,20 +107,28 @@
+@@ -88,20 +107,29 @@
  #include "components/infobars/content/content_infobar_manager.h"
  #include "components/prefs/pref_service.h"
  #include "components/split_tabs/split_tab_visual_data.h"
@@ -6823,6 +6882,7 @@ index 033e450900933..3a251c5938ef5 100644
 +#include "extensions/test/test_extension_dir.h"
  #include "net/dns/mock_host_resolver.h"
  #include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/blink/public/common/web_preferences/web_preferences.h"
  #include "third_party/skia/include/core/SkBitmap.h"
  #include "third_party/skia/include/core/SkColor.h"
  #include "ui/base/base_window.h"
@@ -6839,7 +6899,7 @@ index 033e450900933..3a251c5938ef5 100644
  #include "ui/display/display.h"
  #include "ui/display/screen.h"
  #include "ui/gfx/animation/animation_container.h"
-@@ -112,11 +139,18 @@
+@@ -112,11 +140,18 @@
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/rect_conversions.h"
  #include "ui/gfx/geometry/size.h"
@@ -6858,7 +6918,7 @@ index 033e450900933..3a251c5938ef5 100644
  #include "ui/views/controls/label.h"
  #include "ui/views/controls/textfield/textfield_test_api.h"
  #include "ui/views/focus/focus_manager.h"
-@@ -497,6 +531,74 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
+@@ -497,6 +532,74 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
      EXPECT_TRUE(view()->IsToolbarVisible());
    }
  }
@@ -6933,7 +6993,7 @@ index 033e450900933..3a251c5938ef5 100644
  #endif  // BUILDFLAG(IS_WIN)
  
  // toolbar T36 (BACKLOG S-231): over an infobar Chromium's separator closes
-@@ -1013,11 +1115,21 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+@@ -1013,11 +1116,21 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
    const auto icons = [&]() {
      return bar()->GetColorProvider()->GetColor(kColorToolbarButtonIcon);
    };
@@ -6957,7 +7017,7 @@ index 033e450900933..3a251c5938ef5 100644
    {
      SCOPED_TRACE("each pane's colour over it, a blend between");
      EXPECT_TRUE(base::test::RunUntil([&]() {
-@@ -1081,6 +1193,52 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+@@ -1081,6 +1194,52 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
      row()->SetColorForTesting(light_colour);
      row()->SetPartnerColorForTesting(dark_colour);
    }
@@ -7010,7 +7070,115 @@ index 033e450900933..3a251c5938ef5 100644
    {
      SCOPED_TRACE("a swap takes the colours with the pages");
      tabs->ReverseTabsInSplit(split);
-@@ -1275,4 +1433,294 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheAppMenusChipIsAButtonsHeight) {
+@@ -1178,6 +1337,107 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+   }
+ }
+ 
++// toolbar T41, dark-pages Dk8 (the README recording, 2026-10-21): a switch of
++// dark pages keeps each pane's edge read, through the rule, until the edge is
++// read again. Arch Linux's page beside LWN's: the part over Arch's pane, the
++// other pane, was Arch's declared blue, #027BC2, for about two frames between
++// the dark grey of its header read before the switch and the same grey read
++// after it. Here both panes declare that blue, which the rule keeps as
++// declared, over a dark grey header Blink leaves as it is: every colour
++// either part takes through the switch, either way, is the header's.
++IN_PROC_BROWSER_TEST_F(PageColourRowTest,
++                       ASplitRowKeepsEachPanesEdgeThroughTheSwitch) {
++  constexpr SkColor kHeader = SkColorSetRGB(0x33, 0x33, 0x33);
++  constexpr SkColor kThemeColour = SkColorSetRGB(0x02, 0x7b, 0xc2);
++  ASSERT_EQ(kThemeColour, stedding::ThemeColorUnderDarkPages(
++                              kThemeColour, /*page_darkened=*/true))
++      << "the rule keeps the declared colour";
++  const auto page = [](const char* text) {
++    return GURL(base::StrCat(
++        {"data:text/html,<meta name='theme-color' content='%23027bc2'>"
++         "<body style='margin:0'><div style='height:80px;background:%23333'>"
++         "</div><p>",
++         text, "</p></body>"}));
++  };
++  Profile* const profile = browser()->GetProfile();
++  ThemeServiceFactory::GetForProfile(profile)->SetBrowserColorScheme(
++      ThemeService::BrowserColorScheme::kLight);
++  stedding::SetDarkPagesOn(profile, false);
++  TabStripModel* const tabs = browser()->GetTabStripModel();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page("The active pane")));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), page("The other pane"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  content::WebContents* const active = tabs->GetWebContentsAt(0);
++  content::WebContents* const other = tabs->GetWebContentsAt(1);
++  tabs->ActivateTabAt(0);
++  tabs->AddToNewSplit({1}, split_tabs::SplitTabVisualData(),
++                      split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  ASSERT_EQ(other, row()->partner());
++
++  const auto colour_of = [&](content::WebContents* pane) {
++    return row()->ColorOf(pane).value_or(SK_ColorTRANSPARENT);
++  };
++  const auto is_header = [&](std::optional<SkColor> colour) {
++    return colour && stedding::PageColorsMatch(*colour, kHeader);
++  };
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return other->CompletedFirstVisuallyNonEmptyPaint() &&
++           is_header(row()->ColorOf(active)) &&
++           is_header(row()->ColorOf(other));
++  })) << "each pane's header read: " << std::hex << colour_of(active) << ", "
++      << colour_of(other);
++
++  // Every colour each part takes, as the row is re-themed for it.
++  std::vector<std::optional<SkColor>> active_seen;
++  std::vector<std::optional<SkColor>> other_seen;
++  const base::CallbackListSubscription watch =
++      row()->AddChangedCallback(base::BindLambdaForTesting([&]() {
++        active_seen.push_back(row()->ColorOf(active));
++        other_seen.push_back(row()->ColorOf(other));
++      }));
++  for (const bool on : {true, false}) {
++    SCOPED_TRACE(on ? "dark pages turned on" : "dark pages turned off");
++    active_seen.clear();
++    other_seen.clear();
++    stedding::SetDarkPagesOn(profile, on);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return active->GetOrCreateWebPreferences().force_dark_mode_enabled ==
++                 on &&
++             other->GetOrCreateWebPreferences().force_dark_mode_enabled == on;
++    })) << "the panes never took the switch";
++    // The reads after the restyle (kSampleAfterStyle, kSampleAfterLoad) and
++    // the page's own reports of its new colours.
++    base::RunLoop reads;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE, reads.QuitClosure(), base::Seconds(1));
++    reads.Run();
++    for (const std::optional<SkColor>& colour : other_seen) {
++      EXPECT_TRUE(is_header(colour))
++          << "the other pane's part went to "
++          << (colour ? color_utils::SkColorToRgbaString(*colour)
++                     : std::string("the ground"))
++          << (colour && stedding::PageColorsMatch(*colour, kThemeColour)
++                  ? ", the declared colour"
++                  : "");
++    }
++    for (const std::optional<SkColor>& colour : active_seen) {
++      EXPECT_TRUE(is_header(colour))
++          << "the active pane's part went to "
++          << (colour ? color_utils::SkColorToRgbaString(*colour)
++                     : std::string("the ground"))
++          << (colour && stedding::PageColorsMatch(*colour, kThemeColour)
++                  ? ", the declared colour"
++                  : "");
++    }
++    EXPECT_TRUE(is_header(row()->ColorOf(other)))
++        << std::hex << colour_of(other);
++    EXPECT_TRUE(is_header(row()->ColorOf(active)))
++        << std::hex << colour_of(active);
++  }
++}
++
+ // toolbar T23: a bubble asked for before its window is shown, with the
+ // address row hidden -- the crashed-session "Restore pages?" bubble at
+ // startup -- anchors to the top container. The app menu button is not drawn,
+@@ -1275,4 +1535,294 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheAppMenusChipIsAButtonsHeight) {
        << "the chip runs past the row";
  }
  
