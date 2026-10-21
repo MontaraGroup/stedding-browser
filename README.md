@@ -19,6 +19,25 @@ account, no telemetry, BSD-3-Clause.
 
 <img src="docs/images/readme/demo.gif" alt="Stedding in use: choosing tabs in the sidebar turns the address row green, then blue, with each page; the command bar jumps to a map open in another Space; the Spaces switch, each in its own colour; a tab dragged onto the page lights half of it and makes a split view, the address row dark over one page and white over the other; both pages turn dark at once and back">
 
+## New in 0.3
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/readme/clip-pinned-folder.gif" alt="A folder named Docs, holding a tab and a nested folder, is dragged up from the tabs over the line into the pinned tabs; a bar between the Django and PyPI pins shows the place, and the folder settles there with its tabs"><br>
+      <b>Folders in the pinned tabs.</b> Drag one over the line, to any place among the pins; a bar shows where it will land.</td>
+    <td width="50%"><img src="docs/images/readme/clip-space-scroll.gif" alt="The pointer rests on the sidebar while the mouse scrolls sideways: Work slides away to Personal and its map, then to Reading and its news page, and back again, one Space for each notch"><br>
+      <b>Spaces with the mouse.</b> Scroll sideways over the sidebar, with a tilt wheel or Shift and the wheel: one Space for each notch.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/readme/clip-little-window.gif" alt="A link from another app opens a small window over Stedding, its top row green like the Django page in it, the traffic lights in that row; a click on Open in Stedding at the row's right end moves the page into a tab of the main window"><br>
+      <b>Little windows, then a tab</b> (Mac). A link from another app opens small, its row in the page's colour; <b>Open in Stedding</b> (⌘O) moves it into a tab.</td>
+    <td><img src="docs/images/readme/clip-pin-close.gif" alt="A pinned Django tab that had wandered to another page is closed with Command-W: it stays in its place, asleep, with its own title again, and a click opens it on its pinned page"><br>
+      <b>⌘W on a pinned tab</b>, as in Arc: it goes back to its pinned page, asleep, in its place.</td>
+  </tr>
+</table>
+
+The rest is in the [release notes](docs/release-notes/v0.3.0-beta.1.md).
+
 ## Five things Arc never had
 
 1. **Dark pages.** One switch turns every website dark from its first frame, with no white

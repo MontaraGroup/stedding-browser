@@ -105,12 +105,37 @@ desktop exists (the caption still names them).
 
 ## Left out of the animation
 
-Each of these is a still or a line of the README instead: folders and pinned tabs up
-close (a slash on a wandered pin is too small at GIF size), folders in the pinned tabs
-and the rail at Compact and Dense (0.3.0 beta 1; each would need a scene of its own past 40
-seconds), the rail and the archive (the same), little windows and apps from pages (both
-open a second window outside the recorded region), the Arc import, the welcome flow,
-and private windows.
+Each of these is a still, a short clip (below) or a line of the README instead: folders
+and pinned tabs up close (a slash on a wandered pin is too small at GIF size), folders in
+the pinned tabs and the rail at Compact and Dense (0.3.0 beta 1; each would need a scene of
+its own past 40 seconds), the rail and the archive (the same), little windows and apps from
+pages (a second window), the Arc import, the welcome flow, and private windows.
+
+## The clips of what is new
+
+Four short clips under the README's "New in 0.3", one idea each, made on the 0.3.0 beta 1
+build on 2026-10-21; the website shows the same clips as MP4s, with one more of the split
+scene as a tour item. Each is one
+`tooling/drive` run on a fresh copy of the demo's fixture (`steps/setup.steps`): a cut
+preroll loads the pages, the command bar opens and closes once to sync the recording's
+clock (as the demo's `bar` scene does), and the clip runs from a still frame to a hold on
+the result. The frame is the demo's, 1200 px wide with no caption lane (the README and
+the site caption them); the two sidebar clips show the window's top left 760 × 478 points
+at 1.5 times the size, so the rows can be read.
+
+| File | Seconds | What happens |
+|---|---|---|
+| `clip-pinned-folder.gif` | 7.0 | Work; the Docs folder (its nested Python folder closed) dragged by its header from under the line to between the Django and PyPI pins; the bar shows the place; the folder settles there |
+| `clip-space-scroll.gif` | 7.1 | Work on Django; a sideways wheel notch over the sidebar four times: Personal, Reading, Personal, Work. Work comes back to its own last tab, not an essential, so the clip starts on Django and loops without a seam |
+| `clip-little-window.gif` | 7.0 | Reading on LWN; `open -a <app> https://docs.djangoproject.com/en/stable/` from outside opens the little window, its row Django's green; a click on Open in Stedding moves it into Reading |
+| `clip-pin-close.gif` | 6.4 | Work; Django's pin wandered to its overview page (the slash); ⌘W: the pin sleeps at home, in place, and PyPI shows; a click wakes Django on its home page |
+
+Two things a take needs: the pointer comes to a row over no tab row it slows on (a glide
+that eases out over a tab row opens that row's hover card, and the card stays up through
+a drag that starts next), and the little window's clip is a launch without
+`--window-size` and `--window-position`, which `tooling/drive` passes and the window
+sizer gives every window, the little one included (docs/HANDOFF.md, trap 26); the session
+brings the main window back at the fixture's place without them.
 
 ## Real input only where nothing else shows it
 
