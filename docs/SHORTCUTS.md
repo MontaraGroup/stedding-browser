@@ -62,7 +62,7 @@ a moment before the next.
 | Split the current tab with a new one | ⌃⌘N (⌥⌘N too, except while Arc runs) | Alt+Shift+N |
 | Split with the page on screen: drag a tab onto the page's left or right half, and let go when it lights | drag | drag |
 | Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
-| Reopen closed tabs, one at a time, each in its Space and folder (with Settings › Stedding › Tabs › Offer Undo after closing tabs on, the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
+| Reopen closed tabs, one at a time, each in its Space and folder (the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
 | Close a pinned tab: it unloads and goes back to its pinned page, keeping its place (its ✕, a middle click and its menu's Close do the same) | ⌘W | Ctrl+W |
 
 ## Page

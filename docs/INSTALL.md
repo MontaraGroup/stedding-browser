@@ -52,15 +52,14 @@ across.
 
 ### Updating
 
-From beta 16 on, the Mac version updates itself: it looks for a new version on GitHub when
-you open it, unless it looked in the past hour, and every six hours while it runs (versions
-before 0.3.0 beta 2 look once a day), downloads it in the background, and shows **New
-Stedding Version Available** at the bottom of the sidebar; click it to restart into the new
-version, or just quit, and it installs then. **Stedding › Check for Updates…** looks at
-once. To stop it, turn off **Update Stedding automatically** in Settings › Stedding ›
-Updates; it then makes no update request at all. After each update Stedding opens one
-thank-you page on stedding.dev, which the switch beside it turns off
-([features/updates.md](features/updates.md), [PRIVACY.md](PRIVACY.md)).
+From beta 16 on, the Mac version updates itself: once a day it looks for a new
+version on GitHub, downloads it in the background, and shows **New Stedding Version
+Available** at the bottom of the sidebar; click it to restart into the new version, or just
+quit, and it installs then. **Stedding › Check for Updates…** looks at once. To stop it, turn
+off **Update Stedding automatically** in Settings › Stedding › Updates; it then makes no
+update request at all. After each update Stedding opens one thank-you page on stedding.dev,
+which the switch beside it turns off ([features/updates.md](features/updates.md),
+[PRIVACY.md](PRIVACY.md)).
 
 Before then, or by hand: download the new DMG and drag Stedding over the old one in
 Applications; it opens with no extra step. Your profile is untouched.
@@ -95,14 +94,13 @@ The profile is under `%LOCALAPPDATA%\Stedding\User Data`. Export works as on mac
 
 ### Updating and uninstalling
 
-From beta 19 on, the Windows version updates itself as the Mac's does: it looks for a new
-version on GitHub when you open it, unless it looked in the past hour, and every six hours
-while it runs (versions before 0.3.0 beta 2 look once a day), downloads the installer in the
-background, checks its signature, installs it beside the running copy, and shows **New
-Stedding Version Available** at the bottom of the sidebar; click it to restart into the new
-version, or just quit, and the next start is the new one. **Check for Updates** in the
-command bar looks at once, and **Update Stedding automatically** in Settings › Stedding ›
-Updates turns it off ([features/updates.md](features/updates.md), [PRIVACY.md](PRIVACY.md)).
+From beta 19 on, the Windows version updates itself as the Mac's does: once a day it looks
+for a new version on GitHub, downloads the installer in the background, checks its
+signature, installs it beside the running copy, and shows **New Stedding Version
+Available** at the bottom of the sidebar; click it to restart into the new version, or just
+quit, and the next start is the new one. **Check for Updates** in the command bar looks at
+once, and **Update Stedding automatically** in Settings › Stedding › Updates turns it off
+([features/updates.md](features/updates.md), [PRIVACY.md](PRIVACY.md)).
 
 Beta 18 and earlier have no updater: install beta 19 by hand once. By hand, run the new
 installer over the old version; the profile is kept. From beta 19 on Stedding may stay
