@@ -22,9 +22,10 @@ tooling/drive, fills in @MARKS@ and @SHOTS@, and expands the one step this
 directory adds to tooling/drive's language:
 
     glide X Y [SECONDS]           the pointer moves from where the last step left
-    glide X1 Y1 X2 Y2 [SECONDS]   it (or from X1 Y1) to X Y along an eased path of
-                                  hover steps, so it never jumps across the window
-                                  in the recording; half a second by default
+    glide X1 Y1 X2 Y2 [SECONDS]   it (or from X1 Y1) to X Y along an eased path
+                                  (tooling/drive's move), so it never jumps across
+                                  the window in the recording; half a second by
+                                  default
 
 Every recorded scene's first step is `shot @MARKS@/<scene>.png`; the end
 scene's last step is `shot @MARKS@/stop.png`. The times those files are
@@ -81,8 +82,6 @@ FIXTURES = {
 ID_PREFIX = "5EDD1A6000000000000000000000"
 JAR_TOKEN = "5EDD1A60000000000000000000000A11"
 SCHEMES = {"system": None, "light": 1, "dark": 2}
-
-GLIDE_RATE = 40  # hover steps per second of a glide
 
 
 def fail(message: str) -> int:
@@ -168,17 +167,7 @@ def expand_glide(words: list[str], where: str, at) -> list[str]:
         raise ValueError("%s: glide takes X Y [SECONDS] or X1 Y1 X2 Y2 [SECONDS]" % where)
     if not (0 < seconds <= 5) or not all(math.isfinite(v) for v in (x1, y1, x2, y2)):
         raise ValueError("%s: a glide lasts more than 0 and at most 5 seconds" % where)
-    count = max(6, round(seconds * GLIDE_RATE))
-    pause = seconds / count
-    lines = ["# glide from %d %d to %d %d in %gs" % (x1, y1, x2, y2, seconds)]
-    for i in range(1, count + 1):
-        t = i / count
-        eased = t * t * (3 - 2 * t)
-        lines.append("hover %d %d" % (round(x1 + (x2 - x1) * eased),
-                                      round(y1 + (y2 - y1) * eased)))
-        if i < count:
-            lines.append("wait %.3f" % pause)
-    return lines
+    return ["move %d %d %d %d %g" % (round(x1), round(y1), round(x2), round(y2), seconds)]
 
 
 def pointer_after(words: list[str], at):
@@ -187,6 +176,8 @@ def pointer_after(words: list[str], at):
         if words[0] in POINTER_OPS and len(words) >= 3:
             return float(words[1]), float(words[2])
         if words[0] == "drag" and len(words) == 5:
+            return float(words[3]), float(words[4])
+        if words[0] == "move" and len(words) == 6:
             return float(words[3]), float(words[4])
     except ValueError:
         pass
@@ -224,8 +215,7 @@ def cmd_render(args: argparse.Namespace) -> int:
                 except ValueError as exc:
                     errors.append(str(exc))
                     continue
-                last = out_lines[-1].split()
-                at = (float(last[1]), float(last[2]))
+                at = pointer_after(out_lines[-1].split(), at)
             else:
                 out_lines.append(line)
                 if words and not words[0].startswith("#"):
@@ -439,13 +429,15 @@ def cmd_timeline(args: argparse.Namespace) -> int:
 
     # The recorder's first frame comes a little after t0. The command bar opening
     # right after the bar scene's marker is the largest change on screen in the
-    # second around it; how far before the naive time it shows is that delay.
+    # seconds before it; how far before the naive time it shows is that delay.
+    # ffmpeg's screen input starts about 1.8 s late on the Mac of 2026-10-21: a
+    # window reaching 1.6 s back missed the bar and synced on the typing instead.
     offset, how = 0.0, "none (no --offset and no command bar scene to sync on)"
     if args.offset is not None:
         offset, how = args.offset, "given (--offset)"
     elif args.changes and "bar" in scenes:
         naive = marks[scenes.index("bar")]
-        window = [(t, s) for t, s in scene_changes(args.changes) if naive - 1.6 <= t <= naive + 0.6]
+        window = [(t, s) for t, s in scene_changes(args.changes) if naive - 3.0 <= t <= naive + 0.6]
         if window:
             seen = max(window, key=lambda item: item[1])[0]
             # The bar opens about 0.15 s after the marker is written.

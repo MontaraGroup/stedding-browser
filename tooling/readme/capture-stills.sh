@@ -131,7 +131,7 @@ still_spaces() {
   seeded spaces spaces --scheme "$SCHEME"
   shoot spaces spaces --features "$FEATURE:pin_tabs/2" \
     "--user-data-dir=$PROFILE" "${BROWSER_ARGS[@]}" \
-    "$URL_REPO" "$URL_MDN" "$URL_DJANGO" "$URL_TS" "$URL_TRENDING"
+    "$URL_REPO" "$URL_MDN" "$URL_DJANGO" "$URL_PYTHON" "$URL_TRENDING"
 }
 
 # The command bar open over the page, listing the open tabs.
@@ -146,7 +146,7 @@ still_folders() {
   seeded folders demo --scheme "$SCHEME"
   shoot folders demo --features "$FEATURE:pin_tabs/2/folder_tabs/5" \
     "--user-data-dir=$PROFILE" "${BROWSER_ARGS[@]}" \
-    "$URL_REPO" "$URL_MDN" "$URL_MDN_CSS" "$URL_MDN_JS" "$URL_TS_HANDBOOK" \
+    "$URL_REPO" "$URL_MDN" "$URL_MDN_CSS" "$URL_MDN_JS" "$URL_PY_TUTORIAL" \
     "$URL_DJANGO" "$URL_TRENDING"
 }
 
@@ -201,7 +201,7 @@ still_dark_pages() {
   seeded dark-pages demo --scheme "$SCHEME" --dark-pages
   shoot dark-pages demo --features "$FEATURE:pin_tabs/4" \
     "--user-data-dir=$PROFILE" "${BROWSER_ARGS[@]}" \
-    "$URL_HN" "$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_DJANGO" "$URL_TS" "$URL_TRENDING"
+    "$URL_HN" "$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_DJANGO" "$URL_PYTHON" "$URL_TRENDING"
 }
 
 # This round's: two pages on local servers, the first on screen (the outline shows
@@ -209,7 +209,7 @@ still_dark_pages() {
 still_local_tabs() {
   seeded local-tabs demo --scheme "$SCHEME"
   shoot local-tabs demo "--user-data-dir=$PROFILE" "${BROWSER_ARGS[@]}" \
-    "$URL_SAMPLE_APP" "$URL_SAMPLE_API" "$URL_REPO" "$URL_DJANGO" "$URL_TS"
+    "$URL_SAMPLE_APP" "$URL_SAMPLE_API" "$URL_REPO" "$URL_DJANGO" "$URL_PYTHON"
 }
 
 # This round's: the Space on screen has its own session (the fixture puts Personal

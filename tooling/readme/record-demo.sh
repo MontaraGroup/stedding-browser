@@ -22,9 +22,10 @@
 #              screen with each; nothing else
 #
 # Options:
-#   --with-new          add this round's scenes (dark pages, local development tabs)
-#   --scenes a,b,...    the scenes in order (default hero,colour,bar,spaces,rail,end;
-#                       with --with-new hero,colour,bar,spaces,rail,dark,local,end)
+#   --scenes a,b,...    the scenes in order (default
+#                       hero,colour,bar,spaces,split,dark,end; rail and local are
+#                       left out to keep the take under 40 seconds)
+#   --with-new          slideshow: add the stills of the features of beta 20
 #   --scheme S          light (default) or dark
 #   --recorder R        auto (default: screencapture if it records here, else ffmpeg),
 #                       screencapture or ffmpeg
@@ -55,9 +56,8 @@
 # shellcheck source=./common.sh
 . "$(cd "$(dirname "$0")" && pwd -P)/common.sh"
 
-KNOWN_SCENES="hero colour bar spaces rail dark local end"
-BASE_SCENES="hero,colour,bar,spaces,rail,end"
-NEW_SCENES="hero,colour,bar,spaces,rail,dark,local,end"
+KNOWN_SCENES="hero colour bar spaces split dark rail local end"
+DEMO_SCENES="hero,colour,bar,spaces,split,dark,end"
 BASE_SLIDES="hero,spaces,command-bar,folders,pins,rail,private"
 NEW_SLIDES="hero,spaces,command-bar,folders,pins,rail,isolated-space,local-tabs,dark-pages,private"
 
@@ -94,7 +94,7 @@ RECORDER_PID=""
 T0=""
 
 usage() {
-  sed -n '2,52p' "$0"
+  sed -n '2,53p' "$0"
   exit 2
 }
 
@@ -520,8 +520,7 @@ main() {
       SCENES="$BASE_SLIDES"
       [ "$WITH_NEW" -eq 0 ] || SCENES="$NEW_SLIDES"
     else
-      SCENES="$BASE_SCENES"
-      [ "$WITH_NEW" -eq 0 ] || SCENES="$NEW_SCENES"
+      SCENES="$DEMO_SCENES"
     fi
   fi
   MARKS="$OUT/marks"

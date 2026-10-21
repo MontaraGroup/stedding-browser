@@ -26,14 +26,16 @@ URL_MDN="https://developer.mozilla.org/en-US/"
 URL_DDG="https://duckduckgo.com/"
 URL_HN="https://news.ycombinator.com/"
 URL_MDN_CSS="https://developer.mozilla.org/en-US/docs/Web/CSS"
-URL_TS_HANDBOOK="https://docs.python.org/3/tutorial/"
+URL_PY_TUTORIAL="https://docs.python.org/3/tutorial/"
 URL_DJANGO="https://www.djangoproject.com/"
-URL_TS="https://www.python.org/"
+URL_PYTHON="https://www.python.org/"
 URL_TRENDING="https://github.com/trending"
 URL_LOBSTERS="https://lobste.rs/"
 URL_OSM="https://www.openstreetmap.org/"
 URL_WIKI_COOKIE="https://en.wikipedia.org/wiki/HTTP_cookie"
 URL_ARXIV="https://arxiv.org/"
+URL_PYPI="https://pypi.org/"
+URL_ARCH="https://archlinux.org/"
 URL_LWN="https://lwn.net/"
 URL_MDN_JS="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
 URL_WEB_APP="https://squoosh.app/"
@@ -44,15 +46,19 @@ URL_SAMPLE_API="http://localhost:$SAMPLE_API_PORT/"
 
 # The demo's fixture, in the order setup.steps files it: four essentials, a folder
 # with a nested one, Work's other pages, then the four that move to Personal and
-# Reading (the last one first).
+# Reading (the last one first). Work's two pins have a strong colour along their top
+# edge and nothing that moves on its own (python.org's rotating examples moved, and
+# threw the captions' sync). Reading's two pages are the split scene's, one dark along
+# the top and one white, at half the window's width too (the TypeScript handbook put a
+# white cookie notice on top there), so the row over the split shows two colours.
 DEMO_URLS=("$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_HN"
-           "$URL_MDN_CSS" "$URL_TS_HANDBOOK"
-           "$URL_DJANGO" "$URL_TS" "$URL_SAMPLE_APP" "$URL_TRENDING"
-           "$URL_LOBSTERS" "$URL_WIKI_COOKIE" "$URL_ARXIV" "$URL_LWN")
+           "$URL_MDN_CSS" "$URL_PY_TUTORIAL"
+           "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_TRENDING"
+           "$URL_LOBSTERS" "$URL_OSM" "$URL_ARCH" "$URL_LWN")
 # The same window without the pages that leave Work, for the stills.
 WORK_URLS=("$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_HN"
-           "$URL_MDN_CSS" "$URL_TS_HANDBOOK"
-           "$URL_DJANGO" "$URL_TS" "$URL_SAMPLE_APP" "$URL_TRENDING")
+           "$URL_MDN_CSS" "$URL_PY_TUTORIAL"
+           "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_TRENDING")
 DEMO_PARAMS="$FEATURE:pin_tabs/4/folder_tabs/6"
 # Every launch: no search-engine chooser over the window (run-mac.sh passes the same).
 BROWSER_ARGS=(--disable-search-engine-choice-screen)

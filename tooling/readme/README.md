@@ -36,14 +36,14 @@ that shows them is [README.md](../../README.md); a later rewrite is drafted as `
 ```bash
 # 1. The stills. No input; safe while you work. <out> is any folder outside the repository.
 tooling/readme/capture-stills.sh ~/Desktop/readme-media/stills
-tooling/readme/capture-stills.sh ~/Desktop/readme-media/stills --with-new   # once this round's features are built
+tooling/readme/capture-stills.sh ~/Desktop/readme-media/stills --with-new   # also dark-pages, local-tabs, isolated-space, web-app
 
 # 2. The animation. Real input: only with the operator's yes, then hands off.
 tooling/readme/record-demo.sh check    ~/Desktop/readme-media/demo           # renders and checks the steps; no launch
 tooling/readme/record-demo.sh probe    ~/Desktop/readme-media/demo           # which recorder works here
 tooling/readme/record-demo.sh layout   ~/Desktop/readme-media/demo           # the fixture's pictures: confirm the GUESS coordinates
-tooling/readme/record-demo.sh rehearse ~/Desktop/readme-media/demo --with-new
-tooling/readme/record-demo.sh record   ~/Desktop/readme-media/demo --with-new
+tooling/readme/record-demo.sh rehearse ~/Desktop/readme-media/demo
+tooling/readme/record-demo.sh record   ~/Desktop/readme-media/demo
 tooling/readme/record-demo.sh convert  ~/Desktop/readme-media/demo --offset -0.3   # if the captions run early or late
 
 # 3. Look at every file, copy the chosen ones into docs/images/readme/, then:
@@ -117,8 +117,10 @@ lets go of every key and button, quits the launched browser and stops the record
 the local pages. `check`, `convert` and `slideshow` start no browser and record nothing,
 so they also run beside your own Stedding.
 
-The scenes: `hero colour bar spaces rail end` by default, with `--with-new` also
-`dark` and `local` before `end`; `--scenes` picks others, `end` last. The first scene's
+The scenes: `hero colour bar spaces split dark end` by default; `--scenes` picks
+others, `end` last. `rail` and `local` are left out of the default to keep the take
+under 40 seconds: `rail` goes anywhere before `end`, `local` right after `colour`,
+where Work is on screen. The first scene's
 marker is a capture of the window by its id, and its transparent corners become the
 mask that cuts the desktop out of every frame.
 
@@ -131,14 +133,14 @@ palette).
 ### What a take needs checked by a person
 
 - The GUESS coordinates in `steps/`, from the `layout` pictures: the essentials card,
-  the two pinned rows, the folder headers, the sample app's row and the rest point.
-  The chips and the sidebar toggles are the acceptance runs' coordinates.
+  the two pinned rows, the folder headers, the sample app's row and the rest point;
+  Reading's rows from `marks/split.png` after a rehearsal. The chips and the sidebar
+  toggles are the acceptance runs' coordinates.
 - The pages: each scene's page shows the colour the storyboard says (a site may have
   changed its header since).
-- This round's scenes and stills (`dark`, `local`, `dark-pages`, `local-tabs`,
-  `isolated-space`, `web-app`): the steps files and functions marked CONFIRM describe
-  the features as they are being built (the dark pages chord, the outline, where the
-  mark sits, how an app is made); check them on the build before a take.
+- The split scene: the dragged row's half lights once the pointer is over the page,
+  and the address row over the split shows the two pages' colours (`marks/dark.png`
+  after a rehearsal is the split as the drop left it).
 - The recorder: `screencapture -v` with a rectangle is the default; if `probe` says it
   records nothing here, `--recorder ffmpeg` records the whole display and cuts the
   window out.
