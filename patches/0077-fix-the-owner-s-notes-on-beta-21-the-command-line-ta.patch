@@ -41,7 +41,9 @@ exception):
   colour; a replaced pane is watched again.
 - Smoother motion (motion O4 to O7): hidden row controls are left out of
   every frame's layout, the sidebar's collapse, expand and overlay ease out,
-  and the Space slide's snapshot is a recording the compositor rasters.
+  and the Space slide's snapshot is a recording the compositor rasters; the
+  hidden omnibox popups follow the address field once a motion has ended,
+  not at every frame (62 window moves a collapse before).
 
 Tests: each change's new unit and browser tests, each failing with its change
 taken out; MotionFramesTest.* measures the frames.
@@ -56,7 +58,7 @@ its own (patches/README.md).
  chrome/browser/ui/spaces/space_model.cc       |   98 +-
  chrome/browser/ui/spaces/space_model.h        |   13 +
  chrome/browser/ui/stedding/BUILD.gn           |   16 +
- chrome/browser/ui/stedding/pin_lifecycle.cc   |  283 ++++-
+ chrome/browser/ui/stedding/pin_lifecycle.cc   |  283 +++-
  chrome/browser/ui/stedding/pin_lifecycle.h    |   63 +-
  .../ui/stedding/pin_lifecycle_unittest.cc     |   37 +-
  .../browser/ui/stedding/pin_unload_request.cc |   56 +
@@ -88,6 +90,8 @@ its own (patches/README.md).
  .../frame/vertical_tab_strip_region_view.h    |   32 +
  .../views/location_bar/location_bar_view.cc   |   16 +
  .../ui/views/location_bar/location_bar_view.h |    5 +
+ .../omnibox_popup_webui_base_content.cc       |   58 +-
+ .../omnibox_popup_webui_base_content.h        |   16 +
  .../ui/views/spaces/page_split_drag_target.cc |   19 +-
  .../ui/views/spaces/page_split_drag_target.h  |    6 +
  .../ui/views/spaces/space_switcher_view.cc    |   11 +-
@@ -98,7 +102,7 @@ its own (patches/README.md).
  .../tabs/browser_tab_strip_controller.cc      |    9 +
  chrome/browser/ui/views/tabs/common/BUILD.gn  |    1 +
  .../tabs/common/dragged_tabs_container.cc     |    2 +-
- .../ui/views/tabs/common/folder_view.cc       |  237 +++-
+ .../ui/views/tabs/common/folder_view.cc       |  237 ++-
  .../ui/views/tabs/common/folder_view.h        |   28 +-
  .../tabs/common/pinned_tab_container_view.cc  |   18 +-
  .../tabs/common/root_tab_collection_node.cc   |   49 +
@@ -115,25 +119,25 @@ its own (patches/README.md).
  .../vertical_tab_strip_top_container.cc       |   13 +-
  .../browser/ui/views/toolbar/toolbar_view.cc  |    7 +
  chrome/test/stedding/BUILD.gn                 |    3 +
- .../test/stedding/address_band_browsertest.cc |  400 ++++++-
- .../hidden_row_controls_browsertest.cc        |  289 ++++-
+ .../test/stedding/address_band_browsertest.cc |  400 ++++-
+ .../hidden_row_controls_browsertest.cc        |  289 +++-
  .../hover_card_picture_browsertest.cc         |  100 ++
- .../stedding/motion_frames_browsertest.cc     | 1062 +++++++++++++++++
- .../test/stedding/pinned_run_browsertest.cc   |  158 +++
- .../popup_over_full_screen_browsertest.mm     |  163 +++
- .../stedding/sidebar_click_browsertest.cc     |  392 +++++-
- .../test/stedding/sidebar_rail_browsertest.cc |  412 +++++++
+ .../stedding/motion_frames_browsertest.cc     | 1310 +++++++++++++++++
+ .../test/stedding/pinned_run_browsertest.cc   |  158 ++
+ .../popup_over_full_screen_browsertest.mm     |  163 ++
+ .../stedding/sidebar_click_browsertest.cc     |  392 ++++-
+ .../test/stedding/sidebar_rail_browsertest.cc |  412 ++++++
  .../test/stedding/sleep_timer_browsertest.cc  |   50 +
- .../test/stedding/startup_load_browsertest.cc |  368 +++++-
- chrome/test/stedding/tab_drop_browsertest.cc  |  221 ++++
- .../test/stedding/window_top_browsertest.mm   |  340 ++++++
+ .../test/stedding/startup_load_browsertest.cc |  368 ++++-
+ chrome/test/stedding/tab_drop_browsertest.cc  |  221 +++
+ .../test/stedding/window_top_browsertest.mm   |  340 +++++
  components/tabs/impl/tab_strip_collection.cc  |   18 +
  components/tabs/public/tab_strip_collection.h |    6 +
  .../cert_verifier/cert_verifier_service.cc    |   19 +
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 83 files changed, 5898 insertions(+), 284 deletions(-)
+ 85 files changed, 6214 insertions(+), 290 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.h
  create mode 100644 chrome/test/stedding/motion_frames_browsertest.cc
@@ -2733,6 +2737,160 @@ index 1abe43e4671a3..4c45b6b80c9ea 100644
    // Returns the location bar border radius in DIPs.
    int GetBorderRadius() const;
    static int ComputeBorderRadius(gfx::Size size);
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc b/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc
+index fafe939a64042..9c86f02bd9d0b 100644
+--- a/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc
+@@ -4,7 +4,9 @@
+ 
+ #include "chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.h"
+ 
++#include <optional>
+ #include <string_view>
++#include <utility>
+ 
+ #include "base/functional/bind.h"
+ #include "base/metrics/histogram_functions.h"
+@@ -61,6 +63,13 @@
+ 
+ namespace {
+ 
++// Stedding: how long the location bar's bounds stay unchanged before a hidden
++// popup follows them (see `OnLocationBarBoundsChanged()`). Longer than any gap
++// between the frames of a motion, short enough that a popup opened later finds
++// its page laid out at the new width.
++constexpr base::TimeDelta kHiddenPopupBoundsUpdateDelay =
++    base::Milliseconds(200);
++
+ // Finds the next or previous focusable view in `widget` outside of
+ // `starting_view` by traversing up and out of its subtree using
+ // `TraversalDirection::kUp`.
+@@ -161,6 +170,29 @@ bool OmniboxPopupWebUIBaseContent::EscClosesUI() const {
+ }
+ 
+ void OmniboxPopupWebUIBaseContent::OnLocationBarBoundsChanged() {
++  // Stedding (motion O8): a popup that is not showing follows the location bar
++  // once its bounds have stopped changing, not at every change. A sidebar
++  // collapse, a window resize or a full-screen change moves the location bar at
++  // every frame, and each move resized the hidden popup's window and re-laid
++  // out its hidden page. `Show()` sizes the window and `ShowUI()` the page from
++  // the location bar as it is then, so a popup opened before the deferred
++  // update still opens in the right place and at the right size.
++  if (popup_presenter_ && !popup_presenter_->IsShown()) {
++    hidden_bounds_update_timer_.Start(
++        FROM_HERE, kHiddenPopupBoundsUpdateDelay,
++        base::BindOnce(&OmniboxPopupWebUIBaseContent::UpdateToLocationBarBounds,
++                       base::Unretained(this)));
++    return;
++  }
++  UpdateToLocationBarBounds();
++}
++
++void OmniboxPopupWebUIBaseContent::UpdateToLocationBarBounds() {
++  hidden_bounds_update_timer_.Stop();
++  if (pending_content_height_) {
++    popup_presenter_->OnContentHeightChanged(
++        *std::exchange(pending_content_height_, std::nullopt));
++  }
+   // Track if the location bar width actually changed. This indicates a browser
+   // window resize. In that case, bypass the height debouncer to prevent
+   // flickering due to being 'behind' during actual resizes with rapid changes.
+@@ -292,8 +324,10 @@ void OmniboxPopupWebUIBaseContent::ShowUI() {
+ #endif
+ 
+   // The View may have changed, so this reinstates auto-resizing to prevent
+-  // the omnibox from staying collapsed until a resize is observed.
+-  OnLocationBarBoundsChanged();
++  // the omnibox from staying collapsed until a resize is observed. It also
++  // brings the page up to date with a location bar that moved while the popup
++  // was hidden (see `OnLocationBarBoundsChanged()`).
++  UpdateToLocationBarBounds();
+ 
+   is_shown_ = true;
+ }
+@@ -327,7 +361,7 @@ void OmniboxPopupWebUIBaseContent::ResizeDueToAutoResize(
+   if (popup_presenter_->ShouldDeferUntilVisualStateReady().has_value() ||
+       is_resizing || !popup_presenter_->ShouldDebounceResize()) {
+     debounce_resize_timer_.Stop();
+-    popup_presenter_->OnContentHeightChanged(new_size.height());
++    ApplyContentHeight(new_size.height());
+   } else {
+         // Debounce the resize event by 2 frame's time (assuming 60 Hz) to avoid
+     // flickering issues when the renderer sends a transient initial size.
+@@ -348,9 +382,21 @@ void OmniboxPopupWebUIBaseContent::ResizeDueToAutoResize(
+     // debouncer after making the JS initiate the widget show.
+     debounce_resize_timer_.Start(
+         FROM_HERE, base::Seconds(2) / 60,
+-        base::BindOnce(&OmniboxPopupPresenterBase::OnContentHeightChanged,
+-                       base::Unretained(popup_presenter_), new_size.height()));
++        base::BindOnce(&OmniboxPopupWebUIBaseContent::ApplyContentHeight,
++                       base::Unretained(this), new_size.height()));
++  }
++}
++
++void OmniboxPopupWebUIBaseContent::ApplyContentHeight(int content_height) {
++  // Stedding (motion O8): the page's answer to a hidden popup's update arrives
++  // later, and while the location bar is moving again it would move the hidden
++  // window to where the bar is at that frame. The deferred update applies it
++  // with the bar's final bounds instead.
++  if (hidden_bounds_update_timer_.IsRunning()) {
++    pending_content_height_ = content_height;
++    return;
+   }
++  popup_presenter_->OnContentHeightChanged(content_height);
+ }
+ 
+ bool OmniboxPopupWebUIBaseContent::HandleKeyboardEvent(
+@@ -501,7 +547,7 @@ void OmniboxPopupWebUIBaseContent::LoadContent() {
+   // BrowserWindowInterface.
+   permissions::PermissionRequestManager::CreateForWebContents(GetWebContents());
+ 
+-  OnLocationBarBoundsChanged();
++  UpdateToLocationBarBounds();
+   if (base::FeatureList::IsEnabled(omnibox::kOmniboxWebUIPopupMarkAsHidden)) {
+     GetWebContents()->WasHidden();
+   }
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.h b/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.h
+index 88544af4bd194..189ac3715218d 100644
+--- a/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.h
++++ b/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_OMNIBOX_OMNIBOX_POPUP_WEBUI_BASE_CONTENT_H_
+ #define CHROME_BROWSER_UI_VIEWS_OMNIBOX_OMNIBOX_POPUP_WEBUI_BASE_CONTENT_H_
+ 
++#include <optional>
+ #include <string_view>
+ #include <utility>
+ 
+@@ -161,6 +162,15 @@ class OmniboxPopupWebUIBaseContent : public views::WebView,
+   // the renderer.
+   void LoadContent();
+ 
++  // Stedding: sizes the page's auto-resize limits and the popup's window to
++  // the location bar's bounds now. `OnLocationBarBoundsChanged()` defers it
++  // while the popup is hidden.
++  void UpdateToLocationBarBounds();
++
++  // Stedding: hands the page's height to the presenter, or keeps it for the
++  // deferred update while that is pending.
++  void ApplyContentHeight(int content_height);
++
+ #if BUILDFLAG(IS_MAC)
+   void UpdateAutoFill();
+ #endif
+@@ -193,6 +203,12 @@ class OmniboxPopupWebUIBaseContent : public views::WebView,
+   // Debounces the resize events to avoid flickering.
+   base::OneShotTimer debounce_resize_timer_;
+ 
++  // Stedding: the one deferred update of a hidden popup to the location bar's
++  // bounds, restarted by each change of them.
++  base::OneShotTimer hidden_bounds_update_timer_;
++  // Stedding: the page's height reported while that update was pending.
++  std::optional<int> pending_content_height_;
++
+   // True if a bounds synchronization task is already posted and pending.
+   // Used to avoid overwriting a user resize task with the lower priority task
+   // of updating popup bounds to match location bar bounds change.
 diff --git a/chrome/browser/ui/views/spaces/page_split_drag_target.cc b/chrome/browser/ui/views/spaces/page_split_drag_target.cc
 index faa76595a3c90..990e67b83f179 100644
 --- a/chrome/browser/ui/views/spaces/page_split_drag_target.cc
@@ -5032,10 +5190,10 @@ index b15ecba90853d..fac4933e5aebf 100644
  // split on screen has one; a tab group header's card has none. A folder's
 diff --git a/chrome/test/stedding/motion_frames_browsertest.cc b/chrome/test/stedding/motion_frames_browsertest.cc
 new file mode 100644
-index 0000000000000..e05c7e407bf07
+index 0000000000000..4f49b0c641845
 --- /dev/null
 +++ b/chrome/test/stedding/motion_frames_browsertest.cc
-@@ -0,0 +1,1062 @@
+@@ -0,0 +1,1310 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -5065,6 +5223,7 @@ index 0000000000000..e05c7e407bf07
 +#include "base/functional/bind.h"
 +#include "base/memory/raw_ptr.h"
 +#include "base/run_loop.h"
++#include "base/scoped_multi_source_observation.h"
 +#include "base/strings/strcat.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/strings/stringprintf.h"
@@ -5086,7 +5245,9 @@ index 0000000000000..e05c7e407bf07
 +#include "chrome/browser/ui/animation/browser_animation_controller.h"
 +#include "chrome/browser/ui/animation/browser_animation_provider_internal.h"
 +#include "chrome/browser/ui/animation/browser_animation_types.h"
++#include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/omnibox/omnibox_controller.h"
 +#include "chrome/browser/ui/spaces/space.h"
 +#include "chrome/browser/ui/spaces/space_model.h"
 +#include "chrome/browser/ui/stedding/motion.h"
@@ -5101,6 +5262,10 @@ index 0000000000000..e05c7e407bf07
 +#include "chrome/browser/ui/views/commandbar/command_bar_view.h"
 +#include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/omnibox/omnibox_popup_presenter_base.h"
++#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
++#include "chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.h"
 +#include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 +#include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 +#include "chrome/browser/ui/views/tabs/common/tab_view.h"
@@ -5114,6 +5279,7 @@ index 0000000000000..e05c7e407bf07
 +#include "components/tabs/public/tab_interface.h"
 +#include "content/public/browser/tracing_controller.h"
 +#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
 +#include "third_party/skia/include/core/SkBitmap.h"
 +#include "third_party/skia/include/core/SkColor.h"
 +#include "third_party/skia/include/core/SkRect.h"
@@ -5129,14 +5295,19 @@ index 0000000000000..e05c7e407bf07
 +#include "ui/events/base_event_utils.h"
 +#include "ui/events/event.h"
 +#include "ui/gfx/animation/tween.h"
++#include "ui/gfx/geometry/insets.h"
 +#include "ui/gfx/geometry/point.h"
 +#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/vector2d.h"
 +#include "ui/gfx/presentation_feedback.h"
 +#include "ui/views/bubble/bubble_frame_view.h"
 +#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/webview/webview.h"
 +#include "ui/views/test/views_test_utils.h"
 +#include "ui/views/view.h"
++#include "ui/views/widget/native_widget.h"
 +#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_observer.h"
 +#include "url/gurl.h"
 +
 +namespace {
@@ -5518,6 +5689,55 @@ index 0000000000000..e05c7e407bf07
 +  std::map<std::string, int> painted_;
 +};
 +
++// Counts the bounds each window it watches takes: a move and a resize made
++// together, which the window reports twice, count once.
++class BoundsChangeCounter : public views::WidgetObserver {
++ public:
++  explicit BoundsChangeCounter(const std::vector<views::Widget*>& widgets) {
++    for (views::Widget* const widget : widgets) {
++      observations_.AddObservation(widget);
++      seen_[widget] = {0, widget->GetWindowBoundsInScreen()};
++    }
++  }
++  BoundsChangeCounter(const BoundsChangeCounter&) = delete;
++  BoundsChangeCounter& operator=(const BoundsChangeCounter&) = delete;
++  ~BoundsChangeCounter() override = default;
++
++  int count(views::Widget* widget) const {
++    const auto it = seen_.find(widget);
++    return it == seen_.end() ? 0 : it->second.count;
++  }
++  void Reset() {
++    for (auto& [widget, seen] : seen_) {
++      seen = {0, widget->GetWindowBoundsInScreen()};
++    }
++  }
++
++ private:
++  struct Seen {
++    int count = 0;
++    gfx::Rect bounds;
++  };
++
++  // views::WidgetObserver:
++  void OnWidgetBoundsChanged(views::Widget* widget,
++                             const gfx::Rect& new_bounds) override {
++    Seen& seen = seen_[widget];
++    if (new_bounds != seen.bounds) {
++      ++seen.count;
++      seen.bounds = new_bounds;
++    }
++  }
++  void OnWidgetDestroying(views::Widget* widget) override {
++    observations_.RemoveObservation(widget);
++    seen_.erase(widget);
++  }
++
++  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
++      observations_{this};
++  std::map<views::Widget*, Seen> seen_;
++};
++
 +class MotionFramesTest
 +    : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
 + protected:
@@ -5616,6 +5836,99 @@ index 0000000000000..e05c7e407bf07
 +  void Log(const FrameMeter& meter, std::string_view name) {
 +    LOG(INFO) << meter.Summary(name);
 +  }
++
++  LocationBarView* location_bar() {
++    return browser_view()->GetLocationBarView();
++  }
++
++  // The omnibox's popup windows (its results dropdown and the AI mode one),
++  // which the window keeps, hidden, between their shows; or the one showing.
++  std::vector<views::Widget*> OmniboxPopups(bool showing) {
++    std::vector<views::Widget*> popups;
++    for (views::Widget* const child :
++         views::Widget::GetAllChildWidgets(widget()->GetNativeView())) {
++      if (child != widget() && child->IsVisible() == showing &&
++          child->GetNativeWindowProperty(views::kWidgetIdentifierKey) ==
++              omnibox::kOmniboxWebUIPopupWidgetId) {
++        popups.push_back(child);
++      }
++    }
++    return popups;
++  }
++  views::Widget* Dropdown() {
++    const std::vector<views::Widget*> showing = OmniboxPopups(true);
++    return showing.empty() ? nullptr : showing.front();
++  }
++
++  // The bounds a popup's window takes for the location bar as it is now
++  // (OmniboxPopupPresenterBase::SynchronizePopupBounds): the field's span
++  // across and its top, with the frame's alignment and shadow insets around
++  // them. The height follows the popup's content.
++  gfx::Rect FieldSpan() {
++    gfx::Rect span = location_bar()->GetBoundsInScreen();
++    span.Inset(-RoundedOmniboxResultsFrame::GetLocationBarAlignmentInsets());
++    span.Inset(-RoundedOmniboxResultsFrame::GetShadowInsets());
++    return span;
++  }
++  bool AlignedToTheField(views::Widget* popup) {
++    const gfx::Rect bounds = popup->GetWindowBoundsInScreen();
++    const gfx::Rect span = FieldSpan();
++    return bounds.x() == span.x() && bounds.y() == span.y() &&
++           bounds.width() == span.width();
++  }
++  std::string Describe(views::Widget* popup) {
++    return base::StrCat({"the popup at ",
++                         popup->GetWindowBoundsInScreen().ToString(),
++                         ", the field's span at ", FieldSpan().ToString()});
++  }
++
++  // The width the open dropdown's page lays itself out at, once it is the
++  // field's (the popup's content width), or after ten frames.
++  int DropdownPageWidth(int field_width) {
++    views::WebView* const page =
++        stedding::test::FindView<views::WebView>(Dropdown()->GetRootView());
++    if (!page || !page->GetWebContents()) {
++      return -1;
++    }
++    return content::EvalJs(
++               page->GetWebContents(),
++               base::StringPrintf(
++                   "new Promise(done => {"
++                   "  let frames = 0;"
++                   "  const check = () => {"
++                   "    if (window.innerWidth === %d || ++frames > 10) {"
++                   "      done(window.innerWidth);"
++                   "    } else {"
++                   "      requestAnimationFrame(check);"
++                   "    }"
++                   "  };"
++                   "  check();"
++                   "})",
++                   field_width))
++        .ExtractInt();
++  }
++
++  // Types into the omnibox and waits for its results dropdown.
++  [[nodiscard]] bool OpenTheDropdown() {
++    chrome::FocusLocationBar(browser());
++    if (!base::test::RunUntil(
++            [&]() { return location_bar()->omnibox_view()->HasFocus(); })) {
++      return false;
++    }
++    location_bar()->omnibox_view()->SetUserText(u"a.test",
++                                                /*update_popup=*/true);
++    return base::test::RunUntil([&]() {
++      return location_bar()->GetOmniboxController()->IsPopupOpen() &&
++             Dropdown();
++    });
++  }
++  [[nodiscard]] bool CloseTheDropdown() {
++    location_bar()->omnibox_view()->RevertAll();
++    return base::test::RunUntil([&]() {
++      return !location_bar()->GetOmniboxController()->IsPopupOpen() &&
++             !Dropdown();
++    });
++  }
 +};
 +
 +// The sidebar's collapse to the rail and its expand (upstream's motions,
@@ -5680,6 +5993,99 @@ index 0000000000000..e05c7e407bf07
 +                             "%:", steps, "; windows moved:", moved, ")"}));
 +    EXPECT_EQ(collapse, vertical_tab_strip_state_controller()->IsCollapsed());
 +    ExpectNoHiddenFieldLaidOut(meter);
++  }
++}
++
++// motion O8: the omnibox's hidden popup windows follow the location bar once a
++// collapse or an expand of the sidebar has moved it, not at every frame. Each
++// was moved and resized, its hidden page laid out again, at every frame: 32
++// bounds changes each in a collapse and 38 in an expand at 120 Hz on the Mac
++// (2026-10-21). The page's answer to the update after one motion, arriving in
++// the next, is held for that one's update too.
++IN_PROC_BROWSER_TEST_F(MotionFramesTest,
++                       HiddenOmniboxPopupsFollowTheSidebarOnceAMotion) {
++  if (!Animates()) {
++    GTEST_SKIP() << "the machine asks for reduced motion";
++  }
++  ASSERT_NO_FATAL_FAILURE(OpenTitledTabs(4));
++  const std::vector<views::Widget*> popups = OmniboxPopups(false);
++  ASSERT_FALSE(popups.empty()) << "the window keeps no hidden omnibox popup";
++  const auto all_aligned = [&]() {
++    return std::ranges::all_of(
++        popups, [&](views::Widget* popup) { return AlignedToTheField(popup); });
++  };
++  ASSERT_TRUE(base::test::RunUntil(all_aligned))
++      << "the hidden popups never followed the window's first layout: "
++      << Describe(popups.front());
++  BoundsChangeCounter counter(popups);
++  for (const bool collapse : {true, false}) {
++    SCOPED_TRACE(collapse ? "collapse" : "expand");
++    counter.Reset();
++    const gfx::Rect field = location_bar()->GetBoundsInScreen();
++    vertical_tab_strip_state_controller()->RequestCollapse(collapse);
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !StripAnimating(); }));
++    ASSERT_NE(field, location_bar()->GetBoundsInScreen())
++        << "the motion did not move the location bar";
++    // Once the motion has ended, each follows it.
++    ASSERT_TRUE(base::test::RunUntil(all_aligned))
++        << "a hidden popup was left where the location bar was: "
++        << Describe(popups.front());
++    for (views::Widget* const popup : popups) {
++      EXPECT_FALSE(popup->IsVisible());
++      EXPECT_LE(counter.count(popup), 1)
++          << "a hidden popup window moved at every frame of the motion";
++    }
++  }
++}
++
++// motion O8: a popup hidden while the location bar moved opens at the field,
++// at the field's width, when it opens right after the change, before its
++// deferred update has had the time to run: after a collapse, an expand and a
++// resize of the window, and after a move of the window.
++IN_PROC_BROWSER_TEST_F(MotionFramesTest,
++                       TheOmniboxDropdownOpensAtTheFieldAfterTheWindowChanges) {
++  ASSERT_NO_FATAL_FAILURE(OpenTitledTabs(2));
++  const auto expect_aligned = [&]() {
++    views::Widget* const dropdown = Dropdown();
++    ASSERT_TRUE(dropdown);
++    EXPECT_TRUE(AlignedToTheField(dropdown)) << Describe(dropdown);
++    const int content_width =
++        location_bar()->GetBoundsInScreen().width() +
++        RoundedOmniboxResultsFrame::GetLocationBarAlignmentInsets().width();
++    EXPECT_EQ(content_width, DropdownPageWidth(content_width))
++        << "the dropdown's page is laid out at another width than the field's";
++  };
++  for (const bool collapse : {true, false}) {
++    vertical_tab_strip_state_controller()->RequestCollapse(collapse);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return !StripAnimating() &&
++             vertical_tab_strip_state_controller()->IsCollapsed() == collapse;
++    }));
++  }
++  {
++    SCOPED_TRACE("after a collapse, an expand and a resize");
++    const int width = location_bar()->GetBoundsInScreen().width();
++    gfx::Rect bounds = widget()->GetWindowBoundsInScreen();
++    bounds.Inset(gfx::Insets::TLBR(0, 0, 0, 160));
++    widget()->SetBounds(bounds);
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      views::test::RunScheduledLayout(widget());
++      return location_bar()->GetBoundsInScreen().width() != width;
++    })) << "the resize did not narrow the location bar";
++    ASSERT_TRUE(OpenTheDropdown()) << "no dropdown";
++    ASSERT_NO_FATAL_FAILURE(expect_aligned());
++    ASSERT_TRUE(CloseTheDropdown());
++  }
++  {
++    SCOPED_TRACE("after a move of the window");
++    const gfx::Rect field = location_bar()->GetBoundsInScreen();
++    widget()->SetBounds(widget()->GetWindowBoundsInScreen() +
++                        gfx::Vector2d(40, 30));
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return location_bar()->GetBoundsInScreen() != field;
++    })) << "the window did not move";
++    ASSERT_TRUE(OpenTheDropdown()) << "no dropdown";
++    ASSERT_NO_FATAL_FAILURE(expect_aligned());
 +  }
 +}
 +
