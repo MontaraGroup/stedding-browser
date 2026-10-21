@@ -115,7 +115,7 @@ its own (patches/README.md).
  .../vertical_tab_strip_top_container.cc       |   13 +-
  .../browser/ui/views/toolbar/toolbar_view.cc  |    7 +
  chrome/test/stedding/BUILD.gn                 |    3 +
- .../test/stedding/address_band_browsertest.cc |  385 ++++++
+ .../test/stedding/address_band_browsertest.cc |  400 ++++++-
  .../hidden_row_controls_browsertest.cc        |  289 ++++-
  .../hover_card_picture_browsertest.cc         |  100 ++
  .../stedding/motion_frames_browsertest.cc     | 1062 +++++++++++++++++
@@ -133,7 +133,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 83 files changed, 5885 insertions(+), 282 deletions(-)
+ 83 files changed, 5898 insertions(+), 284 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.h
  create mode 100644 chrome/test/stedding/motion_frames_browsertest.cc
@@ -4023,7 +4023,7 @@ index 7d6b53d1051d3..4f6c57cb7bcb6 100644
      deps += [
        "//chrome/browser:app_controller_mac",
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index 033e450900933..0a89719341391 100644
+index 033e450900933..981fc3f8a48d8 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -30,15 +30,19 @@
@@ -4211,7 +4211,31 @@ index 033e450900933..0a89719341391 100644
  #endif  // BUILDFLAG(IS_WIN)
  
  // toolbar T36 (BACKLOG S-231): over an infobar Chromium's separator closes
-@@ -1081,6 +1180,51 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+@@ -1013,11 +1112,21 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+   const auto icons = [&]() {
+     return bar()->GetColorProvider()->GetColor(kColorToolbarButtonIcon);
+   };
++  // Both pages painted too. Either tab can go to the background before its
++  // first paint, which then comes once the split shows it; the row has the
++  // page's colour from its background before that, and the paint reads it
++  // again. On a loaded PC a pane's first paint came during a step below that
++  // sets a pane's colour by hand, and the row took the page's own colour back
++  // (win-release, 2026-10-21: 4 runs in 60 with six at a time).
+   ASSERT_TRUE(base::test::RunUntil([&]() {
+-    return has(light, SK_ColorWHITE) &&
++    return light->CompletedFirstVisuallyNonEmptyPaint() &&
++           dark->CompletedFirstVisuallyNonEmptyPaint() &&
++           has(light, SK_ColorWHITE) &&
+            has(dark, SkColorSetRGB(0x10, 0x20, 0x30));
+   })) << "the panes' colours: " << std::hex << colour_of(light) << ", "
+-      << colour_of(dark);
++      << colour_of(dark) << "; painted: "
++      << light->CompletedFirstVisuallyNonEmptyPaint() << ", "
++      << dark->CompletedFirstVisuallyNonEmptyPaint();
+   {
+     SCOPED_TRACE("each pane's colour over it, a blend between");
+     EXPECT_TRUE(base::test::RunUntil([&]() {
+@@ -1081,6 +1190,52 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
      row()->SetColorForTesting(light_colour);
      row()->SetPartnerColorForTesting(dark_colour);
    }
@@ -4250,7 +4274,8 @@ index 033e450900933..0a89719341391 100644
 +          << "the icons are " << color_utils::SkColorToRgbaString(icons())
 +          << ", " << worse(icons()) << ":1 on the worse part, where "
 +          << best << ":1 reads on both; the ground is "
-+          << color_utils::SkColorToRgbaString(ground);
++          << color_utils::SkColorToRgbaString(ground) << "; the row has "
++          << std::hex << colour_of(light) << " and " << colour_of(dark);
 +    }
 +    row()->SetColorForTesting(light_colour);
 +    row()->SetPartnerColorForTesting(dark_colour);
@@ -4263,7 +4288,7 @@ index 033e450900933..0a89719341391 100644
    {
      SCOPED_TRACE("a swap takes the colours with the pages");
      tabs->ReverseTabsInSplit(split);
-@@ -1275,4 +1419,245 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheAppMenusChipIsAButtonsHeight) {
+@@ -1275,4 +1430,245 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheAppMenusChipIsAButtonsHeight) {
        << "the chip runs past the row";
  }
  
