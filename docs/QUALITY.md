@@ -36,7 +36,7 @@ harness takes a macOS app bundle; Windows has no measurement yet (`docs/ROADMAP.
 | Memory, 10-tab session | Physical footprint summed over the browser process tree after loading the fixed 10-site list and idling 60 s, median of 5 runs | ≤ 10% overhead |
 | Input latency, tab switch via sidebar | Keypress/click to target tab painted, median of 20 switches | ≤ 16 ms added over vanilla tab-strip switch |
 | Command bar open | Shortcut press to bar rendered and accepting input, median of 20 | ≤ 100 ms absolute |
-| Page load / rendering | Identical to vanilla | No measurable regression: we do not patch the rendering or network path |
+| Page load / rendering | Identical to vanilla | No measurable regression: the series patches no renderer code, and its few hunks in the network stack are listed in `docs/ARCHITECTURE.md` ("Where patches are allowed to live") |
 
 The measurement harness is `tooling/measure/harness.py` and the ten-site list is
 `tooling/measure/sites.txt`, so anyone can reproduce the numbers:
@@ -180,8 +180,8 @@ How it works on the Mac (ADR 0022, `docs/features/updates.md`):
   (`docs/HANDOFF.md`, "The updater"). For a release, the same with the previous release
   and the real feed.
 - **Skipping versions.** The feed keeps the newest five releases and Sparkle takes the
-  newest one the Mac's system can run, so any earlier version with the updater (beta 16 and
-  every release after it) goes straight to the latest.
+  newest one the Mac's system can run, so any earlier version with the updater (0.2.0 beta 16
+  and every release after it) goes straight to the latest.
 - **Rolling back.** Sparkle never installs an older version over a newer one. To take a
   bad release back: take it out of the feed at once (`git revert` of its "offer" commit,
   pushed), so nobody else is offered it, then release the fix as a later version and offer
@@ -212,7 +212,7 @@ How it works on the Mac (ADR 0022, `docs/features/updates.md`):
   `docs/PRIVACY.md`. An unexplained endpoint is a release blocker.
 - **Signed releases only** (from M7; on Windows from M8): every published artifact is
   signed (and notarized on macOS); checksums published with the release. The macOS image
-  is signed and notarized from beta 10; the Windows installer is not signed yet
+  is signed and notarized from 0.2.0 beta 10; the Windows installer is not signed yet
   (`BACKLOG.md` S-56).
 - Vulnerability reports handled per `SECURITY.md`.
 

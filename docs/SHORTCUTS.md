@@ -4,12 +4,12 @@ Every shortcut Stedding adds or changes, on both platforms. The same list is ins
 the browser at **Settings → Stedding → Shortcuts**, generated from the keyboard tables
 the browser itself uses, so its keys are those of the version you run.
 
-Four keys are new since beta 14: muting a tab (⌃M / Ctrl+M), all folders at once
+Four keys are new since 0.2.0 beta 14: muting a tab (⌃M / Ctrl+M), all folders at once
 (⇧⌘E / Ctrl+Shift+E), clearing a site's cookies (⌥⇧⌘R / Ctrl+Alt+Shift+R) and picture in
 picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). An earlier build does nothing with them. On the Mac,
-splitting the current tab with a new one is ⌃⌘N from beta 20;
-beta 17 and earlier have only ⌥⌘N for it, which still splits after that, except while Arc
-runs.
+splitting the current tab with a new one is ⌃⌘N from 0.2.0 beta 20;
+0.2.0 beta 17 and earlier have only ⌥⌘N for it, which still splits after that, except while
+Arc runs.
 
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
@@ -25,9 +25,24 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Pin the tab in its Space, or unpin it | ⌘D | Ctrl+D |
 | Clear: close the Space's unpinned tabs | ⇧⌘K | Ctrl+Shift+K |
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
-| In a little window (macOS): move the page into your window as a tab | ⌘O | — |
-| In a little window (macOS): send the page into a split of your window | ⇧⌘O | — |
+| In a little window (macOS): move the page into your window as a tab, as its Open in Stedding button does (a new window opens when none is) | ⌘O | — |
+| In a little window (macOS): send the page into a split of your window (File menu and the page's menu: Open in Split View) | ⇧⌘O | — |
 | In a little window (macOS): close it (the bare key may not reach the window yet, `docs/history/plan-2026-09-26.md` CMD-15) | Esc | — |
+
+### Switching Spaces with the mouse
+
+Over the sidebar or its icons, scroll sideways: to the right for the next Space, to the
+left for the one before. Scrolling up and down still scrolls your tabs.
+
+| How | macOS | Windows |
+|---|---|---|
+| Two fingers on the touchpad, sideways | the list follows your fingers and changes Space when you let go | one Space for each swipe |
+| A mouse that tilts its wheel, or has a second wheel for sideways | one Space for each notch | one Space for each notch |
+| Shift with the wheel (down is to the right) | one Space for each notch | one Space for each notch |
+| Ctrl with the wheel (down for the next Space) | — | one Space for each notch; over the page it still zooms |
+
+A quick spin of the wheel does not race through all your Spaces: after each change it waits
+a moment before the next.
 
 ## Tabs and the bar
 
@@ -36,7 +51,7 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
 | Open the bar in actions mode (⇥ in an empty bar does the same; ⇥ after the start of a search engine's name makes a search chip for that site instead) | ⇧⌘P | Ctrl+Shift+P |
 | Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
-| Run an extension: the bar lists your extensions; keep the keys down and press E again (or ↓ ↑) to choose, let go to run it; Esc runs none | ⌘E | Ctrl+Alt+E |
+| Run an extension: the bar lists your extensions; keep the keys down and press E again (or ↓ ↑) to choose, let go to run it; Esc (on the Mac also ⌘.) runs none | ⌘E | Ctrl+Alt+E |
 | Jump to one of the first eight rows you can see, or to the last one with 9 (hold ⌘ / Ctrl a moment to see the numbers) | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
 | Next tab / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+PgDn / Ctrl+PgUp |
 | Next tab down the sidebar / previous tab up the sidebar | ⌥⌘↓ / ⌥⌘↑ | Ctrl+Alt+↓ / Ctrl+Alt+↑ |
@@ -44,11 +59,11 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Most recent tabs, the other way round | ⌃⇧⇥ | Ctrl+Shift+Tab |
 | Move the row down / up (a folder beside it is one row) | ⌥⇧⌘↓ / ⌥⇧⌘↑ | Ctrl+Alt+Shift+↓ / ↑ |
 | Collapse the Space's folders, or expand them all when none is open | ⇧⌘E | Ctrl+Shift+E |
-| Split the current tab with a new one | ⌥⌘N (⌃⌘N too from beta 20) | Alt+Shift+N |
+| Split the current tab with a new one | ⌃⌘N (⌥⌘N too, except while Arc runs) | Alt+Shift+N |
 | Split with the page on screen: drag a tab onto the page's left or right half, and let go when it lights | drag | drag |
 | Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
 | Reopen closed tabs, one at a time, each in its Space and folder (the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
-| Put a pinned tab to sleep (instead of closing it) | ⌘W | Ctrl+W |
+| Close a pinned tab: it unloads and goes back to its pinned page, keeping its place (its ✕, a middle click and its menu's Close do the same) | ⌘W | Ctrl+W |
 
 ## Page
 
@@ -78,7 +93,7 @@ its menu item; only the key moves.
 |---|---|---|
 | ⌘T / Ctrl+T | Open the command bar | New Tab |
 | ⌘L / Ctrl+L | Open the command bar with the page's address | Focus the address bar |
-| ⌘W / Ctrl+W on a pinned tab | Put it to sleep | Close Tab |
+| ⌘W / Ctrl+W on a pinned tab | Unload it and send it back to its pinned page | Close Tab |
 | ⌘S / Ctrl+S | Collapse or expand the sidebar | Save Page As… (now ⇧⌘S / Ctrl+Shift+S) |
 | ⌘D / Ctrl+D | Pin the tab in its Space | Bookmark This Tab… (keeps its menu row) |
 | ⇧⌘D / Ctrl+Shift+D | Show or hide the address row | Bookmark All Tabs… (keeps its menu row) |
@@ -91,7 +106,7 @@ its menu item; only the key moves.
 | ⇧⌘K / Ctrl+Shift+K | Clear the Space | unbound |
 | ⌘E | Run an extension | Use Selection for Find (keeps its Edit › Find menu row) |
 
-The four keys added in beta 14 (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
+The four keys added in 0.2.0 beta 14 (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
 Ctrl+Alt+Shift+P and Ctrl+Alt+Shift+R) were free in Chromium on both platforms, so they move
 none of its keys.
 
@@ -115,7 +130,7 @@ Session** row in the command bar (⇧⌘P). Off by default.
   takes it before the browser does; the File menu row always works.
 - **macOS:** while Arc is running it takes ⌥⌘N from every app for its Little Arc window,
   so ⌥⌘N, Chromium's chord for the split, opens Arc instead of a split here. Quit Arc, or
-  use **New Split View with Current Tab** on a tab's right-click menu. From beta 20,
+  use **New Split View with Current Tab** on a tab's right-click menu. From 0.2.0 beta 20,
   ⌃⌘N, the menu's chord, splits whether Arc runs or not.
 - **Windows:** a tap of Alt on its own still focuses the app menu, as in Chromium; the
   digit goes with the key held.

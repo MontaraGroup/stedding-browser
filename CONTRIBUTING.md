@@ -13,6 +13,9 @@ what kinds of contributions are useful right now.
   latest pre-release, use it for a day against whatever you use now, and open an issue
   for each thing that is worse. Most of the work so far has followed exactly this kind
   of feedback; what is open from it is in `BACKLOG.md`.
+- **Ideas.** An issue that asks for a feature is read as a suggestion: the owner decides
+  what is built, and an idea that is turned down is recorded in `BACKLOG.md` with the reason
+  (`S-254`, essentials per Space, is one). An issue that reports a bug is fixed.
 - **Discussions and issues.** Questions, critiques of the plan, prior art we missed,
   Chromium fork experience, packaging and signing knowledge — open a GitHub issue or
   discussion. Disagreement with a documented decision is welcome; argue against the

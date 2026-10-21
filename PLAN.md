@@ -22,9 +22,30 @@ its items still open on 2026-10-14 are BACKLOG rows that name their ids.
    deleted.
 8. The docs claim no import from Chrome, Brave or Edge until it exists; the importer is
    built later (`S-101`).
-9. Little windows get no Space commands. "Open in main window" is enough.
+9. Little windows get no Space commands. "Open in main window" is enough (built as the
+   window's "Open in Stedding", `docs/features/little.md` E7).
 10. Tests that pin a bug are decided from the spec row and Arc's behaviour. Ask the owner only
     where those two disagree.
+
+## Later decisions
+
+11. Closing a pinned tab works the Arc way (2026-10-20): ⌘W, its close button, a middle click
+    and the tab menu's Close unload a Space pin or an essential and send it back to its home,
+    in its place, whatever it is doing, after the page's own "Leave site?" if it asks. The
+    setting off makes ⌘W, the close button and a middle click close it (`docs/features/pins.md`
+    H3, H9, H16).
+12. A top-level folder can join a Space's pinned run, and its tabs are then pins
+    (2026-10-20; `docs/features/folders.md` F38). Essentials take no folder.
+13. On Windows the extension chord is Ctrl+Alt+E (2026-10-20; `docs/features/toolbar.md` T39).
+14. Essentials stay shared by every Space, as in Arc (2026-10-21): no essentials of one Space,
+    and no setting for them (`S-254`, GitHub issue 8).
+15. Spaces switch with a sideways scroll over the sidebar, as in Arc (2026-10-21, GitHub
+    issue 10): a tilt wheel and Shift with the wheel, on Windows also a touchpad's sideways
+    scroll and Ctrl with the wheel; no Control with the wheel on the Mac, and a vertical
+    scroll never switches (`docs/features/spaces.md` B39).
+16. An issue a user files on GitHub is a suggestion unless it reports a bug (2026-10-21):
+    bugs are fixed, a requested feature is built only once the owner has said yes, and
+    nothing is said, labelled or closed on GitHub (`AGENTS.md`, red lines).
 
 The operator's own request in chat comes before any of this and before BACKLOG's order.
 

@@ -17,7 +17,7 @@ account, no telemetry, BSD-3-Clause.
 [stedding.dev](https://stedding.dev) · [Download](#download) · [Shortcuts](docs/SHORTCUTS.md) ·
 [FAQ](docs/FAQ.md) · [Privacy](docs/PRIVACY.md) · [Build](#building-from-source)
 
-<img src="docs/images/readme/demo.gif" alt="Stedding in use: the address row takes each page's colour as tabs are chosen in the sidebar, the command bar finds a tab in another Space, the Spaces switch with their own colours, the sidebar folds to a rail of icons and opens again, every website turns dark at once, and a tab on a local server wears its dashed outline">
+<img src="docs/images/readme/demo.gif" alt="Stedding in use: choosing tabs in the sidebar turns the address row green, then blue, with each page; the command bar jumps to a map open in another Space; the Spaces switch, each in its own colour; a tab dragged onto the page lights half of it and makes a split view, the address row dark over one page and white over the other; both pages turn dark at once and back">
 
 ## Five things Arc never had
 
@@ -37,8 +37,8 @@ account, no telemetry, BSD-3-Clause.
    site in front of you and nothing else; Close Duplicate Tabs is one command away.
    [Spec](docs/features/commandbar.md)
 
-Dark pages, apps from pages and local development tabs came with beta 18 on Windows and with
-beta 20 on the Mac.
+Dark pages, apps from pages and local development tabs came with 0.2.0 beta 18 on Windows and
+with 0.2.0 beta 20 on the Mac.
 
 <p>
   <img src="docs/images/readme/dark-pages.png" width="49%" alt="A white website shown dark, the moon button by the address row lit">
@@ -48,13 +48,17 @@ beta 20 on the Mac.
 ## Everything you know from Arc
 
 - **The sidebar**: vertical tabs at Arc's proportions, essentials as cards, pinned tabs that
-  remember their page, nested folders, and ⌘S to fold it to a rail of icons or hide it.
-- **Spaces** with their own colour and icon: switch with the chips, ⌃1–⌃9 or a two-finger
-  swipe (Mac). A Space can keep its own cookies, so one site can be signed into twice.
+  remember their page and go back to it when you close them, nested folders, in the pinned
+  tabs too, and ⌘S to fold it to a rail of icons or hide it.
+- **Spaces** with their own colour and icon: switch with the chips, ⌃1–⌃9, a two-finger
+  swipe, or the mouse's sideways scroll over the sidebar. A Space can keep its own cookies,
+  so one site can be signed into twice.
 - **⌘T for everything**: a URL, a search, or any open or archived tab in any Space; ⇧⌘P lists
   every command with its key.
-- **Split view**, **little windows** for links from other apps (Mac), sites **routed** to
-  their Space, **sleeping tabs**, and an **archive** for idle tabs, off until you choose.
+- **Split view**: drag a tab onto the page, and it opens beside it.
+- **Little windows** for links from other apps (Mac), with **Open in Stedding** to keep the
+  page as a tab; sites **routed** to their Space, **sleeping tabs**, and an **archive** for
+  idle tabs, off until you choose.
 - **Local development tabs** marked with Arc's dashed tape, with host and port.
 - **Copy the link** clean of trackers (⇧⌘C) or as Markdown, **screenshots** by key, mute and
   picture in picture by key.
@@ -80,16 +84,16 @@ Each feature has a specification naming the test behind every behaviour:
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.2.0 beta 20**, for macOS and Windows, on Chromium 156.0.8078.36.
+is **0.3.0 beta 1**, for macOS and Windows, on Chromium 156.0.8078.48.
 
 | Platform | File | |
 |---|---|---|
 | macOS 13 or later, Apple silicon | `Stedding-<version>-arm64.dmg` | Signed and notarized: drag it to Applications and open it |
 | Windows 10 / 11, x64 | `Stedding-<version>-win-x64.exe` | Installs for the current user, no administrator prompt. Not signed yet: SmartScreen → **More info** → **Run anyway**, once |
 
-After that it updates itself (the Mac from beta 16, Windows from beta 19; install beta 19 by
-hand once). Checksums are in each release's notes; [docs/INSTALL.md](docs/INSTALL.md) covers
-verifying, updating and uninstalling. Intel Macs and Linux are not supported yet.
+After that it updates itself (the Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19; an older
+Windows copy needs one install by hand). Checksums are in each release's notes;
+[docs/INSTALL.md](docs/INSTALL.md) covers verifying, updating and uninstalling. Intel Macs and Linux are not supported yet.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/hero-dark.png">
@@ -110,7 +114,7 @@ Settings → Stedding → Shortcuts in the browser.
 | Space 1–9 / next / previous | ⌃1–⌃9 / ⌥⌘→ / ⌥⌘← | Alt+1–9 / Ctrl+Alt+→ / ← |
 | Most recent tab | ⌃⇥ | Ctrl+Tab |
 | Clear the Space's loose tabs | ⇧⌘K | Ctrl+Shift+K |
-| Split the tab with a new one | ⌥⌘N (⌃⌘N from beta 20) | Alt+Shift+N |
+| Split the tab with a new one | ⌃⌘N | Alt+Shift+N |
 | Dark pages on or off | ⌥⇧⌘D | Ctrl+Alt+Shift+D |
 | Copy the link, clean | ⇧⌘C | Ctrl+Shift+C |
 
@@ -136,12 +140,13 @@ Every connection the browser makes is listed in [docs/PRIVACY.md](docs/PRIVACY.m
 
 ## Status
 
-An early **beta**, fixed release by release. Known limits:
-the Windows installer is unsigned (`S-56`); Safe Browsing is off (above); on a Mac with a
-second desktop, Mission Control takes ⌃1–⌃9 (the Spaces menu keeps them); while Arc runs it
-takes ⌥⌘N from every app (`S-79`; [the FAQ](docs/FAQ.md) has the way round). Open work is in
-[BACKLOG.md](BACKLOG.md), the milestones in [docs/ROADMAP.md](docs/ROADMAP.md), and every
-release's changes in [docs/release-notes/](docs/release-notes/).
+An early **beta**, fixed release by release. Known limits: the Windows installer is unsigned
+(`S-56`); Safe Browsing is off (above); on a Mac with a second desktop, Mission Control takes
+⌃1–⌃9 (the Spaces menu keeps them); while Arc runs it takes ⌥⌘N from every app (`S-79`;
+[the FAQ](docs/FAQ.md) has the way round); Netflix, Disney+ and Spotify's web player do not
+play, since Widevine is not built (`S-241`). Open work is in [BACKLOG.md](BACKLOG.md), the
+milestones in [docs/ROADMAP.md](docs/ROADMAP.md), and every release's changes in
+[docs/release-notes/](docs/release-notes/).
 
 ## Building from source
 

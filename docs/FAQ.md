@@ -43,11 +43,12 @@ Every release is built from this repository's patch series, with its SHA-256 che
 beside the file.
 
 **Will it update itself?**
-Yes, on the Mac from beta 16 and on Windows from beta 19. Once a day it looks for a new version,
-downloads it in the background and shows **New Stedding Version Available** at the bottom of the
-sidebar; a click restarts into it. Every update is signed and checked before it installs, and
-the check sends nothing that identifies you ([PRIVACY.md](PRIVACY.md)). Settings › Stedding ›
-Updates turns it off. A Windows copy older than beta 19 needs beta 19 installed by hand once.
+Yes, on the Mac from 0.2.0 beta 16 and on Windows from 0.2.0 beta 19. Once a day it looks for a
+new version, downloads it in the background and shows **New Stedding Version Available** at the
+bottom of the sidebar; a click restarts into it. Every update is signed and checked before it
+installs, and the check sends nothing that identifies you ([PRIVACY.md](PRIVACY.md)). Settings ›
+Stedding › Updates turns it off. A Windows copy older than 0.2.0 beta 19 needs one newer release
+installed by hand once.
 
 **Intel Mac? Linux?**
 Not yet. Today: macOS on Apple silicon and Windows x64. Linux comes after the Windows port
@@ -69,6 +70,22 @@ Yes. Settings → Stedding → Sidebar → **When the sidebar closes: Hide it co
 (Ctrl+S) gives the page the whole window, and the pointer at the left edge slides the sidebar
 back. The same section sets row height, text size, width, and **Page flush against the window**.
 
+**What does closing a pinned tab do?**
+The same as in Arc: ⌘W (Ctrl+W), the tab's ✕, a middle click or **Close** on its menu unloads
+it and puts it back to the page you pinned, in its place, so it costs nothing until you open it
+again. A page that asks "Leave site?" asks first. To remove a pinned tab, choose **Unpin from
+This Space** or **Remove from Essentials** on its menu; or turn the rule off in Settings →
+Stedding → Tabs, and ⌘W, the ✕ and a middle click then close a pinned tab.
+
+**Can a folder hold pinned tabs?**
+Yes. Drag a folder over the line into the pinned tabs, or choose **Pin Folder** on its menu: every
+tab in it becomes a pinned tab and the folder stays a folder. **Unpin Folder**, or a drag back
+under the line, undoes it. Essentials take no folders.
+
+**Can essentials belong to one Space?**
+No. Essentials are shared by every Space, as in Arc. For a tab that belongs to one Space, pin it
+there (⌘D, Ctrl+D): pinned tabs are each Space's own.
+
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Imported bookmarks stay bookmarks, and ⇧⌘B (Ctrl+Shift+B) still shows
 the bar. The command bar's **Turn Bookmarks into Pinned Tabs** makes them pins and folders.
@@ -79,8 +96,7 @@ Switched off: its page came out blank, so it waits to be rebuilt with little win
 **What happens to tabs I do not close?**
 Nothing, until you choose a time in Settings → Stedding → Tabs → **Archive tabs nobody has
 looked at for** (6 hours to 7 days). Then idle loose tabs move to the Archived view at the
-bottom of the sidebar, by day and Space, one click from coming back. Pinned tabs never archive;
-⌘W puts a pin to sleep instead.
+bottom of the sidebar, by day and Space, one click from coming back. Pinned tabs never archive.
 
 **Why do most tabs look dimmed after a restart?**
 They are asleep. A launch loads only the tab you were on (both sides of a split), so a long
@@ -120,6 +136,11 @@ Yes. It is Chromium; extensions install from the Chrome Web Store. ⌘E (Ctrl+Al
 runs one from the keyboard: keep the keys down and press E again to choose, let go to run it.
 The command bar's actions mode lists them too, which matters when the address row is hidden.
 
+**Can I switch Spaces with the mouse?**
+Yes. Over the sidebar or its icons, scroll sideways: a two-finger swipe on a touchpad, a mouse's
+tilting wheel, or Shift with the wheel. On Windows, Ctrl with the wheel over the sidebar does it
+too. Scrolling up and down still scrolls your tabs ([SHORTCUTS.md](SHORTCUTS.md)).
+
 **Why does ⌃1 switch desktops instead of Spaces?**
 With a second desktop, macOS Mission Control takes ⌃1–⌃9 before the browser sees them. The
 Spaces menu keeps every command reachable ([SHORTCUTS.md](SHORTCUTS.md)).
@@ -130,9 +151,15 @@ right half lights in the Space's colour; let go, and the two pages share the win
 dragged on that half. ⌃⌘N (Alt+Shift+N) splits the current tab with a new one, and a tab's
 right-click menu has **New Split View with Current Tab**.
 
+**A link from another app opened in a small window. How do I keep it?**
+On the Mac a link from another app opens in a little window, to read and close. Its **Open in
+Stedding** button, ⌘O, or the page's right-click menu moves the page into a tab of your window,
+without reloading it; ⇧⌘O puts it in a split instead. Settings → Stedding → Pages and menus
+turns little windows off. On Windows such links open as tabs.
+
 **Why does ⌥⌘N open Arc?**
-While Arc runs it takes ⌥⌘N from every app for Little Arc. From beta 20, split with ⌃⌘N, which
-Arc leaves alone; before beta 20, quit Arc or use the tab menu's **New Split View with Current Tab**.
+While Arc runs it takes ⌥⌘N from every app for Little Arc. Split with ⌃⌘N, which Arc leaves
+alone (from 0.2.0 beta 20), or use the tab menu's **New Split View with Current Tab**.
 
 **How do I get Chromium's full tab menu back?**
 Settings → Stedding → Pages and menus → turn off **Short context menus**.

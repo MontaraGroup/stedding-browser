@@ -33,7 +33,12 @@ tooling/dev test shortcuts
 
 - ⇧⌘D shows or hides the address row on its own (toolbar T10); Chromium had no
   chord on it in Stedding's tables, and Bookmark All Tabs keeps its menu item.
-- Inside a little window (little E2), ⌘O sends the page into a tab (Open File
-  elsewhere), ⇧⌘O into a split and Escape closes the window; ⌃⌘N is the split
+- Inside a little window (little E2, E7), ⌘O sends the page into a tab (Open File
+  elsewhere; the File menu's row reads "Open in Stedding" there), ⇧⌘O into a split
+  ("Open in Split View" under it) and Escape closes the window; ⌃⌘N is the split
   (welcome W6), and Chromium's ⌥⌘N splits too, where Arc opens a little window: a
   divergence recorded here, the decision left for later (little E5).
+- The sideways wheel that steps through the Spaces (spaces B39: a tilt wheel or
+  Shift with the wheel, on Windows also a touchpad's two-finger sideways scroll and
+  Ctrl with the wheel) is not a key, so the Shortcuts block, built from the
+  accelerator tables, does not list it; `docs/SHORTCUTS.md` does.

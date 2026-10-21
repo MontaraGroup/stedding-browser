@@ -62,6 +62,16 @@ and anything else deep in the engine. These are security-critical, churn constan
 and conflicts there are expensive. A product feature that seems to require an engine
 patch should first be redesigned to not require one; if it truly does, that is an ADR.
 
+In the network stack (`net/`, `services/`) the series changes three things, each named in
+its patch's header: the root store's version rules compare Chromium's version, not
+Stedding's own number on Windows (patch 0073, `S-72`); Chrome's launched defaults, its key
+pins and Certificate Transparency are on (patch 0074, `S-236`, `S-237`); and the certificate
+verifier service passes a change of its setup on to the network context only once it has
+verified a certificate, so the updates of a launch's first second no longer drop the
+connections opened ahead for the tabs given on the command line (patch 0077, `S-251`).
+`docs/decisions/0027-changes-to-the-network-stack.md` records the three and the rule for the
+next one.
+
 ## Build system
 
 Chromium builds with Google's standard toolchain: `depot_tools` (which supplies

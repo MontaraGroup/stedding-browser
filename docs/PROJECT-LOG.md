@@ -7,6 +7,81 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-20 night to 2026-10-21 -- the owner's notes on beta 21, the Chrome 156 stable pin, 0.3.0 beta 1
+
+The owner sent twelve notes on beta 21 on 2026-10-20. The round built them, fixed `S-251`,
+took in a review of patches 0075 and 0076 and a by-hand pass on Windows, moved the pin to
+Chrome 156's stable release and read the open GitHub issues, for the next release, 0.3.0
+beta 1, the first of 0.3. On 2026-10-21 the owner set the rule for GitHub issues: a user's
+issue is a suggestion unless it reports a bug, a feature waits for the owner's yes, and
+nothing is said, labelled or closed there (`AGENTS.md`; `PLAN.md` decision 16).
+
+- **The owner's notes** (patch 0077): a folder renamed only from a double click on its name,
+  in a field as wide as the name (folders F4); a folder in the pinned run, by a drag over the
+  Clear line or Pin Folder (F38, `S-107`; the Arc importer still makes such a folder an
+  ordinary one); the rail following the density, square rows of 44, 36 and 30 DIP (sidebar
+  Y8, Y12); a site's favicon kept on its pages that name none (tabs R54); a pin closed the
+  Arc way, unloaded at its home by ⌘W, its ✕, a middle click or the menu's Close (pins H3,
+  H9, H16; `PLAN.md` decision 11); the address row's buttons hovering in the row's own colour
+  (toolbar T44), and a newly pinned extension shown at once (T43; the owner's fault not
+  reproduced); every chip fitting the address field (T42); every empty part of the window's
+  top a title bar, on the Mac and on Windows (sidebar Y29); an extension's popup window
+  opening over a full-screen window on the Mac (windows G8).
+- **Tabs given on the command line** (`S-251`, patch 0077). The background tabs had committed
+  ERR_CONNECTION_RESET: two certificate verifier updates in a launch's first second (the
+  profile's first one and the network time) dropped every connection opened ahead of the
+  tabs' requests, though nothing had been verified yet; the tabs reconnected at once, and a
+  server with a short accept queue reset the overflow. The verifier service now passes a
+  change on only once it has verified a certificate
+  (`CommandLineTabsConnectedAheadTest.ATabLoadsOverTheConnectionItOpenedAhead`, failing
+  without the fix): 0 of 30 real launches lost a tab after, 13 of 22 before (traps 119, 120;
+  `docs/ARCHITECTURE.md` lists the series' changes to the network stack).
+- **The Windows pass and the review** (patch 0077). On Windows' beta 21: a row dragged from
+  the rail onto the page opened the sidebar under the drag, and a split's pane names kept the
+  sides the split first gave them (splits J10, J11, sidebar Y11); Escape during the
+  Ctrl+Alt+E chord sent the window to the back, Windows' own Alt+Esc, which a hot key of the
+  browser's now takes while the chord holds (toolbar T39, trap 122); tabs restored asleep did
+  not draw asleep (tabs R46); the rail's rows showed no hover card (pins H19). The review of
+  patches 0075 and 0076: the sleep gate no longer hits a CHECK on a split the model has let
+  go of, and the termination policy asks it once a page; the split's drop light and the emoji
+  centring mirror in right-to-left layouts; the split row's icons read on the ground beside a
+  page's colour; a replaced pane is watched again.
+- **Smoother motion** (motion O4 to O8), measured frame by frame in a real window on the
+  Mac's release build at 120 Hz: no main frame longer than a vsync, the longest 8.2 ms. Hidden
+  row controls are left out of each frame's layout (a frame of the rail's hover opening laid
+  out 152 views, now 120); the sidebar's collapse, expand and hover overlay ease out, where a
+  collapse had moved a third of the way in one frame; the Space being left is kept as a
+  recording the compositor rasters, so a switch takes 13 to 14 ms where it took 18 to 22;
+  the omnibox's hidden popups follow the address field once a motion ends, where each moved
+  32 times in a collapse and 38 in an expand (`d87ed04`). The Windows runs are not yet made.
+- **The pin.** Chrome 156 reached the stable channel on 2026-10-20 as 156.0.8078.47 and .48;
+  the pin moved to 156.0.8078.48, and the series applied unchanged (`5147193`, ADR 0007).
+- **GitHub issues.** Issue 10, switching Spaces with the mouse, is built as the owner chose
+  (spaces B39; `PLAN.md` decision 15): over the sidebar a sideways scroll steps one Space, from
+  a tilt wheel or Shift with the wheel, and on Windows also from a touchpad's sideways scroll
+  and Ctrl with the wheel. On the Mac its unit and browser tests pass on the release build,
+  and real wheel events posted to the window stepped as specified; on Windows it is written,
+  its run TBD. Issue 9, the little window's way into the main window, was being built as this
+  entry was written: an "Open in Stedding" button at the right end of its bar, rows in the
+  page's menu and the File menu, and a new window when none is open (little E7, `S-157`); its
+  state at the release is TBD. Issue 8, essentials of one Space, is declined by the owner:
+  essentials stay shared by every Space, as in Arc (`S-254`; `PLAN.md` decision 14).
+- **The owner's pass on the Mac's release build** (2026-10-21) found what no test had asked
+  about: a pin closed while it played kept its speaker mark (pins H24); a double click renamed
+  the row the list had moved under the pointer, and a row moved away kept its hover (tabs R14,
+  R1); the chords on the Space chips read 2.5:1 on the light ground (tabs R11); the address
+  row's hovers stood 1.12:1 to 1.36:1 from the row, the star's 1.00:1 (toolbar T44); Close on a
+  pin showed no chord in the Mac's menu (menus M1). Each was fixed with a test.
+- **Found and filed.** A crash when vertical tabs came back on while a tab of the horizontal
+  strip glided home after a drag, in Chromium's `TabStrip::Reset`, which upstream's main
+  branch shares: fixed (`S-253`, tabs R55). A drag test that reads the machine's real cursor
+  (`S-252`). The split row's colour test read a pane's first paint over its step on a busy
+  machine: it now waits for both panes (4 of 60 failed before, 90 of 90 passed after,
+  `e94ae63`).
+- **Tooling.** `tooling/drive` takes a `move` step (the pointer along a timed path) and a
+  `wheel` step (a mouse wheel's notches); traps 117 to 123.
+- **Release:** TBD.
+
 ## 2026-10-19 night to 2026-10-20 -- the planned fixes, six features, the owner's look notes, beta 21
 
 The operator asked for S-250 and "all other planned things": the defects, the updater's

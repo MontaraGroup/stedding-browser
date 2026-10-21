@@ -4,6 +4,8 @@ Stedding ships as beta pre-releases on the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). Each
 release carries a file for each platform it was built for, and a SHA-256 checksum for
 each. Not every release has both: take the newest one with a file for your platform.
+0.3.0 beta 1 follows 0.2.0 beta 21; a beta named below by its number alone is one of the
+0.2.0 betas.
 
 The macOS image is signed with the project's Developer ID and notarized by Apple from
 beta 10 on, so it opens like any other app. The Windows installer is **not code-signed
@@ -110,8 +112,9 @@ Uninstall from **Settings → Apps**, as with any app.
 
 The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctrl and
 Alt, the name and icon, and a per-user installer. Still open: little windows for links
-from other apps (they open as tabs) and signing (`S-56`); the
-two-finger Space swipe (`docs/history/plan-2026-09-26.md` TAB-31); and importing from Arc, whose Windows files
+from other apps (they open as tabs) and signing (`S-56`); a two-finger Space swipe whose
+list follows the fingers, as on the Mac (a touchpad's sideways scroll changes one Space
+instead, `docs/history/plan-2026-09-26.md` TAB-31); and importing from Arc, whose Windows files
 Stedding does not read yet (`S-81`).
 
 ## First start

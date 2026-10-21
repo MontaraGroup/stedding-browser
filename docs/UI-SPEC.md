@@ -40,7 +40,7 @@ DIP, the defaults of the `SteddingArcStyleWindow` feature parameters
 | Card gutter | the mat around the page | 6 (`card_gutter`) at the top, the right and the bottom |
 | Address row | thin, on the window ground | 33 measured: 28 DIP buttons (`toolbar_button_height`) and a 25 DIP field (`location_bar_height`), against Chromium's 46 |
 | Tab row height | ~48 | 44 (`vertical_tab_height`); 36 and 30 in the Compact and Dense row heights (sidebar Y1) |
-| Favicon | ~18, left inset ~28 | 18 (`tab_favicon_size`); 22 in the rail (sidebar Y8) |
+| Favicon | ~18, left inset ~28 | 18 (`tab_favicon_size`); in the rail 22, and 20 at Compact and Dense (sidebar Y8) |
 | Active tab | a filled rounded rect, radius ~10, inset ~10 | radius 10 (`vertical_tab_corner_radius`) |
 | Essentials | a grid of cards at the very top, ~150×50, radius ~12, icon only | cards 50 tall (`vertical_tab_pinned_height`), two to a row at the default width, a lone card stays card-sized |
 | Space switcher | at the bottom: ~24 icons, one per Space, and a trailing `+` | the same: 24 DIP chips 12 apart, closing up to 4 before they overflow (`features/spaces.md` B11, B24) |
@@ -51,7 +51,7 @@ DIP, the defaults of the `SteddingArcStyleWindow` feature parameters
 |---|---|
 | **Essentials** | The cards above all Spaces: visible whichever Space is active |
 | Space title | The active Space's icon and name, with two or more Spaces; it opens the Space menu (spaces B16) |
-| Space-pinned tabs | Ordinary rows, favicon and title, pinned **within the current Space** |
+| Space-pinned tabs | Ordinary rows, favicon and title, pinned **within the current Space**, and folders of them (folders F38) |
 | Clear line | A hairline with `Clear` at its right end, which closes the Space's unpinned tabs and leaves the pins (spaces B17, B20) |
 | `New Tab` row | A plus glyph and label, muted, above the unpinned tabs; it opens the command bar |
 | Unpinned tabs | The rest, folders among them |

@@ -53,24 +53,31 @@ yet, `docs/features/library.md`) and a `+`.
   and Spaces, pins and folders work there too (`PLAN.md` decision 1; `features/menus.md`
   M8, M9; `features/spaces.md` B34).
 - **Row height and text size** **[1.0]**, Stedding's own — three tab row heights and a
-  sidebar text size (`features/sidebar.md` Y1–Y5).
+  sidebar text size (`features/sidebar.md` Y1–Y5); the rail of icons follows the row height
+  too (Y8, Y12).
 - **Pinned Tabs** **[1.0]** — saved per Space, above the divider, never auto-archived.
   `⌘D` pins. Arc describes them as between an app and a bookmark: navigating *within* the
   site stays in the tab; **a link that would leave the site opens Peek (§5) instead of
   replacing the pinned page**. A pin remembers its home page; away from it the row shows
   Arc's slash, and Option-click on the favicon or **Reset to Pinned Page** goes home, while
-  a plain click only selects. `⌘W` puts a pin to sleep instead of closing it. A new pin
-  joins the end of the run (`features/pins.md`).
+  a plain click only selects. Closing a pin works as in Arc: `⌘W`, its close button, a
+  middle click or the menu's Close unloads it and sends it back to its home, in its place,
+  whatever it was doing, after a page's own "Leave site?" (the owner, 2026-10-20;
+  `features/pins.md` H3, H9, H16). A new pin joins the end of the run (`features/pins.md`).
 - **Favorites** **[1.0]** — Stedding's essentials: tabs visible in *every* Space, above the
   Space title, drawn as cards. Arc caps them at 12; Stedding's Arc importer takes twelve
   and nothing else caps them (`features/import.md` I11). Distinct from Pinned Tabs; a
-  spec that conflates the two gets the model wrong (`features/spaces.md` B6).
+  spec that conflates the two gets the model wrong (`features/spaces.md` B6). They are
+  shared by every Space, as in Arc; essentials of one Space alone, as Zen has them, are not
+  planned (the owner, 2026-10-21; `S-254`, GitHub issue 8).
 - **Unpinned Tabs** **[1.0]** — below the divider, auto-archived when idle once the user
   picks a time (§11). `⇧⌘K` clears them as a set (`features/spaces.md` B20).
 - **Folders** **[1.0]** — group tabs; **tabs in folders do not auto-archive**. Folders
   nest; rename, move and delete from the header's menu; drag a tab in. A collection type
-  in the tab tree, not a tab group (ADR 0013; `features/folders.md`). Folders inside the
-  pinned list, whose tabs behave as pins, are not built yet (`S-107`). **Not deferrable**:
+  in the tab tree, not a tab group (ADR 0013; `features/folders.md`). A folder can join
+  the pinned list, dragged over the divider or by Pin Folder, and its tabs then behave as
+  pins (`features/folders.md` F38; the Arc importer still makes a pinned folder an ordinary
+  one, `features/import.md` I3, `S-107`). Essentials take no folder. **Not deferrable**:
   on the comparable project this was the highest Arc-named request (412 upvotes), and
   users said they would not leave Arc without collapsible *pinned* folders (`EVIDENCE.md`).
 - **Bookmarks** **[1.0]**, diverging — Arc has none; Pinned Tabs replace them. Stedding
@@ -82,7 +89,8 @@ yet, `docs/features/library.md`) and a `+`.
   Nth visible row and `⌘9` to the last (`PLAN.md` decision 5; `features/tabs.md` R10–R13);
   `⌃⇥` walks the five most recently used tabs of the Space (`features/switcher.md`).
 - **Favicons** **[1.0]** — per tab; a pinned tab away from home shows it, and the favicon
-  takes Option-click as the reset (above).
+  takes Option-click as the reset (above). A page that names no icon keeps the favicon its
+  site gave the tab, never another site's (`features/tabs.md` R54).
 - **Audio indicator and mute** **[1.0]** — click to mute; right-click mutes a tab that is
   not playing; an essentials card keeps its favicon and badges the sound
   (`features/tabs.md` R18). `⌃M` (Ctrl+M on Windows) mutes or unmutes the selected tabs,
@@ -122,9 +130,12 @@ yet, `docs/features/library.md`) and a `+`.
 - **Spaces** **[1.0]** — distinct browsing areas, each with its own pinned section,
   unpinned section, colour and icon: one tab strip filtered by the active Space (ADR 0015)
   and one Space list for every window (ADR 0016; `features/spaces.md`). `⌃1`…`⌃9` focuses
-  a Space and `⌥⌘←/→` moves to the next or previous one; a two-finger swipe in the sidebar
-  switches, on the Mac only so far (`docs/history/plan-2026-09-26.md` TAB-31); the icons live at the sidebar's
-  bottom.
+  a Space and `⌥⌘←/→` moves to the next or previous one. Over the sidebar a sideways
+  scroll steps to the next or previous Space, as in Arc: a tilt wheel or Shift with the
+  wheel, and on Windows a touchpad's sideways scroll and Ctrl with the wheel too
+  (`features/spaces.md` B39, GitHub issue 10); on the Mac a two-finger swipe follows the
+  fingers (B35), which Windows does not do yet (`docs/history/plan-2026-09-26.md` TAB-31).
+  The icons live at the sidebar's bottom.
 - **Create, rename, reorder, delete** **[1.0]** — `+` creates; the Space's title row opens
   its menu (rename, colour, icon, delete); drag a Space icon, or Move Left / Move Right, to
   reorder. Deleting a Space asks first, naming the Space, its tabs and where they go, then
@@ -144,7 +155,7 @@ yet, `docs/features/library.md`) and a `+`.
   after its name in the title row, the tab menu's Space rows, the command bar, the archive
   and Settings -- and pinning one of its tabs to the essentials, which use the shared
   session, says so with an Undo (`features/sessions.md` S32–S34, `features/spaces.md` B38;
-  released in beta 18, on Windows so far).
+  released in 0.2.0 beta 18 on Windows and beta 20 on the Mac).
 - **Move tabs between Spaces** **[1.0]** — the command bar's "Move Tab to [Space]", the tab
   menu, `⌥⇧⌘←/→`, or a drag onto a Space icon (`features/spaces.md` B12, B22).
 - **Air Traffic Control** **[1.0]** — Stedding's routing: rules sending a site, a part of
@@ -219,8 +230,11 @@ yet, `docs/features/library.md`) and a `+`.
   `features/peek.md`); the rebuild shares one primitive with the little window, a page
   that is a full tab in all but its place (**[M10]**, `S-93`).
 - **Little Arc** **[1.0]** — the little window: a link from another application opens in
-  a small window of its own, to read and dismiss; `⌘O` moves the page into the main
-  window and `⇧⌘O` into a split (`features/little.md`). It has no Space commands
+  a small window of its own, to read and dismiss. Its top is one row, the main window's
+  address row on the page's colour with the traffic lights inline, light or dark as the
+  main window (`features/little.md` E8, E9); `⌘O` or the row's "Open in Stedding" button
+  moves the page into the main window (a new one when none is open) and `⇧⌘O` into a
+  split, as the page's menu and the File menu also offer (E7). It has no Space commands
   (`PLAN.md` decision 9). The Mac only: on Windows such links open as tabs (`S-56`).
   Diverging from Arc: no global `⌥⌘N` to open one (`⌥⌘N` splits, as `⌃⌘N` does,
   little E5), and a little window is never closed for being idle, where Arc archives it
@@ -316,8 +330,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 
 - **Auto Archive** **[1.0]** — idle unpinned tabs archive after a set time, reset by viewing
   the tab; nothing pinned, in a folder or in use is archived. Arc archives after 12 hours by
-  default and does not let you turn it off. Stedding's is off (Never) by default since beta 14,
-  and offers 6 hours, 12 hours, 1 day, 3 days and 7 days; the welcome flow asks
+  default and does not let you turn it off. Stedding's is off (Never) by default since 0.2.0
+  beta 14, and offers 6 hours, 12 hours, 1 day, 3 days and 7 days; the welcome flow asks
   (`features/archive.md` A6, `features/welcome.md` W12).
 - **View and restore the archive** **[1.0]** — the Archived view, by day and Space and
   searchable, and archived tabs in the command bar (archive A7–A11).
@@ -336,8 +350,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   (`features/toolbar.md` T11), and its tab is marked in the sidebar as Arc marks it:
   a yellow and black tape round the row while it is on screen, and at the
   Comfortable density its host and port under the title, with a setting to turn
-  it off (`features/local-tabs.md`; released in beta 18, on Windows so far). Arc's other
-  developer affordances: `S-117`.
+  it off (`features/local-tabs.md`; released in 0.2.0 beta 18 on Windows and beta 20 on the
+  Mac). Arc's other developer affordances: `S-117`.
 - **Extensions** **[1.0]** — full Chrome Web Store compatibility, a hard requirement
   (`AGENTS.md`). `⌘E` (Ctrl+Alt+E) runs one, as in Arc: hold to choose, let go to run; the
   command bar's actions mode lists each extension, so they stay reachable with the address
@@ -355,7 +369,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   page as app…" on Windows, with its Start menu entry. The app's window is drawn edge to
   edge, with no sidebar or card; the app keeps the session of the Space it was made in
   (ADR 0025, proposed), and takes no links from the browser until the user turns that on
-  for it (`features/web-apps.md`; released in beta 18, on Windows so far).
+  for it (`features/web-apps.md`; released in 0.2.0 beta 18 on Windows and beta 20 on the
+  Mac).
 - **Arc Search (iOS/Android)** **[not applicable]** — mobile is out of scope
   (`ROADMAP.md`).
 
@@ -372,9 +387,10 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
 - **Dark mode for web pages**, on Chromium's own (`S-100`): one switch, a moon at the
   address row's right end, ⌥⇧⌘D, a command bar row, a page-menu row and, on the Mac, a
   View menu row, with sites kept light or the only ones darkened, and an app's title bar
-  darkened with its page (`features/dark-pages.md`; released in beta 18, on Windows so far).
+  darkened with its page (`features/dark-pages.md`; released in 0.2.0 beta 18 on Windows and
+  beta 20 on the Mac).
 - **Smaller things seen in Nook**: the site's controls in one panel (`S-118`) and the rest
-  of the small conveniences (`S-125`). Built in beta 14: clear a site's cookies and
+  of the small conveniences (`S-125`). Built in 0.2.0 beta 14: clear a site's cookies and
   reload (`features/commandbar.md` K24, `features/sessions.md` S27), folder verbs
   (`features/folders.md` F30–F33), a pin's home address edited by hand and a middle click
   that sends a pin home (`features/pins.md` H15, H16), mute and picture in picture by key
@@ -401,7 +417,7 @@ honest target until that is revisited is **parity minus Boosts and Easels**.
 ## Where we deliberately differ
 
 - **No account, ever.** Arc requires one.
-- **Auto Archive is off until you pick a time** (since beta 14), and little windows are
+- **Auto Archive is off until you pick a time** (since 0.2.0 beta 14), and little windows are
   never closed for idling.
 - **An address row with the whole address**, where Arc has none.
 - **Bookmarks stay**, beside pinned tabs.

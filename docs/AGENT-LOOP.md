@@ -61,6 +61,11 @@ The order follows yield per hour. The DCHECK build is the cheapest sanitizer and
 to run; ASan went first this time because the plan listed it first, and cost five hours
 before it found one thing. Use the product before any of them.
 
+A change to lifetimes -- who owns or frees a tab, its contents or a view: an unload that
+puts new contents in a tab, a strip torn down while it animates, a view rebuilt under an
+observer -- runs its suites with DCHECKs and the dangling-pointer detector, and under ASan
+before it ships, whatever its yield (`PLAN.md`, "When an item is done", rule 4).
+
 ## Long jobs: supervise, do not poll
 
 - **One detached job, one status file, one finish line.** `tooling\win\build-until-done.ps1`
@@ -110,10 +115,16 @@ and each run is recorded in that file. What to do and what to look for:
   the welcome flow. Then the same in light and dark (`browser.theme.color_scheme2` in the
   profile's Preferences, 1 is light).
 - Every gesture the specs name, with the real pointer: click each kind of row open and in the
-  rail, drag a row onto a folder and onto a Space chip, switch Spaces by chip and by key, copy
-  the link, take the screenshot, go full screen on a video, resize. Prove state with DevTools
-  (`Drive-Visible`) or UI Automation, not with a picture.
+  rail, drag a row onto a folder, onto a Space chip and onto the page, switch Spaces by chip,
+  by key and by the wheel (`tooling/drive`'s `wheel` step on the Mac), copy the link, take the
+  screenshot, go full screen on a video, resize. Prove state with DevTools (`Drive-Visible`)
+  or UI Automation, not with a picture.
 - Read the strings. Wording written on one platform reads wrong on the other.
+- Ask for the owner's own pass on a release build before a release. On 2026-10-21 it found
+  four faults no test had asked about: a pin closed while it played kept its speaker mark
+  (`docs/features/pins.md` H24), a double click renamed the row the list had moved under
+  the pointer (`tabs.md` R14), the chords on the Space chips read 2.5:1 on the light ground
+  (R11), and Close on a pin showed no chord in the Mac's menu (`menus.md` M1).
 - Two browsers from one executable with the same `--remote-debugging-port` leave the second
   with a window and no UI (black). Stop the first, or give each a port.
 
@@ -237,6 +248,22 @@ The suites were cut by merging and deleting what repeated itself; keep them that
 A builder's handoff is: the backlog id, the behaviour ids now green, the test command,
 and the patch numbers. Nothing else needs to be in anyone's head. Independent work is worth
 a subagent; the critical path is not (a subagent needs the context you already have).
+
+Several agents on one machine share one checkout and one screen:
+
+- **One lock for builds and test runs.** A build needs the checkout to stand still, and the
+  Mac's browser tests run one at a time; every build and run takes the same lock first (a
+  directory made with `mkdir`, which fails when it exists, holding its owner's name).
+- **One lock for the screen.** Real input and the browser tests, which open windows, take a
+  second lock, so no agent's pointer lands in another's test window.
+- **Drive a copy beside the owner's own Stedding.** An APFS clone of
+  `out/release/Stedding.app` (`cp -c`) given a bundle id of its own (`PlistBuddy`, then an
+  ad-hoc `codesign`), put at `<dir>/out/release/Stedding.app` and run with
+  `CHROMIUM_SRC=<dir>`, lets `tooling/drive` and `tooling/capture-state` drive it without
+  sharing the owner's bundle id. Make it again after each build.
+- **Seen red, with the fix taken out.** Under the build lock, put the fix's files back to
+  the checkout's `HEAD` (after checking that a saved copy of each still matches), build,
+  run the new tests, and restore the files before the lock is let go.
 
 ## Cheap checks before you claim done
 

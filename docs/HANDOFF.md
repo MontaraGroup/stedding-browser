@@ -17,6 +17,8 @@ of 2026-09-29 to 30.
 3. **Use the product** before any long job: launch it on a fresh profile, click through the
    first launch, light and dark, the gestures the specs name (`tooling\win\drive.ps1` on
    Windows; `tooling/drive` on the Mac). Half an hour, and it finds what the suites do not.
+   With other agents on the machine, take turns for builds and for the screen, and drive a
+   copy of the app beside the owner's own (`docs/AGENT-LOOP.md`, "Roles").
 4. **Run the suites on the shipping configuration:** `tooling/dev test all --no-build`.
 5. **Sanitizer runs, cheapest first:** a DCHECK + dangling-pointer build (`win-checks`, or
    `mac-checks` on the Mac), then ASan (`win-asan`). The same command on each, naming its
@@ -37,7 +39,8 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and twenty-three traps follow. Read the one for the topic in front of you, not the list.
+A hundred and twenty-three traps follow (28 is retired). Read the one for the topic in front of
+you, not the list.
 
 | Topic | Traps |
 |---|---|

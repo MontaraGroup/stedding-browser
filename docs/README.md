@@ -8,7 +8,7 @@ Everything under `docs/`, grouped by who it is for.
 |---|---|
 | [INSTALL.md](INSTALL.md) | Installing on macOS and Windows, verifying the checksum, updating, uninstalling, where your data lives |
 | [SHORTCUTS.md](SHORTCUTS.md) | Every keyboard shortcut, macOS and Windows, and where Stedding differs from Chromium |
-| [FAQ.md](FAQ.md) | Questions and answers: what Stedding has that Arc did not and the reverse, updates, Independent session |
+| [FAQ.md](FAQ.md) | Questions and answers: what Stedding has that Arc did not and the reverse, updates, pinned tabs and essentials, Independent session |
 | [PRIVACY.md](PRIVACY.md) | The privacy principles and every network connection the browser makes |
 | [release-notes/](release-notes/) | What each release changed, with checksums |
 
@@ -40,7 +40,7 @@ Everything under `docs/`, grouped by who it is for.
 | [features/](features/) | One specification per feature: each behaviour, its test and whether it is built, partial or planned |
 | [features/acceptance.md](features/acceptance.md) | The acceptance scripts run by hand or with the drivers on a real build before a release, the core loop first, with a table of every run |
 | [decisions/](decisions/) | Architecture decision records |
-| [history/](history/) | Finished plans and ledgers that specs, patches and release notes still cite: the 2026-09-26 audit and its item ids (TAB-1, SPC-4, ...), round 6's plan (R6-nn), the operator's rounds 2 to 11 |
+| [history/](history/) | Finished plans and ledgers that specs, patches and release notes still cite: the 2026-09-26 audit and its item ids (TAB-1, SPC-4, ...), round 6's plan (R6-nn), the operator's rounds 2 to 11, the code review of 2026-10-15 |
 | [perf/](perf/) | How to measure the performance budgets, and the one comparison so far (2026-09-02, Chromium 153; nothing current) |
 | [../tooling/README.md](../tooling/README.md) | The build, capture and release scripts |
 | [../branding/README.md](../branding/README.md) | The mark, the palette, and how the assets are generated |

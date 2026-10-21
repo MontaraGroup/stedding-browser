@@ -16,6 +16,8 @@ this script pressed is released on every exit: an error, Ctrl-C or SIGTERM.
 See tooling/drive for the step grammar.
 """
 #   click X Y [mods] | rclick X Y [mods] | dblclick X Y [mods] | hover X Y | drag X1 Y1 X2 Y2
+#   move X1 Y1 X2 Y2 SECONDS                   the pointer along an eased path, no button
+#   wheel X Y RIGHT DOWN [shift]               a mouse wheel's notches at X Y, no phase
 #   dragstart X Y | dragmove X Y | dragend      a drag in steps, so a shot can land mid-drag
 #   key <name>[+cmd][+shift][+ctrl][+alt]      (names: KEYS below)
 #   keydown <name> | keyup <name>              a modifier (or key) held across steps
@@ -116,6 +118,19 @@ def parse_steps(path):
                 if len(words) != 4:
                     raise ValueError("drag takes X1 Y1 X2 Y2")
                 args = tuple(_number(w) for w in words)
+            elif op == 'move':
+                if len(words) != 5:
+                    raise ValueError("move takes X1 Y1 X2 Y2 SECONDS")
+                args = tuple(_number(w) for w in words)
+                if not 0 < args[4] <= 5:
+                    raise ValueError("a move lasts more than 0 and at most 5 seconds")
+            elif op == 'wheel':
+                if len(words) not in (4, 5) or (len(words) == 5 and words[4] != 'shift'):
+                    raise ValueError("wheel takes X Y RIGHT DOWN and optional shift")
+                args = (_number(words[0]), _number(words[1]), int(_number(words[2])),
+                        int(_number(words[3])), len(words) == 5)
+                if not (args[2] or args[3]) or abs(args[2]) > 10 or abs(args[3]) > 10:
+                    raise ValueError("wheel turns 1 to 10 notches")
             elif op == 'dragend':
                 if words:
                     raise ValueError("dragend takes nothing")
@@ -373,6 +388,43 @@ class Driver:
         self.require_mouse_at(sx, sy)
         self.post_mouse(q.kCGEventMouseMoved, sx, sy, q.kCGMouseButtonLeft)
 
+    def move(self, x1, y1, x2, y2, seconds):
+        # The pointer from one point to the other along an eased path, on time: a
+        # hover step checks the window twice and lists the processes twice, about
+        # 0.2 s a step, so a path of hover steps took four times as long as asked
+        # and moved in visible jumps. Both ends are checked once, as a drag's are;
+        # the moves in between press nothing.
+        q = self.q
+        sx1, sy1 = self.to_screen(x1, y1)
+        sx2, sy2 = self.to_screen(x2, y2)
+        self.require_mouse_at(sx1, sy1)
+        self.require_mouse_at(sx2, sy2)
+        count = max(2, int(round(seconds * 60)))
+        start = time.monotonic()
+        for i in range(count + 1):
+            t = i / count
+            eased = t * t * (3 - 2 * t)
+            self.post_mouse(q.kCGEventMouseMoved, sx1 + (sx2 - sx1) * eased,
+                            sy1 + (sy2 - sy1) * eased, q.kCGMouseButtonLeft)
+            if i < count:
+                time.sleep(max(0.0, start + seconds * (i + 1) / count - time.monotonic()))
+
+    def wheel(self, x, y, right, down, shift):
+        # One event of a mouse's wheel, line units and no phase, as a notched
+        # wheel sends: the pointer moves there first, since the window reads
+        # the wheel where the pointer is. The system's deltas are positive up
+        # and to the left.
+        q = self.q
+        sx, sy = self.to_screen(x, y)
+        self.require_mouse_at(sx, sy)
+        self.post_mouse(q.kCGEventMouseMoved, sx, sy, q.kCGMouseButtonLeft)
+        time.sleep(0.05)
+        event = q.CGEventCreateScrollWheelEvent(None, q.kCGScrollEventUnitLine, 2,
+                                                -down, -right)
+        q.CGEventSetLocation(event, (sx, sy))
+        q.CGEventSetFlags(event, q.kCGEventFlagMaskShift if shift else 0)
+        q.CGEventPost(q.kCGHIDEventTap, event)
+
     def drag(self, x1, y1, x2, y2):
         q = self.q
         left = q.kCGMouseButtonLeft
@@ -526,6 +578,10 @@ class Driver:
             self.hover(*args)
         elif op == 'drag':
             self.drag(*args)
+        elif op == 'move':
+            self.move(*args)
+        elif op == 'wheel':
+            self.wheel(*args)
         elif op == 'dragstart':
             self.drag_start(*args)
         elif op == 'dragmove':

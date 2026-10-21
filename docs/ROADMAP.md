@@ -18,6 +18,8 @@ is open is `BACKLOG.md`, whose rows name their milestone where it matters; what 
 does today is its spec under `docs/features/`. The ladder was climbed out of order, chasing
 feedback from real use (`docs/PROJECT-LOG.md`). The note under each milestone's heading says
 what is left of it; this page keeps no table of open ids, because one went stale within days.
+A beta named here by its number alone is one of the 0.2.0 betas; 0.3.0 beta 1 follows
+0.2.0 beta 21.
 
 ---
 
@@ -94,8 +96,10 @@ Acceptance criteria:
 > **Done**, on Chromium's own vertical tabs (ADR 0010), and well past this scope since:
 > folders (ADR 0013), Arc's pins, the rail, density and text size, and from beta 13 a sidebar
 > that hides completely with the page edge to edge (`docs/features/sidebar.md` Y19). Released
-> in beta 18, on Windows so far: a tab on this computer's own server marked as
-> Arc's Developer Mode marks it (`docs/features/local-tabs.md`, `S-117`).
+> in beta 18 on Windows and beta 20 on the Mac: a tab on this computer's own server marked as
+> Arc's Developer Mode marks it (`docs/features/local-tabs.md`, `S-117`). Patch 0077 adds
+> folders in the pinned run (`docs/features/folders.md` F38, `S-107`) and Arc's way of
+> closing a pin, which unloads it at its home (`docs/features/pins.md` H3).
 
 **Goal:** the Arc-style sidebar replaces the horizontal tab strip. First build we
 publish for strangers to try.
@@ -138,8 +142,8 @@ Acceptance criteria:
 ## M3 — Workspaces
 
 > **Done** as Spaces (`docs/features/spaces.md`, ADR 0015, ADR 0016), each optionally with
-> cookies of its own (ADR 0019). Released in beta 18, on Windows so far: the mark
-> of a Space with cookies of its own wherever Stedding names it (`docs/features/sessions.md`
+> cookies of its own (ADR 0019). Released in 0.2.0 beta 18 on Windows and beta 20 on the Mac:
+> the mark of a Space with cookies of its own wherever Stedding names it (`docs/features/sessions.md`
 > S32–S34, `S-164`), and apps made from pages, which keep the session of the Space they were
 > made in (`docs/features/web-apps.md`, ADR 0025, proposed; `docs/PRODUCT.md` §12 gives
 > apps no tier yet, so they sit under no milestone).
@@ -199,9 +203,11 @@ Acceptance criteria:
 > **Partly done.** Chromium's own split view, with the sidebar's verbs acting on both panes
 > (`docs/features/splits.md` J4). A split comes back whole after a restart through Chromium's
 > own restore, and a pair the user unsplit stays apart (`RestoreTest.TheSidebarComesBack`,
-> J1). Open (`BACKLOG.md` S-102): what ⌘W does on a split (J3, undecided), whether a Space pin
-> that joins a split leaves the pinned run (J5), ⌘1–9 counting a split once (J2), and the
-> criteria below checked by hand. No ring is drawn around the panes (J6).
+> J1). A tab dragged onto the page makes a split with it (J10–J15, `S-113`, GitHub issue 7;
+> released in 0.2.0 beta 21). Open (`BACKLOG.md` S-102): what ⌘W does on a split (J3,
+> undecided), whether a Space pin that joins a split leaves the pinned run (J5), ⌘1–9
+> counting a split once (J2), and the criteria below checked by hand. No ring is drawn around
+> the panes (J6).
 
 **Goal:** two pages side by side in one window.
 
@@ -306,8 +312,9 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-19):** an unsigned preview ships with each beta, and from beta
-19 it updates itself (`S-215`); betas 18 and 19 are Windows only until the Mac adds its image. Both suites passed with DCHECKs and the
+**Where this stands (2026-10-21):** an unsigned preview ships with each beta, and from 0.2.0
+beta 19 it updates itself (`S-215`); betas 18 and 19 of 0.2.0 were Windows only, and from
+beta 20 each release carries both platforms. Both suites passed with DCHECKs and the
 dangling-pointer detector on and under AddressSanitizer on 2026-09-30; with DCHECKs and the
 detector again on the series through patch 0061 on 2026-10-11, after one fix, and on the
 current pin on 2026-10-17, after one more, but for `S-214`, fixed since. Under
@@ -320,8 +327,10 @@ name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM cla
 sandbox prefix (N3–N4) -- and Chromium's `mini_installer` from the `win-release`
 configuration (ADR 0018), a preview since beta 5 (N6); Arc's keyboard for Windows (N7,
 patch 0043). Not done: little windows and links from other applications, signing and
-SmartScreen, CI, Windows performance budgets, and importing from Arc for Windows
-(`BACKLOG.md` S-81). `BACKLOG.md` S-56.
+SmartScreen, CI, Windows performance budgets, importing from Arc for Windows
+(`BACKLOG.md` S-81), and a two-finger Space swipe that follows the fingers: a touchpad's
+sideways scroll steps one Space instead (`docs/features/spaces.md` B39;
+`docs/history/plan-2026-09-26.md` TAB-31). `BACKLOG.md` S-56.
 
 Scope:
 
@@ -372,8 +381,8 @@ Scope, by area (`BACKLOG.md` ids):
 - **Privacy:** ad and tracker blocking built in, with a switch per site (`S-88`; its own ADR
   first: the engine, and filter lists fetched at run time, never built in); tracking
   parameters stripped from every link opened, not only from a copied one (`S-89`); dark mode
-  for web pages on Chromium's own (`S-100`; specified in `features/dark-pages.md`, written
-  and not yet run).
+  for web pages on Chromium's own (`S-100`, `features/dark-pages.md`; released in 0.2.0
+  beta 18 on Windows and beta 20 on the Mac).
 - **Keyboard:** a web app that binds the same chord gets the first press and Stedding the
   second (`S-90`); shortcuts the user can change, with a conflict check (`S-91`, the 1.0 item
   `docs/PRODUCT.md` §12 names).
@@ -397,11 +406,11 @@ Scope, by area (`BACKLOG.md` ids):
 
 The same read found Arc behaviour that `docs/PRODUCT.md` puts at 1.0 with no item until
 then; those sit under their own milestones above, not here: folders in the pinned run
-(`S-107`), inline completion and Site Search in the command bar (`S-108`, `S-109`, both
-built in beta 14), loading only the selected tab at launch (`S-110`), tabs sleeping on a
-timer (`S-111`), the tab
-selected after a close (`S-112`), a split made by dragging a row onto the page (`S-113`), and
-routing rules edited in Settings (`S-126`). What was read and left out, and why, is in ADR
+(`S-107`, built in patch 0077 but for the Arc importer), inline completion and Site Search
+in the command bar (`S-108`, `S-109`, both built in 0.2.0 beta 14), loading only the
+selected tab at launch (`S-110`), tabs sleeping on a timer (`S-111`), the tab selected
+after a close (`S-112`) and a split made by dragging a row onto the page (`S-113`), those
+four released in 0.2.0 beta 21, and routing rules edited in Settings (`S-126`). What was read and left out, and why, is in ADR
 0021.
 
 Acceptance criteria:

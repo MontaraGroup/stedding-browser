@@ -9,6 +9,9 @@ services in the Chromium base are removed or replaced is in ARCHITECTURE.md
 Anything the shipping browser does on the network that is not listed here is a
 bug. Report it through SECURITY.md.
 
+A beta named here by its number alone is one of the 0.2.0 betas; 0.3.0 beta 1 follows
+0.2.0 beta 21.
+
 ## Principles
 
 1. **No telemetry, ever, by default.** The browser sends no usage metrics, no
@@ -117,7 +120,11 @@ Certificate Transparency logs, and Google's own sites accept only the keys Googl
 for them (`S-236`, `S-237`). Both lists come with the certificate component update that
 already brings the root store; nothing extra is fetched, and nothing is reported. A list
 more than ten weeks old turns its check off rather than refuse sites, as in Chromium. A
-certificate from a root the user added needs neither.
+certificate from a root the user added needs neither. One difference from Chromium in how
+the verifier's updates are applied: until it has verified a certificate, an update (the
+profile's first one at launch, the network time) no longer drops the idle connections and
+the ones being opened ahead of a page, so tabs given at launch load over the connections
+opened for them (patch 0077, `S-251`). Nothing is sent or checked differently.
 
 ### Default search engine — chosen by the user
 
@@ -202,7 +209,7 @@ automatic darkening is on; it cannot read the lists.
 
 Hovering a tab that is not on screen shows a small picture of its page as it was last seen
 (`features/pins.md` H19–H23): Chromium's tab preview images, on in Windows builds as in
-Chrome there, and on the Mac from the release after beta 20. The picture is copied from the
+Chrome there, and on the Mac since 0.2.0 beta 21. The picture is copied from the
 tab itself, when the tab leaves the screen or while its hover card waits for one, and is
 kept as a JPEG in the browser's memory. It is never written to disk, never put in the saved
 session and never sent anywhere; it goes when the tab closes or the browser quits, so none
