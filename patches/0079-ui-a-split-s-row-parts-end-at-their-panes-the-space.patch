@@ -15,10 +15,10 @@ The owner's notes of 2026-10-21 on 0.3.0 beta 1:
 - The Space row at the bottom of the sidebar (spaces B24): as the row
   narrows, after the gaps between the chips close, the row's leading inset,
   beside the downloads button, closes from 12 DIP to 4, and the chips and
-  the "+" shrink a DIP at a time to 18 DIP, each glyph two thirds of its
+  the "+" shrink a DIP at a time to 16 DIP, each glyph two thirds of its
   chip, before any chip turns to a dot. The trailing inset stays 10 DIP, so
   the "+" keeps as far from the sidebar's end as the downloads button keeps
-  from its start. Eight Spaces keep their icons down to a row 208 DIP wide,
+  from its start. Eight Spaces keep their icons down to a row 190 DIP wide,
   where they had turned to dots below 272 with room left at the row's ends.
   As dots, the gaps close from 12 DIP down to 2 as the row narrows, so the
   "+" stays in the row; it had been pushed out of a narrow sidebar.
@@ -29,7 +29,7 @@ The owner's notes of 2026-10-21 on 0.3.0 beta 1:
   without a drag (docs/HANDOFF.md, dev parameters).
 
 Tests: SwitcherRulesTest (each step's form for eight Spaces, every width from
-208 to 290 filled, the dots' gaps, the glyph size);
+190 to 290 filled, the dots' gaps, the glyph size);
 PageColourRowTest.ASplitRowTakesEachPanesColour reads the ground over the gap;
 FolderViewTest.ACollapsedHeaderShowsNoNumber,
 FolderRowsTest.ACollapsedFolderShowsNoNumberInAnySpace and
@@ -46,7 +46,7 @@ the split row, the Space row and the folder header.
  .../views/frame/stedding_window_background.cc | 82 +++--------------
  .../ui/views/spaces/space_switcher_rules.cc   | 48 ++++++++--
  .../ui/views/spaces/space_switcher_rules.h    | 47 ++++++++--
- .../spaces/space_switcher_rules_unittest.cc   | 87 +++++++++++++-----
+ .../spaces/space_switcher_rules_unittest.cc   | 88 +++++++++++++-----
  .../ui/views/spaces/space_switcher_view.cc    | 53 ++++++++---
  .../spaces/space_tab_visibility_controller.cc | 25 +++--
  .../ui/views/tabs/common/folder_view.cc       | 56 +----------
@@ -54,7 +54,7 @@ the split row, the Space row and the folder header.
  .../views/tabs/common/folder_view_unittest.cc | 92 ++++++++-----------
  .../test/stedding/address_band_browsertest.cc | 40 +++-----
  .../test/stedding/folder_tabs_browsertest.cc  | 31 ++++---
- 13 files changed, 308 insertions(+), 289 deletions(-)
+ 13 files changed, 309 insertions(+), 289 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
 index 335120c25fb1d..2d48bc74f9f51 100644
@@ -196,7 +196,7 @@ index 653d8d07861e7..c26258246b960 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules.cc b/chrome/browser/ui/views/spaces/space_switcher_rules.cc
-index cd995c00911da..4a04bd871d2c1 100644
+index cd995c00911da..db8bb99aaa6b8 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_rules.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_rules.cc
 @@ -11,23 +11,51 @@
@@ -252,7 +252,7 @@ index cd995c00911da..4a04bd871d2c1 100644
 +}
 +
 +int SwitcherGlyphSize(int chip) {
-+  return chip * 2 / 3;
++  return (chip * 2 + 1) / 3;
  }
  
  bool SwitcherOverflows(int row_width, size_t chip_count) {
@@ -262,7 +262,7 @@ index cd995c00911da..4a04bd871d2c1 100644
  
  int SwitcherChipWidth(bool overflow, bool active, bool row_hovered) {
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules.h b/chrome/browser/ui/views/spaces/space_switcher_rules.h
-index 9f55cc56e728f..b49699305222c 100644
+index 9f55cc56e728f..ab07752125ebb 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_rules.h
 +++ b/chrome/browser/ui/views/spaces/space_switcher_rules.h
 @@ -24,14 +24,49 @@ inline constexpr int kSwitcherDot = 6;
@@ -281,12 +281,12 @@ index 9f55cc56e728f..b49699305222c 100644
 +// stays kSwitcherTrailingInset, so the "+" keeps as far from the sidebar's
 +// end as the downloads button keeps from its start: closing it too left the
 +// "+" nearer its end than the button was to the other (the owner,
-+// 2026-10-21). A chip's glyph is two thirds of it: 16 px on a full chip, 12
-+// on the smallest. Between dots the gap closes to kSwitcherMinDotGap, so the
++// 2026-10-21). A chip's glyph is two thirds of it, rounded: 16 px on a full
++// chip, 11 on the smallest. Between dots the gap closes to kSwitcherMinDotGap, so the
 +// "+" stays in the row.
 +inline constexpr int kSwitcherMinRowInset = 4;
 +inline constexpr int kSwitcherTrailingInset = 10;
-+inline constexpr int kSwitcherMinChip = 18;
++inline constexpr int kSwitcherMinChip = 16;
 +inline constexpr int kSwitcherMinDotGap = 2;
 +
 +// How a row lays out its chips and the "+": their size, the gap between
@@ -312,7 +312,7 @@ index 9f55cc56e728f..b49699305222c 100644
 +// between kSwitcherMinDotGap and kSwitcherChipGap.
 +SwitcherRowForm SwitcherRowFormAt(int row_width, size_t chip_count);
 +
-+// A chip's glyph, in pixels, at `chip` DIP: two thirds of it.
++// A chip's glyph, in pixels, at `chip` DIP: two thirds of it, rounded.
 +int SwitcherGlyphSize(int chip);
  
  // True when `chip_count` chips plus the "+" would not fit a row `row_width`
@@ -322,7 +322,7 @@ index 9f55cc56e728f..b49699305222c 100644
  
  // The width a chip takes: full while the row has room, while it is the
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc b/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
-index 9457c27689d70..ac67939ff2cc9 100644
+index 9457c27689d70..9eded6a6904aa 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
 @@ -11,8 +11,9 @@
@@ -332,7 +332,7 @@ index 9457c27689d70..ac67939ff2cc9 100644
 -// spaces B24-B26: a full sidebar (352) holds eight chips and the plus; twelve
 -// overflow; below the threshold nothing changes.
 +// spaces B24-B26: a full sidebar (352) holds eight chips and the plus at full
-+// size, and fourteen as smaller chips; fifteen overflow; below the threshold
++// size, and sixteen as smaller chips; seventeen overflow; below the threshold
 +// nothing changes.
  // spaces B27: a dragged chip lands on the nearest chip's place.
  TEST(SwitcherRulesTest, DropIndexIsTheNearestChip) {
@@ -343,22 +343,22 @@ index 9457c27689d70..ac67939ff2cc9 100644
    EXPECT_FALSE(SwitcherOverflows(352, 8));
 -  EXPECT_TRUE(SwitcherOverflows(352, 12));
 -  EXPECT_TRUE(SwitcherOverflows(126, 3));
-+  EXPECT_FALSE(SwitcherOverflows(352, 14));
-+  EXPECT_TRUE(SwitcherOverflows(352, 15));
-+  EXPECT_FALSE(SwitcherOverflows(98, 3));
-+  EXPECT_TRUE(SwitcherOverflows(97, 3));
++  EXPECT_FALSE(SwitcherOverflows(352, 16));
++  EXPECT_TRUE(SwitcherOverflows(352, 17));
++  EXPECT_FALSE(SwitcherOverflows(90, 3));
++  EXPECT_TRUE(SwitcherOverflows(89, 3));
    // The owner's row (2026-10-01): eight Spaces in a row 290 wide went to dots
    // at the full gap; closed up to 6 they all fit.
    EXPECT_FALSE(SwitcherOverflows(290, 8));
 -  EXPECT_TRUE(SwitcherOverflows(250, 8));
 +  // The owner's row (2026-10-21): eight Spaces went to dots with room at the
-+  // row's ends; the narrowest row that holds them now is 208 wide.
-+  EXPECT_FALSE(SwitcherOverflows(208, 8));
-+  EXPECT_TRUE(SwitcherOverflows(207, 8));
++  // row's ends; the narrowest row that holds them now is 190 wide.
++  EXPECT_FALSE(SwitcherOverflows(190, 8));
++  EXPECT_TRUE(SwitcherOverflows(189, 8));
  
    EXPECT_EQ(kSwitcherChip, SwitcherChipWidth(false, false, false));
    EXPECT_EQ(kSwitcherDot, SwitcherChipWidth(true, false, false));
-@@ -64,22 +70,61 @@ TEST(SwitcherRulesTest, OverflowShrinksInactiveChips) {
+@@ -64,22 +70,62 @@ TEST(SwitcherRulesTest, OverflowShrinksInactiveChips) {
    EXPECT_EQ(kSwitcherChip, SwitcherChipWidth(true, false, true));
  }
  
@@ -409,8 +409,8 @@ index 9457c27689d70..ac67939ff2cc9 100644
 +  // A DIP less: chips of 23, the DIP they give back in the gaps.
 +  EXPECT_EQ((Form{23, 5, kSwitcherMinRowInset}), SwitcherRowFormAt(261, 8));
 +  EXPECT_EQ((Form{kSwitcherMinChip, kSwitcherMinChipGap, kSwitcherMinRowInset}),
-+            SwitcherRowFormAt(208, 8));
-+  for (int width = 208; width <= 290; ++width) {
++            SwitcherRowFormAt(190, 8));
++  for (int width = 190; width <= 290; ++width) {
 +    SCOPED_TRACE(testing::Message() << "a row " << width << " wide");
 +    const SwitcherRowForm form = SwitcherRowFormAt(width, 8);
 +    const int used = RowWidth(form, 8);
@@ -420,8 +420,8 @@ index 9457c27689d70..ac67939ff2cc9 100644
 +    EXPECT_LE(form.inset, kSwitcherRowInset);
 +  }
 +  // Dots, the gaps as wide as the row allows: the "+" stays in the row.
-+  EXPECT_EQ((Form{kFull, kSwitcherChipGap, kSwitcherMinRowInset, true}),
-+            SwitcherRowFormAt(207, 8));
++  EXPECT_EQ((Form{kFull, 10, kSwitcherMinRowInset, true}),
++            SwitcherRowFormAt(189, 8));
 +  const Form narrow = SwitcherRowFormAt(167, 8);
 +  EXPECT_TRUE(narrow.dots);
 +  EXPECT_EQ(7, narrow.gap);
@@ -429,10 +429,11 @@ index 9457c27689d70..ac67939ff2cc9 100644
 +  EXPECT_EQ(kSwitcherMinDotGap, SwitcherRowFormAt(40, 3).gap);
 +}
 +
-+// A chip's glyph is two thirds of it.
++// A chip's glyph is two thirds of it, rounded.
 +TEST(SwitcherRulesTest, TheGlyphFollowsTheChip) {
 +  EXPECT_EQ(16, SwitcherGlyphSize(kSwitcherChip));
-+  EXPECT_EQ(12, SwitcherGlyphSize(kSwitcherMinChip));
++  EXPECT_EQ(12, SwitcherGlyphSize(18));
++  EXPECT_EQ(11, SwitcherGlyphSize(kSwitcherMinChip));
  }
  
  // sidebar Y13: the rail's stack goes by the count, and measures itself.

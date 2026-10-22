@@ -18,7 +18,7 @@ held for the next release, `S-258`), then sent three notes from using the build:
   J16). `split_tabs/1` opens a split for captures and `capture-state --sidebar-width` sets the
   sidebar's width, so these captures need no pointer.
 - The Space icons at the sidebar's foot turned to dots with room to spare. The row now closes
-  its leading inset and shrinks its chips to 18 DIP first, and the dots' gaps close so the "+"
+  its leading inset and shrinks its chips to 16 DIP first (18 at first; the owner asked for 16), and the dots' gaps close so the "+"
   stays in a narrow sidebar (spaces B24). The owner then saw the "+" sit nearer the sidebar's
   end than the downloads button was to its start: the trailing inset stays 10 DIP, and five
   captures from 215 to 330 DIP measure both ends at 21.5 DIP within a DIP.
