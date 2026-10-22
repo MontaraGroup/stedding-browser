@@ -158,7 +158,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../tabs/common/pinned_tab_container_view.cc  |  40 +-
  .../common/stedding_tab_row_rules_unittest.cc |  18 +-
  .../ui/views/tabs/common/tab_group_view.cc    |  10 +
- .../ui/views/tabs/common/tab_group_view.h     |   9 +
+ .../ui/views/tabs/common/tab_group_view.h     |  17 +
  .../tabs/common/tab_strip_layout_unittest.cc  |  55 +
  .../ui/views/tabs/common/tab_strip_view.cc    |  68 ++
  .../ui/views/tabs/common/tab_strip_view.h     |  32 +-
@@ -212,7 +212,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 128 files changed, 11186 insertions(+), 765 deletions(-)
+ 128 files changed, 11194 insertions(+), 765 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -4575,7 +4575,7 @@ index 6bde5c9d9e5c1..06584645dbdec 100644
  
  bool TabGroupView::IsCollapsed() const {
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view.h b/chrome/browser/ui/views/tabs/common/tab_group_view.h
-index 7dc74a1770886..fe58ae4e0c126 100644
+index 7dc74a1770886..cc21c2a1fe652 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view.h
 @@ -6,6 +6,7 @@
@@ -4600,14 +4600,22 @@ index 7dc74a1770886..fe58ae4e0c126 100644
    std::optional<BrowserRootView::DropIndex> GetLinkDropIndex(
        const gfx::Point& point_in_local_coords);
  
-@@ -147,6 +155,7 @@ class TabGroupView : public TabCollectionZOrderManager,
-   base::CallbackListSubscription tab_group_data_changed_subscription_;
-   base::CallbackListSubscription node_destroyed_subscription_;
-   base::CallbackListSubscription paint_as_active_subscription_;
-+  base::RepeatingClosure on_child_visibility_changed_;
- };
+@@ -141,6 +149,15 @@ class TabGroupView : public TabCollectionZOrderManager,
+   // reacting immediately to visual data updates during animation.
+   bool is_collapsed_ = false;
  
- #endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_TAB_GROUP_VIEW_H_
++  // Stedding (spaces B33). Declared before `layout_manager_`: installing the
++  // layout manager can end an animation at once, when animations are off --
++  // reduced motion, a remote desktop session -- and the end runs
++  // UpdateChildVisibilityForCollapseState(), which reads this. Declared
++  // after it, it was read before it was constructed, and a group header
++  // dragged out of the window and back crashed the checks build on Windows
++  // over a remote desktop session (2026-10-22).
++  base::RepeatingClosure on_child_visibility_changed_;
++
+   const raw_ref<TabCollectionAnimatingLayoutManager> layout_manager_;
+ 
+   std::unique_ptr<tabs::TabGroupDataObserver> tab_group_data_observer_;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_layout_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_strip_layout_unittest.cc
 index db83512ad013a..191cb789b0c4e 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_layout_unittest.cc

@@ -39,7 +39,20 @@ pinned to the list's top edge (pins H26), and the row carried away kept its hove
 under the pointer had none (sidebar Y31). Both are fixed, each with a test that fails without
 the fix.
 
-How it was checked: TBD.
+The owner then asked for GitHub issue 12, a hover state on the New Tab row (sidebar Y32),
+built the same day. The Windows runs found three more things. With the PC's monitor off,
+Windows ran at 1024×768 and the sidebar tests failed across suites (HANDOFF trap 128); the
+owner signed in over a remote desktop and the reruns came clean. A remote desktop also turns
+animations off, and the checks and AddressSanitizer builds then crashed in a tab group test:
+`TabGroupView` declared the callback a finished animation runs after the layout manager whose
+installation can finish one at once, so it read the callback before constructing it (patch
+0071, BACKLOG S-269, `FolderTabsTest.AGroupMadeWithAnimationsOffShowsItsRows`). And the new
+scroll-room test asked Windows for an offset past the list's end, which Windows does not clamp
+at once. The owner also asked for fewer documents: the release notes and the finished history
+moved into two archives and six small documents into the ones they belong with (129 Markdown
+files to 97), and nothing of the owner's own profile or machines stays in the docs or pictures.
+
+How it was checked: the release notes of 0.3.0 beta 5 give the runs on both machines.
 
 ## 2026-10-22, night -- the owner's three open decisions, the folder header for Narrator, 0.3.0 beta 4
 

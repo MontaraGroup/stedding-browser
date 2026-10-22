@@ -29,9 +29,9 @@ word "steading" (a farmstead or homestead), which comes from "stead", an old wor
 place. The meaning: a place to use the web where surveillance and vendor control cannot
 reach. Say it STED-ding, rhyming with "wedding". The name was chosen after vetting
 candidate names against browser, software, trademark, SEO, and pronunciation criteria —
-full record in `docs/VISION.md#the-name`. Only the word "Stedding" is used, as this browser's
+full record in `docs/VISION.md` ("The name"). Only the word "Stedding" is used, as this browser's
 name. No artwork, names, quotations or other material from any book, film, game or other
-brand, and no claimed affiliation with anyone (`docs/VISION.md#brand-and-voice`).
+brand, and no claimed affiliation with anyone (`docs/VISION.md`, "Brand and voice").
 
 ## The mandate — read this twice
 
@@ -41,7 +41,7 @@ opens it, imports their profile, and prefers it to Chrome/Arc within a day. Ever
 milestone must end in something installable and usable. When choosing between
 "interesting" and "shippable and polished", choose shippable and polished.
 
-Concretely (full detail in `docs/ROADMAP.md#the-quality-bar`):
+Concretely (full detail in `docs/ROADMAP.md`, "The quality bar"):
 
 - Every merged change keeps the browser buildable and runnable.
 - Features ship complete: keyboard shortcuts, settings entry, edge cases, polish —
@@ -136,8 +136,8 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
   the Mac holds the Mac-only checks (`BACKLOG.md` rows say which wait on it).
 - The work order: `BACKLOG.md`, in priority order; its first "Checks still owed" row is the
   core-loop gate that new features wait for (`PLAN.md`).
-- What is released: `docs/release-notes/` has one file per release; `gh release list` is
-  the truth. The site (`stedding.dev`) reads the same list.
+- What is released: `docs/release-notes/` has the current release's notes and `archive.md`
+  with every earlier one; `gh release list` is the truth. The site (`stedding.dev`) reads the same list.
 - What is open: `BACKLOG.md`, by id.
 
 ## Map of the docs
@@ -146,22 +146,18 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 |---|---|
 | `docs/README.md` | The index of everything under `docs/`, grouped by who it is for |
 | `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | The user-facing pages the README links: installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
-| `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch |
+| `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch; the evidence of what Arc switchers ask for |
 | `docs/features/` | One spec per feature; numbered behaviours, each with its test id; `acceptance.md` holds the scripts run on a real build before a release, with every run |
 | `PLAN.md` | The owner's standing decisions and when an item counts as done |
-| `docs/history/` | Finished plans and ledgers still cited by id: the 2026-09-26 audit (TAB-1, SPC-4, ...), round 6, the operator's rounds 2 to 11, a code review (S-179 to S-209) |
-| `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids |
+| `docs/history/` | The 2026-09-26 audit (TAB-1, SPC-4, ...), which the code cites by path, and `archive.md`: closed backlog items, the project log before 2026-10-15, round 6, the operator's rounds 2 to 11, a code review (S-179 to S-210) |
+| `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids; closed items move to `docs/history/archive.md` |
 | `docs/HANDOFF.md` | Where things live, the fast path, dev parameters, the traps already paid for (with an index) |
-| `docs/PROJECT-LOG.md` | What was built, round by round, with the evidence. History, not instructions |
-| `docs/VISION.md` | Why this exists, values, explicit non-goals |
-| `docs/PRODUCT.md` | Full feature spec: sidebar, workspaces, split view, command bar, settings, import |
+| `docs/PROJECT-LOG.md` | What was built since 2026-10-15, round by round, with the evidence. History, not instructions |
+| `docs/VISION.md` | Why this exists, values, non-goals; the name (the naming record), the brand and voice, the competitors |
+| `docs/PRODUCT.md` | Full feature spec: sidebar, workspaces, split view, command bar, settings, import; the UI spec |
 | `docs/ARCHITECTURE.md` | Fork strategy, build system, patch management, updater, signing |
-| `docs/ROADMAP.md` | Milestones M0→1.0 with acceptance criteria |
-| `docs/ROADMAP.md#the-quality-bar` | The "ready-to-use" bar: performance budgets, release checklist |
+| `docs/ROADMAP.md` | Milestones M0→1.0 with acceptance criteria; the quality bar: performance budgets, release checklist |
 | `docs/PRIVACY.md` | Privacy principles and concrete defaults |
-| `docs/VISION.md#competitors` | Arc, Dia, Zen, Helium, Vivaldi, Brave, Thorium — and our gap |
-| `docs/VISION.md#the-name` | The naming decision record: candidates, vetting criteria, outcome |
-| `docs/VISION.md#brand-and-voice` | Name meaning, voice, taglines, trademark hygiene |
 | `docs/decisions/` | ADRs — every irreversible decision gets one |
 | `CONTRIBUTING.md` | How to contribute |
 | `SECURITY.md` | How to report vulnerabilities |
