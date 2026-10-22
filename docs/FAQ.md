@@ -81,6 +81,11 @@ again. A page that asks "Leave site?" asks first. To remove a pinned tab, choose
 This Space** or **Remove from Essentials** on its menu; or turn the rule off in Settings →
 Stedding → Tabs, and ⌘W, the ✕ and a middle click then close a pinned tab.
 
+**Can I pin a tab by dragging it?**
+Yes, as in Arc. Drag a tab up over the line among the pinned tabs and it is pinned where you drop
+it; drag a pinned tab down under the line and it is unpinned. The line moves during the drag to
+show where the tab will land.
+
 **Can a folder hold pinned tabs?**
 Yes. Drag a folder over the line into the pinned tabs, or choose **Pin Folder** on its menu: every
 tab in it becomes a pinned tab and the folder stays a folder. **Unpin Folder**, or a drag back
@@ -150,7 +155,9 @@ closes, it shows the essential you used there last, or opens a new tab if you ha
 Yes. Right-click a Space chip and turn on **Independent session**: that Space keeps its own
 cookies and site data, so another Space can use a different account. The essentials you add in
 that Space are its own and use its session; extensions, history and passwords stay shared. **Clear Independent Session** on the same menu signs that
-Space out of everything.
+Space out of everything. To have it for every Space you add, turn on Settings → Stedding →
+Spaces → **Give every new Space its own session**; it offers to turn it on for the Spaces you
+already have too.
 
 **Is there sync?**
 No: there is no account anywhere in the product. Export a Space as a file (Settings → Stedding →
