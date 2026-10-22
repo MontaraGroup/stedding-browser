@@ -149,11 +149,11 @@ the hover card).
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
- chrome/test/stedding/tab_drop_browsertest.cc  | 471 +++++++++++++++-
+ chrome/test/stedding/tab_drop_browsertest.cc  | 472 +++++++++++++++-
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 ++++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 86 files changed, 5076 insertions(+), 722 deletions(-)
+ 86 files changed, 5077 insertions(+), 722 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -7523,7 +7523,7 @@ index 737209a88e1f5..326c29e639aa7 100644
    EXPECT_TRUE(base::test::RunUntil(
        [&]() { return model_->CountPagesAJarChangeReloads(work_) == 2; }))
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index b753c79753a26..6e9348a623c1e 100644
+index b753c79753a26..1e7ee5424708a 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -10,7 +10,9 @@
@@ -7711,7 +7711,7 @@ index b753c79753a26..6e9348a623c1e 100644
  };
  
  // A drop on a folder header joins the folder as the tab is (PLAN.md TAB-9).
-@@ -767,6 +840,378 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ChipDropsMoveLightAndSurviveARebuild) {
+@@ -767,6 +840,379 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ChipDropsMoveLightAndSurviveARebuild) {
    ASSERT_NO_FATAL_FAILURE(TabsDroppedOnAChipMove());
  }
  
@@ -8062,8 +8062,9 @@ index b753c79753a26..6e9348a623c1e 100644
 +    PressAndMove(from, dot.CenterPoint());
 +    views::test::RunScheduledLayout(widget());
 +    // On the lit chip's far part, which it has grown into from its dot.
-+    const gfx::Point far(dot.x() + 18, dot.CenterPoint().y());
-+    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseDragged, far);
++    const gfx::Point far_part(dot.x() + 18, dot.CenterPoint().y());
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseDragged,
++                                  far_part);
 +    views::test::RunScheduledLayout(widget());
 +    EXPECT_EQ(middle, switcher->drop_target_for_testing())
 +        << "the lit chip did not grow from where its dot was";
@@ -8072,13 +8073,13 @@ index b753c79753a26..6e9348a623c1e 100644
 +    })) << "a rest on the chip did not switch to its Space";
 +    views::test::RunScheduledLayout(widget());
 +    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseDragged,
-+                                  far + gfx::Vector2d(1, 0));
++                                  far_part + gfx::Vector2d(1, 0));
 +    views::test::RunScheduledLayout(widget());
 +    EXPECT_EQ(middle, switcher->drop_target_for_testing())
 +        << "the switch moved another chip under the pointer";
 +    EXPECT_EQ(spaces::kSwitcherChip, box(home).width())
 +        << "the chip of the Space left shrank under the drag";
-+    MoveHeld(far, from);
++    MoveHeld(far_part, from);
 +    Release(from);
 +    views::test::RunScheduledLayout(widget());
 +    EXPECT_EQ(middle, m->SpaceForTab(dragged));
