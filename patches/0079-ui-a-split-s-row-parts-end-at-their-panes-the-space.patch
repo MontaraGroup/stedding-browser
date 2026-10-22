@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
 Date: Wed, 21 Oct 2026 20:07:09 -0400
-Subject: ui: a split's row parts end at their panes, and the Space row shrinks
- before its dots
+Subject: ui: a split's row parts end at their panes, the Space row shrinks
+ before its dots, no folder count
 
 The owner's notes of 2026-10-21 on 0.3.0 beta 1:
 
@@ -13,36 +13,48 @@ The owner's notes of 2026-10-21 on 0.3.0 beta 1:
   where a dark page met a light one. The owner chose this over a sharp edge
   at the gap's middle from captures of both (splits J16).
 - The Space row at the bottom of the sidebar (spaces B24): as the row
-  narrows, after the gaps between the chips close, the row's inset at each
-  end closes from 12 DIP to 4 and the chips and the "+" shrink a DIP at a
-  time to 18 DIP, each glyph two thirds of its chip, before any chip turns
-  to a dot. Eight Spaces keep their icons down to a row 202 DIP wide, where
-  they had turned to dots below 272 with room left at the row's ends. As
-  dots, the gaps close from 12 DIP down to 2 as the row narrows, so the "+"
-  stays in the row; it had been pushed out of a narrow sidebar.
+  narrows, after the gaps between the chips close, the row's leading inset,
+  beside the downloads button, closes from 12 DIP to 4, and the chips and
+  the "+" shrink a DIP at a time to 18 DIP, each glyph two thirds of its
+  chip, before any chip turns to a dot. The trailing inset stays 10 DIP, so
+  the "+" keeps as far from the sidebar's end as the downloads button keeps
+  from its start. Eight Spaces keep their icons down to a row 208 DIP wide,
+  where they had turned to dots below 272 with room left at the row's ends.
+  As dots, the gaps close from 12 DIP down to 2 as the row narrows, so the
+  "+" stays in the row; it had been pushed out of a narrow sidebar.
+- A collapsed folder's header shows no count of its tabs (folders F33), as
+  Arc's has none; the numbers read as noise beside the names.
 - A capture parameter, split_tabs/1 on SteddingArcStyleWindow, puts a new
   window's first two tabs side by side, so a split's row can be captured
   without a drag (docs/HANDOFF.md, dev parameters).
 
 Tests: SwitcherRulesTest (each step's form for eight Spaces, every width from
-202 to 290 filled, the dots' gaps, the glyph size);
-PageColourRowTest.ASplitRowTakesEachPanesColour reads the ground over the gap.
+208 to 290 filled, the dots' gaps, the glyph size);
+PageColourRowTest.ASplitRowTakesEachPanesColour reads the ground over the gap;
+FolderViewTest.ACollapsedHeaderShowsNoNumber,
+FolderRowsTest.ACollapsedFolderShowsNoNumberInAnySpace and
+FolderTabsTest.ACollapsedFolderKeepsItsRows find the name alone on a
+collapsed header.
 
-Why: the owner found the blend ugly and the Space icons turning to dots with
-room to spare.
+Why: the owner found the blend ugly, the Space icons turning to dots with
+room to spare, and the folder counts pointless.
 Removable when: never; the next re-cut folds it into the patches that own
-the split row and the Space row.
+the split row, the Space row and the folder header.
 ---
  chrome/browser/ui/stedding_ui_metrics.cc      |  6 ++
- chrome/browser/ui/stedding_ui_metrics.h       |  5 ++
- .../views/frame/stedding_window_background.cc | 82 ++++--------------
- .../ui/views/spaces/space_switcher_rules.cc   | 43 +++++++---
- .../ui/views/spaces/space_switcher_rules.h    | 40 +++++++--
- .../spaces/space_switcher_rules_unittest.cc   | 83 ++++++++++++++-----
- .../ui/views/spaces/space_switcher_view.cc    | 53 +++++++++---
- .../spaces/space_tab_visibility_controller.cc | 17 +++-
- .../test/stedding/address_band_browsertest.cc | 40 ++++-----
- 9 files changed, 226 insertions(+), 143 deletions(-)
+ chrome/browser/ui/stedding_ui_metrics.h       |  5 +
+ .../views/frame/stedding_window_background.cc | 82 +++--------------
+ .../ui/views/spaces/space_switcher_rules.cc   | 48 ++++++++--
+ .../ui/views/spaces/space_switcher_rules.h    | 47 ++++++++--
+ .../spaces/space_switcher_rules_unittest.cc   | 87 +++++++++++++-----
+ .../ui/views/spaces/space_switcher_view.cc    | 53 ++++++++---
+ .../spaces/space_tab_visibility_controller.cc | 25 +++--
+ .../ui/views/tabs/common/folder_view.cc       | 56 +----------
+ .../ui/views/tabs/common/folder_view.h        | 25 ++---
+ .../views/tabs/common/folder_view_unittest.cc | 92 ++++++++-----------
+ .../test/stedding/address_band_browsertest.cc | 40 +++-----
+ .../test/stedding/folder_tabs_browsertest.cc  | 31 ++++---
+ 13 files changed, 308 insertions(+), 289 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
 index 335120c25fb1d..2d48bc74f9f51 100644
@@ -184,10 +196,10 @@ index 653d8d07861e7..c26258246b960 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules.cc b/chrome/browser/ui/views/spaces/space_switcher_rules.cc
-index cd995c00911da..3c59326e00775 100644
+index cd995c00911da..4a04bd871d2c1 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_rules.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_rules.cc
-@@ -11,23 +11,46 @@
+@@ -11,23 +11,51 @@
  
  namespace spaces {
  
@@ -206,29 +218,34 @@ index cd995c00911da..3c59326e00775 100644
 -  const int gap = spare / count;
 -  if (spare < 0 || gap < kSwitcherMinChipGap) {
 -    return std::nullopt;
-+  const int closed = 2 * kSwitcherMinRowInset + count * kSwitcherMinChipGap;
-+  // Full chips: the gaps close first, at the full inset, then the inset.
++  const int closed = kSwitcherMinRowInset + kSwitcherTrailingInset +
++                     count * kSwitcherMinChipGap;
++  // Full chips: the gaps close first, at the full inset, then the leading
++  // inset.
 +  const int room = row_width - (count + 1) * kSwitcherChip;
 +  if (room >= closed) {
-+    const int gap = (room - 2 * kSwitcherRowInset) / count;
-+    if (room >= 2 * kSwitcherRowInset && gap >= kSwitcherMinChipGap) {
++    const int gap = (room - kSwitcherRowInset - kSwitcherTrailingInset) / count;
++    if (gap >= kSwitcherMinChipGap) {
 +      return {kSwitcherChip, std::min(gap, kSwitcherChipGap),
 +              kSwitcherRowInset};
 +    }
 +    return {kSwitcherChip, kSwitcherMinChipGap,
-+            (room - count * kSwitcherMinChipGap) / 2};
++            room - kSwitcherTrailingInset - count * kSwitcherMinChipGap};
 +  }
 +  // Then smaller chips at the closed gaps and inset; what the division
-+  // leaves over goes to the insets, so the row keeps its width.
++  // leaves over widens the gaps, the last few DIP the leading inset, so the
++  // row keeps its width and no step jumps.
 +  const int chip = (row_width - closed) / (count + 1);
 +  if (chip >= kSwitcherMinChip) {
-+    return {chip, kSwitcherMinChipGap,
-+            kSwitcherMinRowInset + (row_width - closed - (count + 1) * chip) / 2};
++    const int spare = row_width - closed - (count + 1) * chip;
++    return {chip, kSwitcherMinChipGap + spare / count,
++            kSwitcherMinRowInset + spare % count};
    }
 -  return std::min(gap, kSwitcherChipGap);
 +  // Dots: the active chip and the "+" full, the other chips dots.
-+  const int dot_room = row_width - 2 * kSwitcherMinRowInset -
-+                       2 * kSwitcherChip - (count - 1) * kSwitcherDot;
++  const int dot_room = row_width - kSwitcherMinRowInset -
++                       kSwitcherTrailingInset - 2 * kSwitcherChip -
++                       (count - 1) * kSwitcherDot;
 +  return {kSwitcherChip,
 +          std::clamp(dot_room / count, kSwitcherMinDotGap, kSwitcherChipGap),
 +          kSwitcherMinRowInset, /*dots=*/true};
@@ -245,10 +262,10 @@ index cd995c00911da..3c59326e00775 100644
  
  int SwitcherChipWidth(bool overflow, bool active, bool row_hovered) {
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules.h b/chrome/browser/ui/views/spaces/space_switcher_rules.h
-index 9f55cc56e728f..94d1be721f3bf 100644
+index 9f55cc56e728f..b49699305222c 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_rules.h
 +++ b/chrome/browser/ui/views/spaces/space_switcher_rules.h
-@@ -24,14 +24,42 @@ inline constexpr int kSwitcherDot = 6;
+@@ -24,14 +24,49 @@ inline constexpr int kSwitcherDot = 6;
  // every chip (owner, 2026-10-01).
  inline constexpr int kSwitcherMinChipGap = 4;
  
@@ -257,19 +274,25 @@ index 9f55cc56e728f..94d1be721f3bf 100644
 -// narrower as it fills, never under kSwitcherMinChipGap; nullopt when the
 -// chips do not fit even then.
 -std::optional<int> SwitcherChipGap(int row_width, size_t chip_count);
-+// The narrowest side inset the row closes up to, and the smallest chip it
-+// shrinks to after that, before any chip turns to a dot (spaces B24): eight
-+// Spaces went to dots with a chip's width of room left at the row's ends
-+// (the owner, 2026-10-21). A chip's glyph is two thirds of it: 16 px on a
-+// full chip, 12 on the smallest. Between dots the gap closes to
-+// kSwitcherMinDotGap, so the "+" stays in the row.
++// The narrowest leading inset the row closes up to, beside the downloads
++// button, and the smallest chip it shrinks to after that, before any chip
++// turns to a dot (spaces B24): eight Spaces went to dots with a chip's width
++// of room left at the row's ends (the owner, 2026-10-21). The trailing inset
++// stays kSwitcherTrailingInset, so the "+" keeps as far from the sidebar's
++// end as the downloads button keeps from its start: closing it too left the
++// "+" nearer its end than the button was to the other (the owner,
++// 2026-10-21). A chip's glyph is two thirds of it: 16 px on a full chip, 12
++// on the smallest. Between dots the gap closes to kSwitcherMinDotGap, so the
++// "+" stays in the row.
 +inline constexpr int kSwitcherMinRowInset = 4;
++inline constexpr int kSwitcherTrailingInset = 10;
 +inline constexpr int kSwitcherMinChip = 18;
 +inline constexpr int kSwitcherMinDotGap = 2;
 +
 +// How a row lays out its chips and the "+": their size, the gap between
-+// them, the row's inset at each end, and whether the inactive chips are dots
-+// (then `chip` is the active chip's and the "+"'s size).
++// them, the row's leading inset (its trailing one is kSwitcherTrailingInset),
++// and whether the inactive chips are dots (then `chip` is the active chip's
++// and the "+"'s size).
 +struct SwitcherRowForm {
 +  int chip = kSwitcherChip;
 +  int gap = kSwitcherChipGap;
@@ -282,8 +305,9 @@ index 9f55cc56e728f..94d1be721f3bf 100644
 +// The row's form at `row_width` for `chip_count` chips and the "+" (spaces
 +// B24), as the row narrows, each step leaving it as wide as the one before:
 +// full chips at the full inset, their gaps closing from kSwitcherChipGap to
-+// kSwitcherMinChipGap; then the inset closing to kSwitcherMinRowInset; then
-+// the chips and the "+" shrinking a DIP at a time to kSwitcherMinChip; then
++// kSwitcherMinChipGap; then the leading inset closing to
++// kSwitcherMinRowInset; then the chips and the "+" shrinking a DIP at a time
++// to kSwitcherMinChip; then
 +// dots, the active chip and the "+" full, the gaps as wide as the row allows
 +// between kSwitcherMinDotGap and kSwitcherChipGap.
 +SwitcherRowForm SwitcherRowFormAt(int row_width, size_t chip_count);
@@ -298,7 +322,7 @@ index 9f55cc56e728f..94d1be721f3bf 100644
  
  // The width a chip takes: full while the row has room, while it is the
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc b/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
-index 9457c27689d70..528f05fee7ef5 100644
+index 9457c27689d70..ac67939ff2cc9 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
 @@ -11,8 +11,9 @@
@@ -321,20 +345,20 @@ index 9457c27689d70..528f05fee7ef5 100644
 -  EXPECT_TRUE(SwitcherOverflows(126, 3));
 +  EXPECT_FALSE(SwitcherOverflows(352, 14));
 +  EXPECT_TRUE(SwitcherOverflows(352, 15));
-+  EXPECT_FALSE(SwitcherOverflows(92, 3));
-+  EXPECT_TRUE(SwitcherOverflows(91, 3));
++  EXPECT_FALSE(SwitcherOverflows(98, 3));
++  EXPECT_TRUE(SwitcherOverflows(97, 3));
    // The owner's row (2026-10-01): eight Spaces in a row 290 wide went to dots
    // at the full gap; closed up to 6 they all fit.
    EXPECT_FALSE(SwitcherOverflows(290, 8));
 -  EXPECT_TRUE(SwitcherOverflows(250, 8));
 +  // The owner's row (2026-10-21): eight Spaces went to dots with room at the
-+  // row's ends; the narrowest row that holds them now is 202 wide.
-+  EXPECT_FALSE(SwitcherOverflows(202, 8));
-+  EXPECT_TRUE(SwitcherOverflows(201, 8));
++  // row's ends; the narrowest row that holds them now is 208 wide.
++  EXPECT_FALSE(SwitcherOverflows(208, 8));
++  EXPECT_TRUE(SwitcherOverflows(207, 8));
  
    EXPECT_EQ(kSwitcherChip, SwitcherChipWidth(false, false, false));
    EXPECT_EQ(kSwitcherDot, SwitcherChipWidth(true, false, false));
-@@ -64,22 +70,57 @@ TEST(SwitcherRulesTest, OverflowShrinksInactiveChips) {
+@@ -64,22 +70,61 @@ TEST(SwitcherRulesTest, OverflowShrinksInactiveChips) {
    EXPECT_EQ(kSwitcherChip, SwitcherChipWidth(true, false, true));
  }
  
@@ -359,11 +383,12 @@ index 9457c27689d70..528f05fee7ef5 100644
 +int RowWidth(const SwitcherRowForm& form, int count) {
 +  const int chips = form.dots ? 2 * form.chip + (count - 1) * kSwitcherDot
 +                              : (count + 1) * form.chip;
-+  return 2 * form.inset + chips + count * form.gap;
++  return form.inset + kSwitcherTrailingInset + chips + count * form.gap;
 +}
 +
 +// spaces B24: as the row narrows, full chips close their gaps up to
-+// kSwitcherMinChipGap, then the row's inset closes to kSwitcherMinRowInset,
++// kSwitcherMinChipGap, then the row's leading inset closes to
++// kSwitcherMinRowInset while the trailing one keeps kSwitcherTrailingInset,
 +// then the chips shrink a DIP at a time to kSwitcherMinChip; only then do
 +// the inactive chips turn to dots, whose gaps close as the row narrows on so
 +// the "+" stays in it. Until the dots no step leaves the row more than a few
@@ -373,30 +398,33 @@ index 9457c27689d70..528f05fee7ef5 100644
 +  constexpr int kFull = kSwitcherChip;
 +  EXPECT_EQ(Form(), SwitcherRowFormAt(352, 5));
 +  EXPECT_EQ(Form(), SwitcherRowFormAt(352, 0));
-+  // 290 less the "+", eight chips and the insets leaves 50: 6 a chip.
++  // 290 less the "+", eight chips and the insets leaves 52: 6 a chip.
 +  EXPECT_EQ((Form{kFull, 6, kSwitcherRowInset}), SwitcherRowFormAt(290, 8));
-+  // Eight full chips, the "+" and the closed gaps take 248.
++  // Eight full chips, the "+", the insets and the closed gaps take 270.
 +  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, kSwitcherRowInset}),
-+            SwitcherRowFormAt(272, 8));
-+  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, 11}), SwitcherRowFormAt(271, 8));
++            SwitcherRowFormAt(270, 8));
++  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, 11}), SwitcherRowFormAt(269, 8));
 +  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, kSwitcherMinRowInset}),
-+            SwitcherRowFormAt(256, 8));
-+  // A DIP less: chips of 23, the DIP the division leaves over in the insets.
-+  EXPECT_EQ((Form{23, kSwitcherMinChipGap, 8}), SwitcherRowFormAt(255, 8));
++            SwitcherRowFormAt(262, 8));
++  // A DIP less: chips of 23, the DIP they give back in the gaps.
++  EXPECT_EQ((Form{23, 5, kSwitcherMinRowInset}), SwitcherRowFormAt(261, 8));
 +  EXPECT_EQ((Form{kSwitcherMinChip, kSwitcherMinChipGap, kSwitcherMinRowInset}),
-+            SwitcherRowFormAt(202, 8));
-+  for (int width = 202; width <= 290; ++width) {
++            SwitcherRowFormAt(208, 8));
++  for (int width = 208; width <= 290; ++width) {
 +    SCOPED_TRACE(testing::Message() << "a row " << width << " wide");
-+    const int used = RowWidth(SwitcherRowFormAt(width, 8), 8);
++    const SwitcherRowForm form = SwitcherRowFormAt(width, 8);
++    const int used = RowWidth(form, 8);
 +    EXPECT_LE(used, width);
 +    EXPECT_LT(width - used, 8);
++    EXPECT_GE(form.inset, kSwitcherMinRowInset);
++    EXPECT_LE(form.inset, kSwitcherRowInset);
 +  }
 +  // Dots, the gaps as wide as the row allows: the "+" stays in the row.
 +  EXPECT_EQ((Form{kFull, kSwitcherChipGap, kSwitcherMinRowInset, true}),
-+            SwitcherRowFormAt(201, 8));
++            SwitcherRowFormAt(207, 8));
 +  const Form narrow = SwitcherRowFormAt(167, 8);
 +  EXPECT_TRUE(narrow.dots);
-+  EXPECT_EQ(8, narrow.gap);
++  EXPECT_EQ(7, narrow.gap);
 +  EXPECT_LE(RowWidth(narrow, 8), 167);
 +  EXPECT_EQ(kSwitcherMinDotGap, SwitcherRowFormAt(40, 3).gap);
 +}
@@ -409,7 +437,7 @@ index 9457c27689d70..528f05fee7ef5 100644
  
  // sidebar Y13: the rail's stack goes by the count, and measures itself.
 diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
-index e653b2d66b856..2cb50a1341234 100644
+index e653b2d66b856..5e7cb765edd01 100644
 --- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
 +++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
 @@ -72,7 +72,8 @@ constexpr int kIconSize = 24;
@@ -476,16 +504,16 @@ index e653b2d66b856..2cb50a1341234 100644
 +  if (!collapsed_) {
 +    if (auto* const row_layout =
 +            static_cast<views::FlexLayout*>(icon_row_->GetLayoutManager())) {
-+      row_layout->SetInteriorMargin(gfx::Insets::VH(0, form.inset));
++      row_layout->SetInteriorMargin(
++          gfx::Insets::TLBR(0, form.inset, 0, kSwitcherTrailingInset));
 +    }
 +  }
 +  // The "+" is the chips' size, in the rail too.
 +  if (auto* const add = views::AsViewClass<views::LabelButton>(add_button_)) {
-+    add->SetImageModel(
-+        views::Button::STATE_NORMAL,
-+        ui::ImageModel::FromVectorIcon(vector_icons::kAdd2Icon,
-+                                       ui::kColorLabelForegroundSecondary,
-+                                       glyph_size + 2));
++    add->SetImageModel(views::Button::STATE_NORMAL,
++                       ui::ImageModel::FromVectorIcon(
++                           vector_icons::kAdd2Icon,
++                           ui::kColorLabelForegroundSecondary, glyph_size + 2));
 +    add->SetPreferredSize(gfx::Size(chip_size, chip_size));
 +  }
    const auto& spaces = model_->spaces();
@@ -526,7 +554,7 @@ index e653b2d66b856..2cb50a1341234 100644
            views::kMarginsKey,
            gfx::Insets::TLBR(0, chip_gap / 2, 0, chip_gap - chip_gap / 2));
 diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
-index 407d95d824cf5..b089c4db0c675 100644
+index 407d95d824cf5..b1036b72f391d 100644
 --- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
 +++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
 @@ -13,6 +13,7 @@
@@ -574,6 +602,329 @@ index 407d95d824cf5..b089c4db0c675 100644
    UpdateTabVisibility();
  }
  
+@@ -276,14 +291,6 @@ void SpaceTabVisibilityController::UpdateFolder(FolderView& view) {
+       folder_tabs,
+       [this](const tabs::TabInterface* tab) { return ShowsRow(tab); });
+   view.SetVisible(header || row_shown);
+-  // folders F33: the number a collapsed header shows -- the folder's tabs in
+-  // this Space, nested folders' included and each pane of a split counted;
+-  // every tab of a window with no Space model. Set on every pass, so it
+-  // follows a tab opened, closed or moved to another Space, and a switch.
+-  view.SetTabCount(static_cast<size_t>(
+-      std::ranges::count_if(folder_tabs, [this](const tabs::TabInterface* tab) {
+-        return !model_ || model_->IsTabInActiveSpace(tab);
+-      })));
+   view.SetOnCollapsedChanged(
+       base::BindRepeating(&SpaceTabVisibilityController::UpdateTabVisibility,
+                           weak_factory_.GetWeakPtr()));
+diff --git a/chrome/browser/ui/views/tabs/common/folder_view.cc b/chrome/browser/ui/views/tabs/common/folder_view.cc
+index ed3a3e0cdb463..cc896d7258762 100644
+--- a/chrome/browser/ui/views/tabs/common/folder_view.cc
++++ b/chrome/browser/ui/views/tabs/common/folder_view.cc
+@@ -306,15 +306,8 @@ FolderView::FolderView(TabCollectionNode* collection_node)
+                                          base::Unretained(this),
+                                          /*commit=*/true));
+ 
+-  // folders F33: a collapsed folder's tab count, at the header's right. The
+-  // name takes the room between the glyph and the count, so a long name
+-  // elides before the number instead of running under it.
+-  count_ = header->AddChildView(std::make_unique<views::Label>());
+-  count_->SetAutoColorReadabilityEnabled(false);
+-  count_->SetSkipSubpixelRenderingOpacityCheck(true);
+-  count_->SetSubpixelRenderingEnabled(false);
+-  count_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
+-  count_->SetVisible(false);
++  // The name takes the room after the glyph, eliding at the header's end.
++  // folders F33: no count after it, as Arc has none (the owner, 2026-10-21).
+   static_cast<views::BoxLayout*>(header->GetLayoutManager())
+       ->SetFlexForView(name_.get(), 1);
+ 
+@@ -705,8 +698,6 @@ void FolderView::ApplyRail() {
+   if (!rename_field_->GetVisible()) {
+     name_->SetVisible(!rail_);
+   }
+-  // folders F33: no number in the rail, where the header is its glyph alone.
+-  UpdateCount();
+   InvalidateLayout();
+ }
+ 
+@@ -747,11 +738,6 @@ void FolderView::UpdateHeader() {
+   if (!stedding::SameFont(name_->font_list(), font)) {
+     name_->SetFontList(font);
+   }
+-  // folders F33: the count is in the rows' own weight.
+-  const gfx::FontList count_font = stedding::SidebarFont();
+-  if (!stedding::SameFont(count_->font_list(), count_font)) {
+-    count_->SetFontList(count_font);
+-  }
+   header_->SetPreferredSize(
+       gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
+   // sidebar Y1, Y8: the glyph's box is the rows' favicon column, the
+@@ -775,40 +761,6 @@ void FolderView::UpdateHeader() {
+     accessibility.SetIsExpanded();
+   }
+   UpdateSleptLook();
+-  UpdateCount();
+-}
+-
+-void FolderView::SetTabCount(size_t count) {
+-  tab_count_ = count;
+-  UpdateCount();
+-}
+-
+-void FolderView::UpdateCount() {
+-  if (!count_ || !header_) {
+-    return;
+-  }
+-  const tabs::FolderTabCollection* const f = folder();
+-  // Only a collapsed folder at the open width has the number, and not while
+-  // its name is being typed (F4, F13): it would sit under the field.
+-  const bool show = f && f->collapsed() && !rail_ && tab_count_ > 0 &&
+-                    !rename_field_->GetVisible();
+-  bool changed = false;
+-  if (show) {
+-    const std::u16string text = base::NumberToString16(tab_count_);
+-    if (count_->GetText() != text) {
+-      count_->SetText(text);
+-      changed = true;
+-    }
+-  }
+-  if (count_->GetVisible() != show) {
+-    count_->SetVisible(show);
+-    changed = true;
+-  }
+-  // A Space switch runs this for every folder (spaces B36): the header is
+-  // laid out again only when the number changed.
+-  if (changed) {
+-    header_->InvalidateLayout();
+-  }
+ }
+ 
+ void FolderView::UpdateSleptLook() {
+@@ -844,8 +796,6 @@ void FolderView::UpdateSleptLook() {
+   const SkColor color = all_asleep ? stedding::SleptTitleColor(text) : text;
+   glyph_->SetImage(stedding::FolderGlyph(color, kGlyphSize));
+   name_->SetEnabledColor(color);
+-  // folders F33: the count is muted, in the slept rows' colour (R4).
+-  count_->SetEnabledColor(stedding::SleptTitleColor(text));
+ }
+ 
+ bool FolderView::IsOnName(const gfx::Point& point_in_header) const {
+@@ -873,8 +823,6 @@ void FolderView::BeginRename() {
+   // renamed; the field takes the name's slot.
+   name_->SetVisible(false);
+   rename_field_->SetVisible(true);
+-  // folders F33: the field takes the row; the count comes back after.
+-  UpdateCount();
+   rename_field_->RequestFocus();
+   rename_field_->SelectAll(false);
+ }
+diff --git a/chrome/browser/ui/views/tabs/common/folder_view.h b/chrome/browser/ui/views/tabs/common/folder_view.h
+index 4f668a6d8a18e..3ecfbe265ae1b 100644
+--- a/chrome/browser/ui/views/tabs/common/folder_view.h
++++ b/chrome/browser/ui/views/tabs/common/folder_view.h
+@@ -43,10 +43,10 @@ class RenameFieldWatcher;
+ 
+ // An Arc-style folder in the sidebar: a header row with a folder glyph and a
+ // name, its tabs (and nested folders) indented beneath it. Clicking the header
+-// collapses it; double-clicking its name renames it in place. Collapsed, the header
+-// shows at its right how many of its tabs are in the active Space (folders
+-// F33). Which of its rows show, and that number, are not decided here:
+-// SpaceTabVisibilityController owns every row's visibility and sets the count.
++// collapses it; double-clicking its name renames it in place. Collapsed, the
++// header shows its glyph and name alone, as Arc's does (folders F33). Which
++// of its rows show is not decided here: SpaceTabVisibilityController owns
++// every row's visibility.
+ class FolderView : public views::View,
+                    public views::TextfieldController,
+                    public views::ContextMenuController,
+@@ -85,10 +85,8 @@ class FolderView : public views::View,
+   void UpdateHeaderForTesting() { UpdateHeader(); }
+   // The field an open rename types into, or null.
+   views::Textfield* rename_field_for_testing() { return rename_field_; }
+-  // folders F33: the collapsed header's number.
+-  views::Label* count_for_testing() { return count_; }
+-  // How many times the header has drawn its look: the glyph, the title's
+-  // colour and the count's (UpdateSleptLook).
++  // How many times the header has drawn its look: the glyph and the title's
++  // colour (UpdateSleptLook).
+   size_t look_draws_for_testing() const { return look_draws_; }
+   // The header menu as it would open now (M7).
+   ui::SimpleMenuModel* menu_model_for_testing() {
+@@ -96,12 +94,6 @@ class FolderView : public views::View,
+     return menu_model_.get();
+   }
+ 
+-  // folders F33: how many of the folder's tabs are in the active Space,
+-  // nested folders' tabs and each pane of a split included. Shown only while
+-  // the folder is collapsed and drawn at the open width, not while it is
+-  // renamed, and never as 0.
+-  void SetTabCount(size_t count);
+-
+   // The header row, in screen coordinates: the part a dragged tab is dropped
+   // on to join the folder.
+   gfx::Rect GetHeaderBoundsInScreen() const;
+@@ -155,8 +147,6 @@ class FolderView : public views::View,
+   // folders F31: puts the rows' views in the folder's order, right after the
+   // header, before the box layout lays them out in view order.
+   void SyncRowOrder();
+-  // folders F33: shows the count when it applies, hides it otherwise.
+-  void UpdateCount();
+   void ResetCollectionNode();
+   void ToggleCollapsed();
+   void OnFolderDataChanged();
+@@ -206,9 +196,6 @@ class FolderView : public views::View,
+   raw_ptr<views::ImageView> glyph_ = nullptr;
+   raw_ptr<views::Label> name_ = nullptr;
+   raw_ptr<views::Textfield> rename_field_ = nullptr;
+-  // folders F33: the collapsed header's number, and the count it shows.
+-  raw_ptr<views::Label> count_ = nullptr;
+-  size_t tab_count_ = 0;
+   std::unique_ptr<stedding::RenameFieldWatcher> rename_watcher_;
+   bool header_hovered_ = false;
+   bool drop_highlighted_ = false;
+diff --git a/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc b/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc
+index daea402118431..9d3ec946edbad 100644
+--- a/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc
++++ b/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc
+@@ -48,6 +48,7 @@
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/test/views_test_utils.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ #include "url/gurl.h"
+ 
+@@ -200,47 +201,41 @@ TEST_F(FolderViewTest, TheHeaderTakesTheRowsTextColour) {
+             view->glyph_for_testing()->GetImageModel());
+ }
+ 
+-// folders F33: a collapsed header shows the count it is given, at its right.
+-// There is none on an expanded folder, at 0, in the rail (F13) or while the
+-// folder is renamed (F4); each comes back when the reason goes.
+-TEST_F(FolderViewTest, ACollapsedHeaderCountsItsTabs) {
++// Every non-empty label shown in `view`: visible, under parents that are.
++void CollectShownTexts(const views::View* view,
++                       std::vector<std::u16string>& texts) {
++  if (!view->GetVisible()) {
++    return;
++  }
++  if (const auto* const label = views::AsViewClass<views::Label>(view)) {
++    if (!label->GetText().empty()) {
++      texts.emplace_back(label->GetText());
++    }
++  }
++  for (const views::View* const child : view->children()) {
++    CollectShownTexts(child, texts);
++  }
++}
++
++std::vector<std::u16string> ShownTexts(const views::View& view) {
++  std::vector<std::u16string> texts;
++  CollectShownTexts(&view, texts);
++  return texts;
++}
++
++// folders F33: a collapsed header shows the folder's name and no count of
++// its tabs, as Arc's has none. It had shown how many of its tabs were in the
++// Space, which read as noise beside the names (the owner, 2026-10-21).
++TEST_F(FolderViewTest, ACollapsedHeaderShowsNoNumber) {
+   tabs::FolderTabCollection folder(tabs::FolderId::GenerateNew(), "Work",
+                                    /*collapsed=*/false);
+   TabCollectionNode node(&folder, TabStripOrientation::kVertical);
+   FolderView view(&node);
+   view.SetBounds(0, 0, 240, 200);
+-  views::Label* const count = view.count_for_testing();
+-  ASSERT_TRUE(count);
+-
+-  view.SetTabCount(3);
+-  EXPECT_FALSE(count->GetVisible()) << "an expanded folder shows its rows";
+-
++  EXPECT_EQ(std::vector<std::u16string>{u"Work"}, ShownTexts(view));
+   view.ExecuteCommand(FolderView::kToggleCommand, /*event_flags=*/0);
+   ASSERT_TRUE(folder.collapsed());
+-  EXPECT_TRUE(count->GetVisible());
+-  EXPECT_EQ(u"3", count->GetText());
+-  view.SetTabCount(4);
+-  EXPECT_EQ(u"4", count->GetText());
+-  view.SetTabCount(0);
+-  EXPECT_FALSE(count->GetVisible()) << "never a 0";
+-  view.SetTabCount(3);
+-  EXPECT_TRUE(count->GetVisible());
+-  EXPECT_EQ(u"3", count->GetText());
+-
+-  view.SetBounds(0, 0, 44, 200);
+-  EXPECT_FALSE(count->GetVisible()) << "the rail's header is its glyph alone";
+-  view.SetBounds(0, 0, 240, 200);
+-  EXPECT_TRUE(count->GetVisible());
+-
+-  view.ExecuteCommand(FolderView::kRenameCommand, /*event_flags=*/0);
+-  ASSERT_TRUE(view.rename_field_for_testing()->GetVisible());
+-  EXPECT_FALSE(count->GetVisible()) << "the name field takes the row";
+-  view.HandleKeyEvent(
+-      view.rename_field_for_testing(),
+-      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_ESCAPE, ui::EF_NONE));
+-  ASSERT_FALSE(view.rename_field_for_testing()->GetVisible());
+-  EXPECT_TRUE(count->GetVisible());
+-  EXPECT_EQ(u"3", count->GetText());
++  EXPECT_EQ(std::vector<std::u16string>{u"Work"}, ShownTexts(view));
+ }
+ 
+ // BACKLOG S-140 (PLAN.md TAB-27): the header answers the left button alone.
+@@ -513,11 +508,11 @@ TEST_F(FolderRowsTest, AFolderShowsOnlyInTheSpacesOfItsTabs) {
+   EXPECT_FALSE(inner_view->GetVisible());
+ }
+ 
+-// folders F33 under the controller that owns the rows: a collapsed folder's
+-// number is how many of its tabs are in the active Space, and it follows a
+-// tab moved to another Space and a switch; expanding hides it. Alphabetize
+-// is offered on a real folder of three rows (F31).
+-TEST_F(FolderRowsTest, TheCountIsOfThisSpacesTabs) {
++// folders F33 under the controller that owns the rows: a collapsed folder
++// shows its name alone in each Space it holds a tab of, also after a tab
++// moves to another Space and a switch. Alphabetize is offered on a real
++// folder of three rows (F31).
++TEST_F(FolderRowsTest, ACollapsedFolderShowsNoNumberInAnySpace) {
+   tabs::TabInterface* const loose = OpenTab();
+   tabs::TabInterface* const moved = OpenTab();
+   OpenTab();
+@@ -536,30 +531,23 @@ TEST_F(FolderRowsTest, TheCountIsOfThisSpacesTabs) {
+   FolderView* const view = AddFolderView(*root, folder);
+   spaces::SpaceTabVisibilityController controller(&space_model(), tabs(),
+                                                   *root);
+-  views::Label* const count = view->count_for_testing();
+   EXPECT_TRUE(view->IsCommandIdEnabled(FolderView::kAlphabetizeCommand));
+-  EXPECT_FALSE(count->GetVisible()) << "an expanded folder has no number";
++  const std::u16string name(view->name_for_testing()->GetText());
++  const std::vector<std::u16string> name_alone = {name};
+ 
+   view->ExecuteCommand(FolderView::kToggleCommand, /*event_flags=*/0);
+   ASSERT_TRUE(folder->collapsed());
+-  EXPECT_TRUE(count->GetVisible());
+-  EXPECT_EQ(u"3", count->GetText());
++  EXPECT_EQ(name_alone, ShownTexts(*view));
+ 
+   space_model().SetSpaceForTab(moved, work->id());
+-  EXPECT_EQ(u"2", count->GetText()) << "one of its tabs went to Work";
++  EXPECT_EQ(name_alone, ShownTexts(*view)) << "one of its tabs went to Work";
+ 
+   space_model().SetActiveSpace(work->id());
+   EXPECT_TRUE(view->GetVisible()) << "it holds a tab of Work";
+-  EXPECT_TRUE(count->GetVisible());
+-  EXPECT_EQ(u"1", count->GetText());
++  EXPECT_EQ(name_alone, ShownTexts(*view));
+ 
+   space_model().SetActiveSpace(home);
+-  EXPECT_TRUE(count->GetVisible());
+-  EXPECT_EQ(u"2", count->GetText());
+-
+-  view->ExecuteCommand(FolderView::kToggleCommand, /*event_flags=*/0);
+-  ASSERT_FALSE(folder->collapsed());
+-  EXPECT_FALSE(count->GetVisible()) << "an expanded folder shows its rows";
++  EXPECT_EQ(name_alone, ShownTexts(*view));
+ }
+ 
+ }  // namespace
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
 index 2aa3b18233360..4d4d61af7f5fe 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
@@ -670,3 +1021,59 @@ index 2aa3b18233360..4d4d61af7f5fe 100644
      const int old_middle = view()->multi_contents_view()->GetBoundsInScreen()
                                 .CenterPoint()
                                 .x();
+diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
+index ab2a2ade39c7e..291f9f1a8a074 100644
+--- a/chrome/test/stedding/folder_tabs_browsertest.cc
++++ b/chrome/test/stedding/folder_tabs_browsertest.cc
+@@ -19,6 +19,7 @@
+ // split inside it whole.
+ 
+ #include <algorithm>
++#include <iterator>
+ #include <memory>
+ #include <optional>
+ #include <set>
+@@ -605,9 +606,9 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ACollapsedFolderKeepsItsRows) {
+   }
+ 
+   {
+-    // folders F33: a collapsed folder's header draws how many of its tabs
+-    // are in the Space, at its right, after the name.
+-    SCOPED_TRACE("collapsed header shows 2");
++    // folders F33: a collapsed folder's header draws its name and no count
++    // of its tabs, as Arc's has none (the owner, 2026-10-21).
++    SCOPED_TRACE("a collapsed header draws no number");
+     CloseDownToOne();
+     tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
+     ASSERT_TRUE(folder);
+@@ -615,16 +616,20 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ACollapsedFolderKeepsItsRows) {
+     folder->SetCollapsed(true);
+     FolderView* const header = DrawnFolder(folder);
+     ASSERT_TRUE(header);
+-    views::Label* const count = header->count_for_testing();
+-    ASSERT_TRUE(count);
+-    EXPECT_TRUE(count->IsDrawn());
+-    EXPECT_EQ(u"2", count->GetText());
+-    const gfx::Rect number = count->GetBoundsInScreen();
+-    const gfx::Rect name = header->name_for_testing()->GetBoundsInScreen();
+-    EXPECT_FALSE(number.IsEmpty());
+-    EXPECT_GE(number.x(), name.right()) << "right of the name";
+-    EXPECT_TRUE(header->GetHeaderBoundsInScreen().Contains(number))
+-        << "inside the header";
++    std::vector<std::u16string> drawn;
++    views::View::Views pending = {header};
++    while (!pending.empty()) {
++      views::View* const view = pending.back();
++      pending.pop_back();
++      if (const auto* const label = views::AsViewClass<views::Label>(view);
++          label && label->IsDrawn() && !label->GetText().empty()) {
++        drawn.emplace_back(label->GetText());
++      }
++      std::ranges::copy(view->children(), std::back_inserter(pending));
++    }
++    EXPECT_EQ(std::vector<std::u16string>{std::u16string(
++                  header->name_for_testing()->GetText())},
++              drawn);
+   }
+ 
+ #if !BUILDFLAG(IS_MAC)

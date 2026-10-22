@@ -7,6 +7,29 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-21, evening -- after 0.3.0 beta 1: quieter defaults, a split's row, the Space row, folders
+
+After the release the owner asked for quieter defaults and sooner update checks (patch 0078,
+held for the next release, `S-258`), then sent three notes from using the build:
+
+- A split's address row met in a soft blend over the gap, a smudge where a dark page met a
+  light one. Captures of the blend, a sharp edge and the window's ground over the gap went to
+  the owner, who chose the ground: each pane's part now ends at the pane (toolbar T41, splits
+  J16). `split_tabs/1` opens a split for captures and `capture-state --sidebar-width` sets the
+  sidebar's width, so these captures need no pointer.
+- The Space icons at the sidebar's foot turned to dots with room to spare. The row now closes
+  its leading inset and shrinks its chips to 18 DIP first, and the dots' gaps close so the "+"
+  stays in a narrow sidebar (spaces B24). The owner then saw the "+" sit nearer the sidebar's
+  end than the downloads button was to its start: the trailing inset stays 10 DIP, and five
+  captures from 215 to 330 DIP measure both ends at 21.5 DIP within a DIP.
+- A collapsed folder's count of its tabs went, as Arc has none (folders F33).
+
+Patch 0079 carries all three. On the Mac's release build 34 unit tests and 42 browser tests
+pass; the run found `FolderTabsTest.UndoOfAFoldersLastTabStaysOutOfAGroup` still expecting the
+toast 0078 turned off, fixed in 0078. Not yet run on Windows. The same evening: the FAQ's Arc
+comparison now matches the README, and stedding.dev's three-column section has its room above
+the headings back (a list reset had outweighed its padding).
+
 ## 2026-10-20 night to 2026-10-21 -- the owner's notes on beta 21, the Chrome 156 stable pin, 0.3.0 beta 1
 
 The owner sent twelve notes on beta 21 on 2026-10-20. The round built them, fixed `S-251`,

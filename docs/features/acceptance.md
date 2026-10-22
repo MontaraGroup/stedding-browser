@@ -48,7 +48,7 @@ minutes by hand.
 | 7 | Press ⌃3 (Alt+3). | Play is on screen with Page F. |
 | 8 | Press ⌥⌘← (Ctrl+Alt+←) twice. | Work with Page E, then Home on the tab left there: Page A, the last row clicked in Home. |
 | 9 | Press ⌘T (Ctrl+T), type "Page F", choose Page F's tab row, press Enter. | The bar closes and Play is on screen with Page F. |
-| 10 | Press ⌃1 (Alt+1), click Page A, click the folder's header; then ⌃2 (Alt+2) and ⌃1 (Alt+1). | The folder collapses: Page B's row goes, the header shows its count, Page A stays on screen. Away and back, the folder is still collapsed and Page A is still the page on screen. |
+| 10 | Press ⌃1 (Alt+1), click Page A, click the folder's header; then ⌃2 (Alt+2) and ⌃1 (Alt+1). | The folder collapses: Page B's row goes, the header shows its name and no count, Page A stays on screen. Away and back, the folder is still collapsed and Page A is still the page on screen. |
 | 11 | Quit (⌘Q, or the Dock's Quit; Ctrl+Shift+W on Windows) and launch again. | Everything as it was left: Home on Page A, the folder collapsed, Page C and Page D; Work holds Page E, Play holds Page F. No restore bar. |
 | 12 | Press ⌘T (Ctrl+T), type Page G's address, press Enter. | The bar closes; a new row, Page G, is selected in Home and its page shows. |
 | 13 | Press ⌘L (Ctrl+L), type Page H's address, press Enter. | The bar opened with Page G's address selected; after Enter the same row shows Page H. No new row. |
