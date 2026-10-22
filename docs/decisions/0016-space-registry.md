@@ -9,7 +9,7 @@ ADR 0015 made Spaces a filter over one window's tab strip: the `SpaceModel` is p
 window and owns the Space list, order, metadata, the essentials and the per-Space
 pinned entries. A second window (⌘N, a tab dragged out) therefore starts with its own
 default Space and none of the user's Spaces, which is not what Arc does and not what
-anyone expects of a sidebar. Round 6 (`docs/history/round6-plan.md` R6-31) makes the sidebar
+anyone expects of a sidebar. Round 6 (`docs/history/archive.md#round-6-plan` R6-31) makes the sidebar
 one thing per profile.
 
 Two designs were weighed. A shared model that every window observes with tabs living in

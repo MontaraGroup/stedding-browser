@@ -36,7 +36,7 @@ account, no telemetry, BSD-3-Clause.
   </tr>
 </table>
 
-The rest is in the [release notes](docs/release-notes/v0.3.0-beta.1.md).
+The rest is in the [release notes](docs/release-notes/archive.md#stedding-030-beta-1).
 
 ## What Arc never had
 
@@ -106,7 +106,7 @@ Each feature has a specification naming the test behind every behaviour:
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.3.0 beta 4**, for macOS and Windows, on Chromium 156.0.8078.48.
+is **0.3.0 beta 5**, for macOS and Windows, on Chromium 156.0.8078.48.
 
 | Platform | File | |
 |---|---|---|

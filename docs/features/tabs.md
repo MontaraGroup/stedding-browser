@@ -1,7 +1,7 @@
 # Feature: Tab rows
 
 Status: **R1–R8, R10–R18, R20, R21, R23–R27, R29, R30, R56–R59 built** (child tabs since 2026-10-21; R60 planned) (R25–R27, R29, R30 since beta 14; R30's toast off by default since 2026-10-21); **R28 partial**: built since beta 14, its part that passes over a window a launch opened again (archive A15) written 2026-10-18, tests not yet run; **R31 partial**: written 2026-10-18, tests not yet run (BACKLOG S-229); **R19 partial** (a split's panes take a number each, BACKLOG S-102); **R22 partial** (the bar's Move Tab row ignores the selection, BACKLOG S-127). **R33–R38 built** (BACKLOG S-112, 2026-10-20): which tab is shown after the one on screen goes. **R39–R44 built** (BACKLOG S-111, 2026-10-20): tabs sleep on a timer and under memory pressure; Sleep Other Tabs. **R45–R48 built** (BACKLOG S-110, 2026-10-20): at launch only the selected tab loads ("On startup, load"). **R49–R53 built** (2026-10-20, on the Mac): Chromium's horizontal strip, vertical tabs off, in Stedding's style. **R54 built** 2026-10-20 (a site's favicon kept on its pages that give none), tested on the Mac, not yet seen on a real build. **R55 built** 2026-10-21 on the Mac (vertical tabs turned on while a drag in the horizontal strip ends, BACKLOG S-253).
-Owner docs: `docs/UI-SPEC.md`. Patches: 0017, 0019, 0060, and the defect round of 2026-10-18 (R4, R7, R10, R11).
+Owner docs: `docs/PRODUCT.md#ui-spec`. Patches: 0017, 0019, 0060, and the defect round of 2026-10-18 (R4, R7, R10, R11).
 
 The rows of the sidebar follow Arc: the close glyph appears only while the pointer is
 on the row or its close button has keyboard focus (Arc's active row carries none), the title never re-elides when the

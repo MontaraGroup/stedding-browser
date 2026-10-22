@@ -6,7 +6,7 @@ Date: 2026-08-30
 ## Context
 
 A one-team browser cannot ship three platforms at once to the quality bar in
-`../QUALITY.md` — every milestone must end installable and polished. An explicit
+`../ROADMAP.md` ("The quality bar") — every milestone must end installable and polished. An explicit
 order is needed so milestones, CI, and signing infrastructure are built in the
 right sequence instead of three half-finished ports. Chromium itself supports all
 three targets well, so the constraint is our capacity, not the engine.

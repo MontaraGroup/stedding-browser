@@ -29,9 +29,9 @@ word "steading" (a farmstead or homestead), which comes from "stead", an old wor
 place. The meaning: a place to use the web where surveillance and vendor control cannot
 reach. Say it STED-ding, rhyming with "wedding". The name was chosen after vetting
 candidate names against browser, software, trademark, SEO, and pronunciation criteria —
-full record in `docs/NAMING.md`. Only the word "Stedding" is used, as this browser's
+full record in `docs/VISION.md#the-name`. Only the word "Stedding" is used, as this browser's
 name. No artwork, names, quotations or other material from any book, film, game or other
-brand, and no claimed affiliation with anyone (`docs/BRAND.md`).
+brand, and no claimed affiliation with anyone (`docs/VISION.md#brand-and-voice`).
 
 ## The mandate — read this twice
 
@@ -41,7 +41,7 @@ opens it, imports their profile, and prefers it to Chrome/Arc within a day. Ever
 milestone must end in something installable and usable. When choosing between
 "interesting" and "shippable and polished", choose shippable and polished.
 
-Concretely (full detail in `docs/QUALITY.md`):
+Concretely (full detail in `docs/ROADMAP.md#the-quality-bar`):
 
 - Every merged change keeps the browser buildable and runnable.
 - Features ship complete: keyboard shortcuts, settings entry, edge cases, polish —
@@ -157,11 +157,11 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 | `docs/PRODUCT.md` | Full feature spec: sidebar, workspaces, split view, command bar, settings, import |
 | `docs/ARCHITECTURE.md` | Fork strategy, build system, patch management, updater, signing |
 | `docs/ROADMAP.md` | Milestones M0→1.0 with acceptance criteria |
-| `docs/QUALITY.md` | The "ready-to-use" bar: performance budgets, release checklist |
+| `docs/ROADMAP.md#the-quality-bar` | The "ready-to-use" bar: performance budgets, release checklist |
 | `docs/PRIVACY.md` | Privacy principles and concrete defaults |
-| `docs/COMPETITORS.md` | Arc, Dia, Zen, Helium, Vivaldi, Brave, Thorium — and our gap |
-| `docs/NAMING.md` | The naming decision record: candidates, vetting criteria, outcome |
-| `docs/BRAND.md` | Name meaning, voice, taglines, trademark hygiene |
+| `docs/VISION.md#competitors` | Arc, Dia, Zen, Helium, Vivaldi, Brave, Thorium — and our gap |
+| `docs/VISION.md#the-name` | The naming decision record: candidates, vetting criteria, outcome |
+| `docs/VISION.md#brand-and-voice` | Name meaning, voice, taglines, trademark hygiene |
 | `docs/decisions/` | ADRs — every irreversible decision gets one |
 | `CONTRIBUTING.md` | How to contribute |
 | `SECURITY.md` | How to report vulnerabilities |

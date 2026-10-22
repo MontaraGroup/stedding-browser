@@ -5,7 +5,7 @@ Windows: on 0.2.0 beta 20 (2026-10-19 and 2026-10-20, "Runs" below) every step p
 both**; `S-173` keeps the owner's day. The feature
 checks after it -- dark pages, the session mark, local tabs and apps made from pages, all
 written on 2026-10-18 -- have not run.
-Owner docs: `PLAN.md` ("When an item is done"), `docs/QUALITY.md` (the release checklist),
+Owner docs: `PLAN.md` ("When an item is done"), `docs/ROADMAP.md#the-quality-bar` (the release checklist),
 `docs/history/plan-2026-09-26.md` TST-6.
 
 A green sweep is not what a person sees. This file holds the scripts a person, or

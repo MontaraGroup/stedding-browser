@@ -17,7 +17,8 @@ into something a machine can fail on:
   wiring   every source the series adds is in a GN sources list, so it compiles
   args     every build configuration keeps the settings every Stedding build shares
   truth    docs carry no known-stale phrases, feature specs are well formed, and
-           every backlog id cited anywhere exists in BACKLOG.md
+           every backlog id cited anywhere exists in BACKLOG.md or, closed, in
+           docs/history/archive.md
 
 Run: tooling/check-repo [check ...]     (no arguments: run everything)
 Exit status is the number of failures, capped at 125.
@@ -312,12 +313,12 @@ STALE_PHRASES = [
     ("SECURITY.md", "No versions have been released"),
     ("CONTRIBUTING.md", "milestone M0"),
     ("CONTRIBUTING.md", "no installable browser yet"),
-    ("docs/COMPETITORS.md", "We don't exist as a product yet"),
+    ("docs/VISION.md", "We don't exist as a product yet"),
     ("docs/ROADMAP.md", "Outstanding: the network audit"),
 ]
 
 # A behaviour row is | <letter><n> | text | test | state |. The letter is the spec's
-# series (B for spaces, Z for shortcuts, ...); "planned" is a row from docs/history/round6-plan.md
+# series (B for spaces, Z for shortcuts, ...); "planned" is a row from round 6's plan (docs/history/archive.md)
 # whose test is named but not yet green.
 # Ids are a capital and a number (T3), or a capital, a small letter and a
 # number (Cf1) in the specs that share a first letter with another.
@@ -361,9 +362,13 @@ def check_truth() -> None:
             if state == "withdrawn" and not test.strip().lower().startswith("none"):
                 fail(f"{spec.relative_to(ROOT)}:{n}", f"{bid} is 'withdrawn' but names a test")
 
-    # Backlog ids cited anywhere must exist.
+    # Backlog ids cited anywhere must exist: open in BACKLOG.md, or closed in the
+    # history archive's "Closed backlog items", where a closed row moves.
     backlog = (ROOT / "BACKLOG.md").read_text(encoding="utf-8")
     known = set(BACKLOG_ID.findall(backlog))
+    archive = ROOT / "docs" / "history" / "archive.md"
+    if archive.is_file():
+        known |= set(BACKLOG_ID.findall(archive.read_text(encoding="utf-8")))
     for path in tracked_files():
         if path.suffix != ".md" or path.name == "BACKLOG.md":
             continue
@@ -373,7 +378,8 @@ def check_truth() -> None:
                 # as_posix: the rest of this file reports posix paths, and a Windows run
                 # was printing docs\features\x.md next to docs/features/y.md.
                 fail(path.relative_to(ROOT).as_posix(),
-                     f"cites S-{m.group(1)}, which is not in BACKLOG.md")
+                     f"cites S-{m.group(1)}, which is neither in BACKLOG.md nor closed "
+                     "in docs/history/archive.md")
 
 
 # --------------------------------------------------------------------------- traps

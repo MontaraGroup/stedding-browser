@@ -68,7 +68,7 @@ you, not the list.
   that carries it (trap 44).
 - Build output on the Mac: `out/release` (proprietary codecs on). `out/official` is
   built only for a performance baseline (`tooling/dev build official chrome`) and is
-  not there now (never quote numbers from `release`; `docs/QUALITY.md`). On the PC:
+  not there now (never quote numbers from `release`; `docs/ROADMAP.md#the-quality-bar`). On the PC:
   `STEDDING_CHROMIUM_SRC` and `out\win-release` ("The Windows build").
 - The website: `ysalitrynskyi/stedding.dev` (private), live
   at https://stedding.dev since 2026-09-16. Astro, static, Cloudflare Pages from
@@ -446,7 +446,7 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     hangs it from the card since round 6, and one dereferenced the horizontal
     strip an Arc window does not have -- a crash, which prints no FAILED line and
     which `tooling/dev test` used to swallow: it reports crashes and timeouts now
-    (`docs/history/operator-rounds.md`, *The Mac pass*).
+    (`docs/history/archive.md#the-operators-rounds`, *The Mac pass*).
 
 32. **Windows' caption buttons are on the right, and the frame reports them as
     the trailing exclusion.** The layout skipped every exclusion with a vertical
@@ -1880,7 +1880,7 @@ image joins the same release from the Windows PC: `tooling\win\build-until-done.
 (then both suites on that exact build), `tooling\win\package-installer.ps1`,
 `tooling\win\test-installer.ps1` (`-Mode backup`, then `upgrade`, `uninstall-keep`,
 `install`) and a real launch of
-the installed build (docs/QUALITY.md, release checklist 13), the checksum pasted under
+the installed build (docs/ROADMAP.md#the-quality-bar, release checklist 13), the checksum pasted under
 *Windows* in the notes, commit, push, `tooling/publish-release` from Git for Windows -- whichever
 platform publishes first creates the release, the other uploads into it and the
 notes are refreshed (ADR 0018). Then the Windows feed, on the PC after `git pull`:

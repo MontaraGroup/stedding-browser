@@ -77,7 +77,7 @@ for `../PRIVACY.md` to declare.
   condition, not a note.
 - The patent-licensing obligation (Via LA, AVC/H.264 and AAC) attaches at the first
   public release. Terms and cost are **TBD** and are recorded in a superseding ADR
-  before the 1.0 release checklist in `../QUALITY.md` passes; unsigned pre-release
+  before the 1.0 release checklist in `../ROADMAP.md` ("The quality bar") passes; unsigned pre-release
   betas to testers are made in the meantime with this obligation stated in their
   release notes.
 - Chromium branding plus our own, never Google Chrome's, so no Google licence is

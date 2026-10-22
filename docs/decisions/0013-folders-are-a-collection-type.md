@@ -6,7 +6,7 @@ Date: 2026-08-31
 ## Context
 
 Arc's Folders are named, collapsible containers of tabs that live in the sidebar, nest,
-and never auto-archive. `PRODUCT.md` puts them at 1.0, and `EVIDENCE.md` records that
+and never auto-archive. `PRODUCT.md` puts them at 1.0, and `AGENT-LOOP.md` ("Evidence") records that
 they were the single highest Arc-named request on the comparable project — the thing
 users said kept them on Arc.
 

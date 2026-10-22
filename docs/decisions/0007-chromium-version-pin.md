@@ -13,7 +13,7 @@ say which one it builds, where that answer is written down, and when it moves.
 
 Getting this wrong is expensive in a specific way: the patch series is rebased
 against the pin, so a pin that lags means every rebase carries more upstream drift,
-and — per the security gate in `../QUALITY.md` — a lagging pin means shipping known
+and — per the security gate in `../ROADMAP.md` ("The quality bar") — a lagging pin means shipping known
 vulnerabilities.
 
 ## Decision
@@ -25,7 +25,7 @@ hard-codes a version. Prose may quote the current pin where it aids the reader; 
 and configuration may not, because those are what silently go stale.
 
 - The initial pin is `153.0.8010.12` (M153).
-- Security point releases move the pin on the timetable in `../QUALITY.md` (7 days
+- Security point releases move the pin on the timetable in `../ROADMAP.md` ("The quality bar") (7 days
   for in-the-wild exploits, 14 otherwise).
 - **Early stable is.** Google ships the next milestone to a small share of stable
   users about a week before the full rollout; that build is on the stable channel and

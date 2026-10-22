@@ -99,7 +99,7 @@ fix (`QuietStartTest.AFreshProfileCallsNoGoogleService`: the policy invalidation
 it for a token at start). The runs used a stand-in keychain, so as not to touch the
 login keychain; whether that keeps the push service from starting is not known. The new tab page is local
 and makes no request of its own (`features/new-tab.md` N1). Nothing here is telemetry, but "no telemetry" and "contacts nothing" are
-different claims, and only the first is true today, which is why `docs/QUALITY.md`
+different claims, and only the first is true today, which is why `docs/ROADMAP.md#the-quality-bar`
 makes an unexplained endpoint a release blocker.
 
 ## Concrete stances

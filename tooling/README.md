@@ -62,7 +62,7 @@ PowerShell.
 | `win/package-installer.ps1` | The release image in `dist/` from a built `mini_installer` (ADR 0018) |
 | `check-geometry` | Re-measures the card's gutters and corner radius in `docs/images/*.png` against `probes/geometry.json`. Needs Pillow; runs anywhere. `--report` prints the measurements. Not a CI check. |
 | `verify-build` | **(macOS)** Runs a built browser and checks it renders, does WebGL, and decodes video. |
-| `measure/` | **(macOS)** Performance harness, the ten live sites and the ten local pages for the QUALITY.md budgets (`docs/perf/README.md`). |
+| `measure/` | **(macOS)** Performance harness, the ten live sites and the ten local pages for the quality bar's budgets (`docs/ROADMAP.md`) (`docs/perf/README.md`). |
 | `args/` | `gn` argument files, one per build configuration, with the reasoning per flag. |
 
 ## Normal use

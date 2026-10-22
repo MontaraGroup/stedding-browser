@@ -39,7 +39,7 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   browser, with a `SCOPED_TRACE` per step; near-copy unit tests made table-driven; the drag
   fixtures kept above other windows. Test files only, touched by most patches since 0057,
   so one patch at the tip rather than a fixup into each;
-- 0065, the code review of 2026-10-15 (`docs/history/review-2026-10-15.md`): two crashes in
+- 0065, the code review of 2026-10-15 (`docs/history/archive.md`, "The code review of 2026-10-15"): two crashes in
   the tab model and its views (closing a split's pane, grouping a tab inside a folder), the
   Arc import's crash, a deleted Space's wipe that waits for its pages, Autofill's server
   queries off, three command-bar faults, a stacked split's corners, the export's file name,
@@ -66,7 +66,8 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   their jars, the sidebar's views, the toolbar, the archive, the importers, the settings page
   and the Mac's full screen;
 - 0083, the owner's round after 0.3.0 beta 4 (2026-10-22): GitHub issues 8 (essentials of a
-  Space's own in a Space with an Independent session) and 11 (a Copy Link button), a drag that
+  Space's own in a Space with an Independent session), 11 (a Copy Link button) and 12 (the New
+  Tab row's hover), a drag that
   rests on another Space's chip, folders into folders, the close rule and the room below the
   list, a scroll that moves the hover, folders never grey, child tabs off by default, a pin's
   row and home, a nested pinned folder's link, and the hover card's resource line, across the
@@ -78,7 +79,7 @@ when the releases are official builds.
 
 Patch messages cite the docs as they were when each was written: `PLAN.md`'s item ids
 (TAB-1, SPC-4, ...), `docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` now live under
-`docs/history/` (`docs/history/README.md`).
+`docs/history/` (`docs/history/archive.md`).
 
 Most branding is **not** here: it is asset replacement in [../branding/](../branding/),
 which costs no patches at all. A patch is the last resort, not the first.

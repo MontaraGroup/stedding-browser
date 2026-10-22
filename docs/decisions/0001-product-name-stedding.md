@@ -12,7 +12,7 @@ and English speakers pronounced it two ways. We generated candidate names from
 invented and real English words and coinages across nautical, avian, wayfinding and
 shelter themes, and vetted each with live web searches for existing browsers,
 software collisions, trademark exposure, pronunciation, and the odds of ranking #1
-for the exact phrase "{Name} Browser". Full record: `../NAMING.md`.
+for the exact phrase "{Name} Browser". Full record: `../VISION.md` ("The name").
 
 ## Decision
 
@@ -34,4 +34,4 @@ claimed affiliation with anyone.
 - We accept a small familiarity cost: most readers meet the name for the first time.
   It is unusual but easy to say (STED-ding, rhyming with "wedding"), and its shape
   points to the English word "steading".
-- Trademark hygiene rules live in `../BRAND.md` and bind all future material.
+- Trademark hygiene rules live in `../VISION.md` ("Brand and voice") and bind all future material.

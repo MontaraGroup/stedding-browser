@@ -57,6 +57,6 @@ web app's own shortcut list from its own documentation).
 - Each item gets its feature spec rows (`docs/features/`) when its work starts, with tests
   that fail first, as every feature does.
 - Whoever builds one does not open the other project's files; the descriptions in
-  `BACKLOG.md` and `docs/COMPETITORS.md` are enough, and keep the work clean of both
+  `BACKLOG.md` and `docs/VISION.md#competitors` are enough, and keep the work clean of both
   licenses.
 - The ad blocker changes `docs/PRIVACY.md`'s defaults and the network list; its ADR says how.

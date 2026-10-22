@@ -32,7 +32,7 @@ compares the tag to its own version, and tells the user when a newer one exists.
   cost and it goes in `PRIVACY.md` with the endpoint named, rather than being
   described as "no telemetry" and left there.
 - **The check is off by default until it has a settings entry**, per the UX
-  completeness rule in `QUALITY.md`. A browser that phones anywhere the user did
+  completeness rule in `ROADMAP.md` ("The quality bar"). A browser that phones anywhere the user did
   not ask it to is the thing this project exists not to be.
 - **Downloading and applying an update is a later step.** Knowing a newer
   version exists is useful on its own and is a fraction of the work; silent

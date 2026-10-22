@@ -1,7 +1,7 @@
 # Feature: Page card
 
 Status: **U1–U9 built** (U9 since beta 14; U2 seen in immersive full screen on 2026-10-18).
-Owner docs: `docs/UI-SPEC.md`. Patches: 0017, 0060 (U9).
+Owner docs: `docs/PRODUCT.md#ui-spec`. Patches: 0017, 0060 (U9).
 
 The content card is one surface: the link status bubble is a pill inside it, the find
 bar takes the dialog colours and the card's right edge, and split panes carry no ring

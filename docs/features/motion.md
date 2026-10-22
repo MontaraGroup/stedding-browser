@@ -3,7 +3,7 @@
 Status: **O1–O3 built** (O2 seen on a build on 2026-10-18, animations slowed twenty times);
 **O4–O8 built** 2026-10-21 on the Mac (their Windows runs not yet made; O6 not yet seen by the
 owner).
-Owner docs: `docs/QUALITY.md`. Patch: 0017.
+Owner docs: `docs/ROADMAP.md#the-quality-bar`. Patch: 0017.
 
 One helper decides whether Stedding animates: `stedding::ShouldAnimate()` is false when
 the system asks for reduced motion (Reduce Motion on the Mac, animation effects off on

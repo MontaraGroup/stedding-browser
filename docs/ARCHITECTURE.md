@@ -643,7 +643,7 @@ of an update check: if the site is down, updates still work.
   not the process.
 - Major-version rebases (new stable milestone) are scheduled, budgeted work with a
   checklist, performed on a branch and merged only when the full series applies and
-  the browser passes the release checklist in `QUALITY.md`.
+  the browser passes the release checklist in `ROADMAP.md` ("The quality bar").
 
 ## CI reality
 

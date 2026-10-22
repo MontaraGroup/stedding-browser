@@ -54,7 +54,7 @@ documented properties of a beta:
 Both platforms update themselves from a signed feed: the Mac from 0.2.0 beta 16 on and
 Windows from 0.2.0 beta 19 on (ADR 0022, ADR 0023, ADR 0026). The Chromium pin is watched
 daily (`.github/workflows/upstream.yml`, `tooling/check-pin`) and the rebase timetable is in
-`docs/QUALITY.md`.
+`docs/ROADMAP.md#the-quality-bar`.
 
 Vulnerabilities in upstream Chromium should be reported to the
 [Chromium security team](https://www.chromium.org/Home/chromium-security/reporting-security-bugs/),

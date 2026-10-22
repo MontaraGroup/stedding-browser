@@ -23,7 +23,7 @@ project on Chromium's open-source code.
 **Why does it exist when Arc still runs?**
 Arc gets only security and Chromium updates since 2025, and its maker was acquired. Stedding's
 core is BSD-licensed and forkable, so no pivot or acquisition can take it away
-([COMPETITORS.md](COMPETITORS.md)).
+([the comparison](VISION.md#competitors)).
 
 **Does it have AI?**
 No bundled model and no chat in the command bar ([ADR 0020](decisions/0020-no-bundled-model.md)).
@@ -31,7 +31,7 @@ An extension can add one if you want it.
 
 **What does "Stedding" mean?**
 A haven. It is shaped on "steading", a farmstead, from "stead", an old word for a place
-([NAMING.md](NAMING.md)).
+([how it was chosen](VISION.md#the-name)).
 
 **Who makes it?**
 One maintainer, in the open. Open work is in [BACKLOG.md](../BACKLOG.md); what each round built

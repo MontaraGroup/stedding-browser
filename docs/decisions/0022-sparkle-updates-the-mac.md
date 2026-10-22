@@ -60,7 +60,7 @@ signature over the image made with a key only the project holds.
 - The release gains a step: offering it (`tooling/publish-appcast --push`) after it
   has been tried as a user gets it. Not offering a release is a way to hold it.
 - Sparkle never downgrades. Rolling back means releasing a later version
-  (`docs/QUALITY.md`).
+  (`docs/ROADMAP.md#the-quality-bar`).
 - `CFBundleVersion` now carries Stedding's version (10020.16 for 0.2.0-beta.16),
   not Chromium's build number, because Sparkle and LaunchServices compare it.
 - A fork that keeps this feed URL and key would be updated to this project's

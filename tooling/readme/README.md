@@ -11,6 +11,7 @@ that shows them is [README.md](../../README.md); a later rewrite is drafted as `
 | `record-demo.sh` | **(macOS)** The animation: the fixture and the scenes driven through `tooling/drive` with real input, the window recorded, then the GIF and the MP4. Also `check` (no launch), `layout`, `rehearse`, `convert`, `slideshow` and `probe`. |
 | `steps/` | The steps files: `setup` builds the fixture, `preroll` loads the pages, then one file per scene. `tooling/drive`'s language plus `glide`, which `media.py render` turns into eased pointer moves. |
 | `captions.tsv` | One caption per scene and per still: the keys, then the words. |
+| `arc-demo-sidebar.py` | A made-up Arc sidebar for `welcome-import`, written under a scratch home folder. |
 | `media.py` | The helpers: a seeded profile, the rendered steps, the caption strips, the window's rectangle, the timeline that cuts the recording. |
 | `common.sh` | What both scripts share: the pages, the local servers, the checks before a launch. |
 | `pages/` | Two local development pages, served on localhost:5173 and localhost:8797 while the scripts run. |
@@ -86,9 +87,10 @@ browser runs on the seeded profile, and `capture-state`'s own empty one is delet
 unused. A Space registry and these preferences are not protected preferences, so a
 seed is read as written; pinned tabs are, which is why they come from the params.
 
-`welcome-import` is skipped on a Mac that has an Arc sidebar file: the step reads that
-file and would show its Spaces and counts. Take it on a Mac without Arc, or pass
-`--arc-ok` knowing what it shows.
+`welcome-import` runs with a scratch home folder holding a made-up Arc sidebar
+(`arc-demo-sidebar.py`: four Spaces, pinned tabs and folders, four essentials, on example
+sites), handed to the browser alone through `STEDDING_LAUNCH_ENV` (`tooling/lib.sh`). The
+step reads the Arc sidebar under the home folder, so it never shows the Mac's own profile.
 
 ## The animation
 

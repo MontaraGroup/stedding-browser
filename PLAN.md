@@ -63,7 +63,7 @@ A green unit test does not close anything. An item is closed when all of these h
 3. The spec row cites that test, and the spec and the code's comments say what the code now
    does.
 4. Suites that touch lifetimes ran clean with DCHECKs and the dangling-pointer detector on
-   (`win-checks`, `mac-checks`), and under ASan before a release (`docs/QUALITY.md`).
+   (`win-checks`, `mac-checks`), and under ASan before a release (`docs/ROADMAP.md#the-quality-bar`).
 
 ## How items are taken
 

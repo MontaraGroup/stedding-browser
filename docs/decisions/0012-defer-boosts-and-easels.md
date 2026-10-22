@@ -46,7 +46,7 @@ They return when either condition holds:
 Evidence gathered after this ADR was written supports it more strongly than the
 reasoning did. On Zen Browser's tracker — the closest comparable project — Boosts drew
 **4 upvotes** and Easels **41**, against **412** for folders and **475** for sync. Zen
-shipped Boosts; almost nobody had asked. See `../EVIDENCE.md`.
+shipped Boosts; almost nobody had asked. See `../AGENT-LOOP.md` ("Evidence").
 
 For Boosts specifically, the threat model comes **before** any implementation, not
 alongside it.

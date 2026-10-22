@@ -6,8 +6,8 @@ Date: 2026-08-31
 ## Context
 
 Spaces are the feature people name when they say why they stay in Arc, and
-`EVIDENCE.md` records workspace-adjacent requests as the top cluster on the
-comparable project. `docs/UI-SPEC.md` puts the space switcher at the top of the
+`AGENT-LOOP.md` ("Evidence") records workspace-adjacent requests as the top cluster on the
+comparable project. `docs/PRODUCT.md#ui-spec` puts the space switcher at the top of the
 sidebar. The switcher is currently unbuilt, deliberately: a row of pills that
 changes an active id without moving any tabs is a picture of a feature, and the
 mandate in `AGENTS.md` says features ship complete.

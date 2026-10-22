@@ -293,8 +293,14 @@ launch_in_background() {
   : > "$log" || die "cannot write the log $log"
   LAUNCHED_PID=""
   LAUNCHING_EXE="$exe"
-  open -g -n -a "$app" --stdout /dev/null --stderr "$log" --args "$@" ||
-    die "open could not launch $app"
+  # STEDDING_LAUNCH_ENV: "NAME=value NAME=value" for the launched process alone, such
+  # as a scratch HOME whose Arc sidebar the welcome flow reads (tooling/readme).
+  local env_args=() pair
+  for pair in ${STEDDING_LAUNCH_ENV:-}; do
+    env_args+=(--env "$pair")
+  done
+  open -g -n -a "$app" --stdout /dev/null --stderr "$log" ${env_args[@]+"${env_args[@]}"} \
+    --args "$@" || die "open could not launch $app"
   for _ in $(seq 1 40); do
     pid="$(pids_running_executable "$exe")"
     [ -n "$pid" ] && break

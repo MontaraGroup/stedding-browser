@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Performance measurement harness for the budgets in docs/QUALITY.md.
+"""Performance measurement harness for the budgets in docs/ROADMAP.md#the-quality-bar.
 
 The budgets are expressed as *overhead relative to vanilla Chromium at the same
 pinned version, same build configuration, same hardware*. So this harness is built to
@@ -19,10 +19,10 @@ What is measured, precisely:
 
   memory         Physical footprint summed across the launched browser process and
                  all of its descendants, after loading the ten-site list and idling,
-                 per QUALITY.md. Not RSS: see the note above phys_footprint below.
+                 per the quality bar (docs/ROADMAP.md). Not RSS: see the note above phys_footprint below.
 
 Sidebar tab switching and the command bar ship, but are not measured here yet: they
-are deliberately absent rather than stubbed (docs/QUALITY.md, budgets TBD).
+are deliberately absent rather than stubbed (docs/ROADMAP.md#the-quality-bar, budgets TBD).
 
 Usage:
     tooling/measure/harness.py all       --app /path/to/Chromium.app --out results.json
@@ -60,7 +60,7 @@ SITE_LIST = "live"
 
 # Time budget for a single run before it is declared failed rather than slow.
 RUN_TIMEOUT_S = 90
-# QUALITY.md: "after loading a fixed 10-site list and idling 60 s".
+# The quality bar (docs/ROADMAP.md): "after loading a fixed 10-site list and idling 60 s".
 IDLE_SECONDS = 60
 # Time allowed for the ten tabs to finish loading before the idle period starts.
 LOAD_SECONDS = 30
@@ -286,7 +286,7 @@ def measure_startup_once(app: Path, profile: Path, extra_urls: list[str],
 def measure_startup(app: Path, mode: str, runs: int) -> dict:
     """Cold: a new profile per run. Warm: one profile, pre-warmed, reused.
 
-    "Cold" in QUALITY.md means a cold *profile*, not a cold machine. The very first
+    "Cold" in the quality bar (docs/ROADMAP.md) means a cold *profile*, not a cold machine. The very first
     launch of a binary additionally pays to fault the executable and its frameworks
     into the OS page cache — measured here at roughly three seconds against one on
     subsequent launches. That cost is real but it is paid once per machine, not once
@@ -328,7 +328,7 @@ def measure_startup(app: Path, mode: str, runs: int) -> dict:
             wait_for_exit(prime_proc)
             time.sleep(3)
             for i in range(runs):
-                # QUALITY.md specifies "existing profile with 10 restored tabs", so the
+                # The quality bar specifies "existing profile with 10 restored tabs", so the
                 # session must actually be restored. Without this flag the browser
                 # opens empty and the measurement is a cold start against a warm cache.
                 value = measure_startup_once(app, profile, [],
@@ -357,7 +357,7 @@ def measure_memory_once(app: Path) -> tuple[int, int] | None:
         proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             time.sleep(LOAD_SECONDS)   # let ten tabs finish loading
-            time.sleep(IDLE_SECONDS)   # then idle, exactly as QUALITY.md specifies
+            time.sleep(IDLE_SECONDS)   # then idle, exactly as the quality bar specifies
             total, counted = tree_footprint_bytes(proc.pid)
             if counted == 0:
                 return None
@@ -463,12 +463,12 @@ def main() -> int:
 
     if args.what in ("all", "startup"):
         for mode in (["cold", "warm"] if args.what == "all" else [args.mode]):
-            runs = args.runs or 10  # QUALITY.md: median of 10.
+            runs = args.runs or 10  # The quality bar (docs/ROADMAP.md): median of 10.
             print(f"\nstartup ({mode}), {runs} runs:", file=sys.stderr)
             results["measurements"][f"startup_{mode}"] = measure_startup(app, mode, runs)
 
     if args.what in ("all", "memory"):
-        runs = args.runs or 5  # QUALITY.md: median of 5.
+        runs = args.runs or 5  # The quality bar (docs/ROADMAP.md): median of 5.
         print(f"\nmemory, 10 tabs, {runs} runs (each ~{30 + IDLE_SECONDS}s):", file=sys.stderr)
         results["measurements"]["memory_10_tabs"] = measure_memory(app, runs)
 

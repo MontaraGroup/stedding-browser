@@ -17,7 +17,6 @@
 #                     params need a build that is not an official one
 #   --scheme S        light (default) or dark, for every still but hero-dark
 #   --with-new        also the stills of this round's features
-#   --arc-ok          take welcome-import even though this Mac has an Arc sidebar
 #                     file: the step lists that profile's Spaces and counts
 #   --keep-profiles   keep the seeded profiles (work/profiles/) for a look afterwards
 #
@@ -52,7 +51,6 @@ NEW_STILLS=(dark-pages local-tabs isolated-space web-app)
 
 SCHEME="light"
 KEEP_PROFILES=0
-ARC_OK=0
 FAILED=""
 PROFILE=""
 RAW=""
@@ -174,24 +172,28 @@ still_private() {
 # The welcome flow on one step (capture-state's own empty profile). The dialog may
 # come as a second window: raw/<still>-2.png.
 welcome() {
-  local step="$1"
+  local step="$1" url="${2:-$URL_REPO}"
   shoot "welcome-$step" - --seed "$SCHEME" "${BROWSER_ARGS[@]}" \
-    "--stedding-welcome=$step" "$URL_REPO"
+    "--stedding-welcome=$step" "$url"
 }
 still_welcome_search() { welcome search; }
 still_welcome_appearance() { welcome appearance; }
 still_welcome_behaviour() { welcome behaviour; }
 still_welcome_default() { welcome default; }
 still_welcome_keys() { welcome keys; }
-# The import step reads this Mac's own Arc sidebar file when there is one, and
-# would show that profile (docs/history/plan-2026-09-26.md DOC-P18).
+# The import step reads the Arc sidebar under the home folder, and showed this Mac's
+# own profile (docs/history/plan-2026-09-26.md DOC-P18; a beta's README did, its counts
+# included, until 2026-10-22). It runs with a scratch home holding a made-up sidebar
+# (arc-demo-sidebar.py), whatever this Mac has.
 still_welcome_import() {
-  if [ -f "$HOME/Library/Application Support/Arc/StorableSidebar.json" ] && [ "$ARC_OK" -eq 0 ]; then
-    warn "welcome-import skipped: this Mac has an Arc sidebar file, which the step would show; take it on a Mac without Arc, or pass --arc-ok"
-    FAILED="$FAILED welcome-import(skipped)"
-    return 0
-  fi
-  welcome import
+  local home="$RAW/arc-home"
+  rm -rf "$home"
+  python3 "$STEDDING_ROOT/tooling/readme/arc-demo-sidebar.py" "$home" >/dev/null ||
+    { warn "welcome-import: could not write the demo Arc sidebar"; FAILED="$FAILED welcome-import"; return 0; }
+  # GitHub's home page behind the dialog, not the repository's, whose file list shows
+  # under the dialog.
+  STEDDING_LAUNCH_ENV="HOME=$home CFFIXED_USER_HOME=$home" welcome import "https://github.com/"
+  rm -rf "$home"
 }
 
 # This round's: dark pages on (Chromium's own preference is the switch). The page on
@@ -250,7 +252,6 @@ main() {
       --build) BUILD="${2:-}"; shift 2 ;;
       --scheme) SCHEME="${2:-}"; shift 2 ;;
       --with-new) wanted+=("${STILLS[@]}" "${NEW_STILLS[@]}"); shift ;;
-      --arc-ok) ARC_OK=1; shift ;;
       --keep-profiles) KEEP_PROFILES=1; shift ;;
       -*) die "unknown option $1" ;;
       *) wanted+=("$1"); shift ;;

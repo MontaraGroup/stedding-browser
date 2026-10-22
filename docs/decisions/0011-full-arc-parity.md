@@ -17,7 +17,7 @@ going to be any single feature; it is the whole workflow *plus* the things Arc c
 not offer: open source under BSD, no telemetry, no vendor able to discontinue it.
 
 One fact makes this tractable. **Arc is frozen.** Its maker put it in maintenance mode
-in May 2025 and moved to Dia (`../COMPETITORS.md`). Parity with a live product is a
+in May 2025 and moved to Dia (`../VISION.md` ("Competitors")). Parity with a live product is a
 race you cannot finish; parity with a product that has stopped moving is a finite
 amount of work. The target will not run away.
 
@@ -34,7 +34,7 @@ Arc's own terminology for its concepts.
 - Arc's terminology is kept where it names a real concept (Spaces, Split View, Little
   Arc, Boosts, Easels). Inventing our own names for the same ideas would make the spec
   harder to check against the thing it is copying. Trademarked branding is not reused
-  — see `../BRAND.md`.
+  — see `../VISION.md` ("Brand and voice").
 - Parity is the floor, not the ceiling. It does not preclude doing better, but "better"
   never justifies shipping less.
 
@@ -44,7 +44,7 @@ Arc's own terminology for its concepts.
   milestone ladder needs restructuring against the inventory, and it is dishonest to
   leave a roadmap in place that implies parity is close.
 - 1.0 acquires a concrete definition it did not have: parity with a fixed target, at
-  the quality bar in `../QUALITY.md`. That is a harder gate than "no open blockers",
+  the quality bar in `../ROADMAP.md` ("The quality bar"). That is a harder gate than "no open blockers",
   and a more meaningful one.
 - Features that were open questions become requirements — Boosts, Easels, Little Arc,
   the archive model — several of which are substantial products in themselves.

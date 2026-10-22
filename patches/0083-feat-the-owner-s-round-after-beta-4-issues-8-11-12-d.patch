@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
 Date: Thu, 22 Oct 2026 11:04:39 -0400
-Subject: feat: the owner's round after beta 4: issues 8 and 11, drags, the
+Subject: feat: the owner's round after beta 4: issues 8, 11, 12, drags, the
  list
 
 The owner's requests of 2026-10-22, after 0.3.0 beta 4:
@@ -31,6 +31,8 @@ The owner's requests of 2026-10-22, after 0.3.0 beta 4:
   R33).
 - A list taller than the sidebar scrolls past its last row by half its
   height (sidebar Y30).
+- The "+ New Tab" row takes the tab rows' hover tint under the pointer and
+  the selected row's fill while pressed (sidebar Y32; GitHub issue 12).
 - A scroll moves the hover to the row it brings under the resting pointer,
   and ends a hover card's wait (sidebar Y31, pins H26).
 - After a relaunch every folder looked grey: a header no longer takes the
@@ -54,14 +56,15 @@ FolderTabsTest.AFolderDraggedOntoAFoldersHeaderGoesIntoIt and four more,
 TabStripModelTest.MoveFolderInto*; SidebarClickTest.ACloseKeepsTheListWhereItIs,
 AListScrollsHalfItsHeightPastItsLastRow and
 APinSentHomeShowsItsHomeInItsRow; FolderTabsTest.AScrollMovesTheHoverToTheRowUnderIt;
+SidebarClickTest.TheNewTabRowLightsUnderThePointer;
 HoverCardPictureTest.AScrollDropsACardWaitingToShow and
 ACardShowsItsTabsUseAfterAPause; TabResourceLineTest.*;
 PinnedRunTest.ALinkFromANestedPinnedFolderLeavesItInTheRun; and
 stedding::test::WaitForRowsToSettleAtFramePace for a row moved into a
 nested folder.
 
-Why: the owner's notes on beta 4 and two GitHub issues the owner chose to
-build; each closes a way the sidebar, the pins or the Spaces did not do
+Why: the owner's notes on beta 4 and three GitHub issues the owner chose
+to build; each closes a way the sidebar, the pins or the Spaces did not do
 what a person expected.
 Removable when: never; the next re-cut folds each into the patch that owns
 its feature (Spaces, sessions, pins, folders, the sidebar, the toolbar,
@@ -118,7 +121,7 @@ the hover card).
  .../tabs/common/stedding_tab_row_rules.cc     |   4 +
  .../tabs/common/stedding_tab_row_rules.h      |   7 +
  .../common/stedding_tab_row_rules_unittest.cc |  10 +
- .../ui/views/tabs/common/tab_strip_view.cc    |  53 +-
+ .../ui/views/tabs/common/tab_strip_view.cc    |  93 +++-
  .../ui/views/tabs/common/tab_strip_view.h     |   1 +
  .../tabs/common/tab_strip_view_layout.cc      |  14 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |  28 +-
@@ -145,7 +148,7 @@ the hover card).
  .../stedding/isolation_mark_browsertest.cc    | 161 ++----
  .../test/stedding/pinned_run_browsertest.cc   |  67 +++
  .../stedding/settings_spaces_browsertest.cc   |  19 +-
- .../stedding/sidebar_click_browsertest.cc     | 143 +++++
+ .../stedding/sidebar_click_browsertest.cc     | 190 ++++++-
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
@@ -153,7 +156,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 ++++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 86 files changed, 5077 insertions(+), 722 deletions(-)
+ 86 files changed, 5163 insertions(+), 723 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -4324,7 +4327,7 @@ index b2fe54f849e0c..08de8d7512665 100644
    EXPECT_TRUE(ShowsClearLine(/*pinned_rows_shown=*/2,
                               /*pinned_run_collapsed=*/false,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index d88e45a66c970..08865a3ea0432 100644
+index d88e45a66c970..76edb2058d43a 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 @@ -10,6 +10,7 @@
@@ -4343,7 +4346,70 @@ index d88e45a66c970..08865a3ea0432 100644
  
  namespace {
  
-@@ -528,7 +530,7 @@ void TabStripView::ApplySpaceTitleForm() {
+@@ -122,6 +124,21 @@ class SidebarRowButton : public views::LabelButton {
+     }
+   }
+ 
++  // sidebar Y32 (GitHub issue 12; the owner, 2026-10-22): the "+ New Tab" row
++  // answers the pointer as the tab rows under it do, with their hover tint
++  // and corner radius under the pointer and the selected row's fill while
++  // pressed. It showed only its tooltip, so it did not read as a button.
++  void SetRowFills(bool fills) {
++    row_fills_ = fills;
++    UpdateRowFill();
++  }
++
++  // views::Button:
++  void StateChanged(ButtonState old_state) override {
++    views::LabelButton::StateChanged(old_state);
++    UpdateRowFill();
++  }
++
+   // views::LayoutDelegate: the button's own layout, the text centred by its
+   // ink where asked, then the mark: after the text, which gives up its end
+   // when the name is too long for both, or on the corner of the glyph the
+@@ -179,8 +196,32 @@ class SidebarRowButton : public views::LabelButton {
+   }
+ 
+  private:
++  void UpdateRowFill() {
++    if (!row_fills_) {
++      return;
++    }
++    const float radius =
++        GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius);
++    switch (GetState()) {
++      case STATE_HOVERED:
++        SetBackground(views::CreateRoundedRectBackground(
++            kColorTabBackgroundInactiveHoverFrameActive, radius));
++        break;
++      case STATE_PRESSED:
++        SetBackground(views::CreateRoundedRectBackground(
++            kColorTabBackgroundActiveFrameActive, radius));
++        break;
++      case STATE_NORMAL:
++      case STATE_DISABLED:
++      case STATE_COUNT:
++        SetBackground(nullptr);
++        break;
++    }
++  }
++
+   raw_ptr<stedding::IsolationMarkView> mark_ = nullptr;
+   bool centre_text_ink_ = false;
++  bool row_fills_ = false;
+ };
+ 
+ BEGIN_METADATA(SidebarRowButton)
+@@ -465,6 +506,7 @@ void TabStripView::SetUpSpaceBoundary(
+ #else
+   new_tab_row->SetTooltipText(u"New Tab (Ctrl+T)");
+ #endif
++  new_tab_row->SetRowFills(true);
+   new_tab_row->SetVisible(false);
+   new_tab_row_ = new_tab_row.get();
+   unpinned_tabs_container_view_->SetSpaceBoundary(std::move(clear_line),
+@@ -528,7 +570,7 @@ void TabStripView::ApplySpaceTitleForm() {
    // its title row in either form. The row's tooltip, which it had none of,
    // says what the mark means -- in the rail, where the row is the glyph
    // alone, after the Space's name, as the rail's chip does -- and that the
@@ -4352,7 +4418,7 @@ index d88e45a66c970..08865a3ea0432 100644
    // means is the row's accessible description, after the Space's name.
    row->SetIsolationMark(!space_title_mark_.empty(), rail_form_);
    std::u16string tooltip;
-@@ -607,6 +609,28 @@ void TabStripView::SetSpaceTitleIcon(const ui::ImageModel& icon) {
+@@ -607,6 +649,28 @@ void TabStripView::SetSpaceTitleIcon(const ui::ImageModel& icon) {
    }
  }
  
@@ -4381,7 +4447,7 @@ index d88e45a66c970..08865a3ea0432 100644
  void TabStripView::AddedToWidget() {
    views::Widget* const widget = GetWidget();
    widget_observation_.Observe(widget);
-@@ -1230,9 +1254,34 @@ void TabStripView::HideHoverCardOnScroll() {
+@@ -1230,9 +1294,34 @@ void TabStripView::HideHoverCardOnScroll() {
      return;
    }
  
@@ -7224,18 +7290,43 @@ index c1e809a950931..36e41584c77de 100644
    }
    {
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index d71a0fcdc8b7e..db7614e002628 100644
+index d71a0fcdc8b7e..70352d371cc95 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
-@@ -36,6 +36,7 @@
+@@ -36,7 +36,9 @@
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/animation/browser_animation_controller.h"
  #include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/browser_tabstrip.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
  #include "chrome/browser/ui/spaces/space.h"
  #include "chrome/browser/ui/spaces/space_model.h"
-@@ -96,7 +97,9 @@
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+@@ -54,7 +56,6 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/contents_web_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+-#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+@@ -65,6 +66,7 @@
+ #include "chrome/browser/ui/views/tabs/tab/tab_context_menu_controller.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
++#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+@@ -90,16 +92,20 @@
+ #include "ui/base/hit_test.h"
+ #include "ui/base/mojom/ui_base_types.mojom-shared.h"
+ #include "ui/base/window_open_disposition.h"
++#include "ui/color/color_provider.h"
+ #include "ui/events/event.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/events/event_utils.h"
  #include "ui/events/keycodes/keyboard_codes.h"
  #include "ui/events/test/event_generator.h"
  #include "ui/gfx/animation/animation_test_api.h"
@@ -7245,7 +7336,11 @@ index d71a0fcdc8b7e..db7614e002628 100644
  #include "ui/gfx/geometry/size.h"
  #include "ui/menus/simple_menu_model.h"
  #include "ui/views/accessibility/view_accessibility.h"
-@@ -118,6 +121,7 @@
++#include "ui/views/background.h"
+ #include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/button/md_text_button.h"
+@@ -118,6 +124,7 @@
  #include "ui/views/widget/widget_utils.h"
  #include "ui/views/window/dialog_delegate.h"
  #include "url/gurl.h"
@@ -7253,7 +7348,7 @@ index d71a0fcdc8b7e..db7614e002628 100644
  
  namespace {
  
-@@ -1394,6 +1398,107 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ACloseShowsTheRowUsedBefore) {
+@@ -1394,6 +1401,107 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ACloseShowsTheRowUsedBefore) {
    EXPECT_EQ(2, tab_strip_model()->count());
  }
  
@@ -7361,7 +7456,7 @@ index d71a0fcdc8b7e..db7614e002628 100644
  // TAB-10: a Shift-click selects the rows between two rows as the sidebar
  // draws them: a tab of another Space that sits between them in the strip,
  // and a tab under a collapsed folder, are not in the range. The menu counts
-@@ -2426,6 +2531,44 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinUnloadsItAtItsHome) {
+@@ -2426,6 +2534,44 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinUnloadsItAtItsHome) {
    }
  }
  
@@ -7406,6 +7501,53 @@ index d71a0fcdc8b7e..db7614e002628 100644
  // pins H3, tabs R4 (the owner, 2026-10-21): a pin closed while it plays
  // sound -- a Space pin at its home with Cmd-W, a drifted essential with the
  // tab menu's Close -- is unloaded, and at once its row or card shows no
+@@ -2732,4 +2878,46 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
+   }
+ }
+ 
++// sidebar Y32 (GitHub issue 12; the owner, 2026-10-22): the "+ New Tab" row
++// answers the pointer as the tab rows do: the rows' hover tint, rounded,
++// while the pointer is on it, the selected row's fill while it is pressed,
++// and nothing once the pointer leaves. It showed only its tooltip.
++IN_PROC_BROWSER_TEST_F(SidebarClickTest, TheNewTabRowLightsUnderThePointer) {
++  TabStripView* const strip = stedding::test::FindView<TabStripView>(
++      browser_view()->vertical_tab_strip_region_view_for_testing());
++  ASSERT_TRUE(strip);
++  views::LabelButton* const row = strip->GetNewTabRow();
++  ASSERT_TRUE(row && row->IsDrawn());
++  const ui::ColorProvider* const colors = row->GetColorProvider();
++  ASSERT_TRUE(colors);
++  // The fill the row shows now, or none.
++  const auto fill = [&]() -> std::optional<SkColor> {
++    const views::Background* const background = row->GetBackground();
++    if (!background) {
++      return std::nullopt;
++    }
++    return background->color().ResolveToSkColor(colors);
++  };
++  const gfx::Point centre = row->GetLocalBounds().CenterPoint();
++  const auto mouse = [&](ui::EventType type, int flags) {
++    return ui::MouseEvent(type, centre, centre, base::TimeTicks::Now(), flags,
++                          flags);
++  };
++  EXPECT_FALSE(fill()) << "the row has a fill at rest";
++
++  row->OnMouseEntered(mouse(ui::EventType::kMouseEntered, ui::EF_NONE));
++  EXPECT_EQ(colors->GetColor(kColorTabBackgroundInactiveHoverFrameActive),
++            fill())
++      << "no hover tint under the pointer";
++  row->OnMousePressed(
++      mouse(ui::EventType::kMousePressed, ui::EF_LEFT_MOUSE_BUTTON));
++  EXPECT_EQ(colors->GetColor(kColorTabBackgroundActiveFrameActive), fill())
++      << "no pressed fill";
++  // The press given up, as when the window takes the pointer back, and the
++  // pointer off the row: no new tab, and no fill.
++  row->OnMouseCaptureLost();
++  row->OnMouseExited(mouse(ui::EventType::kMouseExited, ui::EF_NONE));
++  EXPECT_FALSE(fill()) << "the fill stayed once the pointer left";
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/sidebar_test_util.cc b/chrome/test/stedding/sidebar_test_util.cc
 index ef95ec4e1d069..c4b458aaacd9b 100644
 --- a/chrome/test/stedding/sidebar_test_util.cc

@@ -34,6 +34,6 @@ themselves as us.
 - License matches Chromium's, so patches, vendored code, and derived files carry no
   license friction in either direction.
 - Clause 3 gives limited name protection; real brand protection still depends on
-  trademark practice (`../BRAND.md`).
+  trademark practice (`../VISION.md` ("Brand and voice")).
 - Relicensing later is effectively impossible once outside contributions arrive —
   this decision is permanent in practice.

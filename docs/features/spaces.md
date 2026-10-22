@@ -1,7 +1,7 @@
 # Feature: Spaces
 
 Status: **B1–B37 built, except B5, B11, B12, B15, B17 and B25, which are partial** (B12: built before, with the switch on a rest over another Space's chip, the drop beside a chip and the rows held over the switcher written 2026-10-22, whose tests have not yet run; B11, B25: one test or one look short, BACKLOG S-129; B15: Windows and Linux, `docs/history/plan-2026-09-26.md` WIN-12; B5 and B17: built before, each with a part written 2026-10-18 whose tests have not yet run, B5's question naming the Space's apps, web apps Wa13, and B17's quieter line and word, sidebar Y27); **B38 partial**: written 2026-10-18, its tests pass since 2026-10-19, and the mark not yet seen on a build. **B39 built** on the Mac (2026-10-21, the sideways wheel; on Windows its tests pass, a real touchpad not yet tried). The swipe that follows the fingers (B15, B35) is the Mac's only (`docs/history/plan-2026-09-26.md` TAB-31); on Windows a touchpad's sideways scroll steps a Space instead (B39).
-Owner docs: `docs/decisions/0015-spaces-filter-one-tab-strip.md` (model), `docs/UI-SPEC.md`
+Owner docs: `docs/decisions/0015-spaces-filter-one-tab-strip.md` (model), `docs/PRODUCT.md#ui-spec`
 (pixels). Patches: `0004` (one tab strip filtered by the active Space), `0021` (the switcher's
 overflow and reorder), `0025` (chip drags), `0052` (the slide between Spaces), and the round
 patches in `patches/README.md`.

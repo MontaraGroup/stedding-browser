@@ -68,7 +68,7 @@ operator chose it on 2026-10-15 from ten candidates.
 
 `public/` is a drop-in web brand folder: favicons, the social card, and the icon and
 logo variants in SVG and PNG. The palette is at the top of `tooling/brand/mark.py`, and
-`docs/BRAND.md` gives the reasoning.
+`docs/VISION.md#brand-and-voice` gives the reasoning.
 
 ## The macOS icon needs three files, not one
 

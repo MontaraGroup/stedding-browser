@@ -1,6 +1,6 @@
 # Performance measurements
 
-**There is no current measurement.** The budgets in `docs/QUALITY.md` are overheads
+**There is no current measurement.** The budgets in `docs/ROADMAP.md#the-quality-bar` are overheads
 against vanilla Chromium at the same pin, configuration and hardware. The only
 comparison so far is from 2026-09-02, on the Mac, of the series of 8 patches as it was
 on 2026-08-31, on 153.0.8010.12. The pin has moved and the series has grown since

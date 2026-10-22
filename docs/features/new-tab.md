@@ -1,7 +1,7 @@
 # Feature: New tab page
 
 Status: **N1–N5 built**; **N6–N8 planned** (BACKLOG S-61).
-Owner docs: `docs/PRIVACY.md` (no request on a new tab), `docs/UI-SPEC.md`. Patches: `0003`
+Owner docs: `docs/PRIVACY.md` (no request on a new tab), `docs/PRODUCT.md#ui-spec`. Patches: `0003`
 (the de-Google patch: default search, choice screen, local new tab page), `0044` (N1 with Google).
 
 The new tab page is Chromium's local "third-party" page, always, whatever the default

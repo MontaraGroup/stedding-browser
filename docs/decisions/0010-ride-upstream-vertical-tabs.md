@@ -49,7 +49,7 @@ put tabs in `SidePanel`.
   Product logic goes in new files; touching those two is a design failure to be
   reviewed, not a routine step.
 - **This weakens the product's stated differentiation, and that part is not settled
-  here.** `VISION.md` and `COMPETITORS.md` present the Arc-style sidebar as the reason
+  here.** `VISION.md` and `VISION.md` ("Competitors") present the Arc-style sidebar as the reason
   Stedding exists. If Chromium ships vertical tabs by default, the sidebar alone is no
   longer a differentiator, and what remains is workspaces, the command bar and split
   view — plus privacy defaults and governance. That is a product-positioning judgement
