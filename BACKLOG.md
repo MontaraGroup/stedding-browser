@@ -20,6 +20,8 @@ refer to `docs/features/<feature>.md`.
 
 ### Next
 
+Recommended for the next round (2026-10-22, after 0.3.0 beta 5; the owner has not yet chosen): Arc import on Windows (`S-81`) first, since Arc users must move before December 22; then Peek (`S-93`), which Zen, Nez and Crest have; little windows on Windows (`S-56`); built-in ad and tracker blocking (`S-88`); and Linux (`S-216`). The field they come from is `docs/VISION.md`, "The Arc-style field after the sunset notice". The owner's own steps waiting: the Widevine licence application (`S-270`), Google Search Console for stedding.dev, and replies from the r/browsers and r/suggestabrowser moderators and from Hacker News about the flagged Show HN.
+
 The owner's "wanted next" (2026-10-01). On 2026-10-18 the owner asked for everything Chrome does that Stedding does not to be implemented next, after the round under way, Windows-only items aside (a system install only if it makes sense, `S-169`). The rows below come from the comparison of 2026-10-18 (Chrome 156's code at the pin, Chrome's field-trial configuration of that day, and both browsers installed on the Mac); each says what Chrome does, what Stedding does, and the recommendation.
 
 | Id | Item | Feature / spec | Notes |

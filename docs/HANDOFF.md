@@ -39,7 +39,7 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and twenty-eight traps follow (28 is retired). Read the one for the topic in front of
+A hundred and twenty-nine traps follow (28 is retired). Read the one for the topic in front of
 you, not the list.
 
 | Topic | Traps |
@@ -49,7 +49,7 @@ you, not the list.
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126, 127 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125, 128 |
-| Release and signing | 44, 47, 49, 62, 85, 117, 118, 124 |
+| Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129 |
 | Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113, 122 |
 
 ## Where things live
@@ -1673,6 +1673,12 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     resolution before the Windows legs. A Windows App (RDP) session gives the session its own
     display (1728×1084 from the Mac); keep its window open, not minimized, while the legs run,
     and do not leave it disconnected, which locks the session.
+129. **A real-feed check run within five minutes of the feed's push sees the old feed.**
+    GitHub serves `updates/appcast*.xml` from raw.githubusercontent.com with
+    `cache-control: max-age=300`. On 2026-10-22 the Windows copy of beta 4, started two minutes
+    after the feed commit, found no update in five minutes; started again once the cache had
+    turned over, it showed the pill in 25 seconds. Wait five minutes after `publish-appcast`
+    before a real-feed check, or check the served feed with `curl` first.
 
 ## The Windows build
 

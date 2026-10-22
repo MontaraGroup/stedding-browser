@@ -365,6 +365,26 @@ enterprise software company — which is precisely the situation Stedding exists
 make impossible: our core is BSD-licensed and forkable, so no acquisition or pivot
 can take the product away.
 
+On 2026-10-22 The Browser Company told Arc users that Arc will be sunset on December 22,
+2026: Arc keeps basic updates until then, Arc accounts close that day, and personal data
+tied to an account is deleted within 30 days (its notice to users; stedding.dev/arc/ is the
+page for people moving).
+
+### The Arc-style field after the sunset notice (2026-10-22)
+
+Checked on GitHub and the projects' own sites on 2026-10-22; star counts move daily.
+
+| Browser | Engine | Platforms | Licence | GitHub stars | Ahead of Stedding | Behind Stedding |
+|---|---|---|---|---|---|---|
+| Zen | Gecko | Win, Mac, Linux | MPL-2.0 | about 45,000 | community, Linux, Glance (Peek) | Firefox extensions; no Arc import |
+| Helium | Chromium | Win, Mac, Linux | GPL-3.0 | about 22,000 | trust, ad blocking built in, Linux | not Arc-style: no Spaces or pinned run |
+| Ora | WebKit (Swift) | Mac | GPL-3.0 | about 2,200 | native and light | partial extension support, Mac only |
+| Nook | WebKit (Swift) | Mac | GPL-3.0 | about 2,000 | native and light | partial extension support, Mac only |
+| Crest | WebKit and a second engine (Swift) | Mac, iPhone, iPad | MPL-2.0 | about 500 | mobile apps, App Store, Peek | Mac and iOS only |
+| Refrax | WebKit (Swift) | Mac | GPL-3.0 | about 50 | — | one person's maximalist browser |
+| Nez | Chromium | Windows | no source found | — | Arc import on Windows, uBlock Origin built in, Glance, a mini window for links from other apps, split view of up to four | Windows only, closed |
+| Stedding | Chromium | Mac, Windows | BSD-3-Clause | 21 | full Chrome extensions, the most complete Arc import (Mac), Arc's model closest | reach; no Peek, no ad blocker, Arc import Mac-only, no Linux |
+
 ### Direct and adjacent competitors
 
 #### Dia (The Browser Company / Atlassian)

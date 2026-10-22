@@ -54,6 +54,13 @@ files to 97), and nothing of the owner's own profile or machines stays in the do
 
 How it was checked: the release notes of 0.3.0 beta 5 give the runs on both machines.
 
+0.3.0 beta 5 was published that afternoon on both platforms, with both feeds, and both real
+feeds checked from beta 4. Afterwards: stedding.dev gained /arc/, "Moving from Arc", for Arc's
+shutdown on December 22 (the site's own repository); BACKLOG `S-270` plans Widevine, so
+Netflix and the like can play, which waits on the owner's licence application to Google; and
+`docs/VISION.md` records the Arc-style field after the sunset notice, with the next round's
+recommended order in BACKLOG's "Next".
+
 ## 2026-10-22, night -- the owner's three open decisions, the folder header for Narrator, 0.3.0 beta 4
 
 With the owner asleep and asking for every open item to be decided or skipped, the three
