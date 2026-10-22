@@ -7,6 +7,39 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-22, night -- the owner's three open decisions, the folder header for Narrator, 0.3.0 beta 4
+
+With the owner asleep and asking for every open item to be decided or skipped, the three
+decisions the backlog had held for the owner were made, each the way its recommendation said:
+⌘N opens on the Space it is pressed in (windows G6, S-145); Settings → Stedding → Tabs shows
+the bookmark bar and the star again after Turn Bookmarks into Pinned Tabs (settings T27,
+WIN-15's option B, S-142); and that command asks first above 50 bookmarks, naming how many it
+would add (import I16, S-142). Patch 0081 carries them, each with a browser test.
+
+S-140's Windows side was checked without real input, through UI Automation on the installed
+beta 3: the folder header is a named, focusable button with Expand and Collapse, the pattern
+Windows gives a control that reports itself expanded or collapsed in place of Invoke. Collapse
+failed: the header answered only the press VoiceOver sends, so Narrator could not open or close
+a folder. It now answers both (folders F4, folded into patch 0070, with a unit test).
+UI Automation's SetFocus leaves the focus on the page for the header and for a tab row alike,
+Chromium's rule for its tabs.
+
+S-257, the browser test whose shutdown overruns 30 seconds on a busy Mac, was traced in the
+code: every saved log says no task was running, so the wait is on a task queued and never
+started, and Stedding posts none of the kind a Mac test reaches. Patch 0082 has the Mac's test
+builds print every thread's stack when it happens again.
+
+The Mac's sweep then failed one drag test five times in five: the S-252 guard added the night
+before had moved the test's window under the machine's resting pointer, at the screen's right
+edge. With the window kept clear of that pointer instead it passed every time; the test now
+does that (patch 0077). The Mac's update check from beta 3 first showed no pill: the operator's
+own Stedding had downloaded an update and was waiting to install it, and Sparkle, which names an
+install in progress by bundle id, sent the test copies to that install instead of a check; the
+copies now get a bundle id of their own (`docs/HANDOFF.md`, trap 124). A Windows-only compile
+error (`near` is a macro there, trap 125) in the test's first version was fixed before the
+Windows drag runs. 0.3.0 beta 4 carries 0081, 0082 and the fixes, with every suite green on the
+Mac and on the three Windows builds, both installers' checks and both updaters from beta 3.
+
 ## 2026-10-22, small hours -- the checks after beta 2, and 0.3.0 beta 3
 
 After beta 2 the Windows suites were run again in full with the one-at-a-time list fixed (green

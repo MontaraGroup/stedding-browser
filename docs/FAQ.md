@@ -92,7 +92,9 @@ there (⌘D, Ctrl+D): pinned tabs are each Space's own.
 
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Imported bookmarks stay bookmarks, and ⇧⌘B (Ctrl+Shift+B) still shows
-the bar. The command bar's **Turn Bookmarks into Pinned Tabs** makes them pins and folders.
+the bar. The command bar's **Turn Bookmarks into Pinned Tabs** makes them pins and folders, and
+then hides the bar and the star, since the sidebar holds them; above 50 bookmarks it asks first.
+Settings → Stedding → Tabs → **Show the bookmark bar and the star** brings both back.
 
 **Where is Peek?**
 Switched off: its page came out blank, so it waits to be rebuilt with little windows (`S-93`).

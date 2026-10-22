@@ -39,7 +39,7 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and twenty-three traps follow (28 is retired). Read the one for the topic in front of
+A hundred and twenty-six traps follow (28 is retired). Read the one for the topic in front of
 you, not the list.
 
 | Topic | Traps |
@@ -47,9 +47,9 @@ you, not the list.
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100, 123 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121 |
-| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120 |
-| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122 |
-| Release and signing | 44, 47, 49, 62, 85, 117, 118 |
+| What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126 |
+| Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125 |
+| Release and signing | 44, 47, 49, 62, 85, 117, 118, 124 |
 | Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113, 122 |
 
 ## Where things live
@@ -1637,6 +1637,22 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     symbols, every one defined in a file the copy had brought (`PageBarColorSupplier`'s new
     constructor among them). Extract with `tar xmf`, which stamps the files with the time of
     the copy.
+124. **A Stedding of the operator's waiting to install an update stops the Mac's n-1 copies
+    from checking.** Sparkle names an install in progress by the host app's bundle id, and asks
+    for one (the `<bundle id>-spks` service) before it checks. On 2026-10-22 the operator's own
+    Stedding had downloaded an update and waited to quit to install it; the test copies, which
+    kept the real bundle id, found that install, made no request to the local feed, and showed
+    no pill in five minutes, three runs in a row. Give each test copy a `CFBundleIdentifier` of
+    its own (the test domain plus `.app`) when its `Info.plist` is retargeted: the copy then
+    fetched the feed and the image nine seconds after launch, and Chromium's own defaults stay
+    off the real app's too.
+125. **`near` and `far` are macros on Windows.** `windef.h` defines both as nothing, so
+    `gfx::Rect near = bounds;` fails to compile there with "expected unqualified-id" while the
+    Mac builds it (2026-10-22, a test). Name a variable anything else.
+126. **A test window under the machine's resting pointer gets that pointer's events on the
+    Mac.** With the pointer resting on a rail row a drag the test sent failed every time, and
+    passed every time with the window moved clear of it (BACKLOG S-252). A test that drags
+    keeps its window clear of the real pointer, and says so if it cannot.
 
 ## The Windows build
 

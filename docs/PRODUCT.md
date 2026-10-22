@@ -83,8 +83,9 @@ yet, `docs/features/library.md`) and a `+`.
 - **Bookmarks** **[1.0]**, diverging — Arc has none; Pinned Tabs replace them. Stedding
   keeps Chromium's bookmarks (their menu rows stay; `⌘D` pins instead). Imported bookmarks
   stay bookmarks, and the command bar's **Turn Bookmarks into Pinned Tabs** makes pins and
-  folders of them when asked (`features/import.md` I13–I16). Converting them by itself
-  after an import is **[cut]**.
+  folders of them when asked, asking first above 50, and Settings shows the bar and the star
+  again afterwards (`features/import.md` I13–I16, `features/settings.md` T27). Converting them
+  by itself after an import is **[cut]**.
 - **Tab switching** **[1.0]** — `⌥⌘↑/↓` moves in sidebar order; `⌘1`…`⌘8` jump to the
   Nth visible row and `⌘9` to the last (`PLAN.md` decision 5; `features/tabs.md` R10–R13);
   `⌃⇥` walks the five most recently used tabs of the Space (`features/switcher.md`).

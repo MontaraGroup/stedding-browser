@@ -192,7 +192,7 @@ its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |   92 +
  .../test/stedding/space_wheel_browsertest.cc  |  442 +++++
  .../test/stedding/startup_load_browsertest.cc |  368 +++-
- chrome/test/stedding/tab_drop_browsertest.cc  |  504 ++++++
+ chrome/test/stedding/tab_drop_browsertest.cc  |  526 ++++++
  .../stedding/window_buttons_browsertest.mm    |    7 +
  .../test/stedding/window_top_browsertest.mm   |  340 ++++
  components/tabs/impl/tab_strip_collection.cc  |   18 +
@@ -201,7 +201,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 130 files changed, 11125 insertions(+), 396 deletions(-)
+ 130 files changed, 11147 insertions(+), 396 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -14788,7 +14788,7 @@ index ef81e9870337d..e2c316cb5c34d 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index 8ee33529a3c97..008ef9f139b7f 100644
+index 8ee33529a3c97..1bead2060c36a 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -19,8 +19,16 @@
@@ -14953,7 +14953,7 @@ index 8ee33529a3c97..008ef9f139b7f 100644
      EXPECT_EQ(dragged, tab_strip_model()->GetActiveTab());
      ExpectKept(dragged, kept);
      EXPECT_EQ(1u, WindowCount());
-@@ -1474,6 +1574,145 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1474,6 +1574,167 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
    }
  }
  
@@ -15067,16 +15067,38 @@ index 8ee33529a3c97..008ef9f139b7f 100644
 +  ASSERT_TRUE(close_on_leaving());
 +  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
 +  {
-+    // BACKLOG S-252: the machine's own pointer resting on a rail row, where
-+    // the step below failed 3 of 3 on 2026-10-21 and passed with the pointer
-+    // elsewhere. The window moves to put the row under it, wherever it is, so
-+    // the step always meets that case.
++    // BACKLOG S-252: the machine's own pointer, resting over the window,
++    // sends it events of its own (macOS reports a pointer that a window
++    // moves under), which the drag this test sends cannot share: with that
++    // pointer on a rail row the step below failed 3 of 3 on 2026-10-21, and
++    // 5 of 5 on 2026-10-22 with the window moved to put the row under it.
++    // A person's drag is the one pointer there is, so the window moves clear
++    // of the machine's, to the side with more room, narrower if it must.
 +    const gfx::Point cursor = display::Screen::Get()->GetCursorScreenPoint();
++    const gfx::Rect work =
++        display::Screen::Get()->GetDisplayNearestPoint(cursor).work_area();
++    constexpr int kClear = 40;
 +    gfx::Rect bounds = widget()->GetWindowBoundsInScreen();
-+    bounds.Offset(cursor - RowCentre(dragged));
-+    widget()->SetBounds(bounds);
-+    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
-+    views::test::RunScheduledLayout(widget());
++    gfx::Rect around = bounds;
++    around.Inset(-kClear);
++    if (around.Contains(cursor)) {
++      const int left_room = cursor.x() - kClear - work.x();
++      const int right_room = work.right() - cursor.x() - kClear;
++      if (left_room >= right_room) {
++        bounds.set_width(std::min(bounds.width(), left_room));
++        bounds.set_x(cursor.x() - kClear - bounds.width());
++      } else {
++        bounds.set_width(std::min(bounds.width(), right_room));
++        bounds.set_x(cursor.x() + kClear);
++      }
++      widget()->SetBounds(bounds);
++      ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++      views::test::RunScheduledLayout(widget());
++    }
++    const gfx::Rect clear = widget()->GetWindowBoundsInScreen();
++    ASSERT_FALSE(clear.Contains(cursor))
++        << "the window " << clear.ToString()
++        << " still lies under the machine's pointer at " << cursor.ToString();
 +  }
 +  {
 +    SCOPED_TRACE("a drop inside the opened sidebar reorders");
@@ -15099,7 +15121,7 @@ index 8ee33529a3c97..008ef9f139b7f 100644
  // splits J12, J14: while the pointer is over the page the rows hold still,
  // whatever height it is at, and no window opens; a release where the page
  // takes no drop leaves no split and every row where it was.
-@@ -1573,4 +1812,269 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AHorizontalTabDroppedOnThePageMakesASplit) {
+@@ -1573,4 +1834,269 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AHorizontalTabDroppedOnThePageMakesASplit) {
    EnterVerticalTabsMode();
  }
  
