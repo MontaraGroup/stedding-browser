@@ -123,7 +123,8 @@ yet, `docs/features/library.md`) and a `+`.
   from, a closed parent's children move up, and the tree survives a restart; a setting turns it
   off (`features/tabs.md` R56–R59). Back returning to the parent is not built yet (R60, `S-92`).
 - **Undo after closing tabs** **[M10]** — after a close, a toast with Undo that reopens those
-  tabs in their Space and folder; a setting turns it off (`features/tabs.md` R25–R28, R30).
+  tabs in their Space and folder; off by default since 2026-10-21 (the owner), a setting turns
+  it on (`features/tabs.md` R25–R28, R30).
 - **The sidebar on the right** **[M10]** — a setting (`S-96`).
 
 ## 2. Spaces

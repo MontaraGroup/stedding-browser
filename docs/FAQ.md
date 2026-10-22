@@ -46,12 +46,13 @@ Every release is built from this repository's patch series, with its SHA-256 che
 beside the file.
 
 **Will it update itself?**
-Yes, on the Mac from 0.2.0 beta 16 and on Windows from 0.2.0 beta 19. Once a day it looks for a
-new version, downloads it in the background and shows **New Stedding Version Available** at the
-bottom of the sidebar; a click restarts into it. Every update is signed and checked before it
-installs, and the check sends nothing that identifies you ([PRIVACY.md](PRIVACY.md)). Settings ›
-Stedding › Updates turns it off. A Windows copy older than 0.2.0 beta 19 needs one newer release
-installed by hand once.
+Yes, on the Mac from 0.2.0 beta 16 and on Windows from 0.2.0 beta 19. It looks for a new version
+when you open it, unless it looked in the past hour, and every six hours while it runs (versions
+before 0.3.0 beta 2 look once a day); it downloads a new version in the background and shows
+**New Stedding Version Available** at the bottom of the sidebar; a click restarts into it. Every
+update is signed and checked before it installs, and the check sends nothing that identifies you
+([PRIVACY.md](PRIVACY.md)). Settings › Stedding › Updates turns it off. A Windows copy older
+than 0.2.0 beta 19 needs one newer release installed by hand once.
 
 **Intel Mac? Linux?**
 Not yet. Today: macOS on Apple silicon and Windows x64. Linux comes after the Windows port
@@ -115,8 +116,21 @@ stay awake. The command bar's **Sleep Other Tabs** does it at once for every Spa
 When memory runs short, the tab seen longest ago sleeps first.
 
 **I closed a tab by mistake.**
-The toast after a close has **Undo**, which puts the tabs back in their Space and folder. ⇧⌘T
-(Ctrl+Shift+T) reopens closed tabs one at a time after the toast has gone.
+⇧⌘T (Ctrl+Shift+T) reopens closed tabs one at a time, each in its Space and folder. For a toast
+with **Undo** after every close, which puts a whole close back at once, turn on Settings → Stedding →
+Tabs → **Offer Undo after closing tabs** (off by default).
+
+**How do I leave full screen?**
+⌃⌘F, the green button, or hold Esc (on Windows F11, or hold Esc). Stedding does not show
+Chromium's note about it unless Settings → Stedding → Pages and menus → **Show how to leave full
+screen** is on. A page that fills the screen by itself, such as a video, always shows its note,
+so a page cannot pass itself off as the browser.
+
+**Why is a tab indented under another?**
+A link you open in a new tab (a middle click, ⌘-click or Ctrl+click), or a page opening one
+itself, sits under the page it came from; a link opened from that tab sits a level further.
+Close the page and its tabs move up a level. Essentials and pinned tabs keep their links at the
+left. Settings → Stedding → Tabs → **Show tabs under the tab that opened them** turns it off.
 
 **Which tab do I see after I close one?**
 The tab you used before it in the same Space: the one a quick ⌃⇥ (Ctrl+Tab) would show. If you
