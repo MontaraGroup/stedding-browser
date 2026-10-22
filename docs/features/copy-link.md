@@ -1,12 +1,16 @@
 # Feature: Copy link
 
-Status: **L1–L6 built**.
-Owner docs: `docs/PRIVACY.md` (the tracking strip), `docs/PRODUCT.md`. Patch: 0016.
+Status: **L1–L6 built**; **L7 written** 2026-10-22 (the address field's button), not yet
+built, run or seen live.
+Owner docs: `docs/PRIVACY.md` (the tracking strip), `docs/PRODUCT.md`. Patch: 0016; L7 not
+yet in the series.
 
 ⇧⌘C copies the page's URL, ⌥⇧⌘C a Markdown link with a rich-text twin, both with
 tracking parameters removed when the setting is on. The Markdown title is the page
 title, or the host when the title is empty. With rows selected, both copy every selected
 page (tabs R21); a split is one row, so on a split alone they copy the page in focus.
+A button at the address field's right end does the same with a click, and an
+Option-click copies the Markdown link (L7).
 
 On Windows every chord below is the Mac's with ⌘ read as Ctrl and ⌥⌘ as Ctrl+Alt
 (Alt+1–9 for the Spaces themselves); the full map is `docs/features/windows.md` N7.
@@ -21,6 +25,7 @@ On Windows every chord below is the Mac's with ⌘ read as Ctrl and ⌥⌘ as Ct
 | L4 | Both appear in the tab context menu (`CommandCopyURL` exists; a Markdown sibling joins it) and the app menu; the command bar's actions mode lists them (commandbar K9). | live: capture of the tab context menu and the File menu | built |
 | L5 | Chromium's `ToastId::kLinkCopied` confirms; it reads "Link copied, tracking removed" when something was stripped. | live capture through `tooling/drive` | built |
 | L6 | Setting off copies the URL verbatim. | `CopyLinkTest.SettingOffCopiesVerbatim` | built |
+| L7 | A Copy Link button at the address field's right end, just before the star (GitHub issue 11; the owner, 2026-10-22). It is Chromium's own Copy Link action (`kActionCopyUrl`) shown as a page action. A click copies what ⇧⌘C copies (L1, L2; with several rows selected, every selected page, tabs R21); an Option-click (Alt-click on Windows) copies what ⌥⇧⌘C copies (L3). The toast confirms (L5), and the icon turns into a check mark for 1.5 seconds, then back into the link; leaving the page ends it at once. The button shows only while the tab's address is http or https: not on the new tab page, a chrome:// page, a file, a view-source: page, about:blank or data:. It is in every normal and private window; popups, app windows and little windows have none. Its tooltip reads "Copy Link (⇧⌘C)" on the Mac and "Copy Link (Ctrl+Shift+C)" on Windows, the chord from the accelerator tables, and its accessible name is "Copy Link". A private window's copy is marked off the record, as every copy from one is (L3). "Show the Copy Link button" (settings T28, `stedding.toolbar.copy_link_button`, on by default) hides it in every window at once. Pinned to the toolbar from Customize Chrome, the action shows there and the field's button steps aside (Chromium's rule for a pinned page action). The sharing policy that removes Copy Link from the menus (`DesktopSharingHubEnabled` off) hides the button too, as it turns off ⇧⌘C. | browser: `CopyLinkTest.TheButtonCopiesTheLinkAndConfirms` (shown on a web page; its name and the window's chord; the clean link copied; the "tracking removed" toast; the check mark and its return), `CopyLinkTest.AnOptionClickCopiesTheMarkdownLink`, `CopyLinkTest.TheButtonIsOnlyOnWebPages` (the new tab page, chrome://settings, view-source:, about:blank), `CopyLinkTest.TheSettingHidesTheButton` (two windows; ⇧⌘C still copies), `CopyLinkTest.APrivateWindowsButtonCopiesOffTheRecord`, `CopyLinkTest.PopupsHaveNoButton`; unit: `SteddingPrefsTest.EveryPreferenceRegistersWithItsDefault` (on) | built · 2026-10-22 on the Mac, its tests passing on the release build; the button seen on a real build, its click not yet tried by hand |
 
 ## Running the tests
 

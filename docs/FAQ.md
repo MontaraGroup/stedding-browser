@@ -87,8 +87,11 @@ tab in it becomes a pinned tab and the folder stays a folder. **Unpin Folder**, 
 under the line, undoes it. Essentials take no folders.
 
 **Can essentials belong to one Space?**
-No. Essentials are shared by every Space, as in Arc. For a tab that belongs to one Space, pin it
-there (⌘D, Ctrl+D): pinned tabs are each Space's own.
+In a Space with an **Independent session**, yes: a tab you add to the essentials there is that
+Space's own, stays signed in with the Space's session, and shows in that Space alone, which
+shows only its own essentials. Elsewhere, essentials are shared by every Space, as in Arc. For a
+tab that belongs to one Space, you can also pin it there (⌘D, Ctrl+D): pinned tabs are each
+Space's own. Turning the Space's session off makes its essentials its pinned tabs.
 
 **Where did the bookmark bar go?**
 Pinned tabs play its part. Imported bookmarks stay bookmarks, and ⇧⌘B (Ctrl+Shift+B) still shows
@@ -128,22 +131,25 @@ Chromium's note about it unless Settings → Stedding → Pages and menus → **
 screen** is on. A page that fills the screen by itself, such as a video, always shows its note,
 so a page cannot pass itself off as the browser.
 
-**Why is a tab indented under another?**
-A link you open in a new tab (a middle click, ⌘-click or Ctrl+click), or a page opening one
-itself, sits under the page it came from; a link opened from that tab sits a level further.
-Close the page and its tabs move up a level. Essentials and pinned tabs keep their links at the
-left. Settings → Stedding → Tabs → **Show tabs under the tab that opened them** turns it off.
+**Can a tab sit indented under the page it came from?**
+Yes, if you want it. A link you open in a new tab (a middle click, ⌘-click or Ctrl+click)
+opens just below its page, at the same depth. Settings → Stedding → Tabs → **Show tabs under the
+tab that opened them** draws it a level to the right, under that page, and a link opened from
+it a level further; close the page and its tabs move up a level. Essentials and pinned tabs keep
+their links at the left. It is off unless you turn it on.
 
 **Which tab do I see after I close one?**
-The tab you used before it in the same Space: the one a quick ⌃⇥ (Ctrl+Tab) would show. If you
-have not used another tab there since the browser started, the tab below it, else the one above.
+The tab you used before it in the same Space, the one a quick ⌃⇥ (Ctrl+Tab) would show, as long
+as its row is in view in the sidebar, so the list does not jump. If that row is scrolled out of
+view, or you have not used another tab there since the browser started, the tab below it, else
+the one above.
 Putting a tab to sleep, and ⌘W on a pinned tab, land on the same tab. When a Space's last tab
 closes, it shows the essential you used there last, or opens a new tab if you have none.
 
 **Can I be signed into the same site twice?**
 Yes. Right-click a Space chip and turn on **Independent session**: that Space keeps its own
-cookies and site data, so another Space can use a different account. Essentials, extensions,
-history and passwords stay shared. **Clear Independent Session** on the same menu signs that
+cookies and site data, so another Space can use a different account. The essentials you add in
+that Space are its own and use its session; extensions, history and passwords stay shared. **Clear Independent Session** on the same menu signs that
 Space out of everything.
 
 **Is there sync?**

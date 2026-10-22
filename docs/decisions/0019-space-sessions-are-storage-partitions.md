@@ -44,7 +44,8 @@ Three designs were weighed.
   before the flag existed (beta 7) reads a token as on. It is not a Chrome
   profile path and not the Space's runtime id.
 - Isolation is **opt-in per Space**. Essentials stay on the default partition
-  (they are in every Space, B6). Private windows have no Spaces. A Blank
+  (they are in every Space, B6); amended 2026-10-22 by ADR 0028: an essential pinned in a
+  Space with its own session is that Space's own, in its partition. Private windows have no Spaces. A Blank
   Window has no Space registry, so its Spaces cannot be isolated (amended
   2026-09-28: the in-memory partitions this bullet described were cut in patch
   0055, and the isolation toggle still shows there, docs/history/plan-2026-09-26.md SPC-32).

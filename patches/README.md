@@ -64,7 +64,13 @@ lines; the next rebase folds them where they belong (`docs/history/plan-2026-09-
   for (S-173, S-147, S-174, S-128, S-129, S-141, S-148, S-149, S-150, S-154, S-172) and the
   faults they found, fixed, with S-222, S-223, S-224 and S-225 of that day, across the Spaces and
   their jars, the sidebar's views, the toolbar, the archive, the importers, the settings page
-  and the Mac's full screen.
+  and the Mac's full screen;
+- 0083, the owner's round after 0.3.0 beta 4 (2026-10-22): GitHub issues 8 (essentials of a
+  Space's own in a Space with an Independent session) and 11 (a Copy Link button), a drag that
+  rests on another Space's chip, folders into folders, the close rule and the room below the
+  list, a scroll that moves the hover, folders never grey, child tabs off by default, a pin's
+  row and home, a nested pinned folder's link, and the hover card's resource line, across the
+  Spaces, sessions, pins, folders, the sidebar, the toolbar and the hover card.
 
 0069 is not a round: it is the one hunk in `base/check.cc` that lets soft checks report
 instead of crash in a build without DCHECKs (ADR 0024), kept apart so it can go on its own

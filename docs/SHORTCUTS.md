@@ -71,6 +71,7 @@ a moment before the next.
 |---|---|---|
 | Copy the link, without its tracking parameters | ⇧⌘C | Ctrl+Shift+C |
 | Copy the link as Markdown | ⌥⇧⌘C | Ctrl+Alt+Shift+C |
+| Copy the link with the mouse: the Copy Link button at the address field's right end; Option-click (Alt-click) for Markdown | click | click |
 | Clear the site's cookies and reload the page (only cookies; in a Space with its own session, only that Space's) | ⌥⇧⌘R | Ctrl+Alt+Shift+R |
 | Screenshot the page as shown | ⇧⌘2 | Ctrl+Shift+2 |
 | Screenshot a region you drag out | ⌥⇧⌘2 | Ctrl+Alt+Shift+2 |

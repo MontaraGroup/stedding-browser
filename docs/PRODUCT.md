@@ -68,8 +68,9 @@ yet, `docs/features/library.md`) and a `+`.
   Space title, drawn as cards. Arc caps them at 12; Stedding's Arc importer takes twelve
   and nothing else caps them (`features/import.md` I11). Distinct from Pinned Tabs; a
   spec that conflates the two gets the model wrong (`features/spaces.md` B6). They are
-  shared by every Space, as in Arc; essentials of one Space alone, as Zen has them, are not
-  planned (the owner, 2026-10-21; `S-254`, GitHub issue 8).
+  shared by every Space, as in Arc, except in a Space with an Independent session, whose
+  essentials are its own, in its session, and which shows only those (the owner, 2026-10-22;
+  `S-254`, GitHub issue 8, ADR 0028).
 - **Unpinned Tabs** **[1.0]** — below the divider, auto-archived when idle once the user
   picks a time (§11). `⇧⌘K` clears them as a set (`features/spaces.md` B20).
 - **Folders** **[1.0]** — group tabs; **tabs in folders do not auto-archive**. Folders
@@ -118,11 +119,13 @@ yet, `docs/features/library.md`) and a `+`.
   (`features/import.md` I18, I20; `features/sidebar-file.md`). Scheduled backups, the
   sidebar folder and the version-2 catalog are **[cut]**.
 - **Copy URL, and copy as Markdown** **[1.0]** — `⇧⌘C` and `⌥⇧⌘C`, with tracking
-  parameters removed (`features/copy-link.md`).
+  parameters removed, and a Copy Link button at the address field's right end, Option-click
+  for Markdown, which a setting hides (`features/copy-link.md` L7; GitHub issue 11).
 - **Reopen closed tab** **[1.0]** — `⇧⌘T`, Chromium's.
-- **Child tabs** **[M10]** — a link opened in a new tab sits indented under the page it came
-  from, a closed parent's children move up, and the tree survives a restart; a setting turns it
-  off (`features/tabs.md` R56–R59). Back returning to the parent is not built yet (R60, `S-92`).
+- **Child tabs** **[M10]** — a link opened in a new tab opens just below the page it came
+  from; a setting, off by default since 2026-10-22 (the owner), draws it indented under that
+  page, a closed parent's children move up, and the tree survives a restart
+  (`features/tabs.md` R56–R59). Back returning to the parent is not built yet (R60, `S-92`).
 - **Undo after closing tabs** **[M10]** — after a close, a toast with Undo that reopens those
   tabs in their Space and folder; off by default since 2026-10-21 (the owner), a setting turns
   it on (`features/tabs.md` R25–R28, R30).
@@ -156,9 +159,9 @@ yet, `docs/features/library.md`) and a `+`.
   to one jar, or giving a Space its own extensions, needs a later ADR. A Space with its own
   session is marked wherever Stedding names it as a place to go -- a cookie on its chip and
   after its name in the title row, the tab menu's Space rows, the command bar, the archive
-  and Settings -- and pinning one of its tabs to the essentials, which use the shared
-  session, says so with an Undo (`features/sessions.md` S32–S34, `features/spaces.md` B38;
-  released in 0.2.0 beta 18 on Windows and beta 20 on the Mac).
+  and Settings (`features/sessions.md` S32, S34, `features/spaces.md` B38; released in 0.2.0
+  beta 18 on Windows and beta 20 on the Mac). Its essentials are its own and stay in its
+  session (`features/sessions.md` S8, ADR 0028).
 - **Move tabs between Spaces** **[1.0]** — the command bar's "Move Tab to [Space]", the tab
   menu, `⌥⇧⌘←/→`, or a drag onto a Space icon (`features/spaces.md` B12, B22).
 - **Air Traffic Control** **[1.0]** — Stedding's routing: rules sending a site, a part of
