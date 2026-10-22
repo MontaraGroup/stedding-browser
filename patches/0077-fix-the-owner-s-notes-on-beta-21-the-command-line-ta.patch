@@ -192,7 +192,7 @@ its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |   92 +
  .../test/stedding/space_wheel_browsertest.cc  |  442 +++++
  .../test/stedding/startup_load_browsertest.cc |  368 +++-
- chrome/test/stedding/tab_drop_browsertest.cc  |  491 ++++++
+ chrome/test/stedding/tab_drop_browsertest.cc  |  504 ++++++
  .../stedding/window_buttons_browsertest.mm    |    7 +
  .../test/stedding/window_top_browsertest.mm   |  340 ++++
  components/tabs/impl/tab_strip_collection.cc  |   18 +
@@ -201,7 +201,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 130 files changed, 11084 insertions(+), 396 deletions(-)
+ 130 files changed, 11097 insertions(+), 396 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -14760,7 +14760,7 @@ index ef81e9870337d..e2c316cb5c34d 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index 8ee33529a3c97..966c464a674da 100644
+index 8ee33529a3c97..008ef9f139b7f 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -19,8 +19,16 @@
@@ -14799,10 +14799,11 @@ index 8ee33529a3c97..966c464a674da 100644
  #include "chrome/browser/ui/views/spaces/page_split_drag_target.h"
  #include "chrome/browser/ui/views/spaces/split_drop_rules.h"
  #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
-@@ -74,9 +86,14 @@
+@@ -74,9 +86,15 @@
  #include "ui/color/color_id.h"
  #include "ui/color/color_provider.h"
  #include "ui/color/color_provider_key.h"
++#include "ui/display/screen.h"
 +#include "ui/events/base_event_utils.h"
 +#include "ui/events/event.h"
 +#include "ui/events/event_constants.h"
@@ -14814,7 +14815,7 @@ index 8ee33529a3c97..966c464a674da 100644
  #include "ui/views/background.h"
  #include "ui/views/test/views_test_utils.h"
  #include "ui/views/view.h"
-@@ -1291,6 +1308,14 @@ PageHalves HalvesOf(BrowserView* browser_view) {
+@@ -1291,6 +1309,14 @@ PageHalves HalvesOf(BrowserView* browser_view) {
            gfx::Point(page.x() + 3 * page.width() / 4, page.CenterPoint().y())};
  }
  
@@ -14829,7 +14830,7 @@ index 8ee33529a3c97..966c464a674da 100644
  // The pointer, its button down, moves from `from` to `to` in twelve steps.
  void MoveWithTheButtonDown(views::Widget* widget,
                             const gfx::Point& from,
-@@ -1395,6 +1420,69 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowOverThePageLightsTheHalfUnderIt) {
+@@ -1395,6 +1421,69 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowOverThePageLightsTheHalfUnderIt) {
                                                            halves.left));
  }
  
@@ -14899,7 +14900,7 @@ index 8ee33529a3c97..966c464a674da 100644
  // splits J11: a row dropped on a half makes one split of it and the page
  // that was on screen, the dropped page on that side and active, in the
  // page's place, with nothing detached: the same tab and page, in its Space,
-@@ -1425,6 +1513,10 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1425,6 +1514,10 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
          << "the drop made no split";
      EXPECT_EQ((std::vector<tabs::TabInterface*>{dragged, shown}),
                panes(shown));
@@ -14910,7 +14911,7 @@ index 8ee33529a3c97..966c464a674da 100644
      EXPECT_EQ(dragged, tab_strip_model()->GetActiveTab());
      EXPECT_LT(Index(above), Index(dragged)) << "not in the page's place";
      EXPECT_LT(Index(shown), Index(below));
-@@ -1441,6 +1533,13 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1441,6 +1534,13 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
          << "the drop made no split";
      EXPECT_EQ((std::vector<tabs::TabInterface*>{shown, dragged}),
                panes(shown));
@@ -14924,7 +14925,7 @@ index 8ee33529a3c97..966c464a674da 100644
      EXPECT_EQ(dragged, tab_strip_model()->GetActiveTab());
      ExpectKept(dragged, kept);
      EXPECT_EQ(1u, WindowCount());
-@@ -1474,6 +1573,133 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1474,6 +1574,145 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
    }
  }
  
@@ -15038,6 +15039,18 @@ index 8ee33529a3c97..966c464a674da 100644
 +  ASSERT_TRUE(close_on_leaving());
 +  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
 +  {
++    // BACKLOG S-252: the machine's own pointer resting on a rail row, where
++    // the step below failed 3 of 3 on 2026-10-21 and passed with the pointer
++    // elsewhere. The window moves to put the row under it, wherever it is, so
++    // the step always meets that case.
++    const gfx::Point cursor = display::Screen::Get()->GetCursorScreenPoint();
++    gfx::Rect bounds = widget()->GetWindowBoundsInScreen();
++    bounds.Offset(cursor - RowCentre(dragged));
++    widget()->SetBounds(bounds);
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++  }
++  {
 +    SCOPED_TRACE("a drop inside the opened sidebar reorders");
 +    ASSERT_TRUE(open_on_hover()) << "the sidebar did not open on hover";
 +    ASSERT_LT(Index(dragged), Index(last));
@@ -15058,7 +15071,7 @@ index 8ee33529a3c97..966c464a674da 100644
  // splits J12, J14: while the pointer is over the page the rows hold still,
  // whatever height it is at, and no window opens; a release where the page
  // takes no drop leaves no split and every row where it was.
-@@ -1573,4 +1799,269 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AHorizontalTabDroppedOnThePageMakesASplit) {
+@@ -1573,4 +1812,269 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AHorizontalTabDroppedOnThePageMakesASplit) {
    EnterVerticalTabsMode();
  }
  
