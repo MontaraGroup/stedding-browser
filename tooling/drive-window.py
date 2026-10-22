@@ -289,9 +289,59 @@ class Driver:
                     # screen; it takes the pointer only on its own strip, which is what
                     # the screen's visible frame leaves out (with the menu bar).
                     continue
+                if (window.get("kCGWindowOwnerName") in ("Notification Centre",
+                                                         "Notification Center") and
+                        not self.on_notifications(window, x, y)):
+                    # On macOS 27, while a notification waits, Notification Centre
+                    # is one window over the whole screen too; it takes the pointer
+                    # only on its notifications' stack, the window's children in its
+                    # accessibility tree (2026-10-22).
+                    continue
                 sys.exit("(%s, %s) is covered by %s's window; not sending mouse input"
                          % (x, y, window.get("kCGWindowOwnerName", "another app")))
         sys.exit("no window at (%s, %s); not sending mouse input" % (x, y))
+
+    def on_notifications(self, window, x, y):
+        # Whether (x, y) is on Notification Centre's notifications: the parts of
+        # its accessibility tree under the window that `window` is, where a part
+        # as big as the window itself only holds the real ones. Anything it
+        # cannot read counts as covered, so no input goes where it cannot tell.
+        try:
+            import ApplicationServices as ax
+        except ImportError:
+            return True
+        app = ax.AXUIElementCreateApplication(int(window.get("kCGWindowOwnerPID", -1)))
+
+        def attr(element, name):
+            err, value = ax.AXUIElementCopyAttributeValue(element, name, None)
+            return value if err == 0 else None
+
+        def frame(element):
+            position, size = attr(element, "AXPosition"), attr(element, "AXSize")
+            if position is None or size is None:
+                return None
+            origin = ax.AXValueGetValue(position, ax.kAXValueCGPointType, None)[1]
+            extent = ax.AXValueGetValue(size, ax.kAXValueCGSizeType, None)[1]
+            return (origin.x, origin.y, extent.width, extent.height)
+
+        bounds = window.get("kCGWindowBounds", {})
+        whole = (bounds.get("X", 0), bounds.get("Y", 0),
+                 bounds.get("Width", 0), bounds.get("Height", 0))
+        for each in attr(app, "AXWindows") or []:
+            if frame(each) != whole:
+                continue
+            pending = list(attr(each, "AXChildren") or [])
+            while pending:
+                part = pending.pop()
+                box = frame(part)
+                if box is None:
+                    return True
+                if box == whole:
+                    pending.extend(attr(part, "AXChildren") or [])
+                elif box[0] <= x < box[0] + box[2] and box[1] <= y < box[1] + box[3]:
+                    return True
+            return False
+        return True
 
     def in_visible_frame(self, x, y):
         # NSScreen frames are in Cocoa's coordinates, origin at the bottom left of

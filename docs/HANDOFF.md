@@ -39,14 +39,14 @@ of 2026-09-29 to 30.
 
 ### Trap index
 
-A hundred and twenty-nine traps follow (28 is retired). Read the one for the topic in front of
+A hundred and thirty traps follow (28 is retired). Read the one for the topic in front of
 you, not the list.
 
 | Topic | Traps |
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100, 123 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121, 130 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126, 127 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125, 128 |
 | Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129 |
@@ -1679,6 +1679,19 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     after the feed commit, found no update in five minutes; started again once the cache had
     turned over, it showed the pill in 25 seconds. Wait five minutes after `publish-appcast`
     before a real-feed check, or check the served feed with `curl` first.
+130. **On macOS 27 a waiting notification makes `tooling/drive` refuse every point.** While a
+    notification waits to be read (a Time Sensitive one stays until it is), Notification
+    Centre keeps a window over the whole screen, at layer 21, above every app's; the
+    harness's check that the test window is on top at the point (`require_mouse_at`) found
+    it everywhere and sent no input: "(120.0, 307.0) is covered by Notification Centre's
+    window" (2026-10-22). It takes the pointer only on its notifications' stack at the
+    screen's right, which its accessibility tree gives (a group 752 points wide on the
+    Mac's display); the harness now asks for that and lets the rest through, as it already
+    did for the Dock's full-screen window (trap list, "Driving and capturing the window").
+    Keep the parts a drive presses left of the stack: a 950-point window at the left edge
+    does, a 1200-point one put the address field's buttons under it. Do not try to close
+    the panel with a click: there is no panel open, and a click is input into the owner's
+    machine for nothing.
 
 ## The Windows build
 
