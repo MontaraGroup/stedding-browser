@@ -154,7 +154,8 @@ No CI runner can build, run the suites, drive a window or sign: that is `S-49`.
 (the essentials row). `space_pin_tabs/N` — pin the first N tabs in their Space,
 their URL as home; `drift_tabs/N` — then send the first N of those to the next
 tab's page (a drifted pin, for pins H4 and H12). `folder_tabs/N` — wrap first N tabs in a folder and nest
-one (exercises the whole folder pipeline). `open_command_bar/true` — open ⌘T
+one (exercises the whole folder pipeline). `split_tabs/1` — put the first two tabs side
+by side in a split (toolbar T41's row). `open_command_bar/true` — open ⌘T
 overlay at startup. `drag_tabs_to_spaces` — on by default. `reduce_motion/true` — no
 Stedding animation, as with the system's reduced motion (`docs/features/motion.md`).
 

@@ -1,0 +1,672 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 21 Oct 2026 20:07:09 -0400
+Subject: ui: a split's row parts end at their panes, and the Space row shrinks
+ before its dots
+
+The owner's notes of 2026-10-21 on 0.3.0 beta 1:
+
+- A split's address row (toolbar T41): each pane's part ends at the pane's
+  own edge, its top corners rounded as the card's, and the window's ground
+  shows over the gap between the panes, as it does between the panes below.
+  The parts had met in a soft blend over the gap, which read as a smudge
+  where a dark page met a light one. The owner chose this over a sharp edge
+  at the gap's middle from captures of both (splits J16).
+- The Space row at the bottom of the sidebar (spaces B24): as the row
+  narrows, after the gaps between the chips close, the row's inset at each
+  end closes from 12 DIP to 4 and the chips and the "+" shrink a DIP at a
+  time to 18 DIP, each glyph two thirds of its chip, before any chip turns
+  to a dot. Eight Spaces keep their icons down to a row 202 DIP wide, where
+  they had turned to dots below 272 with room left at the row's ends. As
+  dots, the gaps close from 12 DIP down to 2 as the row narrows, so the "+"
+  stays in the row; it had been pushed out of a narrow sidebar.
+- A capture parameter, split_tabs/1 on SteddingArcStyleWindow, puts a new
+  window's first two tabs side by side, so a split's row can be captured
+  without a drag (docs/HANDOFF.md, dev parameters).
+
+Tests: SwitcherRulesTest (each step's form for eight Spaces, every width from
+202 to 290 filled, the dots' gaps, the glyph size);
+PageColourRowTest.ASplitRowTakesEachPanesColour reads the ground over the gap.
+
+Why: the owner found the blend ugly and the Space icons turning to dots with
+room to spare.
+Removable when: never; the next re-cut folds it into the patches that own
+the split row and the Space row.
+---
+ chrome/browser/ui/stedding_ui_metrics.cc      |  6 ++
+ chrome/browser/ui/stedding_ui_metrics.h       |  5 ++
+ .../views/frame/stedding_window_background.cc | 82 ++++--------------
+ .../ui/views/spaces/space_switcher_rules.cc   | 43 +++++++---
+ .../ui/views/spaces/space_switcher_rules.h    | 40 +++++++--
+ .../spaces/space_switcher_rules_unittest.cc   | 83 ++++++++++++++-----
+ .../ui/views/spaces/space_switcher_view.cc    | 53 +++++++++---
+ .../spaces/space_tab_visibility_controller.cc | 17 +++-
+ .../test/stedding/address_band_browsertest.cc | 40 ++++-----
+ 9 files changed, 226 insertions(+), 143 deletions(-)
+
+diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
+index 335120c25fb1d..2d48bc74f9f51 100644
+--- a/chrome/browser/ui/stedding_ui_metrics.cc
++++ b/chrome/browser/ui/stedding_ui_metrics.cc
+@@ -111,6 +111,12 @@ BASE_FEATURE_PARAM(int,
+                    "drift_tabs",
+                    0);
+ 
++BASE_FEATURE_PARAM(int,
++                   kSplitTabsForTesting,
++                   &kArcStyleWindow,
++                   "split_tabs",
++                   0);
++
+ BASE_FEATURE_PARAM(int,
+                    kExtraSpacesForTesting,
+                    &kArcStyleWindow,
+diff --git a/chrome/browser/ui/stedding_ui_metrics.h b/chrome/browser/ui/stedding_ui_metrics.h
+index bb5e8de1a9762..683b4f9fbf99d 100644
+--- a/chrome/browser/ui/stedding_ui_metrics.h
++++ b/chrome/browser/ui/stedding_ui_metrics.h
+@@ -177,6 +177,11 @@ BASE_DECLARE_FEATURE_PARAM(int, kPinTabsForTesting);
+ BASE_DECLARE_FEATURE_PARAM(int, kSpacePinTabsForTesting);
+ BASE_DECLARE_FEATURE_PARAM(int, kDriftTabsForTesting);
+ 
++// Put the window's first two tabs side by side in a split when it opens, so
++// a split's row (toolbar T41) can be captured without a drag. Zero in normal
++// use.
++BASE_DECLARE_FEATURE_PARAM(int, kSplitTabsForTesting);
++
+ // Extra Spaces to create in each new window, on top of the one every window
+ // starts with. Zero in normal use. This exists so multi-Space states can be
+ // screenshotted and tested without a UI gesture, the same reason the metrics
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.cc b/chrome/browser/ui/views/frame/stedding_window_background.cc
+index 653d8d07861e7..c26258246b960 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.cc
++++ b/chrome/browser/ui/views/frame/stedding_window_background.cc
+@@ -171,18 +171,6 @@ void SteddingWindowBackground::Paint(gfx::Canvas* canvas,
+ 
+ namespace {
+ 
+-// toolbar T41: how far the blend between a split's two parts of the row
+-// runs past each side of the gap between the panes, so the change from one
+-// page's colour to the other's reads as soft.
+-constexpr float kSplitBlendOverhang = 6.f;
+-
+-// The hairline under the row where it meets a page of colour `bar`: a tenth
+-// of the contrast colour (toolbar T15).
+-SkColor HairlineFor(SkColor bar) {
+-  return color_utils::AlphaBlend(color_utils::GetColorWithMaxContrast(bar),
+-                                 bar, 0.10f);
+-}
+-
+ // A split's two parts of the row, left and right, in a target view's
+ // coordinates: the gap between the panes, and each pane's page colour.
+ struct RowParts {
+@@ -271,67 +259,27 @@ void PaintBarSurface(gfx::Canvas* canvas,
+ }
+ 
+ // toolbar T41: a split's row, a part over each pane in that pane's colour,
+-// a short horizontal blend from one to the other over the gap between them
+-// and kSplitBlendOverhang past each side, the hairline under each part in its
+-// own colour. A part whose page has no colour leaves the ground there, the
+-// other part fading into it.
++// each ending at its pane's edge with its top corners rounded as the card's,
++// and the window's ground over the gap between them, as between the panes
++// below; each part has its own hairline (T15). A part whose page has no
++// colour leaves the ground there. The parts had met in a soft blend over the
++// gap, which read as a smudge where a dark page met a light one (the owner,
++// 2026-10-21).
+ void PaintSplitBarSurface(gfx::Canvas* canvas,
+                           const gfx::RectF& surface,
+                           const RowParts& parts,
+                           bool square) {
+-  if (!parts.left && !parts.right) {
+-    return;
+-  }
+-  const float radius =
+-      square ? 0.f : static_cast<float>(stedding::kContentsCornerRadius.Get());
+-  SkRRect rrect;
+-  const SkVector radii[4] = {
+-      {radius, radius}, {radius, radius}, {0, 0}, {0, 0}};
+-  rrect.setRectRadii(gfx::RectFToSkRect(surface), radii);
+-  gfx::ScopedCanvas scoped(canvas);
+-  canvas->ClipPath(SkPath::RRect(rrect), /*do_anti_alias=*/true);
+-
+-  // A missing colour is the other one, transparent, so the blend fades
+-  // rather than passing through black. Each side is read only when it is
+-  // known: value_or() evaluates its fallback, and dereferenced the empty side
+-  // whenever the other was known (a pane whose page had no colour yet).
+-  const SkColor known = parts.left ? *parts.left : *parts.right;
+-  const SkColor left = parts.left ? *parts.left : SkColorSetA(known, 0);
+-  const SkColor right = parts.right ? *parts.right : SkColorSetA(known, 0);
+-  const SkColor left_line = parts.left
+-                                ? HairlineFor(*parts.left)
+-                                : SkColorSetA(HairlineFor(known), 0);
+-  const SkColor right_line = parts.right
+-                                 ? HairlineFor(*parts.right)
+-                                 : SkColorSetA(HairlineFor(known), 0);
+-  const float blend_left = std::clamp(parts.gap_left - kSplitBlendOverhang,
+-                                      surface.x(), surface.right());
+-  const float blend_right = std::clamp(parts.gap_right + kSplitBlendOverhang,
+-                                       blend_left, surface.right());
+-  const auto band = [&](float top, float height, SkColor from, SkColor to) {
+-    cc::PaintFlags flags;
+-    flags.setColor(from);
+-    canvas->DrawRect(
+-        gfx::RectF(surface.x(), top, blend_left - surface.x(), height), flags);
+-    flags.setColor(to);
+-    canvas->DrawRect(
+-        gfx::RectF(blend_right, top, surface.right() - blend_right, height),
+-        flags);
+-    if (blend_right > blend_left) {
+-      const SkPoint points[2] = {SkPoint::Make(blend_left, top),
+-                                 SkPoint::Make(blend_right, top)};
+-      const SkColor4f colors[2] = {SkColor4f::FromColor(from),
+-                                   SkColor4f::FromColor(to)};
+-      cc::PaintFlags blend;
+-      blend.setShader(cc::PaintShader::MakeLinearGradient(
+-          points, colors, nullptr, 2, SkTileMode::kClamp));
+-      canvas->DrawRect(
+-          gfx::RectF(blend_left, top, blend_right - blend_left, height),
+-          blend);
++  const auto part = [&](float from, float to, std::optional<SkColor> colour) {
++    if (colour && to > from) {
++      PaintBarSurface(
++          canvas, gfx::RectF(from, surface.y(), to - from, surface.height()),
++          *colour, square);
+     }
+   };
+-  band(surface.y(), surface.height(), left, right);
+-  band(std::floor(surface.bottom()) - 1, 1, left_line, right_line);
++  part(surface.x(), std::clamp(parts.gap_left, surface.x(), surface.right()),
++       parts.left);
++  part(std::clamp(parts.gap_right, surface.x(), surface.right()),
++       surface.right(), parts.right);
+ }
+ 
+ }  // namespace
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules.cc b/chrome/browser/ui/views/spaces/space_switcher_rules.cc
+index cd995c00911da..3c59326e00775 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_rules.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_rules.cc
+@@ -11,23 +11,46 @@
+ 
+ namespace spaces {
+ 
+-std::optional<int> SwitcherChipGap(int row_width, size_t chip_count) {
++SwitcherRowForm SwitcherRowFormAt(int row_width, size_t chip_count) {
+   if (chip_count == 0) {
+-    return kSwitcherChipGap;
++    return SwitcherRowForm();
+   }
+-  // Every chip carries half the gap on each side; the "+" is one more chip.
++  // Every chip carries half the gap on each side; the "+" is one more chip,
++  // with none.
+   const int count = static_cast<int>(chip_count);
+-  const int spare = row_width - 2 * kSwitcherRowInset - kSwitcherChip -
+-                    count * kSwitcherChip;
+-  const int gap = spare / count;
+-  if (spare < 0 || gap < kSwitcherMinChipGap) {
+-    return std::nullopt;
++  const int closed = 2 * kSwitcherMinRowInset + count * kSwitcherMinChipGap;
++  // Full chips: the gaps close first, at the full inset, then the inset.
++  const int room = row_width - (count + 1) * kSwitcherChip;
++  if (room >= closed) {
++    const int gap = (room - 2 * kSwitcherRowInset) / count;
++    if (room >= 2 * kSwitcherRowInset && gap >= kSwitcherMinChipGap) {
++      return {kSwitcherChip, std::min(gap, kSwitcherChipGap),
++              kSwitcherRowInset};
++    }
++    return {kSwitcherChip, kSwitcherMinChipGap,
++            (room - count * kSwitcherMinChipGap) / 2};
++  }
++  // Then smaller chips at the closed gaps and inset; what the division
++  // leaves over goes to the insets, so the row keeps its width.
++  const int chip = (row_width - closed) / (count + 1);
++  if (chip >= kSwitcherMinChip) {
++    return {chip, kSwitcherMinChipGap,
++            kSwitcherMinRowInset + (row_width - closed - (count + 1) * chip) / 2};
+   }
+-  return std::min(gap, kSwitcherChipGap);
++  // Dots: the active chip and the "+" full, the other chips dots.
++  const int dot_room = row_width - 2 * kSwitcherMinRowInset -
++                       2 * kSwitcherChip - (count - 1) * kSwitcherDot;
++  return {kSwitcherChip,
++          std::clamp(dot_room / count, kSwitcherMinDotGap, kSwitcherChipGap),
++          kSwitcherMinRowInset, /*dots=*/true};
++}
++
++int SwitcherGlyphSize(int chip) {
++  return chip * 2 / 3;
+ }
+ 
+ bool SwitcherOverflows(int row_width, size_t chip_count) {
+-  return !SwitcherChipGap(row_width, chip_count).has_value();
++  return SwitcherRowFormAt(row_width, chip_count).dots;
+ }
+ 
+ int SwitcherChipWidth(bool overflow, bool active, bool row_hovered) {
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules.h b/chrome/browser/ui/views/spaces/space_switcher_rules.h
+index 9f55cc56e728f..94d1be721f3bf 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_rules.h
++++ b/chrome/browser/ui/views/spaces/space_switcher_rules.h
+@@ -24,14 +24,42 @@ inline constexpr int kSwitcherDot = 6;
+ // every chip (owner, 2026-10-01).
+ inline constexpr int kSwitcherMinChipGap = 4;
+ 
+-// The gap between full-size chips in a row `row_width` wide that holds
+-// `chip_count` chips and the "+": kSwitcherChipGap while the row has room,
+-// narrower as it fills, never under kSwitcherMinChipGap; nullopt when the
+-// chips do not fit even then.
+-std::optional<int> SwitcherChipGap(int row_width, size_t chip_count);
++// The narrowest side inset the row closes up to, and the smallest chip it
++// shrinks to after that, before any chip turns to a dot (spaces B24): eight
++// Spaces went to dots with a chip's width of room left at the row's ends
++// (the owner, 2026-10-21). A chip's glyph is two thirds of it: 16 px on a
++// full chip, 12 on the smallest. Between dots the gap closes to
++// kSwitcherMinDotGap, so the "+" stays in the row.
++inline constexpr int kSwitcherMinRowInset = 4;
++inline constexpr int kSwitcherMinChip = 18;
++inline constexpr int kSwitcherMinDotGap = 2;
++
++// How a row lays out its chips and the "+": their size, the gap between
++// them, the row's inset at each end, and whether the inactive chips are dots
++// (then `chip` is the active chip's and the "+"'s size).
++struct SwitcherRowForm {
++  int chip = kSwitcherChip;
++  int gap = kSwitcherChipGap;
++  int inset = kSwitcherRowInset;
++  bool dots = false;
++
++  bool operator==(const SwitcherRowForm&) const = default;
++};
++
++// The row's form at `row_width` for `chip_count` chips and the "+" (spaces
++// B24), as the row narrows, each step leaving it as wide as the one before:
++// full chips at the full inset, their gaps closing from kSwitcherChipGap to
++// kSwitcherMinChipGap; then the inset closing to kSwitcherMinRowInset; then
++// the chips and the "+" shrinking a DIP at a time to kSwitcherMinChip; then
++// dots, the active chip and the "+" full, the gaps as wide as the row allows
++// between kSwitcherMinDotGap and kSwitcherChipGap.
++SwitcherRowForm SwitcherRowFormAt(int row_width, size_t chip_count);
++
++// A chip's glyph, in pixels, at `chip` DIP: two thirds of it.
++int SwitcherGlyphSize(int chip);
+ 
+ // True when `chip_count` chips plus the "+" would not fit a row `row_width`
+-// wide at full size, even with the gaps closed up (SwitcherChipGap).
++// wide but as dots (SwitcherRowFormAt).
+ bool SwitcherOverflows(int row_width, size_t chip_count);
+ 
+ // The width a chip takes: full while the row has room, while it is the
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc b/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
+index 9457c27689d70..528f05fee7ef5 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
+@@ -11,8 +11,9 @@
+ namespace spaces {
+ namespace {
+ 
+-// spaces B24-B26: a full sidebar (352) holds eight chips and the plus; twelve
+-// overflow; below the threshold nothing changes.
++// spaces B24-B26: a full sidebar (352) holds eight chips and the plus at full
++// size, and fourteen as smaller chips; fifteen overflow; below the threshold
++// nothing changes.
+ // spaces B27: a dragged chip lands on the nearest chip's place.
+ TEST(SwitcherRulesTest, DropIndexIsTheNearestChip) {
+   const std::vector<int> centres = {20, 60, 100};
+@@ -50,12 +51,17 @@ TEST(SwitcherRulesTest, DragOffsetsOpenTheLandingPlace) {
+ TEST(SwitcherRulesTest, OverflowShrinksInactiveChips) {
+   EXPECT_FALSE(SwitcherOverflows(352, 5));
+   EXPECT_FALSE(SwitcherOverflows(352, 8));
+-  EXPECT_TRUE(SwitcherOverflows(352, 12));
+-  EXPECT_TRUE(SwitcherOverflows(126, 3));
++  EXPECT_FALSE(SwitcherOverflows(352, 14));
++  EXPECT_TRUE(SwitcherOverflows(352, 15));
++  EXPECT_FALSE(SwitcherOverflows(92, 3));
++  EXPECT_TRUE(SwitcherOverflows(91, 3));
+   // The owner's row (2026-10-01): eight Spaces in a row 290 wide went to dots
+   // at the full gap; closed up to 6 they all fit.
+   EXPECT_FALSE(SwitcherOverflows(290, 8));
+-  EXPECT_TRUE(SwitcherOverflows(250, 8));
++  // The owner's row (2026-10-21): eight Spaces went to dots with room at the
++  // row's ends; the narrowest row that holds them now is 202 wide.
++  EXPECT_FALSE(SwitcherOverflows(202, 8));
++  EXPECT_TRUE(SwitcherOverflows(201, 8));
+ 
+   EXPECT_EQ(kSwitcherChip, SwitcherChipWidth(false, false, false));
+   EXPECT_EQ(kSwitcherDot, SwitcherChipWidth(true, false, false));
+@@ -64,22 +70,57 @@ TEST(SwitcherRulesTest, OverflowShrinksInactiveChips) {
+   EXPECT_EQ(kSwitcherChip, SwitcherChipWidth(true, false, true));
+ }
+ 
+-// spaces B24: full chips close their gaps up as the row fills, down to
+-// kSwitcherMinChipGap, before any of them turns to a dot.
+-TEST(SwitcherRulesTest, ChipsCloseUpBeforeTheyTurnToDots) {
+-  EXPECT_EQ(kSwitcherChipGap, SwitcherChipGap(352, 5));
+-  EXPECT_EQ(kSwitcherChipGap, SwitcherChipGap(352, 0));
+-  // 290 less the insets, the "+" and eight chips leaves 50: 6 a chip.
+-  EXPECT_EQ(6, SwitcherChipGap(290, 8));
+-  EXPECT_EQ(kSwitcherMinChipGap,
+-            SwitcherChipGap(2 * kSwitcherRowInset + kSwitcherChip +
+-                                8 * (kSwitcherChip + kSwitcherMinChipGap),
+-                            8));
+-  EXPECT_EQ(std::nullopt,
+-            SwitcherChipGap(2 * kSwitcherRowInset + kSwitcherChip +
+-                                8 * (kSwitcherChip + kSwitcherMinChipGap) - 1,
+-                            8));
+-  EXPECT_EQ(std::nullopt, SwitcherChipGap(40, 3));
++// The row's width a form takes for `count` chips and the "+": the dots'
++// row with the active chip full.
++int RowWidth(const SwitcherRowForm& form, int count) {
++  const int chips = form.dots ? 2 * form.chip + (count - 1) * kSwitcherDot
++                              : (count + 1) * form.chip;
++  return 2 * form.inset + chips + count * form.gap;
++}
++
++// spaces B24: as the row narrows, full chips close their gaps up to
++// kSwitcherMinChipGap, then the row's inset closes to kSwitcherMinRowInset,
++// then the chips shrink a DIP at a time to kSwitcherMinChip; only then do
++// the inactive chips turn to dots, whose gaps close as the row narrows on so
++// the "+" stays in it. Until the dots no step leaves the row more than a few
++// DIP to spare (the row's spacers take them), so the steps join up.
++TEST(SwitcherRulesTest, ChipsCloseUpAndShrinkBeforeTheyTurnToDots) {
++  using Form = SwitcherRowForm;
++  constexpr int kFull = kSwitcherChip;
++  EXPECT_EQ(Form(), SwitcherRowFormAt(352, 5));
++  EXPECT_EQ(Form(), SwitcherRowFormAt(352, 0));
++  // 290 less the "+", eight chips and the insets leaves 50: 6 a chip.
++  EXPECT_EQ((Form{kFull, 6, kSwitcherRowInset}), SwitcherRowFormAt(290, 8));
++  // Eight full chips, the "+" and the closed gaps take 248.
++  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, kSwitcherRowInset}),
++            SwitcherRowFormAt(272, 8));
++  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, 11}), SwitcherRowFormAt(271, 8));
++  EXPECT_EQ((Form{kFull, kSwitcherMinChipGap, kSwitcherMinRowInset}),
++            SwitcherRowFormAt(256, 8));
++  // A DIP less: chips of 23, the DIP the division leaves over in the insets.
++  EXPECT_EQ((Form{23, kSwitcherMinChipGap, 8}), SwitcherRowFormAt(255, 8));
++  EXPECT_EQ((Form{kSwitcherMinChip, kSwitcherMinChipGap, kSwitcherMinRowInset}),
++            SwitcherRowFormAt(202, 8));
++  for (int width = 202; width <= 290; ++width) {
++    SCOPED_TRACE(testing::Message() << "a row " << width << " wide");
++    const int used = RowWidth(SwitcherRowFormAt(width, 8), 8);
++    EXPECT_LE(used, width);
++    EXPECT_LT(width - used, 8);
++  }
++  // Dots, the gaps as wide as the row allows: the "+" stays in the row.
++  EXPECT_EQ((Form{kFull, kSwitcherChipGap, kSwitcherMinRowInset, true}),
++            SwitcherRowFormAt(201, 8));
++  const Form narrow = SwitcherRowFormAt(167, 8);
++  EXPECT_TRUE(narrow.dots);
++  EXPECT_EQ(8, narrow.gap);
++  EXPECT_LE(RowWidth(narrow, 8), 167);
++  EXPECT_EQ(kSwitcherMinDotGap, SwitcherRowFormAt(40, 3).gap);
++}
++
++// A chip's glyph is two thirds of it.
++TEST(SwitcherRulesTest, TheGlyphFollowsTheChip) {
++  EXPECT_EQ(16, SwitcherGlyphSize(kSwitcherChip));
++  EXPECT_EQ(12, SwitcherGlyphSize(kSwitcherMinChip));
+ }
+ 
+ // sidebar Y13: the rail's stack goes by the count, and measures itself.
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index e653b2d66b856..2cb50a1341234 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -72,7 +72,8 @@ constexpr int kIconSize = 24;
+ // behind the glyph, its corners a quarter of the chip.
+ constexpr SkAlpha kDropTargetAlpha = 0x8C;
+ constexpr int kDropTargetRadius = kIconSize / 4;
+-// The emoji itself, in pixels; the chip is the hit target around it.
++// The emoji itself, in pixels; the chip is the hit target around it. A
++// smaller chip (spaces B24) has a smaller one (SwitcherGlyphSize).
+ constexpr int kGlyphSize = 16;
+ constexpr int kRowInset = 12;
+ // Space between neighbouring chips.
+@@ -231,8 +232,13 @@ class SpaceChipButton : public views::LabelButton {
+ 
+   // LabelButton keeps label() protected; the row sets the glyph size.
+   void SetGlyphSize(int pixels) {
++    if (glyph_size_ == pixels) {
++      return;
++    }
++    glyph_size_ = pixels;
+     label()->SetFontList(label()->font_list().DeriveWithSizeDelta(
+         pixels - label()->font_list().GetFontSize()));
++    InvalidateLayout();
+   }
+ 
+   // The width the chip's text takes in the glyph's font, all of it: what a
+@@ -316,7 +322,7 @@ class SpaceChipButton : public views::LabelButton {
+       return layout;
+     }
+     gfx::Rect glyph = chip;
+-    glyph.ClampToCenteredSize(gfx::Size(kGlyphSize, kGlyphSize));
++    glyph.ClampToCenteredSize(gfx::Size(glyph_size_, glyph_size_));
+     const auto* const manager =
+         static_cast<const views::LayoutManagerBase*>(GetLayoutManager());
+     layout.child_layouts.emplace_back(
+@@ -344,6 +350,8 @@ class SpaceChipButton : public views::LabelButton {
+   std::u16string space_name_;
+   std::u16string isolation_mark_;
+   raw_ptr<stedding::IsolationMarkView> badge_ = nullptr;
++  // The glyph's size in pixels, which the badge is placed against.
++  int glyph_size_ = 0;
+ };
+ 
+ BEGIN_METADATA(SpaceChipButton)
+@@ -633,11 +641,31 @@ void SpaceSwitcherView::ApplyOverflow() {
+   // gaps up, and only chips that do not fit even then turn to dots: the row
+   // went to dots with room left for every chip (spaces B24, owner,
+   // 2026-10-01).
+-  const std::optional<int> row_gap =
+-      collapsed_ ? std::nullopt : SwitcherChipGap(width(), chips_.size());
+-  const bool overflow = collapsed_ ? SwitcherStackOverflows(chips_.size())
+-                                   : !row_gap.has_value();
+-  const int gap = row_gap.value_or(kSwitcherChipGap);
++  // Before that the inset closes up and the chips get smaller, and between
++  // dots the gaps close so the "+" stays in the row (owner, 2026-10-21).
++  const SwitcherRowForm form = collapsed_
++                                   ? SwitcherRowForm()
++                                   : SwitcherRowFormAt(width(), chips_.size());
++  const bool overflow =
++      collapsed_ ? SwitcherStackOverflows(chips_.size()) : form.dots;
++  const int gap = form.gap;
++  const int chip_size = form.chip;
++  const int glyph_size = SwitcherGlyphSize(chip_size);
++  if (!collapsed_) {
++    if (auto* const row_layout =
++            static_cast<views::FlexLayout*>(icon_row_->GetLayoutManager())) {
++      row_layout->SetInteriorMargin(gfx::Insets::VH(0, form.inset));
++    }
++  }
++  // The "+" is the chips' size, in the rail too.
++  if (auto* const add = views::AsViewClass<views::LabelButton>(add_button_)) {
++    add->SetImageModel(
++        views::Button::STATE_NORMAL,
++        ui::ImageModel::FromVectorIcon(vector_icons::kAdd2Icon,
++                                       ui::kColorLabelForegroundSecondary,
++                                       glyph_size + 2));
++    add->SetPreferredSize(gfx::Size(chip_size, chip_size));
++  }
+   const auto& spaces = model_->spaces();
+   std::vector<int> widths;
+   // The widest chip across the row's axis: the rail's column is as wide.
+@@ -667,8 +695,9 @@ void SpaceSwitcherView::ApplyOverflow() {
+     const int chip_width = SwitcherChipWidth(
+         overflow, active || drop,
+         (row_hovered_ || drop_target_.has_value()) && !collapsed_);
+-    widths.push_back(chip_width);
+     const bool dot = chip_width == kSwitcherDot;
++    widths.push_back(dot ? kSwitcherDot : chip_size);
++    chip->SetGlyphSize(glyph_size);
+     std::u16string text = dot ? std::u16string() : GlyphFor(space, model_index);
+     bool chord = false;
+ #if BUILDFLAG(IS_MAC)
+@@ -690,10 +719,10 @@ void SpaceSwitcherView::ApplyOverflow() {
+     // kept 24 DIP, and the "+", a DIP left of it while ⌘ was held (the
+     // owner, 2026-10-20; sidebar Y8).
+     const int chord_extra =
+-        chord ? std::max(0, chip->TextWidth() - kIconSize) : 0;
+-    const int full_width = kIconSize + chord_extra + chord_extra % 2;
++        chord ? std::max(0, chip->TextWidth() - chip_size) : 0;
++    const int full_width = chip_size + chord_extra + chord_extra % 2;
+     chip->SetPreferredSize(dot ? gfx::Size(kSwitcherDot, kSwitcherDot)
+-                               : gfx::Size(full_width, kIconSize));
++                               : gfx::Size(full_width, chip_size));
+     if (!dot) {
+       widest = std::max(widest, full_width);
+     }
+@@ -745,7 +774,7 @@ void SpaceSwitcherView::ApplyOverflow() {
+       // A chip widened for its chord takes the room from its own gap, while
+       // the gap has it: the chips stay where they were, give or take a
+       // pixel, and the row is as wide as SwitcherChipGap counted it.
+-      const int chip_gap = std::max(0, gap - (full_width - kIconSize));
++      const int chip_gap = std::max(0, gap - (full_width - chip_size));
+       chip->SetProperty(
+           views::kMarginsKey,
+           gfx::Insets::TLBR(0, chip_gap / 2, 0, chip_gap - chip_gap / 2));
+diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
+index 407d95d824cf5..b089c4db0c675 100644
+--- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
++++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
+@@ -13,6 +13,7 @@
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+@@ -20,6 +21,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
++#include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_collection_types.h"
+@@ -91,7 +93,8 @@ SpaceTabVisibilityController::SpaceTabVisibilityController(
+ #if !defined(OFFICIAL_BUILD)
+   if (stedding::kPinTabsForTesting.Get() > 0 ||
+       stedding::kFolderTabsForTesting.Get() > 0 ||
+-      stedding::kSpacePinTabsForTesting.Get() > 0) {
++      stedding::kSpacePinTabsForTesting.Get() > 0 ||
++      stedding::kSplitTabsForTesting.Get() > 0) {
+     // Deferred: this controller is built when the tab strip view is set, which
+     // is before the window's first tabs are inserted, so pinning here would
+     // find an empty strip.
+@@ -161,6 +164,18 @@ void SpaceTabVisibilityController::PinTabsForTesting() {
+                                     ui::PAGE_TRANSITION_TYPED, std::string());
+     }
+   }
++
++  // toolbar T41 (a capture): the first two tabs side by side, the first
++  // active, as the tab's menu would put them.
++  if (stedding::kSplitTabsForTesting.Get() > 0 &&
++      tab_strip_model_->count() >= 2 &&
++      !tab_strip_model_->GetTabAtIndex(0)->IsSplit() &&
++      !tab_strip_model_->GetTabAtIndex(1)->IsSplit()) {
++    tab_strip_model_->ActivateTabAt(0);
++    tab_strip_model_->AddToNewSplit(
++        {1}, split_tabs::SplitTabVisualData(),
++        split_tabs::SplitTabCreatedSource::kTabContextMenu);
++  }
+   UpdateTabVisibility();
+ }
+ 
+diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
+index 2aa3b18233360..4d4d61af7f5fe 100644
+--- a/chrome/test/stedding/address_band_browsertest.cc
++++ b/chrome/test/stedding/address_band_browsertest.cc
+@@ -1016,8 +1016,8 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
+ 
+ // toolbar T41: a split's row as the window's background paints it, along
+ // the row's middle, against the colours each part should have: over each
+-// pane up to the blend that pane's colour, and over the gap between them a
+-// colour between the two in every channel where they differ.
++// pane, up to its edge, that pane's colour, and over the gap between them the
++// window's ground, as the top gutter has it at that x.
+ testing::AssertionResult SplitRowReads(BrowserView* window,
+                                        SkColor left,
+                                        SkColor right) {
+@@ -1043,15 +1043,17 @@ testing::AssertionResult SplitRowReads(BrowserView* window,
+   gfx::Canvas canvas(window->size(), 1.0f, /*is_opaque=*/true);
+   window->background()->Paint(&canvas, window);
+   const SkBitmap& row = canvas.GetBitmap();
+-  // The blend runs 6 DIP past each side of the gap.
++  // The ground, where no row is: the window's top gutter at that x.
++  const int middle = (first.right() + second.x()) / 2;
+   const struct {
+     const char* where;
+     int x;
+     SkColor want;
+   } solid[] = {
+       {"over the left pane's middle", first.CenterPoint().x(), left},
+-      {"over the left pane, before the blend", first.right() - 8, left},
+-      {"over the right pane, after the blend", second.x() + 8, right},
++      {"over the left pane, by its edge", first.right() - 2, left},
++      {"over the gap", middle, row.getColor(middle, 2)},
++      {"over the right pane, by its edge", second.x() + 2, right},
+       {"over the right pane's middle", second.CenterPoint().x(), right},
+   };
+   for (const auto& point : solid) {
+@@ -1064,27 +1066,13 @@ testing::AssertionResult SplitRowReads(BrowserView* window,
+              << first.ToString() << " and " << second.ToString();
+     }
+   }
+-  if (left != right) {
+-    const int middle = (first.right() + second.x()) / 2;
+-    const SkColor got = row.getColor(middle, y);
+-    const auto between = [](U8CPU value, U8CPU a, U8CPU b) {
+-      return a == b ? value == a : std::min(a, b) < value && value < std::max(a, b);
+-    };
+-    if (!between(SkColorGetR(got), SkColorGetR(left), SkColorGetR(right)) ||
+-        !between(SkColorGetG(got), SkColorGetG(left), SkColorGetG(right)) ||
+-        !between(SkColorGetB(got), SkColorGetB(left), SkColorGetB(right))) {
+-      return testing::AssertionFailure()
+-             << "over the gap (x " << middle << ") the row is "
+-             << color_utils::SkColorToRgbaString(got)
+-             << ", not a blend of the two";
+-    }
+-  }
+   return testing::AssertionSuccess();
+ }
+ 
+ // toolbar T41 (the owner, 2026-10-20): in a split the row takes each pane's
+-// page colour over that pane, with a short blend over the gap between them,
+-// and its icons and text read on both parts. It follows a swap, a new
++// page colour over that pane, with the window's ground over the gap between
++// them (the owner, 2026-10-21: a blend there had read as a smudge), and its
++// icons and text read on both parts. It follows a swap, a new
+ // ratio, the other pane navigating and dark pages, and goes with the row
+ // hidden and with the split. Before, the row was the active pane's colour
+ // across its whole width, over the other page too.
+@@ -1138,7 +1126,7 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+       << light->CompletedFirstVisuallyNonEmptyPaint() << ", "
+       << dark->CompletedFirstVisuallyNonEmptyPaint();
+   {
+-    SCOPED_TRACE("each pane's colour over it, a blend between");
++    SCOPED_TRACE("each pane's colour over it, the ground between");
+     EXPECT_TRUE(base::test::RunUntil([&]() {
+       return SplitRowReads(view(), colour_of(light), colour_of(dark));
+     })) << SplitRowReads(view(), colour_of(light), colour_of(dark)).message();
+@@ -1154,8 +1142,8 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+   }
+   {
+     // Either pane's page can have no colour yet (it has not painted, or its
+-    // edge was not read): the row leaves the ground over it and the other
+-    // part fades into it. Reading the unknown side crashed the painter
++    // edge was not read): the row leaves the ground over it, and the other
++    // part ends at its own pane. Reading the unknown side crashed the painter
+     // whenever the left pane's colour was known and the right one's was not
+     // (FolderTabsTest.AFolderComesBackInOrder, 2026-10-20).
+     SCOPED_TRACE("a pane with no colour yet leaves the ground over it");
+@@ -1254,7 +1242,7 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, ASplitRowTakesEachPanesColour) {
+     })) << SplitRowReads(view(), colour_of(dark), colour_of(light)).message();
+   }
+   {
+-    SCOPED_TRACE("a new ratio moves the blend with the gap");
++    SCOPED_TRACE("a new ratio moves the gap");
+     const int old_middle = view()->multi_contents_view()->GetBoundsInScreen()
+                                .CenterPoint()
+                                .x();

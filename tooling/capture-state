@@ -6,6 +6,7 @@
 #                         [--settle <seconds>]
 #                         [--features <list>] [--disable-features <list>]
 #                         [--size WxH] [--url URL] [--page URL] [--build DIR]
+#                         [--sidebar-width N]
 #                         [chromium args and URLs...]
 #
 # Refuses to start while any other process with the app's bundle id runs
@@ -38,6 +39,7 @@
 #   --features 'SteddingArcStyleWindow:extra_spaces/2/pin_tabs/1/folder_tabs/3'
 #   --features 'SteddingArcStyleWindow:space_pin_tabs/1/drift_tabs/1'
 #   --features 'SteddingArcStyleWindow:open_command_bar/true'
+#   --features 'SteddingArcStyleWindow:split_tabs/1'   the first two tabs side by side
 #   --stedding-welcome=import          the welcome flow, on one step
 #   --seed collapsed                   the collapsed rail (a profile preference)
 #   --seed grey-dark                   dark mode with Customize Chrome's Grey
@@ -46,6 +48,7 @@
 #   --seed horizontal                  vertical tabs off: Chromium's horizontal tab strip
 #                                      (prefs::kVerticalTabsEnabled); horizontal-light and
 #                                      horizontal-dark set the window's scheme as well
+#   --sidebar-width N                  the open sidebar N DIP wide, with any seed
 # The list of params is in docs/HANDOFF.md.
 
 # shellcheck source-path=SCRIPTDIR
@@ -66,10 +69,10 @@ capture_cleanup() {
 
 main() {
   local out="" seed="" settle=18 features="" disable_features="" size="1400,880"
-  local build="release" url="" page="" page_settle=5
+  local build="release" url="" page="" page_settle=5 sidebar_width=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --out=*|--seed=*|--settle=*|--features=*|--size=*|--url=*|--disable-features=*|--build=*|--page=*|--page-settle=*)
+      --out=*|--seed=*|--settle=*|--features=*|--size=*|--url=*|--disable-features=*|--build=*|--page=*|--page-settle=*|--sidebar-width=*)
         set -- "${1%%=*}" "${1#*=}" "${@:2}"
         ;;
     esac
@@ -84,7 +87,8 @@ main() {
       --page)     page="$2"; shift 2 ;;
       --page-settle) page_settle="$2"; shift 2 ;;
       --build)    build="$2"; shift 2 ;;
-      -h|--help)  sed -n '2,45p' "$0"; exit 0 ;;
+      --sidebar-width) sidebar_width="$2"; shift 2 ;;
+      -h|--help)  sed -n '2,52p' "$0"; exit 0 ;;
       *)          break ;;
     esac
   done
@@ -145,6 +149,14 @@ main() {
       printf '{"vertical_tabs":{"enabled":false},"browser":{"theme":{"color_scheme2":%d}}}' \
         "$([ "$seed" = horizontal-light ] && echo 1 || echo 2)" > "$profile/Default/Preferences" ;;
   esac
+  if [ -n "$sidebar_width" ]; then
+    # prefs::kVerticalTabsUncollapsedWidth, merged into the seed's preferences.
+    python3 -c 'import json, os, sys
+path = sys.argv[1]
+prefs = json.load(open(path)) if os.path.exists(path) else {}
+prefs.setdefault("vertical_tabs", {})["uncollapsed_width"] = int(sys.argv[2])
+json.dump(prefs, open(path, "w"))' "$profile/Default/Preferences" "$sidebar_width"
+  fi
 
   # LaunchServices starts the app in /, so the log path must be absolute.
   local log_file
