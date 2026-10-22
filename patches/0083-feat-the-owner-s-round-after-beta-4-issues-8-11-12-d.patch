@@ -48,6 +48,14 @@ The owner's requests of 2026-10-22, after 0.3.0 beta 4:
   card's foot gives its memory, CPU and network rate, read every second,
   or "Asleep"; resource attribution for memory and CPU, the task manager
   for the network rate, run only while a line is due.
+- A row dragged across the Clear line takes the pin of the side it is
+  dropped on, where it is dropped, and the line is drawn during the drag
+  where the drop would leave it (pins H14; BACKLOG S-271). A loose row
+  dropped among the pins stayed loose and the run's last pin showed under
+  the line; a pin dropped among the loose rows stayed a pin.
+- The Copy Link button's press ends its ripple as a button's does, so its
+  fill goes with the pointer (copy-link L7; BACKLOG S-273, GitHub issue
+  11): a page action's press waits for a bubble that Copy Link never opens.
 
 Tests: CopyLinkTest.*; SpaceWindowTest's own-essential tests and
 IsolationMarkTest.PinningAWorkTabKeepsItInWorksSession; TabDropTest's five
@@ -59,7 +67,8 @@ APinSentHomeShowsItsHomeInItsRow; FolderTabsTest.AScrollMovesTheHoverToTheRowUnd
 SidebarClickTest.TheNewTabRowLightsUnderThePointer;
 HoverCardPictureTest.AScrollDropsACardWaitingToShow and
 ACardShowsItsTabsUseAfterAPause; TabResourceLineTest.*;
-PinnedRunTest.ALinkFromANestedPinnedFolderLeavesItInTheRun; and
+PinnedRunTest.ALinkFromANestedPinnedFolderLeavesItInTheRun and
+ARowDraggedAcrossTheLineTakesThePinThere; and
 stedding::test::WaitForRowsToSettleAtFramePace for a row moved into a
 nested folder.
 
@@ -82,8 +91,8 @@ the hover card).
  chrome/browser/ui/spaces/new_tab_space.cc     |   4 +-
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
  .../spaces/space_jar_navigation_throttle.cc   |   4 +-
- chrome/browser/ui/spaces/space_model.cc       | 360 +++++++-----
- chrome/browser/ui/spaces/space_model.h        |  66 +--
+ chrome/browser/ui/spaces/space_model.cc       | 369 +++++++-----
+ chrome/browser/ui/spaces/space_model.h        |  70 +--
  .../ui/spaces/space_model_window_unittest.cc  | 307 +++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
@@ -101,7 +110,7 @@ the hover card).
  chrome/browser/ui/toasts/api/toast_id.h       |   8 +-
  chrome/browser/ui/toasts/toast_service.cc     |  22 -
  chrome/browser/ui/views/page_action/BUILD.gn  |   9 +
- .../ui/views/page_action/page_action_view.cc  |   5 +-
+ .../ui/views/page_action/page_action_view.cc  |  17 +-
  ...edding_copy_link_page_action_controller.cc | 153 +++++
  ...tedding_copy_link_page_action_controller.h | 115 ++++
  .../ui/views/spaces/space_drag_target.cc      | 127 +++-
@@ -121,14 +130,15 @@ the hover card).
  .../tabs/common/stedding_tab_row_rules.cc     |   4 +
  .../tabs/common/stedding_tab_row_rules.h      |   7 +
  .../common/stedding_tab_row_rules_unittest.cc |  10 +
+ .../ui/views/tabs/common/tab_drag_handler.cc  |  70 +++
  .../ui/views/tabs/common/tab_strip_view.cc    |  93 ++-
  .../ui/views/tabs/common/tab_strip_view.h     |   1 +
  .../tabs/common/tab_strip_view_layout.cc      |  14 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |  28 +-
  .../browser/ui/views/tabs/common/tab_view.h   |   6 -
  .../common/unpinned_tab_container_view.cc     |   8 +
- .../tabs/common/unpinned_tab_container_view.h |  19 +
- .../unpinned_tab_container_view_layout.cc     |   5 +
+ .../tabs/common/unpinned_tab_container_view.h |  29 +
+ .../unpinned_tab_container_view_layout.cc     |  75 ++-
  .../browser/ui/views/tabs/hovercard/BUILD.gn  |  29 +-
  .../views/tabs/hovercard/fade_footer_view.cc  |  38 +-
  .../views/tabs/hovercard/fade_footer_view.h   |  13 +
@@ -142,11 +152,11 @@ the hover card).
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
- chrome/test/stedding/copy_link_browsertest.cc | 250 +++++++-
+ chrome/test/stedding/copy_link_browsertest.cc | 330 ++++++++++-
  .../test/stedding/folder_tabs_browsertest.cc  | 552 +++++++++++++++++-
  .../hover_card_picture_browsertest.cc         | 255 +++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
- .../test/stedding/pinned_run_browsertest.cc   |  67 +++
+ .../test/stedding/pinned_run_browsertest.cc   | 194 ++++++
  .../stedding/settings_spaces_browsertest.cc   |  19 +-
  .../stedding/sidebar_click_browsertest.cc     | 208 ++++++-
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
@@ -156,7 +166,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 86 files changed, 5217 insertions(+), 726 deletions(-)
+ 87 files changed, 5598 insertions(+), 727 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -432,7 +442,7 @@ index 9cb917131b6fe..28a5f4733fed5 100644
    }
    // A form a web page sends goes with the session the page was filled in:
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index ca531490e2626..9e994b2809984 100644
+index ca531490e2626..b3fad7709536c 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -638,6 +638,11 @@ void SpaceModel::SyncWithRegistry(bool seed) {
@@ -955,7 +965,23 @@ index ca531490e2626..9e994b2809984 100644
          ++count;
        }
      }
-@@ -3205,6 +3234,27 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
+@@ -3086,6 +3115,15 @@ void SpaceModel::SetSpacePinned(tabs::TabInterface* tab, bool pinned) {
+   }
+ }
+ 
++void SpaceModel::SetSpacePinnedInPlace(tabs::TabInterface* tab, bool pinned) {
++  if (!tab) {
++    return;
++  }
++  for (tabs::TabInterface* const each : SplitPeers(tab)) {
++    SetSpacePinnedOnOneTab(each, pinned, /*move=*/false);
++  }
++}
++
+ bool SpaceModel::IsFolderSpacePinned(
+     const tabs::FolderTabCollection* folder) const {
+   if (!folder) {
+@@ -3205,6 +3243,27 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
    }
    return parent && parent->type() == tabs::TabCollection::Type::UNPINNED;
  }
@@ -983,7 +1009,7 @@ index ca531490e2626..9e994b2809984 100644
  }  // namespace
  
  bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
-@@ -3215,14 +3265,12 @@ bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
+@@ -3215,14 +3274,12 @@ bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
    // folders F38: a loose tab in a pinned folder -- a link opened from one of
    // its pins, which the folder takes in (F25) -- leaves it for the rows
    // under the line, as one opened from a pin does; the folder would else
@@ -1003,7 +1029,7 @@ index ca531490e2626..9e994b2809984 100644
        if (each == tab) {
          continue;
        }
-@@ -3255,6 +3303,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
+@@ -3255,6 +3312,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
        !tab_strip_model_->delegate()->IsTabStripEditable()) {
      return;
    }
@@ -1017,7 +1043,7 @@ index ca531490e2626..9e994b2809984 100644
  }
  
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index f79b6994af4cc..7330277302e09 100644
+index f79b6994af4cc..da93531fea4fd 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
 @@ -120,12 +120,6 @@ class SpaceModel : public TabStripModelObserver,
@@ -1082,7 +1108,18 @@ index f79b6994af4cc..7330277302e09 100644
    // The session extra data that describes `tab`'s place in Spaces: its Space
    // and, when set, its per-Space pin. Both the incremental writes and the
    // startup rebuild of the session log emit exactly this, so the two cannot
-@@ -615,6 +625,11 @@ class SpaceModel : public TabStripModelObserver,
+@@ -477,6 +487,10 @@ class SpaceModel : public TabStripModelObserver,
+   // under the line (pins H14). Every caller (menu, Cmd-D) gets the same
+   // result. To unpin several tabs in their order, unpin the last first.
+   void SetSpacePinned(tabs::TabInterface* tab, bool pinned);
++  // The same pin, with `tab` (and a split's other pane) left where it is: a
++  // drop across the Clear line has already put it there (pins H14, BACKLOG
++  // S-271).
++  void SetSpacePinnedInPlace(tabs::TabInterface* tab, bool pinned);
+ 
+   // folders F38, pins H14 (the owner, 2026-10-20): a folder in the pinned
+   // run, as in Arc. A top-level folder whose tabs are all Space-pinned is a
+@@ -615,6 +629,11 @@ class SpaceModel : public TabStripModelObserver,
    std::string IsolatedJarOf(const SpaceId& id) const;
    // Moves every tab of `from` to `to`, saving and rebinding each.
    void RefileTabs(const SpaceId& from, const SpaceId& to);
@@ -1094,7 +1131,7 @@ index f79b6994af4cc..7330277302e09 100644
    // SetActiveSpace's tail once `active_id_` has changed from `previous`: the
    // visible tab, the observers, the session and the sleep timers.
    // `tell_registry` is false inside the registry's own notification.
-@@ -695,6 +710,8 @@ class SpaceModel : public TabStripModelObserver,
+@@ -695,6 +714,8 @@ class SpaceModel : public TabStripModelObserver,
    // during its first load -- so it is the address asked for, not the page it
    // lands on (PLAN.md TAB-26). The first commit settles each, once.
    std::set<tabs::TabHandle> homes_before_commit_;
@@ -1103,7 +1140,7 @@ index f79b6994af4cc..7330277302e09 100644
    // Records, or forgets, that `tab`'s home was just taken before a commit.
    void NoteHomeTakenBeforeCommit(const tabs::TabInterface* tab);
    // The tab the user last had active in each Space, so coming back to a Space
-@@ -707,6 +724,8 @@ class SpaceModel : public TabStripModelObserver,
+@@ -707,6 +728,8 @@ class SpaceModel : public TabStripModelObserver,
    void RecordActivation(tabs::TabInterface* tab);
    void AddToHistory(tabs::TabInterface* tab);
    std::map<SpaceId, std::vector<tabs::TabHandle>> history_;
@@ -1112,7 +1149,7 @@ index f79b6994af4cc..7330277302e09 100644
    // tabs R34: the restore is over; the tab on screen is the first the user
    // has.
    void OnSessionRestored(Profile* profile, int tabs_restored);
-@@ -775,29 +794,6 @@ class SpaceModel : public TabStripModelObserver,
+@@ -775,29 +798,6 @@ class SpaceModel : public TabStripModelObserver,
    std::optional<LastRoute> last_route_;
    int routing_paused_ = 0;
  
@@ -2345,10 +2382,18 @@ index 6aa54a5eb5ade..3601e56694003 100644
  
    # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
 diff --git a/chrome/browser/ui/views/page_action/page_action_view.cc b/chrome/browser/ui/views/page_action/page_action_view.cc
-index 2ca2cf18c0d46..adc86345be175 100644
+index 2ca2cf18c0d46..2f385d4ff99cc 100644
 --- a/chrome/browser/ui/views/page_action/page_action_view.cc
 +++ b/chrome/browser/ui/views/page_action/page_action_view.cc
-@@ -371,10 +371,13 @@ void PageActionView::NotifyClick(const ui::Event& event) {
+@@ -38,6 +38,7 @@
+ #include "ui/gfx/geometry/insets.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/animation/ink_drop.h"
++#include "ui/views/animation/ink_drop_state.h"
+ #include "ui/views/background.h"
+ #include "ui/views/controls/button/single_animated_image_container.h"
+ #include "ui/views/view_class_properties.h"
+@@ -371,15 +372,29 @@ void PageActionView::NotifyClick(const ui::Event& event) {
    click_callback_.Run(trigger_source);
  
    IconLabelBubbleView::NotifyClick(event);
@@ -2363,6 +2408,22 @@ index 2ca2cf18c0d46..adc86345be175 100644
    if (auto side_panel_trigger =
            GetSidePanelOpenTriggerForPageAction(action_item_->GetActionId())) {
      builder = std::move(builder).SetProperty(kSidePanelOpenTriggerKey,
+                                              *side_panel_trigger);
+   }
++  // Stedding copy-link L7 (BACKLOG S-273, GitHub issue 11): the press's
++  // ripple ends as a button's does, before the action runs. An action that
++  // anchors a bubble or a panel to the button lights it again; one that
++  // anchors nothing -- Copy Link copies and is done -- left the ripple
++  // pending, and the button's fill with it, after the pointer had gone.
++  if (views::InkDrop::Get(this)->GetInkDrop()->GetTargetInkDropState() ==
++      views::InkDropState::ACTION_PENDING) {
++    views::InkDrop::Get(this)->AnimateToState(
++        views::InkDropState::ACTION_TRIGGERED,
++        ui::LocatedEvent::FromIfValid(&event));
++  }
+   action_item_->InvokeAction(std::move(builder).Build());
+ }
+ 
 diff --git a/chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc b/chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
 new file mode 100644
 index 0000000000000..eb8f3294cf380
@@ -4326,6 +4387,119 @@ index b2fe54f849e0c..08de8d7512665 100644
  TEST(TabRowRulesTest, ACollapsedPinnedRunKeepsTheClearLine) {
    EXPECT_TRUE(ShowsClearLine(/*pinned_rows_shown=*/2,
                               /*pinned_run_collapsed=*/false,
+diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+index bb5aa4aecd3f5..7ef0fb7a695ee 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+@@ -7,11 +7,16 @@
+ #include <algorithm>
+ #include <memory>
+ #include <optional>
++#include <vector>
+ 
+ #include "base/check_deref.h"
+ #include "base/functional/bind.h"
++#include "base/location.h"
+ #include "base/notreached.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/types/to_address.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+@@ -22,6 +27,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_link_drop_handler.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
++#include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/dragging/drag_session_data.h"
+ #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+ #include "chrome/browser/ui/views/tabs/shared/tab_strip_types.h"
+@@ -122,6 +128,33 @@ const TabGroup& TabGroupDataFromNode(const TabCollectionNode& node) {
+   return *group_data;
+ }
+ 
++// Stedding (pins H14, BACKLOG S-271): the pin a release across the Clear line
++// gives each dropped tab that is a row of the sidebar's list itself, the tab
++// left where the drop put it. A tab the drop sent into a folder, a Space chip
++// or another window is not the line's.
++void SettleDroppedPins(const std::vector<tabs::TabHandle>& dropped,
++                       bool pinned) {
++  for (const tabs::TabHandle& handle : dropped) {
++    tabs::TabInterface* const tab = handle.Get();
++    if (!tab || tab->IsPinned()) {
++      continue;
++    }
++    const tabs::TabCollection* parent = tab->GetParentCollection();
++    if (parent && parent->type() == tabs::TabCollection::Type::SPLIT) {
++      parent = parent->GetParentCollection();
++    }
++    if (!parent || parent->type() != tabs::TabCollection::Type::UNPINNED) {
++      continue;
++    }
++    BrowserWindowInterface* const window = tab->GetBrowserWindowInterface();
++    spaces::SpaceModel* const model =
++        window ? spaces::SpaceModel::From(window) : nullptr;
++    if (model && model->IsSpacePinned(tab) != pinned) {
++      model->SetSpacePinnedInPlace(tab, pinned);
++    }
++  }
++}
++
+ // Stedding: the strip range of a folder's tabs. They sit together in the
+ // strip, and an emptied folder leaves the tree, so there is a first tab.
+ gfx::Range GetFolderRange(const TabCollectionNode& folder_node,
+@@ -396,12 +429,49 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+     return;
+   }
+ 
++  // Stedding (pins H14, BACKLOG S-271): a release in the sidebar's list gives
++  // the rows dragged there the pin of the side of the Clear line they landed
++  // on, the side the line was drawn on during the drag
++  // (UnpinnedTabContainerView::dragged_rows_pinned()). Read before the drag
++  // ends, which clears its state; set once the release is done.
++  std::optional<bool> pinned;
++  std::vector<tabs::TabHandle> dropped;
++  if (reason == EndDragReason::kComplete && drag_controller_ &&
++      drag_controller_->attached_context() == this &&
++      drag_controller_->GetSessionData().dragging_groups.empty()) {
++    const DragSessionData& session = drag_controller_->GetSessionData();
++    for (TabSlotView* const slot : session.attached_views()) {
++      const views::View* const row = ViewFromTabSlot(slot);
++      const auto* const container =
++          row ? views::AsViewClass<UnpinnedTabContainerView>(row->parent())
++              : nullptr;
++      if (container && container->IsHandlingDrag()) {
++        pinned = container->dragged_rows_pinned();
++        break;
++      }
++    }
++    for (const TabDragData& data : session.tab_drag_data_) {
++      if (pinned && data.contents && !data.pinned) {
++        if (tabs::TabInterface* const tab =
++                tabs::TabInterface::MaybeGetFromContents(data.contents)) {
++          dropped.push_back(tab->GetHandle());
++        }
++      }
++    }
++  }
++
+   // Let TabDragController decide whether this reason should actually end the
+   // drag (e.g. capture loss while dragging a detached window) and destroy
+   // itself when appropriate.
+   if (drag_controller_) {
+     drag_controller_->EndDrag(reason);
+   }
++
++  if (pinned && !dropped.empty()) {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&SettleDroppedPins, std::move(dropped), *pinned));
++  }
+ }
+ 
+ void TabDragHandlerImpl::HandleDraggedTabsIntoNode(
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 index d88e45a66c970..76edb2058d43a 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
@@ -4612,10 +4786,24 @@ index aa2f61cc204e2..09d239c9886d9 100644
    TabCollectionZOrderManager::PaintChildren(info);
    if (!row_drop_indicator_y_) {
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 958ed52e516cd..f7b88033f1f16 100644
+index 958ed52e516cd..52f218e554a65 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-@@ -102,6 +102,21 @@ class UnpinnedTabContainerView
+@@ -78,6 +78,13 @@ class UnpinnedTabContainerView
+       std::unique_ptr<views::View> new_tab_row,
+       base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
+   views::View* space_boundary_clear_line() { return boundary_clear_line_; }
++  // Stedding (pins H14, BACKLOG S-271): while rows of this container are
++  // dragged, whether a release here puts them in the Space's pinned run, over
++  // the Clear line, or under it; nothing while no row of it is dragged. The
++  // vertical layout works it out on every pass and draws the line by it.
++  std::optional<bool> dragged_rows_pinned() const {
++    return dragged_rows_pinned_;
++  }
+   bool IsAnimatingForTesting() const { return layout_manager_->is_animating(); }
+ 
+   // Stedding (pins H17): the Space's pinned run is collapsed while it holds
+@@ -102,6 +109,21 @@ class UnpinnedTabContainerView
    // The bar's bounds in screen coordinates, or nothing while none is shown.
    std::optional<gfx::Rect> GetRowDropIndicatorBoundsInScreenForTesting() const;
  
@@ -4637,7 +4825,7 @@ index 958ed52e516cd..f7b88033f1f16 100644
    // views::View:
    void PaintChildren(const views::PaintInfo& info) override;
  
-@@ -123,6 +138,10 @@ class UnpinnedTabContainerView
+@@ -123,6 +145,10 @@ class UnpinnedTabContainerView
    void ResetCollectionNode();
  
    raw_ptr<TabCollectionNode> collection_node_;
@@ -4648,11 +4836,108 @@ index 958ed52e516cd..f7b88033f1f16 100644
  
    raw_ptr<views::View> boundary_clear_line_ = nullptr;
  
+@@ -132,6 +158,9 @@ class UnpinnedTabContainerView
+ 
+   bool pinned_run_collapsed_ = false;
+ 
++  // Written by the layout, which is const; see dragged_rows_pinned().
++  mutable std::optional<bool> dragged_rows_pinned_;
++
+   // folders F38: where the drop indicator's bar is centred, if shown.
+   std::optional<int> row_drop_indicator_y_;
+ 
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index 4b6552b2b1d2d..53aba7bf8f97b 100644
+index 4b6552b2b1d2d..e1dde5823b09d 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-@@ -397,6 +397,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.h"
+ 
+ #include <algorithm>
++#include <optional>
+ #include <vector>
+ 
+ #include "base/feature_list.h"
+@@ -276,10 +277,77 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+   // it never puts the pins after it under the line (PLAN.md TAB-24, SPC-34).
+   views::View* const clear_line = tab_container_view->boundary_clear_line_;
+   views::View* const new_tab_row = tab_container_view->boundary_new_tab_row_;
+-  const auto is_space_pinned = [&](views::View* child) {
++  const auto pinned_in_model = [&](views::View* child) {
+     return tab_container_view->is_space_pinned_ &&
+            tab_container_view->is_space_pinned_.Run(child);
+   };
++  // pins H14 (BACKLOG S-271): rows dragged across the line take the pin of
++  // the side they are dropped on (TabDragHandlerImpl::EndDrag), so while they
++  // are dragged the line is drawn by where they would go, not by their pin.
++  // A loose row dragged in among the pins put the line above itself and the
++  // pins after it, and a pin dragged among the loose rows kept them under
++  // the line. Before a pin the rows are in the run, after a loose row they
++  // are not; between the run's last pin and the first loose row their middle
++  // against the line's says, the line drawn on their own side of them until
++  // they are past it.
++  std::optional<bool> dragged_pinned;
++  if (tab_container_view->is_space_pinned_ &&
++      tab_container_view->IsHandlingDrag()) {
++    views::View* before = nullptr;
++    views::View* after = nullptr;
++    views::View* first_dragged = nullptr;
++    int dragged_height = 0;
++    bool dragged_group = false;
++    for (auto* child : children) {
++      if (!IsChildVisibleInContainer(tab_container_view, focused_group_id,
++                                     child)) {
++        continue;
++      }
++      if (tab_container_view->GetVisualDataForDraggedView(*child)) {
++        first_dragged = first_dragged ? first_dragged : child;
++        dragged_height += child->GetPreferredSize().height();
++        dragged_group |= views::IsViewClass<TabGroupView>(child);
++      } else if (!first_dragged) {
++        before = child;
++      } else if (!after) {
++        after = child;
++      }
++    }
++    if (first_dragged && !dragged_group) {
++      if (after && pinned_in_model(after)) {
++        dragged_pinned = true;
++      } else if (before && !pinned_in_model(before)) {
++        dragged_pinned = false;
++      } else {
++        // The run's edge, and the line and the New Tab row under it.
++        const int edge = before ? before->bounds().bottom() : 0;
++        int boundary = 0;
++        if (clear_line) {
++          boundary += clear_line->GetPreferredSize().height();
++        }
++        if (new_tab_row && new_tab_row->GetVisible()) {
++          boundary += new_tab_row->GetPreferredSize().height();
++        }
++        const int middle =
++            tab_container_view->GetVisualDataForDraggedView(*first_dragged)
++                ->offset.y() +
++            dragged_height / 2;
++        // A loose row joins only a run that is there: with no pin over the
++        // line, as in a private window, the line stays a line.
++        dragged_pinned = pinned_in_model(first_dragged)
++                             ? middle <= edge + dragged_height + boundary / 2
++                             : before && middle < edge + boundary / 2;
++      }
++    }
++  }
++  tab_container_view->dragged_rows_pinned_ = dragged_pinned;
++  const auto is_space_pinned = [&](views::View* child) {
++    if (dragged_pinned &&
++        tab_container_view->GetVisualDataForDraggedView(*child)) {
++      return *dragged_pinned;
++    }
++    return pinned_in_model(child);
++  };
+   int visible_unpinned_after_boundary = 0;
+   int visible_pinned_before_boundary = 0;
+   {
+@@ -397,6 +465,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
    if (height > 0) {
      height -= vertical_padding;
    }
@@ -5736,10 +6021,10 @@ index b73ee0bbc7ac4..dc13c5fbd7f26 100644
  
    TabStripModel* tabs() { return browser()->tab_strip_model(); }
 diff --git a/chrome/test/stedding/copy_link_browsertest.cc b/chrome/test/stedding/copy_link_browsertest.cc
-index 81eddea0a4a79..3a513f7af7235 100644
+index 81eddea0a4a79..fc0d3bd6144d9 100644
 --- a/chrome/test/stedding/copy_link_browsertest.cc
 +++ b/chrome/test/stedding/copy_link_browsertest.cc
-@@ -5,54 +5,120 @@
+@@ -5,54 +5,128 @@
  // Copy a Markdown link (⌥⇧⌘C; docs/features/copy-link.md, PLAN.md WIN-5): on
  // a page with no title, at an address carrying tracking parameters, the
  // link copied names the host and keeps the address without the trackers.
@@ -5760,6 +6045,7 @@ index 81eddea0a4a79..3a513f7af7235 100644
 +#include <vector>
  
 +#include "base/memory/raw_ptr.h"
++#include "base/notreached.h"
 +#include "base/strings/strcat.h"
  #include "base/strings/utf_string_conversions.h"
 +#include "base/test/run_until.h"
@@ -5793,10 +6079,17 @@ index 81eddea0a4a79..3a513f7af7235 100644
 +#include "ui/base/models/image_model.h"
 +#include "ui/events/event.h"
 +#include "ui/events/event_constants.h"
++#include "ui/events/event_utils.h"
++#include "ui/events/types/event_type.h"
 +#include "ui/gfx/geometry/point.h"
 +#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/animation/ink_drop.h"
++#include "ui/views/animation/ink_drop_host.h"
++#include "ui/views/animation/ink_drop_state.h"
 +#include "ui/views/controls/button/button.h"
 +#include "ui/views/test/button_test_api.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget.h"
  #include "url/gurl.h"
 +#include "url/url_constants.h"
  
@@ -5864,7 +6157,7 @@ index 81eddea0a4a79..3a513f7af7235 100644
      ui::Clipboard::DestroyClipboardForCurrentThread();
      InProcessBrowserTest::TearDownOnMainThread();
    }
-@@ -64,6 +130,49 @@ class CopyLinkTest : public InProcessBrowserTest {
+@@ -64,6 +138,76 @@ class CopyLinkTest : public InProcessBrowserTest {
          text.GetCallback());
      return text.Get();
    }
@@ -5900,6 +6193,33 @@ index 81eddea0a4a79..3a513f7af7235 100644
 +        ui::EF_LEFT_MOUSE_BUTTON));
 +  }
 +
++  // `type`, a pointer's move, press or release at `screen_point`, handed to
++  // `widget`'s views as the window hands a person's.
++  static void SendMouse(views::Widget* widget,
++                        ui::EventType type,
++                        const gfx::Point& screen_point) {
++    views::View* const root = widget->GetRootView();
++    gfx::Point in_root = screen_point;
++    views::View::ConvertPointFromScreen(root, &in_root);
++    const int button =
++        type == ui::EventType::kMouseMoved ? 0 : ui::EF_LEFT_MOUSE_BUTTON;
++    const ui::MouseEvent event(type, in_root, in_root, ui::EventTimeForNow(),
++                               button, button);
++    switch (type) {
++      case ui::EventType::kMouseMoved:
++        root->OnMouseMoved(event);
++        break;
++      case ui::EventType::kMousePressed:
++        root->OnMousePressed(event);
++        break;
++      case ui::EventType::kMouseReleased:
++        root->OnMouseReleased(event);
++        break;
++      default:
++        NOTREACHED();
++    }
++  }
++
 +  // Whether `button` draws the check mark in place of the link.
 +  static bool ShowsTheCheckMark(page_actions::PageActionView* button) {
 +    const std::optional<ui::ImageModel>& image =
@@ -5914,7 +6234,7 @@ index 81eddea0a4a79..3a513f7af7235 100644
  };
  
  IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
-@@ -79,6 +188,139 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
+@@ -79,6 +223,184 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
    EXPECT_EQ(std::u16string::npos, copied.find(u"fbclid"));
  }
  
@@ -5962,6 +6282,51 @@ index 81eddea0a4a79..3a513f7af7235 100644
 +    return !ShowsTheCheckMark(button);
 +  })) << "the check mark stayed";
 +  EXPECT_TRUE(button->GetVisible());
++}
++
++// copy-link L7 (BACKLOG S-273, GitHub issue 11): the button lets its hover go
++// after a click. The pointer moved onto it lights it; a press and a release
++// there copy the link; the pointer moved off over the page, the fill goes,
++// and it stays gone once the check mark has turned back into the link. The
++// fill stayed on after a click, with the pointer gone.
++IN_PROC_BROWSER_TEST_F(CopyLinkTest, TheButtonLetsGoOfItsHoverAfterAClick) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("shop.test", "/title1.html")));
++  ASSERT_TRUE(WaitForButton(browser(), true));
++  page_actions::PageActionView* const button = ButtonOf(browser());
++  views::Widget* const widget = button->GetWidget();
++  ASSERT_TRUE(widget);
++  BrowserView* const browser_view =
++      BrowserView::GetBrowserViewForBrowser(browser());
++  const gfx::Point on = button->GetBoundsInScreen().CenterPoint();
++  const gfx::Point off =
++      browser_view->contents_container()->GetBoundsInScreen().CenterPoint();
++  views::InkDrop* const ink = views::InkDrop::Get(button)->GetInkDrop();
++  ASSERT_TRUE(ink);
++  const auto lit = [&]() {
++    return ink->IsHighlightFadingInOrVisible() ||
++           (ink->GetTargetInkDropState() != views::InkDropState::HIDDEN &&
++            ink->GetTargetInkDropState() != views::InkDropState::DEACTIVATED);
++  };
++
++  SendMouse(widget, ui::EventType::kMouseMoved, on);
++  ASSERT_TRUE(base::test::RunUntil([&]() { return lit(); }))
++      << "no hover fill under the pointer";
++  SendMouse(widget, ui::EventType::kMousePressed, on);
++  SendMouse(widget, ui::EventType::kMouseReleased, on);
++  EXPECT_TRUE(ShowsTheCheckMark(button)) << "the click copied nothing";
++  SendMouse(widget, ui::EventType::kMouseMoved, off);
++  EXPECT_TRUE(base::test::RunUntil([&]() { return !lit(); }))
++      << "the hover fill stayed with the pointer gone: highlight "
++      << ink->IsHighlightFadingInOrVisible() << ", ink drop state "
++      << static_cast<int>(ink->GetTargetInkDropState()) << ", button state "
++      << static_cast<int>(button->GetState()) << ", hovered "
++      << button->IsMouseHovered();
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return !ShowsTheCheckMark(button);
++  })) << "the check mark stayed";
++  EXPECT_FALSE(lit()) << "the fill came back with the link";
++  EXPECT_EQ(views::Button::STATE_NORMAL, button->GetState());
 +}
 +
 +// copy-link L7, L3: an Option-click (Alt-click) copies the Markdown link, as
@@ -7211,10 +7576,22 @@ index 90707112ea954..23b9cd0fc6096 100644
  
  // sessions S32, sidebar Y14: the floating name of a Space with an
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
-index 18624c45d4cf8..54539cab634bb 100644
+index 18624c45d4cf8..aea87f5e1c66d 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc
 +++ b/chrome/test/stedding/pinned_run_browsertest.cc
-@@ -792,6 +792,73 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, AFolderDraggedOverTheLineJoinsTheRun) {
+@@ -14,9 +14,11 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/functional/callback.h"
+ #include "base/run_loop.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/test/bind.h"
+ #include "base/test/run_until.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/prefs/session_startup_pref.h"
+@@ -792,6 +794,73 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, AFolderDraggedOverTheLineJoinsTheRun) {
    }
  }
  
@@ -7288,6 +7665,136 @@ index 18624c45d4cf8..54539cab634bb 100644
  // folders F38, pins H14 (the owner, 2026-10-21: "Why no reordering? How
  // about normal pins?"): a pinned folder's header dragged within the run puts
  // the folder where it is dropped, as a pin's row goes, between two pins or
+@@ -1002,4 +1071,129 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, AFoldersPlaceInTheRunSurvivesARestart) {
+   EXPECT_FALSE(IsAboveTheLine(tail));
+ }
+ 
++// pins H14 (BACKLOG S-271, the owner on 0.3.0 beta 4 and beta 5): a loose
++// tab's row dragged up over the Clear line joins the Space's pinned run as a
++// pin, at the place it was dropped, and every pin stays a pin above the line;
++// a pin's row dragged under the line leaves the run, unpinned, at the place
++// it was dropped, and the pins after it stay pins. Nothing decided the pin at
++// the drop: the dragged tab stayed loose among the pins, and the sidebar drew
++// the line above the first loose row, so the run's last pin showed under it.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest,
++                       ARowDraggedAcrossTheLineTakesThePinThere) {
++  tabs::TabInterface* const a = tabs().GetActiveTab();
++  model().SetSpacePinned(a, true);
++  tabs::TabInterface* const b = AddBlankTab();
++  model().SetSpacePinned(b, true);
++  tabs::TabInterface* const c = AddBlankTab();
++  model().SetSpacePinned(c, true);
++  tabs::TabInterface* const loose = AddBlankTab();
++  // A row that stays under the line throughout, so the line is drawn.
++  tabs::TabInterface* const tail = AddBlankTab();
++  tabs::TabInterface* const last = AddBlankTab();
++  ASSERT_TRUE(IsAboveTheLine(c));
++  ASSERT_FALSE(IsAboveTheLine(loose));
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  // Every row of `pins` a pin above the line, and every row of `rows` loose
++  // under it; the strip's order is the order of `order`.
++  const auto expect = [&](const std::vector<const tabs::TabInterface*>& pins,
++                          const std::vector<const tabs::TabInterface*>& rows,
++                          const std::vector<const tabs::TabInterface*>& order) {
++    for (const tabs::TabInterface* const tab : pins) {
++      EXPECT_TRUE(model().IsSpacePinned(tab)) << "row " << Index(tab);
++      EXPECT_TRUE(IsAboveTheLine(tab)) << "row " << Index(tab);
++    }
++    for (const tabs::TabInterface* const tab : rows) {
++      EXPECT_FALSE(model().IsSpacePinned(tab)) << "row " << Index(tab);
++      EXPECT_FALSE(IsAboveTheLine(tab)) << "row " << Index(tab);
++    }
++    for (size_t i = 1; i < order.size(); ++i) {
++      EXPECT_EQ(Index(order[i - 1]) + 1, Index(order[i])) << "place " << i;
++    }
++  };
++  // A press on `tab`'s row and a drag in steps to `to`, the window laying
++  // out between two, then the release there, as a person's drag goes. With
++  // `then`, the drag goes on to where it says once the rows have made room
++  // for the dragged one, and the release is there: a person aims at the
++  // rows as they are drawn by then.
++  const auto drag_row_to =
++      [&](const tabs::TabInterface* tab, const gfx::Point& to,
++          const base::RepeatingCallback<gfx::Point()>& then) {
++        ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++        views::test::RunScheduledLayout(widget());
++        const TabView* const row =
++            stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++        ASSERT_TRUE(row) << "the sidebar shows no row for the tab";
++        gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++        stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed,
++                                      from);
++        gfx::Point target = to;
++        for (int pass = 0; pass < (then ? 2 : 1); ++pass) {
++          constexpr int kSteps = 20;
++          for (int i = 1; i <= kSteps; ++i) {
++            stedding::test::SendLeftMouse(
++                widget(), ui::EventType::kMouseDragged,
++                gfx::Point(from.x() + (target.x() - from.x()) * i / kSteps,
++                           from.y() + (target.y() - from.y()) * i / kSteps));
++            EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++          }
++          from = target;
++          if (then) {
++            target = then.Run();
++          }
++        }
++        stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased,
++                                      from);
++        base::RunLoop().RunUntilIdle();
++        EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++      };
++  // The middle of the room between `upper`'s row and `lower`'s, as drawn
++  // when asked: during a drag, the dragged row's place.
++  const auto between = [&](const tabs::TabInterface* upper,
++                           const tabs::TabInterface* lower) {
++    return base::BindLambdaForTesting([this, upper, lower]() {
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++      views::test::RunScheduledLayout(widget());
++      const TabView* const top =
++          stedding::test::FindDrawnRow(widget()->GetRootView(), upper);
++      const TabView* const bottom =
++          stedding::test::FindDrawnRow(widget()->GetRootView(), lower);
++      EXPECT_TRUE(top && bottom) << "the sidebar shows no row for a tab";
++      return top && bottom
++                 ? gfx::Point(top->GetBoundsInScreen().CenterPoint().x(),
++                              (top->GetBoundsInScreen().bottom() +
++                               bottom->GetBoundsInScreen().y()) /
++                                  2)
++                 : gfx::Point();
++    });
++  };
++
++  {
++    SCOPED_TRACE("a loose row dropped between the second and third pins");
++    ASSERT_NO_FATAL_FAILURE(
++        drag_row_to(loose, JustInsideTheTopOf(c), between(b, c)));
++    expect({a, b, loose, c}, {tail, last}, {a, b, loose, c, tail, last});
++  }
++  {
++    SCOPED_TRACE("a pin dropped between two rows under the line");
++    ASSERT_NO_FATAL_FAILURE(
++        drag_row_to(b, JustInsideTheTopOf(last), between(tail, last)));
++    expect({a, loose, c}, {tail, b, last}, {a, loose, c, tail, b, last});
++  }
++  {
++    // Between the run's last pin and the first row under the line, the
++    // row's middle over the line's: just under the last pin's row.
++    SCOPED_TRACE("a loose row dropped on the line joins the run's end");
++    views::test::RunScheduledLayout(widget());
++    const TabView* const row_c =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), c);
++    ASSERT_TRUE(row_c);
++    const gfx::Rect bounds = row_c->GetBoundsInScreen();
++    ASSERT_NO_FATAL_FAILURE(drag_row_to(
++        tail, gfx::Point(bounds.CenterPoint().x(), bounds.bottom() + 3),
++        base::NullCallback()));
++    expect({a, loose, c, tail}, {b, last}, {a, loose, c, tail, b, last});
++  }
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
 index c1e809a950931..36e41584c77de 100644
 --- a/chrome/test/stedding/settings_spaces_browsertest.cc
