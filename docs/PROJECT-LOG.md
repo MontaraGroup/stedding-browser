@@ -7,6 +7,22 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-22, small hours -- the checks after beta 2, and 0.3.0 beta 3
+
+After beta 2 the Windows suites were run again in full with the one-at-a-time list fixed (green
+on the release and checks builds), and AddressSanitizer was built and run, which beta 2's
+notes had said was not. It found no memory error, but two page-colour tests timed out on its
+slow build. One waited for a late read that had already run (a test fault; the test now starts
+the read itself). The other showed a real fault: a read of the page's top edge that found no
+surface to copy yet, as a page just shown on a slow machine can, was dropped with no retry, and
+with nothing else due the row kept the page's declared colour, both parts of a split in two runs
+of five. Reads that find no surface, or whose copy fails, are now tried again (toolbar T31,
+`PageColourRowTest.AReadWithNoSurfaceYetIsTriedAgain`, failing without it). S-252 did not
+reproduce with each rail row put under the real pointer by moving the test's window; the move
+stays in the test. The defects still open were brought up to date: what is left is the owner's
+decisions or checks that need real input or hardware. 0.3.0 beta 3 carries the fix, with every
+suite green on both platforms and AddressSanitizer clean.
+
 ## 2026-10-21, night -- child tabs, the owner's Arc import checked, 0.3.0 beta 2
 
 The owner asked, before sleeping, for every bug and check that could be done, child tabs, and a
