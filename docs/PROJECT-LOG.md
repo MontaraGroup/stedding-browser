@@ -10,6 +10,44 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-22, night -- after beta 5: a drag across the Clear line, the Copy Link button's hover, a session for every new Space
+
+The owner, going to sleep, asked for every GitHub issue and the plan for the next release to be
+reviewed and the bugs fixed, with the Mac's pointer and the PC free to use. The two defects
+first, each reproduced in a browser test before it was touched. `S-271`: nothing decided a
+tab's pin when it was dropped across the Clear line, so a loose tab dropped among the pins
+stayed loose and the sidebar drew the line above it, with the run's last pin under it; a pin
+dropped among the loose rows stayed a pin. A row dragged across the line now takes the pin of
+the side it lands on, where it lands, and the line is drawn during the drag where the drop
+would leave it (pins H14). `S-273` (GitHub issue 11): the Copy Link button's press waited, as
+every page action's does, for a bubble to take the button, and Copy Link opens none, so the
+press's ripple and the fill with it stayed after the pointer left; the press now ends as a
+button's does (copy-link L7). Both went into patch 0083, which owns both. Then the setting
+promised on issue 8, `S-274`: "Give every new Space its own session", off by default, which
+asks whether the Spaces that share the session should have their own too (patch 0084,
+sessions S35, settings T29). Issues 14, 15 and 16 arrived after the handoff: the address
+field that moves on focus is the field as specified, and essentials that shrink and a drag
+into the essentials are features, so all three wait for the owner (`S-275` to `S-277`).
+`tooling/check-pin` says the pin is behind: Windows' stable channel serves 157.0.8103.15 and
+156.0.8078.49 to 0.5% of users (`S-278`).
+
+Evidence. The new tests failed before their fixes (`PinnedRunTest.ARowDraggedAcrossTheLineTakesThePinThere`:
+the dropped tab loose, the last pin under the line; `CopyLinkTest.TheButtonLetsGoOfItsHoverAfterAClick`:
+the ink drop held at its pending state with the pointer gone) and pass after, with
+`SettingsSpacesTest.EveryNewSpaceCanHaveItsOwnSession` and `SpaceRegistryTest.ANewSpaceTakesTheOwnSessionSetting`.
+On the Mac's release build, with the real pointer on a copy of the app: a loose tab dragged
+between two pins joined the run there, every pin over the line; a pin dragged among the loose
+rows left the run; the Copy Link button lit under the pointer, showed the check mark after a
+click and had no fill once the pointer left; the new setting asked "One Space still shares the
+session ... One open page reloads ...", Turn On for All gave the Space its own session, and a
+Space made with "+" came with one. On the PC (the series before the setting's wording fix)
+`win-release` passed 1033 unit tests and 619 browser tests. The Mac's sweep, the PC's checks
+and ASan builds: TBD.
+
+`tooling/drive` refused every point on the Mac: a waiting notification keeps a window of
+Notification Centre over the whole screen on macOS 27; the harness now lets through what is
+not on the notifications' stack (trap 130).
+
 ## 2026-10-22, day -- the owner's round after beta 4, GitHub issues 8 and 11, 0.3.0 beta 5
 
 The owner, awake, read two GitHub issues and listed what beta 4 got wrong. Patch 0083 carries
