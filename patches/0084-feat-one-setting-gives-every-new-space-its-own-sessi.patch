@@ -1,0 +1,422 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 22 Oct 2026 18:58:05 -0400
+Subject: feat: one setting gives every new Space its own session (issue 8)
+
+GitHub issue 8 asked, after beta 5's essentials of a Space's own, for
+every Space to be independent without turning Independent session on
+Space by Space (BACKLOG S-274). "Give every new Space its own session"
+in Settings -> Stedding -> Spaces (settings T29, sessions S35) writes
+stedding.spaces.own_session, off by default:
+
+- While it is on, a Space added to the profile's registry starts with a
+  jar of its own, as Independent session turned on at once gives it
+  (SpaceRegistry::Add); each Space's own switch still turns it off.
+- Turned on with Spaces that still share the session, the page asks
+  whether they should have their own too, naming how many and how many
+  of their open pages would reload (the count sessions S10 asks with);
+  "Turn On for All" turns each on, "New Spaces Only" leaves them.
+- Turned off, it changes no Space: a new Space shares the session again
+  and the others keep what they have (sessions S7).
+
+Tests: SpaceRegistryTest.ANewSpaceTakesTheOwnSessionSetting,
+SteddingPrefsTest.EveryPreferenceRegistersWithItsDefault (off), and
+SettingsSpacesTest.EveryNewSpaceCanHaveItsOwnSession through the page.
+
+Why: people who keep every Space apart (GitHub issue 8) had to turn the
+session on in each Space, and again for every Space they added.
+Removable when: never; it is a product setting.
+---
+ .../api/settings_private/prefs_util.cc        |  3 +
+ .../stedding_page/stedding_page.html.ts       | 23 ++++++
+ .../settings/stedding_page/stedding_page.ts   | 71 ++++++++++++++++
+ chrome/browser/ui/spaces/space_registry.cc    | 11 ++-
+ .../ui/spaces/space_registry_unittest.cc      | 29 +++++++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |  1 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |  4 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |  2 +-
+ .../browser/ui/webui/settings/settings_ui.cc  | 27 +++++++
+ .../stedding/settings_spaces_browsertest.cc   | 81 +++++++++++++++++++
+ 10 files changed, 250 insertions(+), 2 deletions(-)
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index c3e08fff74bfb..a5cd8dafdde14 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -388,6 +388,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+   // routing D4, settings T23.
+   (*s_allowlist)[stedding::prefs::kSpaceNotices] =
+       settings_api::PrefType::kBoolean;
++  // sessions S35, settings T29.
++  (*s_allowlist)[stedding::prefs::kSpacesOwnSession] =
++      settings_api::PrefType::kBoolean;
+   // toolbar T45, settings T24.
+   (*s_allowlist)[stedding::prefs::kFullscreenHint] =
+       settings_api::PrefType::kBoolean;
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 3b3a15d81426b..660036ebb8725 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -464,6 +464,29 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingSpaceNoticesLabel}"
+       sub-label="$i18n{steddingSpaceNoticesSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="spacesOwnSession"
++      class="hr"
++      pref-key="stedding.spaces.own_session"
++      label="$i18n{steddingSpacesOwnSessionLabel}"
++      sub-label="$i18n{steddingSpacesOwnSessionSubLabel}"
++      @change="${this.onSpacesOwnSessionChange_}">
++  </settings-toggle-button>
++  <cr-dialog id="ownSessionDialog" @close="${this.onOwnSessionDialogClose_}">
++    <div slot="title">$i18n{steddingOwnSessionAllTitle}</div>
++    <div slot="body">
++      <div class="secondary">${this.ownSessionBody_()}</div>
++    </div>
++    <div slot="button-container">
++      <cr-button class="cancel-button" @click="${this.onOwnSessionCancelClick_}">
++        $i18n{steddingOwnSessionNewOnly}
++      </cr-button>
++      <cr-button class="action-button"
++          @click="${this.onOwnSessionConfirmClick_}">
++        $i18n{steddingOwnSessionAll}
++      </cr-button>
++    </div>
++  </cr-dialog>
+   <div class="hr settings-box" id="externalDefault">
+     <div class="flex">
+       <div class="label">$i18n{steddingExternalDefaultLabel}</div>
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+index 6a029b5fbc31a..b3f27bfb8dd8b 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+@@ -29,6 +29,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ 
+ import type {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.js';
++import type {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
+ import {getSearchManager} from '../search_settings.js';
+ import type {SettingsPlugin} from '../settings_main/settings_plugin.js';
+ 
+@@ -113,6 +114,7 @@ export class SettingsSteddingPageElement extends
+       arcImporting_: {type: Boolean},
+       hasShortcutReference_: {type: Boolean},
+       pendingIsolation_: {type: Object},
++      pendingOwnSession_: {type: Object},
+       hoverDelayOptions_: {type: Array},
+       darkPages_: {type: Object},
+       darkPagesError_: {type: String},
+@@ -130,6 +132,11 @@ export class SettingsSteddingPageElement extends
+   // PLAN.md SPC-9: the isolation change that waits on its dialog.
+   protected accessor pendingIsolation_:
+       {space: SteddingSpace, isolate: boolean, pages: number}|null = null;
++  // sessions S35 (BACKLOG S-274): the Spaces that still shared the session
++  // when "Give every new Space its own session" was turned on, and their
++  // open pages, while the question waits.
++  protected accessor pendingOwnSession_:
++      {ids: string[], pages: number}|null = null;
+   // dark-pages Dk12, Dk20: the mode and the lists, from the browser; the
+   // line under the add field when what was typed is no site (Dk13).
+   protected accessor darkPages_:
+@@ -298,6 +305,70 @@ export class SettingsSteddingPageElement extends
+     this.pendingIsolation_ = null;
+   }
+ 
++  // sessions S35 (BACKLOG S-274): turned on, the setting gives the Spaces
++  // made from now on their own session, and asks whether the Spaces that
++  // share one now should have theirs too, saying what that reloads (S10).
++  // Turned off, it changes no Space: each keeps its own switch.
++  protected async onSpacesOwnSessionChange_(e: Event) {
++    if (!(e.target as SettingsToggleButtonElement).checked) {
++      return;
++    }
++    const shared =
++        this.spaces_.filter(space => space.canIsolate && !space.isolated);
++    if (shared.length === 0) {
++      return;
++    }
++    let pages = 0;
++    for (const space of shared) {
++      pages += Number(await sendWithPromise(
++                   'steddingCountSpacePages', space.id)) ||
++          0;
++    }
++    this.pendingOwnSession_ = {ids: shared.map(space => space.id), pages};
++    await this.updateComplete;
++    this.ownSessionDialog_().showModal();
++  }
++
++  private ownSessionDialog_(): CrDialogElement {
++    return this.shadowRoot.querySelector<CrDialogElement>(
++        '#ownSessionDialog')!;
++  }
++
++  protected ownSessionBody_(): string {
++    const pending = this.pendingOwnSession_;
++    if (!pending) {
++      return '';
++    }
++    const spaces = pending.ids.length === 1 ?
++        loadTimeData.getString('steddingOwnSessionOneSpace') :
++        loadTimeData.getStringF(
++            'steddingOwnSessionSpaces', String(pending.ids.length));
++    if (pending.pages === 0) {
++      return spaces;
++    }
++    const pages = pending.pages === 1 ?
++        loadTimeData.getString('steddingOwnSessionOnePage') :
++        loadTimeData.getStringF(
++            'steddingOwnSessionPages', String(pending.pages));
++    return `${spaces} ${pages}`;
++  }
++
++  protected onOwnSessionConfirmClick_() {
++    const pending = this.pendingOwnSession_;
++    this.ownSessionDialog_().close();
++    for (const id of pending?.ids || []) {
++      chrome.send('steddingSetSpaceIsolated', [id, true]);
++    }
++  }
++
++  protected onOwnSessionCancelClick_() {
++    this.ownSessionDialog_().cancel();
++  }
++
++  protected onOwnSessionDialogClose_() {
++    this.pendingOwnSession_ = null;
++  }
++
+   // routing D5: the dropdown's choices, the active Space first. A Space with
+   // an Independent session says so after its name (sessions S32): links sent
+   // there open in its own cookies.
+diff --git a/chrome/browser/ui/spaces/space_registry.cc b/chrome/browser/ui/spaces/space_registry.cc
+index 2801a27ec0b24..ce296cf0c8c07 100644
+--- a/chrome/browser/ui/spaces/space_registry.cc
++++ b/chrome/browser/ui/spaces/space_registry.cc
+@@ -41,7 +41,16 @@ RegistryEntry* SpaceRegistry::FindMutable(const SpaceId& id) {
+ 
+ SpaceId SpaceRegistry::Add(std::string name, SkColor color) {
+   const SpaceId id = SpaceId::GenerateNew();
+-  entries_.emplace_back(id, std::move(name), color);
++  RegistryEntry& entry = entries_.emplace_back(id, std::move(name), color);
++  // sessions S35 (BACKLOG S-274): with "Give every new Space its own
++  // session" on, the Space starts with a jar of its own, as Independent
++  // session turned on at once would give it; the switch on each Space
++  // still turns it off.
++  if (prefs_ && prefs_->FindPreference(stedding::prefs::kSpacesOwnSession) &&
++      prefs_->GetBoolean(stedding::prefs::kSpacesOwnSession)) {
++    entry.profile_id = base::Token::CreateRandom().ToString();
++    entry.isolated = true;
++  }
+   Changed();
+   return id;
+ }
+diff --git a/chrome/browser/ui/spaces/space_registry_unittest.cc b/chrome/browser/ui/spaces/space_registry_unittest.cc
+index b16ccaeb04c94..91cae740fa7fd 100644
+--- a/chrome/browser/ui/spaces/space_registry_unittest.cc
++++ b/chrome/browser/ui/spaces/space_registry_unittest.cc
+@@ -54,6 +54,35 @@ TEST(SpaceRegistryTest, RoundTrip) {
+       SpaceRegistry::FromValue(SpaceRegistry::ToValue(again.entries())).size());
+ }
+ 
++// sessions S35 (BACKLOG S-274): a Space added while "Give every new Space
++// its own session" is on starts with a jar of its own; one added while it is
++// off shares the session, and turning it on changes no Space already there.
++TEST(SpaceRegistryTest, ANewSpaceTakesTheOwnSessionSetting) {
++  TestingPrefServiceSimple prefs;
++  prefs.registry()->RegisterListPref(stedding::prefs::kSpaceRegistry);
++  prefs.registry()->RegisterBooleanPref(stedding::prefs::kSpacesOwnSession,
++                                        false);
++  SpaceRegistry registry(&prefs);
++  const SpaceId shared = registry.Add("Work", SK_ColorBLUE);
++  prefs.SetBoolean(stedding::prefs::kSpacesOwnSession, true);
++  const SpaceId own = registry.Add("Mail", SK_ColorGREEN);
++  prefs.SetBoolean(stedding::prefs::kSpacesOwnSession, false);
++  const SpaceId later = registry.Add("Play", SK_ColorRED);
++
++  ASSERT_TRUE(registry.Find(shared) && registry.Find(own) &&
++              registry.Find(later));
++  EXPECT_FALSE(registry.Find(shared)->isolated);
++  EXPECT_TRUE(registry.Find(own)->isolated);
++  EXPECT_FALSE(registry.Find(own)->profile_id.empty());
++  EXPECT_FALSE(registry.Find(later)->isolated);
++  // The jar is kept with the Space, as Independent session turned on keeps
++  // it (sessions S2).
++  SpaceRegistry again(&prefs);
++  ASSERT_TRUE(again.Find(own));
++  EXPECT_TRUE(again.Find(own)->isolated);
++  EXPECT_EQ(registry.Find(own)->profile_id, again.Find(own)->profile_id);
++}
++
+ // sessions S2: turning isolation on writes a token that survives the round
+ // trip; a second EnsureIsolated leaves it.
+ TEST(SpaceRegistryTest, IsolatedProfileIdRoundTrips) {
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 999e303fe8c13..707528a19d9f3 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -66,6 +66,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // ever wrote it, so a profile that has a value keeps its user's choice.
+   registry->RegisterBooleanPref(kUndoToast, false);
+   registry->RegisterBooleanPref(kSpaceNotices, false);
++  registry->RegisterBooleanPref(kSpacesOwnSession, false);
+   registry->RegisterBooleanPref(kFullscreenHint, false);
+   registry->RegisterListPref(kArcImportedIds);
+   registry->RegisterDictionaryPref(kArcImportedSpaces);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 7b01d88c3b5bd..c016a1d803476 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -143,6 +143,10 @@ inline constexpr char kNestChildTabs[] = "stedding.tabs.nest_children";
+ // routing D4, settings T23: "Opened in <Space>", with Undo, after a routed
+ // open. Off by default (the owner, 2026-10-21).
+ inline constexpr char kSpaceNotices[] = "stedding.spaces.notices";
++// sessions S35, settings T29 (BACKLOG S-274, GitHub issue 8): every Space
++// made from now on starts with an Independent session (sessions S10). Off by
++// default: Spaces share one session, as Spaces of one Arc profile do.
++inline constexpr char kSpacesOwnSession[] = "stedding.spaces.own_session";
+ // toolbar T45, settings T24: full screen the person starts (the menu, the
+ // green button, the chord, F11, the command bar) shows Chromium's note on how
+ // to leave it. Off by default (the owner, 2026-10-21). A page's own full
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index 7a660cf5a93dd..6ed9aa3c1acd6 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -36,7 +36,7 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   }
+   for (const char* name :
+        {kPeekEnabled, kToolbarHideWithSidebar, kSidebarPageFlush, kUndoToast,
+-        kSpaceNotices, kFullscreenHint, kNestChildTabs}) {
++        kSpaceNotices, kFullscreenHint, kNestChildTabs, kSpacesOwnSession}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_FALSE(service.GetBoolean(name)) << name;
+   }
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 0fb18670d9ac6..e955a23d09ccd 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -896,6 +896,33 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingSpaceNoticesSubLabel",
+       "\u201COpened in Work\u201D, with Undo, when a site\u2019s rule "
+       "below opens it in its Space.");
++  // sessions S35, settings T29 (BACKLOG S-274, GitHub issue 8).
++  html_source->AddString("steddingSpacesOwnSessionLabel",
++                         "Give every new Space its own session");
++  html_source->AddString(
++      "steddingSpacesOwnSessionSubLabel",
++      "A Space you add keeps its own sign-ins, cookies and essentials. The "
++      "switch on each Space below still changes it.");
++  html_source->AddString("steddingOwnSessionAllTitle",
++                         "Give your other Spaces their own sessions too?");
++  html_source->AddString(
++      "steddingOwnSessionOneSpace",
++      "One Space still shares the session. With its own, it starts signed "
++      "out, with cookies of its own.");
++  html_source->AddString(
++      "steddingOwnSessionSpaces",
++      "$1 Spaces still share the session. With their own, each starts "
++      "signed out, with cookies of its own.");
++  html_source->AddString(
++      "steddingOwnSessionOnePage",
++      "One open page reloads. A page holding changes you have not saved "
++      "keeps them until you leave it.");
++  html_source->AddString(
++      "steddingOwnSessionPages",
++      "$1 open pages reload. A page holding changes you have not saved "
++      "keeps them until you leave it.");
++  html_source->AddString("steddingOwnSessionNewOnly", "New Spaces Only");
++  html_source->AddString("steddingOwnSessionAll", "Turn On for All");
+   html_source->AddString("steddingExternalDefaultLabel",
+                          "Open links from other apps in");
+   html_source->AddString("steddingExternalDefaultSubLabel",
+diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
+index 36e41584c77de..6cc0e6d674ede 100644
+--- a/chrome/test/stedding/settings_spaces_browsertest.cc
++++ b/chrome/test/stedding/settings_spaces_browsertest.cc
+@@ -1053,4 +1053,85 @@ IN_PROC_BROWSER_TEST_F(SettingsDarkPagesTest,
+   })) << "a site clears the line";
+ }
+ 
++// sessions S35, settings T29 (BACKLOG S-274, GitHub issue 8): "Give every new
++// Space its own session", through the page. Turned on, it asks whether the
++// Spaces that still share the session should have their own too, naming how
++// many and how many open pages would reload, and "Turn On for All" gives each
++// its own; a Space added while it is on starts with its own. Turned off, it
++// asks nothing, a new Space shares the session again, and the others keep
++// what they have.
++IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, EveryNewSpaceCanHaveItsOwnSession) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  ASSERT_FALSE(prefs->GetBoolean(stedding::prefs::kSpacesOwnSession))
++      << "off by default";
++  // The page itself is in a Space with a session of its own already, so the
++  // answer reloads no page the test reads.
++  const spaces::SpaceId home = model->active_id();
++  model->SetSpaceIsolated(home, true);
++  const spaces::SpaceId work = model->AddSpace("Work", SK_ColorBLUE)->id();
++  const spaces::SpaceId mail = model->AddSpace("Mail", SK_ColorGREEN)->id();
++  ASSERT_FALSE(model->SpaceIsIsolated(work)) << "a new Space shares";
++  // Work holds one web page; Mail holds none.
++  ASSERT_TRUE(model->SetActiveSpace(work));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), embedded_test_server()->GetURL("/title1.html"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  ASSERT_TRUE(model->SetActiveSpace(home));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
++                                           GURL("chrome://settings/stedding")));
++  content::WebContents* const page =
++      browser()->GetTabStripModel()->GetActiveWebContents();
++  const auto run = [&](std::string_view body) {
++    return content::EvalJs(page, OnThePage(body));
++  };
++  const auto question_open = [&]() {
++    return run("const d = pick('#ownSessionDialog'); return !!d && d.open;")
++        .ExtractBool();
++  };
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return run("return !!pick('#spacesOwnSession');").ExtractBool();
++  })) << "the page has no such switch";
++
++  {
++    SCOPED_TRACE("turned on, it asks about the Spaces that share");
++    EXPECT_EQ("", run("pick('#spacesOwnSession').click(); return '';"));
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return prefs->GetBoolean(stedding::prefs::kSpacesOwnSession);
++    }));
++    ASSERT_TRUE(base::test::RunUntil([&]() { return question_open(); }))
++        << "no question for the Spaces that share";
++    const std::string body =
++        run("return pick('#ownSessionDialog .secondary').textContent.trim();")
++            .ExtractString();
++    EXPECT_NE(std::string::npos, body.find("2 Spaces still share")) << body;
++    EXPECT_NE(std::string::npos, body.find("One open page reloads")) << body;
++    EXPECT_EQ("", run("pick('#ownSessionDialog .action-button').click(); "
++                      "return '';"));
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return model->SpaceIsIsolated(work) && model->SpaceIsIsolated(mail);
++    })) << "Turn On for All left a Space sharing";
++    EXPECT_FALSE(question_open());
++  }
++  {
++    SCOPED_TRACE("a Space added while it is on has its own session");
++    const spaces::SpaceId play = model->AddSpace("Play", SK_ColorRED)->id();
++    EXPECT_TRUE(model->SpaceIsIsolated(play));
++  }
++  {
++    SCOPED_TRACE("turned off, a new Space shares and the others stay");
++    EXPECT_EQ("", run("pick('#spacesOwnSession').click(); return '';"));
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return !prefs->GetBoolean(stedding::prefs::kSpacesOwnSession);
++    }));
++    EXPECT_FALSE(question_open()) << "turning it off asked something";
++    const spaces::SpaceId later = model->AddSpace("Later", SK_ColorCYAN)->id();
++    EXPECT_FALSE(model->SpaceIsIsolated(later));
++    EXPECT_TRUE(model->SpaceIsIsolated(work) && model->SpaceIsIsolated(mail));
++  }
++}
++
+ }  // namespace
