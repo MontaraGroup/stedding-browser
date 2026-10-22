@@ -48,8 +48,8 @@ Removable when: never; the look is Stedding's own.
  .../stedding/theme/page_bar_color_supplier.cc |  51 +-
  .../stedding/theme/page_bar_color_supplier.h  |  23 +-
  .../theme/page_bar_color_supplier_unittest.cc |  39 ++
- .../theme/page_theme_color_controller.cc      | 282 +++++++++--
- .../theme/page_theme_color_controller.h       |  47 ++
+ .../theme/page_theme_color_controller.cc      | 315 ++++++++++--
+ .../theme/page_theme_color_controller.h       |  57 +++
  .../views/frame/stedding_window_background.cc | 205 +++++++-
  .../views/frame/stedding_window_background.h  |  14 +-
  .../frame/vertical_tab_strip_region_view.cc   |  46 +-
@@ -67,10 +67,10 @@ Removable when: never; the look is Stedding's own.
  .../ui/views/tabs/common/tab_strip_view.cc    |  65 ++-
  chrome/browser/ui/views/tabs/tab.cc           |  13 +-
  chrome/test/stedding/BUILD.gn                 |   1 +
- .../test/stedding/address_band_browsertest.cc | 333 +++++++++++++
+ .../test/stedding/address_band_browsertest.cc | 339 +++++++++++++
  .../stedding/horizontal_strip_browsertest.cc  | 408 ++++++++++++++++
  .../test/stedding/sidebar_rail_browsertest.cc | 458 +++++++++++++++++-
- 26 files changed, 2443 insertions(+), 76 deletions(-)
+ 26 files changed, 2489 insertions(+), 79 deletions(-)
  create mode 100644 chrome/browser/ui/views/stedding/glyph_ink.cc
  create mode 100644 chrome/browser/ui/views/stedding/glyph_ink.h
  create mode 100644 chrome/browser/ui/views/stedding/glyph_ink_unittest.cc
@@ -314,7 +314,7 @@ index 320991c1592e4..a4a75b3582c98 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
-index d5167a50b99d4..131c017227f9c 100644
+index d5167a50b99d4..969253b0b8483 100644
 --- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
 +++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
 @@ -5,6 +5,7 @@
@@ -341,7 +341,17 @@ index d5167a50b99d4..131c017227f9c 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  
-@@ -61,6 +64,33 @@ constexpr base::TimeDelta kSampleScrollMid = base::Milliseconds(700);
+@@ -56,11 +59,43 @@ constexpr base::TimeDelta kSampleAfterPaint = base::Milliseconds(150);
+ constexpr base::TimeDelta kSampleAfterStyle = base::Milliseconds(100);
+ constexpr base::TimeDelta kSampleAfterLoad = base::Milliseconds(300);
+ constexpr base::TimeDelta kSampleLate = base::Milliseconds(1500);
++// T31: a read due while the page on screen has no surface to copy yet (just
++// shown, on a slow or busy machine) is tried again this much later, at most
++// kSurfaceRetries times in a row.
++constexpr base::TimeDelta kSampleRetry = base::Milliseconds(100);
++constexpr int kSurfaceRetries = 20;
+ constexpr base::TimeDelta kSampleScroll = base::Milliseconds(250);
+ constexpr base::TimeDelta kSampleScrollMid = base::Milliseconds(700);
  constexpr base::TimeDelta kSampleScrollEnd = base::Milliseconds(1600);
  constexpr base::TimeDelta kSampleTimeout = base::Seconds(1);
  
@@ -375,7 +385,7 @@ index d5167a50b99d4..131c017227f9c 100644
  // toolbar T20: one of 16 levels per channel, the nearest -- 0x00, 0x11 ...
  // 0xFF -- so white stays white and black black, and no channel moves by more
  // than 8.
-@@ -74,6 +104,44 @@ SkColor BarKey(SkColor colour) {
+@@ -74,6 +109,44 @@ SkColor BarKey(SkColor colour) {
  
  }  // namespace
  
@@ -420,7 +430,7 @@ index d5167a50b99d4..131c017227f9c 100644
  DEFINE_USER_DATA(PageThemeColorController);
  
  // static
-@@ -88,6 +156,7 @@ PageThemeColorController::PageThemeColorController(
+@@ -88,6 +161,7 @@ PageThemeColorController::PageThemeColorController(
      : browser_(browser),
        private_window_(private_window),
        scoped_user_data_(browser.GetUnownedUserDataHost(), *this) {
@@ -428,7 +438,7 @@ index d5167a50b99d4..131c017227f9c 100644
    browser_->GetTabStripModel()->AddObserver(this);
    if (tabs::TabInterface* const active =
            browser_->GetTabStripModel()->GetActiveTab()) {
-@@ -98,6 +167,7 @@ PageThemeColorController::PageThemeColorController(
+@@ -98,6 +172,7 @@ PageThemeColorController::PageThemeColorController(
        base::BindRepeating(&PageThemeColorController::OnDarkPagesChanged,
                            base::Unretained(this)));
    Refresh();
@@ -436,7 +446,7 @@ index d5167a50b99d4..131c017227f9c 100644
  }
  
  PageThemeColorController::~PageThemeColorController() {
-@@ -116,7 +186,19 @@ PageThemeColorController::bar_supplier() const {
+@@ -116,7 +191,19 @@ PageThemeColorController::bar_supplier() const {
    // field and the results dropdown take it (toolbar T20) -- so each channel
    // goes to its nearest level, white staying white: dropping the low four
    // bits drew a white page's focused field 0xF0F0F0 on its white row.
@@ -457,7 +467,7 @@ index d5167a50b99d4..131c017227f9c 100644
    if (private_window_) {
      // private V9: a private window's key holds this supplier where it held
      // the private mark, so the supplier is marked to stand for it. Shared by
-@@ -124,11 +206,12 @@ PageThemeColorController::bar_supplier() const {
+@@ -124,11 +211,12 @@ PageThemeColorController::bar_supplier() const {
      // cached by the key, and a freed supplier's address could come back for
      // a normal window's key, whose provider would then be the graphite one.
      static base::NoDestructor<
@@ -472,7 +482,7 @@ index d5167a50b99d4..131c017227f9c 100644
        SetMarksPrivateWindow(supplier.get(), true);
      }
      return supplier.get();
-@@ -138,15 +221,34 @@ PageThemeColorController::bar_supplier() const {
+@@ -138,15 +226,34 @@ PageThemeColorController::bar_supplier() const {
    // would then get the normal window's cached, non-graphite provider. At most
    // 4096 colours, a few bytes each.
    static base::NoDestructor<
@@ -509,7 +519,7 @@ index d5167a50b99d4..131c017227f9c 100644
  base::CallbackListSubscription PageThemeColorController::AddChangedCallback(
      base::RepeatingClosure callback) {
    return changed_callbacks_.Add(std::move(callback));
-@@ -157,11 +259,16 @@ void PageThemeColorController::OnTabStripModelChanged(
+@@ -157,11 +264,16 @@ void PageThemeColorController::OnTabStripModelChanged(
      const TabStripModelChange& change,
      const TabStripSelectionChange& selection) {
    if (selection.active_tab_changed()) {
@@ -526,7 +536,7 @@ index d5167a50b99d4..131c017227f9c 100644
      if (content::WebContents* const contents = web_contents();
          contents && contents->CompletedFirstVisuallyNonEmptyPaint()) {
        ScheduleTopSamples({kSampleAfterShown});
-@@ -169,6 +276,14 @@ void PageThemeColorController::OnTabStripModelChanged(
+@@ -169,6 +281,14 @@ void PageThemeColorController::OnTabStripModelChanged(
    }
  }
  
@@ -541,7 +551,7 @@ index d5167a50b99d4..131c017227f9c 100644
  void PageThemeColorController::OnBackgroundColorChanged() {
    Refresh();
    ScheduleTopSamples({kSampleAfterStyle});
-@@ -235,12 +350,31 @@ void PageThemeColorController::OnDarkPagesChanged() {
+@@ -235,12 +355,31 @@ void PageThemeColorController::OnDarkPagesChanged() {
    // theme colour and the background Blink reports once the page has
    // repainted.
    TabStripModel* const model = browser_->GetTabStripModel();
@@ -574,7 +584,7 @@ index d5167a50b99d4..131c017227f9c 100644
    content::WebContents* const contents = web_contents();
    if (!decision_changes(contents)) {
      return;
-@@ -267,24 +401,8 @@ void PageThemeColorController::Refresh() {
+@@ -267,24 +406,8 @@ void PageThemeColorController::Refresh() {
      // colour; then the page's own background, the way Safari tints its bar,
      // so a white page gets a white bar and a dark page a dark one even
      // without a <meta name="theme-color"> (T3).
@@ -601,7 +611,7 @@ index d5167a50b99d4..131c017227f9c 100644
      // A reload: the new Page starts with no colour of its own, and it reports
      // one only when it differs from the last colour the WebContents sent
      // (WebContentsImpl::OnBackgroundColorChanged keeps that on the
-@@ -311,6 +429,67 @@ void PageThemeColorController::Refresh() {
+@@ -311,6 +434,67 @@ void PageThemeColorController::Refresh() {
    SetColor(color);
  }
  
@@ -669,39 +679,64 @@ index d5167a50b99d4..131c017227f9c 100644
  void PageThemeColorController::ScheduleTopSamples(
      std::initializer_list<base::TimeDelta> delays) {
    if (!web_contents()) {
-@@ -344,8 +523,14 @@ void PageThemeColorController::OnSampleTimer() {
+@@ -344,23 +528,43 @@ void PageThemeColorController::OnSampleTimer() {
  }
  
  void PageThemeColorController::SampleTop() {
 -  content::WebContents* const contents = web_contents();
 -  if (!contents || sample_in_flight_ ||
-+  SampleTopOf(web_contents(), sample_in_flight_);
++  bool retry = SampleTopOf(web_contents(), sample_in_flight_);
 +  // T41: the split's other pane is on screen beside it.
-+  SampleTopOf(partner(), partner_sample_in_flight_);
++  retry |= SampleTopOf(partner(), partner_sample_in_flight_);
++  // T31: a page on screen whose surface could not be copied yet is read
++  // again shortly. The read was dropped, and with no other read due the row
++  // kept the page's declared colour over a header of another (the PC's
++  // AddressSanitizer build, 2026-10-22: both panes of a split, 2 runs in 5).
++  if (!retry) {
++    surface_retries_ = 0;
++  } else if (surface_retries_ < kSurfaceRetries) {
++    ++surface_retries_;
++    ScheduleTopSamples({kSampleRetry});
++  }
 +}
 +
-+void PageThemeColorController::SampleTopOf(content::WebContents* contents,
++bool PageThemeColorController::SampleTopOf(content::WebContents* contents,
 +                                           bool& in_flight) {
 +  if (!contents || in_flight ||
        contents->GetVisibility() != content::Visibility::VISIBLE) {
-     return;
+-    return;
++    return false;
    }
-@@ -360,7 +545,7 @@ void PageThemeColorController::SampleTop() {
+   content::RenderWidgetHostView* const view =
+       contents->GetRenderWidgetHostView();
++  if (surface_failures_for_testing_ > 0) {
++    --surface_failures_for_testing_;
++    return true;
++  }
+   if (!view || !view->IsSurfaceAvailableForCopy()) {
+-    return;
++    return true;
+   }
+   const gfx::Size viewport = view->GetVisibleViewportSize();
+   const int width = viewport.width() - kPageTopRightMargin;
+   if (width < kPageTopMinSamples * kPageTopSampleSpacing ||
        viewport.height() < kPageTopStripHeight) {
-     return;
+-    return;
++    return false;
    }
 -  sample_in_flight_ = true;
 +  in_flight = true;
    // The result may come back on another sequence; the controller and the
    // page live on this one.
    view->CopyFromSurface(
-@@ -371,14 +556,33 @@ void PageThemeColorController::SampleTop() {
+@@ -371,14 +575,41 @@ void PageThemeColorController::SampleTop() {
            base::SequencedTaskRunner::GetCurrentDefault(),
            base::BindOnce(&PageThemeColorController::OnTopSampled,
                           weak_factory_.GetWeakPtr(),
 -                         contents->GetPrimaryPage().GetWeakPtr())));
 +                         contents->GetPrimaryPage().GetWeakPtr(),
 +                         base::Unretained(&in_flight), top_read_generation_)));
++  return false;
  }
  
  void PageThemeColorController::OnTopSampled(
@@ -727,12 +762,19 @@ index d5167a50b99d4..131c017227f9c 100644
 +    const content::CopyFromSurfaceResult& result) {
 +  // The flag is a member: the weak pointer bound with it says this lives.
 +  *in_flight = false;
++  // T31: a copy that failed, its surface not ready, is tried again shortly,
++  // as a read that found no surface is (SampleTop).
++  if (generation == top_read_generation_ && page && !result.has_value() &&
++      surface_retries_ < kSurfaceRetries) {
++    ++surface_retries_;
++    ScheduleTopSamples({kSampleRetry});
++  }
 +  // Dk8: begun before a dark-pages change, the read is the page as it was.
 +  if (generation != top_read_generation_ || !page || !result.has_value()) {
      return;
    }
    PageTopSample* const sample = PageTopSample::GetOrCreateForPage(*page);
-@@ -389,6 +593,9 @@ void PageThemeColorController::OnTopSampled(
+@@ -389,6 +620,9 @@ void PageThemeColorController::OnTopSampled(
    content::WebContents* const contents = web_contents();
    if (contents && &contents->GetPrimaryPage() == page.get()) {
      Refresh();
@@ -742,7 +784,7 @@ index d5167a50b99d4..131c017227f9c 100644
    }
  }
  
-@@ -398,6 +605,10 @@ void PageThemeColorController::SetColor(std::optional<SkColor> color) {
+@@ -398,6 +632,10 @@ void PageThemeColorController::SetColor(std::optional<SkColor> color) {
      return;
    }
    color_ = color;
@@ -753,7 +795,7 @@ index d5167a50b99d4..131c017227f9c 100644
    // Not from inside the change. The active tab changes in the middle of the
    // tab strip's own notification, before its views have caught up, and a
    // window re-themed from there reached a folder header whose folder had
-@@ -427,4 +638,15 @@ void PageThemeColorController::SetColorForTesting(
+@@ -427,4 +665,15 @@ void PageThemeColorController::SetColorForTesting(
    SetColor(color);
  }
  
@@ -770,7 +812,7 @@ index d5167a50b99d4..131c017227f9c 100644
 +
  }  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
-index f1ad9e311a968..008814fe781e8 100644
+index f1ad9e311a968..cdea17452278b 100644
 --- a/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
 +++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller.h
 @@ -59,6 +59,15 @@ class PageThemeColorController : public TabStripModelObserver,
@@ -797,7 +839,7 @@ index f1ad9e311a968..008814fe781e8 100644
  
    // content::WebContentsObserver:
    void DidChangeThemeColor() override;
-@@ -86,6 +96,14 @@ class PageThemeColorController : public TabStripModelObserver,
+@@ -86,6 +96,19 @@ class PageThemeColorController : public TabStripModelObserver,
  
    // The change path without a page, for tests.
    void SetColorForTesting(std::optional<SkColor> color);
@@ -809,10 +851,15 @@ index f1ad9e311a968..008814fe781e8 100644
 +  // again.
 +  void HoldTopReadsForTesting(
 +      base::RepeatingCallback<void(base::OnceClosure)> hold);
++  // The next `attempts` reads find no surface to copy, as a page just shown
++  // on a slow machine can (T31).
++  void FailSurfacesForTesting(int attempts) {
++    surface_failures_for_testing_ = attempts;
++  }
  
    // dark-pages Dk8: the colour the row takes from a page's declared theme
    // colour. While dark pages darkens the page, a theme colour Blink would
-@@ -96,20 +114,39 @@ class PageThemeColorController : public TabStripModelObserver,
+@@ -96,20 +119,41 @@ class PageThemeColorController : public TabStripModelObserver,
    static SkColor RowColorForThemeColor(SkColor theme_color, bool page_darkened);
  
   private:
@@ -839,7 +886,9 @@ index f1ad9e311a968..008814fe781e8 100644
    void OnSampleTimer();
    void SampleTop();
 +  // Reads `contents`' top edge unless a read of it is in flight already.
-+  void SampleTopOf(content::WebContents* contents, bool& in_flight);
++  // Returns true when the page is on screen but its surface cannot be copied
++  // yet, so the read should be tried again.
++  bool SampleTopOf(content::WebContents* contents, bool& in_flight);
 +  // `generation` is top_read_generation_ when the read began.
    void OnTopSampled(base::WeakPtr<content::Page> page,
 +                    bool* in_flight,
@@ -852,7 +901,7 @@ index f1ad9e311a968..008814fe781e8 100644
  
    const raw_ref<BrowserWindowInterface> browser_;
    const bool private_window_;
-@@ -120,6 +157,16 @@ class PageThemeColorController : public TabStripModelObserver,
+@@ -120,6 +164,19 @@ class PageThemeColorController : public TabStripModelObserver,
    base::flat_set<base::TimeTicks> sample_due_;
    base::OneShotTimer sample_timer_;
    bool sample_in_flight_ = false;
@@ -865,6 +914,9 @@ index f1ad9e311a968..008814fe781e8 100644
 +  // Dk8: one more at each dark-pages change that changes a page's decision;
 +  // a read begun before it is dropped when it comes back.
 +  int top_read_generation_ = 0;
++  // T31: how many times in a row a read found no surface to copy.
++  int surface_retries_ = 0;
++  int surface_failures_for_testing_ = 0;
 +  base::RepeatingCallback<void(base::OnceClosure)> hold_top_reads_for_testing_;
    base::RepeatingClosureList changed_callbacks_;
    ui::ScopedUnownedUserData<PageThemeColorController> scoped_user_data_;
@@ -2157,7 +2209,7 @@ index 318718b5a59c0..7d6b53d1051d3 100644
      "https_first_browsertest.cc",
      "import_browsertest.cc",
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index a51c6a7083a57..033e450900933 100644
+index a51c6a7083a57..d6b80c83659c2 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -29,6 +29,7 @@
@@ -2214,7 +2266,7 @@ index a51c6a7083a57..033e450900933 100644
  #include "ui/gfx/geometry/size.h"
  #include "ui/gfx/render_text.h"
  #include "ui/gfx/render_text_test_api.h"
-@@ -845,6 +854,330 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
+@@ -845,6 +854,336 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
        << std::hex << *row()->color();
  }
  
@@ -2238,11 +2290,17 @@ index a51c6a7083a57..033e450900933 100644
 +      ThemeService::BrowserColorScheme::kLight);
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), header));
 +  ASSERT_TRUE(WaitForTheRow(kEdge)) << "the edge was read";
-+  // The next read of the edge, the one after the load or the late one, is
-+  // held as it comes back: the pale edge, read before the switch.
++  // The next read of the edge is held as it comes back: the pale edge, read
++  // before the switch. The page starts one by changing its background below
++  // the header (a read follows a restyle): waiting for the late read after the
++  // load timed out on the PC's AddressSanitizer build, slow enough that the
++  // late read had come back before the hold, 2026-10-22.
 +  std::vector<base::OnceClosure> held;
 +  row()->HoldTopReadsForTesting(base::BindLambdaForTesting(
 +      [&](base::OnceClosure take) { held.push_back(std::move(take)); }));
++  ASSERT_TRUE(content::ExecJs(
++      browser()->tab_strip_model()->GetActiveWebContents(),
++      "document.body.style.backgroundColor = 'rgb(250, 250, 250)'"));
 +  ASSERT_TRUE(base::test::RunUntil([&]() { return !held.empty(); }))
 +      << "no read of the edge after the first";
 +  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
