@@ -1,0 +1,1752 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 21 Oct 2026 21:21:37 -0400
+Subject: feat: child tabs, and Arc's folders of folders come across whole
+
+The owner's requests of the night of 2026-10-21, for 0.3.0 beta 2:
+
+- Child tabs (docs/features/tabs.md R56-R59, settings T26; BACKLOG S-92):
+  a link opened in a new tab (a middle click, Cmd-click, "Open link in new
+  tab") or a page's own window.open becomes a child of the tab it came
+  from and is drawn a level, 14 DIP, right of it in the sidebar, its pill
+  and its contents both; a grandchild two levels. A row nests while every
+  row between it and its parent descends from the parent, in the same
+  folder or list; rows of another Space and rows in a collapsed folder take
+  no part, and folders and children share one depth of 5. A new tab, a
+  typed address, a bookmark, a duplicate and a drop are no one's child, and
+  essentials and a Space's pins take none. Each parent gets a token and
+  each child keeps its parent's, on the contents (carried through a jar
+  change and a pin's reset) and in the session as per-tab extra data, so
+  the tree survives a restart. A closed parent's children move up a level
+  in its place. "Show tabs under the tab that opened them" in Settings >
+  Stedding > Tabs, on by default, turns it off. Back closing a child at its
+  first page is not built (R60).
+- Import from Arc (import I3; BACKLOG S-48): an Arc list holding only lists
+  was not made a folder, a folder needing tabs to be made around, so its
+  folders came out a level up. It is now made around its first list's own
+  tabs, that list's folder is made inside it, and the other lists follow.
+  Found checking the owner's own import, which otherwise brought 8 of 8
+  Spaces, 426 of 426 tabs and all 2,650 history rows.
+
+Tests: TabParentsTest and TabParentsStripTest (the nesting rule, tokens,
+restore, carry, a closed parent); ChildTabsTest (links, window.open, a new
+tab, a duplicate, an essential, a closed parent, a moved row, the setting,
+the session as a restart reads it); ArcSidebarImportWindowTest.
+AFolderOfFoldersKeepsItsShape; SteddingPrefsTest for the new preference.
+
+Why: the owner asked for child tabs, and the import check found the folders.
+Removable when: never; the next re-cut gives child tabs a patch of its own
+and folds the import fix into the importer's patch.
+---
+ .../api/settings_private/prefs_util.cc        |   3 +
+ .../stedding_page/stedding_page.html.ts       |   7 +
+ chrome/browser/ui/BUILD.gn                    |   1 +
+ chrome/browser/ui/browser_tabrestore.cc       |   3 +
+ chrome/browser/ui/spaces/BUILD.gn             |   2 +
+ .../browser/ui/spaces/arc_sidebar_importer.cc | 115 +++++--
+ .../spaces/arc_sidebar_importer_unittest.cc   |  78 +++++
+ chrome/browser/ui/spaces/space_model.cc       |   4 +
+ .../ui/spaces/space_storage_partition.cc      |   3 +
+ chrome/browser/ui/stedding/BUILD.gn           |  21 ++
+ chrome/browser/ui/stedding/pin_lifecycle.cc   |   2 +
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   3 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   3 +-
+ chrome/browser/ui/stedding/tab_parents.cc     | 275 ++++++++++++++++
+ chrome/browser/ui/stedding/tab_parents.h      |  97 ++++++
+ .../ui/stedding/tab_parents_unittest.cc       | 147 +++++++++
+ chrome/browser/ui/views/spaces/BUILD.gn       |   3 +
+ .../spaces/space_tab_visibility_controller.cc | 116 +++++++
+ .../spaces/space_tab_visibility_controller.h  |  15 +
+ .../browser/ui/views/tabs/common/tab_view.cc  |  18 ++
+ .../browser/ui/views/tabs/common/tab_view.h   |   9 +
+ .../tabs/common/tab_view_vertical_layout.cc   |   3 +
+ .../tabs/common/vertical_tab_style_views.cc   |   5 +
+ .../browser/ui/webui/settings/settings_ui.cc  |   7 +
+ chrome/test/stedding/BUILD.gn                 |   2 +
+ .../test/stedding/child_tabs_browsertest.cc   | 294 ++++++++++++++++++
+ 27 files changed, 1209 insertions(+), 28 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/tab_parents.cc
+ create mode 100644 chrome/browser/ui/stedding/tab_parents.h
+ create mode 100644 chrome/browser/ui/stedding/tab_parents_unittest.cc
+ create mode 100644 chrome/test/stedding/child_tabs_browsertest.cc
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index a89cb85d6b368..15e6294575dc1 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -376,6 +376,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kUndoToast] =
+       settings_api::PrefType::kBoolean;
++  // tabs R56, settings T26.
++  (*s_allowlist)[stedding::prefs::kNestChildTabs] =
++      settings_api::PrefType::kBoolean;
+   // routing D4, settings T23.
+   (*s_allowlist)[stedding::prefs::kSpaceNotices] =
+       settings_api::PrefType::kBoolean;
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 4bf373e24b2ad..26c26890e773f 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -141,6 +141,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingUndoToastLabel}"
+       sub-label="$i18n{steddingUndoToastSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="nestChildTabs"
++      class="hr"
++      pref-key="stedding.tabs.nest_children"
++      label="$i18n{steddingNestChildTabsLabel}"
++      sub-label="$i18n{steddingNestChildTabsSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="ctrlTabMru"
+       class="hr"
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 015087aec7cc3..88bf70825680e 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -2385,6 +2385,7 @@ static_library("ui") {
+       "//chrome/browser/ui/stedding:sleep_tabs",
+       "//chrome/browser/ui/stedding:tab_names",
+       "//chrome/browser/ui/stedding:tab_numbers",
++      "//chrome/browser/ui/stedding:tab_parents",
+       "//chrome/browser/ui/stedding:motion",
+       "//chrome/browser/ui/views/commandbar",
+       "//chrome/browser/ui/views/peek",
+diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
+index 33e76b99547d5..fbc1c21a108a0 100644
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -25,6 +25,7 @@
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+@@ -124,6 +125,8 @@ std::unique_ptr<WebContents> CreateRestoredTab(
+ 
+   spaces::RestoreSpaceFromExtraData(web_contents.get(), extra_data);
+   stedding::RestoreTabNameFromExtraData(web_contents.get(), extra_data);
++  // tabs R58: the tab's place under the tab that opened it.
++  stedding::RestoreTabParentFromExtraData(web_contents.get(), extra_data);
+   // archive A1 (PLAN.md TST-18): a tab the session restores goes on from the
+   // idle time it had; one reopened from the recently-closed list is opened
+   // again.
+diff --git a/chrome/browser/ui/spaces/BUILD.gn b/chrome/browser/ui/spaces/BUILD.gn
+index 4f9a416592e56..2d4817b130b57 100644
+--- a/chrome/browser/ui/spaces/BUILD.gn
++++ b/chrome/browser/ui/spaces/BUILD.gn
+@@ -107,6 +107,7 @@ source_set("spaces") {
+     "//chrome/browser/ui/stedding/theme",
+     "//chrome/browser/ui/stedding:pin_home",
+     "//chrome/browser/ui/stedding:tab_names",
++    "//chrome/browser/ui/stedding:tab_parents",
+     "//chrome/browser/ui/stedding:sleep_tabs",
+     "//chrome/browser/ui/stedding:prefs",
+     "//components/prefs",
+@@ -166,6 +167,7 @@ source_set("unit_tests") {
+     "//chrome/browser/ui/stedding:prefs",
+     "//chrome/browser/ui/stedding:sleep_tabs",
+     "//chrome/browser/ui/stedding:tab_names",
++    "//chrome/browser/ui/stedding:tab_parents",
+     "//base/test:test_support",
+     "//components/prefs",
+     "//components/sessions",
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+index b2adf3c65fada..20d11f6e7be29 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+@@ -448,6 +448,67 @@ SpaceId SpaceOfFolder(ApplyContext& ctx,
+   return fallback;
+ }
+ 
++// Inserts the tabs directly in Arc's list `node` into `space`, unloaded,
++// skipping what an earlier import brought and what cannot be opened.
++std::vector<tabs::TabInterface*> InsertDirectTabs(ApplyContext& ctx,
++                                                  const Node& node,
++                                                  const SpaceId& space) {
++  std::vector<tabs::TabInterface*> inserted;
++  for (const Node& child : node.children) {
++    if (child.kind == Node::Kind::kFolder) {
++      continue;
++    }
++    if (ctx.ids->Contains(child.arc_id) ||
++        ctx.open_tabs.contains(child.arc_id)) {
++      ++ctx.result->skipped;
++      continue;
++    }
++    if (!IsImportablePage(child.url)) {
++      continue;
++    }
++    tabs::TabInterface* const tab =
++        InsertUnloaded(ctx.tabs, ctx.profile, child);
++    if (!tab) {
++      continue;
++    }
++    ctx.model->SetSpaceForTab(tab, space);
++    ctx.ids->Add(child.arc_id);
++    ++ctx.result->tabs;
++    inserted.push_back(tab);
++  }
++  return inserted;
++}
++
++// Makes Arc's list `node` a folder around `tabs`, inside `parent` (or at the
++// top), named and remembered as Arc's (I12). Null when there is no tab to
++// make it around.
++tabs::FolderTabCollection* MakeFolder(
++    ApplyContext& ctx,
++    const std::vector<tabs::TabInterface*>& tabs,
++    tabs::FolderTabCollection* parent,
++    const Node& node) {
++  std::vector<int> indices;
++  for (tabs::TabInterface* const tab : tabs) {
++    const int index = ctx.tabs->GetIndexOfTab(tab);
++    if (index != TabStripModel::kNoTab) {
++      indices.push_back(index);
++    }
++  }
++  if (indices.empty()) {
++    return nullptr;
++  }
++  std::ranges::sort(indices);
++  tabs::FolderTabCollection* const folder =
++      ctx.tabs->AddToNewFolder(indices, parent);
++  if (folder) {
++    folder->SetTitle(base::UTF16ToUTF8(node.title));
++    ctx.ids->Add(node.arc_id);
++    ctx.ids->RememberFolder(node.arc_id, folder->id());
++    ++ctx.result->folders;
++  }
++  return folder;
++}
++
+ // Inserts `nodes` into `space`: loose tabs, and folders with their tabs, in
+ // order. Returns the loose tabs, for the pinned run.
+ std::vector<tabs::TabInterface*> InsertNodes(
+@@ -497,44 +558,44 @@ std::vector<tabs::TabInterface*> InsertNodes(
+     }
+     // A folder: its direct tabs first, then the folder around them, then the
+     // folders inside it.
+-    std::vector<int> indices;
+     std::vector<const Node*> subfolders;
+     for (const Node& child : node.children) {
+       if (child.kind == Node::Kind::kFolder) {
+         subfolders.push_back(&child);
+-        continue;
+-      }
+-      if (ctx.ids->Contains(child.arc_id) ||
+-          ctx.open_tabs.contains(child.arc_id)) {
+-        ++ctx.result->skipped;
+-        continue;
+       }
+-      if (!IsImportablePage(child.url)) {
++    }
++    tabs::FolderTabCollection* folder =
++        MakeFolder(ctx, InsertDirectTabs(ctx, node, space), parent_folder,
++                   node);
++    // I3: a list that holds only lists. A folder is made around tabs, so it
++    // is made around its first list's own tabs, and that list's folder is
++    // then made inside it (folders F2: the command on tabs already in a
++    // folder nests a new one); the other lists go inside as before. It had
++    // come out as its lists beside each other a level up (the owner's own
++    // import, 2026-10-21: a folder of thirteen folders and one of two).
++    for (size_t i = 0; !folder && i < subfolders.size(); ++i) {
++      const Node& first = *subfolders[i];
++      if (ctx.ids->Contains(first.arc_id) ||
++          ctx.open_tabs.contains(first.arc_id)) {
+         continue;
+       }
+-      tabs::TabInterface* const tab =
+-          InsertUnloaded(ctx.tabs, ctx.profile, child);
+-      if (!tab) {
++      const std::vector<tabs::TabInterface*> first_tabs =
++          InsertDirectTabs(ctx, first, space);
++      folder = MakeFolder(ctx, first_tabs, parent_folder, node);
++      if (!folder) {
+         continue;
+       }
+-      ctx.model->SetSpaceForTab(tab, space);
+-      ctx.ids->Add(child.arc_id);
+-      ++ctx.result->tabs;
+-      indices.push_back(ctx.tabs->GetIndexOfTab(tab));
+-    }
+-    tabs::FolderTabCollection* folder = nullptr;
+-    if (!indices.empty()) {
+-      std::ranges::sort(indices);
+-      folder = ctx.tabs->AddToNewFolder(indices, parent_folder);
+-      if (folder) {
+-        folder->SetTitle(base::UTF16ToUTF8(node.title));
+-        ctx.ids->Add(node.arc_id);
+-        ctx.ids->RememberFolder(node.arc_id, folder->id());
+-        ++ctx.result->folders;
++      tabs::FolderTabCollection* const inner =
++          MakeFolder(ctx, first_tabs, folder, first);
++      for (const Node& child : first.children) {
++        if (child.kind == Node::Kind::kFolder) {
++          InsertNodes(ctx, {child}, space, inner ? inner : folder);
++        }
+       }
++      subfolders.erase(subfolders.begin() + static_cast<ptrdiff_t>(i));
+     }
+-    // A folder with no tab of its own cannot be made; its folders come out
+-    // beside it.
++    // A folder with no tab anywhere to make it around cannot be made; its
++    // folders come out beside it.
+     for (const Node* sub : subfolders) {
+       InsertNodes(ctx, {*sub}, space, folder ? folder : parent_folder);
+     }
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+index 8f42929ae7c62..7e938ddbc36dc 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+@@ -241,6 +241,84 @@ TEST_F(ArcSidebarImportWindowTest, AppliesSpacesPinsAndFolders) {
+   EXPECT_EQ(u"F", in_play[0]->GetContents()->GetTitle());
+ }
+ 
++// I3: an Arc list that holds only lists becomes a folder of folders. A folder
++// is made around tabs, and one with no tab of its own was not made: its
++// folders came out a level up (the owner's import, 2026-10-21).
++TEST_F(ArcSidebarImportWindowTest, AFolderOfFoldersKeepsItsShape) {
++  constexpr char kNested[] = R"json({
++  "version": 1,
++  "sidebar": {"containers": [
++    {"global": {}},
++    {
++      "spaces": ["space-work", {"id": "space-work", "title": "Work",
++        "containerIDs": ["unpinned", "cont-unpinned", "pinned", "cont-pinned"]}],
++      "items": [
++        "cont-pinned", {"id": "cont-pinned", "parentID": null,
++          "childrenIds": [], "title": "",
++          "data": {"itemContainer": {"containerType": {"spaceItems": {}}}}},
++        "cont-unpinned", {"id": "cont-unpinned", "parentID": null,
++          "childrenIds": ["list-outer", "tab-z"], "title": "",
++          "data": {"itemContainer": {"containerType": {"spaceItems": {}}}}},
++        "list-outer", {"id": "list-outer", "parentID": "cont-unpinned",
++          "childrenIds": ["list-x", "list-y"], "title": "Outer",
++          "data": {"list": {}}},
++        "list-x", {"id": "list-x", "parentID": "list-outer",
++          "childrenIds": ["tab-x1", "tab-x2"], "title": "X", "data": {"list": {}}},
++        "list-y", {"id": "list-y", "parentID": "list-outer",
++          "childrenIds": ["tab-y1"], "title": "Y", "data": {"list": {}}},
++        "tab-x1", {"id": "tab-x1", "parentID": "list-x", "childrenIds": [],
++          "title": "", "data": {"tab": {"savedURL": "https://x1.example/", "savedTitle": "X1"}}},
++        "tab-x2", {"id": "tab-x2", "parentID": "list-x", "childrenIds": [],
++          "title": "", "data": {"tab": {"savedURL": "https://x2.example/", "savedTitle": "X2"}}},
++        "tab-y1", {"id": "tab-y1", "parentID": "list-y", "childrenIds": [],
++          "title": "", "data": {"tab": {"savedURL": "https://y1.example/", "savedTitle": "Y1"}}},
++        "tab-z", {"id": "tab-z", "parentID": "cont-unpinned", "childrenIds": [],
++          "title": "", "data": {"tab": {"savedURL": "https://z.example/", "savedTitle": "Z"}}}
++      ],
++      "topAppsContainerIDs": []
++    }
++  ]}
++})json";
++  const std::optional<ArcImportPlan> plan = ParseArcSidebar(kNested);
++  ASSERT_TRUE(plan.has_value());
++  const ArcImportResult result =
++      ApplyArcImport(browser(), *plan, ArcImportOptions());
++  EXPECT_EQ(4u, result.tabs);
++  EXPECT_EQ(3u, result.folders);
++  const Space* const work = SpaceNamed("Work");
++  ASSERT_TRUE(work);
++  const std::vector<tabs::TabInterface*> in_work = TabsIn(work->id());
++  ASSERT_EQ(4u, in_work.size());
++  const auto folder_of = [](const tabs::TabCollection* collection) {
++    return collection && collection->type() == tabs::TabCollection::Type::FOLDER
++               ? static_cast<const tabs::FolderTabCollection*>(collection)
++               : nullptr;
++  };
++  // X1 and X2 in X, Y1 in Y, both inside Outer, in Arc's order; Z loose.
++  const tabs::FolderTabCollection* const x =
++      folder_of(in_work[0]->GetParentCollection());
++  ASSERT_TRUE(x);
++  EXPECT_EQ("X", x->title());
++  EXPECT_EQ(x, in_work[1]->GetParentCollection());
++  const tabs::FolderTabCollection* const y =
++      folder_of(in_work[2]->GetParentCollection());
++  ASSERT_TRUE(y);
++  EXPECT_EQ("Y", y->title());
++  const tabs::FolderTabCollection* const outer =
++      folder_of(x->GetParentCollection());
++  ASSERT_TRUE(outer);
++  EXPECT_EQ("Outer", outer->title());
++  EXPECT_EQ(outer, y->GetParentCollection());
++  EXPECT_EQ(u"Z", in_work[3]->GetContents()->GetTitle());
++  EXPECT_FALSE(folder_of(in_work[3]->GetParentCollection()));
++
++  // A second import adds nothing and finds the folders it made (I12).
++  const ArcImportResult again =
++      ApplyArcImport(browser(), *plan, ArcImportOptions());
++  EXPECT_EQ(0u, again.tabs);
++  EXPECT_EQ(0u, again.folders);
++}
++
+ // I3: a file that names one Arc Space twice makes one Space; its second
+ // entry's tabs join the first. Both became Spaces, and a later import filled
+ // only the one it remembered (BACKLOG S-183).
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 774c9397fcc8d..1804c3e9d6ba4 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -48,6 +48,7 @@
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/pin_home.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/stedding_folder_session.h"
+@@ -238,6 +239,8 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+         "spaces", base::BindRepeating(&SpaceModel::AppendRebuildCommands));
+     // Tab names ride the same rebuild (docs/features/tabs.md R16).
+     stedding::RegisterTabNameSessionRebuild();
++    // So do child tabs' places (docs/features/tabs.md R58).
++    stedding::RegisterTabParentSessionRebuild();
+     return true;
+   }();
+   std::ignore = registered;
+@@ -1250,6 +1253,7 @@ void SpaceModel::OnTabStripModelChanged(
+     // a turn later, outside this notification.
+     const TabStripModelChange::Replace* const replace = change.GetReplace();
+     stedding::CarryTabName(replace->old_contents, replace->new_contents);
++    stedding::CarryTabParent(replace->old_contents, replace->new_contents);
+     CarryClosedFolderPlace(replace->old_contents, replace->new_contents);
+     // A rebind of this model's own already puts the contents in the Space's
+     // jar; asking for another would loop.
+diff --git a/chrome/browser/ui/spaces/space_storage_partition.cc b/chrome/browser/ui/spaces/space_storage_partition.cc
+index 912b392de60a0..b7a10c4c0b82b 100644
+--- a/chrome/browser/ui/spaces/space_storage_partition.cc
++++ b/chrome/browser/ui/spaces/space_storage_partition.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/spaces/space_registry.h"
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "components/sessions/content/content_serialized_navigation_builder.h"
+ #include "components/sessions/core/serialized_navigation_entry.h"
+@@ -287,6 +288,7 @@ void RebindTab(TabStripModel* tabs,
+   }
+   // The user's name for the tab rides on the contents (tabs R14).
+   stedding::CarryTabName(old_contents, fresh.get());
++  stedding::CarryTabParent(old_contents, fresh.get());
+   if (asleep) {
+     fresh->SetWasDiscarded(true);
+   }
+@@ -361,6 +363,7 @@ bool MoveFreshTabToSpaceJar(TabStripModel* tabs,
+   std::unique_ptr<content::WebContents> fresh =
+       content::WebContents::Create(params);
+   stedding::CarryTabName(old_contents, fresh.get());
++  stedding::CarryTabParent(old_contents, fresh.get());
+   // The old contents showed a new-tab page at most; they go now, before the
+   // address loads in their place.
+   tabs->DiscardWebContents(old_contents, std::move(fresh)).reset();
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index ea5bbf3f21165..22e98028bf177 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -212,6 +212,7 @@ source_set("pin_lifecycle") {
+     ":prefs",
+     ":sleep_tabs",
+     ":tab_names",
++    ":tab_parents",
+     "//base",
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui/browser_window",
+@@ -263,6 +264,24 @@ source_set("tab_names") {
+   ]
+ }
+ 
++# Child tabs (docs/features/tabs.md R56-R60): a tab opened from a link sits
++# under the tab it came from.
++source_set("tab_parents") {
++  public = [ "tab_parents.h" ]
++  sources = [ "tab_parents.cc" ]
++  deps = [
++    "//base",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/sessions",
++    "//chrome/browser/ui/browser_window",
++    "//chrome/browser/ui/tabs:tab_strip",
++    "//components/sessions",
++    "//components/tabs:public",
++    "//content/public/browser",
++    "//ui/base",
++  ]
++}
++
+ source_set("tab_numbers") {
+   public = [ "tab_numbers.h" ]
+   sources = [ "tab_numbers.cc" ]
+@@ -618,6 +637,7 @@ source_set("unit_tests") {
+     "tab_menu_verbs_unittest.cc",
+     "tab_names_unittest.cc",
+     "tab_numbers_unittest.cc",
++    "tab_parents_unittest.cc",
+     "thanks_pages_unittest.cc",
+     "update_feed_unittest.cc",
+   ]
+@@ -650,6 +670,7 @@ source_set("unit_tests") {
+     ":tab_menu_verbs",
+     ":tab_names",
+     ":tab_numbers",
++    ":tab_parents",
+     ":thanks_pages",
+     ":version",
+     "//chrome/app:command_ids",
+diff --git a/chrome/browser/ui/stedding/pin_lifecycle.cc b/chrome/browser/ui/stedding/pin_lifecycle.cc
+index 5b4d9541451a6..a9ff93b92918f 100644
+--- a/chrome/browser/ui/stedding/pin_lifecycle.cc
++++ b/chrome/browser/ui/stedding/pin_lifecycle.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/ui/stedding/sleep_tabs.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+ #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
+@@ -176,6 +177,7 @@ void ReplaceWithHomeAsleep(TabStripModel* tabs,
+   fresh->GetController().Restore(0, content::RestoreType::kRestored, &entries);
+   // The name the user gave the pin rides on its contents (tabs R14).
+   CarryTabName(old_contents, fresh.get());
++  CarryTabParent(old_contents, fresh.get());
+   // Asleep: no renderer, the dimmed row, a load when it is next shown.
+   fresh->SetWasDiscarded(true);
+   content::WebContents* const raw_fresh = fresh.get();
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index b5f4f80486abe..156a91cf6ae33 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -54,6 +54,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kHoldCmdNumbers, true);
+   registry->RegisterBooleanPref(kMarkLocalTabs, true);
+   registry->RegisterBooleanPref(kCtrlTabMru, true);
++  registry->RegisterBooleanPref(kNestChildTabs, true);
+   // tabs R30, routing D4, toolbar T45: hints are off until the user asks for
+   // them (the owner, 2026-10-21). A profile that never wrote
+   // the undo toast's setting takes the new default; only the Settings switch
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index e4c02d838563c..4cad42c858329 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -132,6 +132,9 @@ inline constexpr char kCtrlTabMru[] = "stedding.tabs.ctrl_tab_mru";
+ // reopens it where it was (R25-R27). Off by default since 2026-10-21 (the
+ // owner): Shift-Cmd-T still reopens closed tabs.
+ inline constexpr char kUndoToast[] = "stedding.tabs.undo_toast";
++// tabs R56, settings T26: a tab opened from a link sits under the tab it came
++// from. On by default (the owner, 2026-10-21).
++inline constexpr char kNestChildTabs[] = "stedding.tabs.nest_children";
+ // routing D4, settings T23: "Opened in <Space>", with Undo, after a routed
+ // open. Off by default (the owner, 2026-10-21).
+ inline constexpr char kSpaceNotices[] = "stedding.spaces.notices";
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index eb3f97ddc1e63..7201c1426c8ac 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -28,7 +28,8 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   for (const char* name :
+        {kNewTabShowHint, kNewTabShowShortcuts, kCopyStripTracking, kUiAnimate,
+         kShowLinkAddress, kPinsCloseSleeps, kMenusShort, kHoldCmdNumbers,
+-        kDarkPagesButton, kMarkLocalTabs, kLittleEnabled, kPinSignoutWarning}) {
++        kDarkPagesButton, kMarkLocalTabs, kLittleEnabled, kPinSignoutWarning,
++        kNestChildTabs}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_TRUE(service.GetBoolean(name)) << name;
+   }
+diff --git a/chrome/browser/ui/stedding/tab_parents.cc b/chrome/browser/ui/stedding/tab_parents.cc
+new file mode 100644
+index 0000000000000..ff236eec5bcde
+--- /dev/null
++++ b/chrome/browser/ui/stedding/tab_parents.cc
+@@ -0,0 +1,275 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/tab_parents.h"
++
++#include <algorithm>
++#include <map>
++#include <string>
++#include <tuple>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/uuid.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_service.h"
++#include "chrome/browser/sessions/session_service_factory.h"
++#include "chrome/browser/sessions/stedding_session_rebuild.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/sessions/content/session_tab_helper.h"
++#include "components/sessions/core/session_service_commands.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "ui/base/page_transition_types.h"
++
++namespace stedding {
++namespace {
++
++// The tokens ride on the WebContents, so they are there before the
++// TabInterface exists on restore, as a tab's name is (tab_names.cc).
++class TabParentData : public content::WebContentsUserData<TabParentData> {
++ public:
++  ~TabParentData() override = default;
++
++  const std::string& token() const { return token_; }
++  const std::string& parent() const { return parent_; }
++  void set_token(std::string token) { token_ = std::move(token); }
++  void set_parent(std::string parent) { parent_ = std::move(parent); }
++
++ private:
++  friend class content::WebContentsUserData<TabParentData>;
++  explicit TabParentData(content::WebContents* contents)
++      : content::WebContentsUserData<TabParentData>(*contents) {}
++
++  std::string token_;
++  std::string parent_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(TabParentData);
++
++TabParentData& DataFor(content::WebContents* contents) {
++  return *TabParentData::GetOrCreateForWebContents(contents);
++}
++
++// Writes `key` = `value` for `contents` to its window's session; an empty
++// value clears what an earlier write said.
++void Write(BrowserWindowInterface* browser,
++           content::WebContents* contents,
++           const char* key,
++           const std::string& value) {
++  if (!browser || !contents) {
++    return;
++  }
++  SessionService* const session_service =
++      SessionServiceFactory::GetForProfile(browser->GetProfile());
++  const SessionID tab_id = sessions::SessionTabHelper::IdForTab(contents);
++  if (session_service && tab_id.is_valid()) {
++    session_service->AddTabExtraData(browser->GetSessionID(), tab_id, key,
++                                     value);
++  }
++}
++
++// Writes the places of `child` and of its parent, as they are by then, to
++// their windows' sessions.
++void WritePlaces(tabs::TabHandle child, tabs::TabHandle parent) {
++  if (tabs::TabInterface* const tab = parent.Get()) {
++    Write(tab->GetBrowserWindowInterface(), tab->GetContents(),
++          kSessionTabTokenKey, TabToken(tab->GetContents()));
++  }
++  if (tabs::TabInterface* const tab = child.Get()) {
++    Write(tab->GetBrowserWindowInterface(), tab->GetContents(),
++          kSessionTabParentKey, TabParentToken(tab->GetContents()));
++  }
++}
++
++void AppendRebuildCommands(BrowserWindowInterface* browser,
++                           SessionRebuildCommands* commands) {
++  TabStripModel* const tabs = browser->GetTabStripModel();
++  for (int i = 0; i < tabs->count(); ++i) {
++    content::WebContents* const contents = tabs->GetWebContentsAt(i);
++    const SessionID tab_id = sessions::SessionTabHelper::IdForTab(contents);
++    if (!tab_id.is_valid()) {
++      continue;
++    }
++    if (const std::string token = TabToken(contents); !token.empty()) {
++      commands->push_back(sessions::CreateAddTabExtraDataCommand(
++          tab_id, kSessionTabTokenKey, token));
++    }
++    if (const std::string parent = TabParentToken(contents); !parent.empty()) {
++      commands->push_back(sessions::CreateAddTabExtraDataCommand(
++          tab_id, kSessionTabParentKey, parent));
++    }
++  }
++}
++
++}  // namespace
++
++std::string TabToken(const content::WebContents* contents) {
++  const TabParentData* const data =
++      contents ? TabParentData::FromWebContents(contents) : nullptr;
++  return data ? data->token() : std::string();
++}
++
++std::string TabParentToken(const content::WebContents* contents) {
++  const TabParentData* const data =
++      contents ? TabParentData::FromWebContents(contents) : nullptr;
++  return data ? data->parent() : std::string();
++}
++
++bool OpensAsChild(const TabStripModel& model, int index) {
++  if (index < 0 || index >= model.count() || model.IsTabPinned(index)) {
++    return false;
++  }
++  const tabs::TabInterface* const opener = model.GetOpenerOfTabAt(index);
++  const tabs::TabInterface* const tab = model.GetTabAtIndex(index);
++  if (!opener || !tab || opener == tab || opener->IsPinned()) {
++    return false;
++  }
++  content::WebContents* const contents = tab->GetContents();
++  if (!contents) {
++    return false;
++  }
++  // A page's own window.open keeps its opener; a link opened in a new tab
++  // (a middle click, Cmd-click, a "New tab" link) starts its first load as a
++  // link. Chromium gives a new tab, a typed address opened beside the tab
++  // and a duplicate an opener too, so that closing them returns to it; none
++  // of those is a child.
++  if (contents->GetOpener()) {
++    return true;
++  }
++  const content::NavigationEntry* const entry =
++      contents->GetController().GetPendingEntry();
++  return entry && ui::PageTransitionCoreTypeIs(entry->GetTransitionType(),
++                                               ui::PAGE_TRANSITION_LINK);
++}
++
++void SetTabParent(BrowserWindowInterface* browser,
++                  tabs::TabInterface* child,
++                  tabs::TabInterface* parent) {
++  content::WebContents* const child_contents =
++      child ? child->GetContents() : nullptr;
++  content::WebContents* const parent_contents =
++      parent ? parent->GetContents() : nullptr;
++  if (!child_contents || !parent_contents || child == parent) {
++    return;
++  }
++  TabParentData& parent_data = DataFor(parent_contents);
++  if (parent_data.token().empty()) {
++    parent_data.set_token(base::Uuid::GenerateRandomV4().AsLowercaseString());
++  }
++  DataFor(child_contents).set_parent(parent_data.token());
++  // Written a turn later, once every observer of the insertion, the
++  // session's own among them, has seen the new tab.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(&WritePlaces, child->GetHandle(), parent->GetHandle()));
++}
++
++void ReparentChildrenOf(BrowserWindowInterface* browser,
++                        const content::WebContents* closed) {
++  const std::string token = TabToken(closed);
++  if (!browser || token.empty()) {
++    return;
++  }
++  const std::string grandparent = TabParentToken(closed);
++  TabStripModel* const tabs = browser->GetTabStripModel();
++  for (int i = 0; i < tabs->count(); ++i) {
++    content::WebContents* const contents = tabs->GetWebContentsAt(i);
++    if (contents == closed || TabParentToken(contents) != token) {
++      continue;
++    }
++    // Not written to the session here, so that tabs taken out as a window
++    // closes never rewrite the places the next launch restores. The next
++    // rewrite of the session log carries the new place
++    // (AppendRebuildCommands); until then a restart finds the child under a
++    // parent that is gone, at the left.
++    DataFor(contents).set_parent(grandparent);
++  }
++}
++
++void CarryTabParent(content::WebContents* from, content::WebContents* to) {
++  const std::string token = TabToken(from);
++  const std::string parent = TabParentToken(from);
++  if (!to || (token.empty() && parent.empty())) {
++    return;
++  }
++  TabParentData& data = DataFor(to);
++  data.set_token(token);
++  data.set_parent(parent);
++}
++
++void RestoreTabParentFromExtraData(
++    content::WebContents* contents,
++    const std::map<std::string, std::string>& extra_data) {
++  if (!contents) {
++    return;
++  }
++  const auto token = extra_data.find(kSessionTabTokenKey);
++  const auto parent = extra_data.find(kSessionTabParentKey);
++  const bool has_token = token != extra_data.end() && !token->second.empty();
++  const bool has_parent =
++      parent != extra_data.end() && !parent->second.empty();
++  if (!has_token && !has_parent) {
++    return;
++  }
++  TabParentData& data = DataFor(contents);
++  if (has_token) {
++    data.set_token(token->second);
++  }
++  if (has_parent) {
++    data.set_parent(parent->second);
++  }
++}
++
++void RegisterTabParentSessionRebuild() {
++  static const bool registered = [] {
++    AddSessionRebuildProvider("tab_parents",
++                              base::BindRepeating(&AppendRebuildCommands));
++    return true;
++  }();
++  std::ignore = registered;
++}
++
++std::vector<int> NestDepths(const std::vector<NestRow>& rows) {
++  std::vector<int> depths;
++  depths.reserve(rows.size());
++  // The rows above the current one that it could still nest under: each
++  // entry's token and depth, the deepest last.
++  std::vector<std::pair<const std::string*, int>> chain;
++  uintptr_t run = 0;
++  for (const NestRow& row : rows) {
++    if (row.run != run) {
++      chain.clear();
++      run = row.run;
++    }
++    int depth = 0;
++    if (!row.parent.empty()) {
++      while (!chain.empty() && *chain.back().first != row.parent) {
++        chain.pop_back();
++      }
++      if (!chain.empty()) {
++        depth = std::min(chain.back().second + 1, std::max(row.limit, 0));
++      }
++    } else {
++      chain.clear();
++    }
++    if (depth == 0) {
++      chain.clear();
++    }
++    depths.push_back(depth);
++    chain.emplace_back(&row.token, depth);
++  }
++  return depths;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/tab_parents.h b/chrome/browser/ui/stedding/tab_parents.h
+new file mode 100644
+index 0000000000000..9f513ceaa73fd
+--- /dev/null
++++ b/chrome/browser/ui/stedding/tab_parents.h
+@@ -0,0 +1,97 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_TAB_PARENTS_H_
++#define CHROME_BROWSER_UI_STEDDING_TAB_PARENTS_H_
++
++#include <cstdint>
++#include <map>
++#include <string>
++#include <vector>
++
++class BrowserWindowInterface;
++class TabStripModel;
++
++namespace content {
++class WebContents;
++}  // namespace content
++
++namespace tabs {
++class TabInterface;
++}  // namespace tabs
++
++namespace stedding {
++
++// Child tabs (docs/features/tabs.md R56-R60): a tab opened from a link in
++// another tab sits indented under it in the sidebar. Each tab that has
++// children gets a token of its own, and each child keeps its parent's token;
++// both ride on the WebContents and are written to the session as per-tab
++// extra data, so the tree survives a restart.
++inline constexpr char kSessionTabTokenKey[] = "stedding.tab_token";
++inline constexpr char kSessionTabParentKey[] = "stedding.parent";
++
++// The deepest a row nests, folders and children together (R57).
++inline constexpr int kMaxNestDepth = 5;
++
++// The tab's own token, empty while it has never had a child.
++std::string TabToken(const content::WebContents* contents);
++
++// The token of the tab `contents` was opened from, empty for a tab with no
++// parent.
++std::string TabParentToken(const content::WebContents* contents);
++
++// R56: whether a tab inserted into `model` at `index` is a child of the tab
++// that opened it: a link opened in a new tab or a page's own window.open,
++// not a new tab, a bookmark, a duplicate or a drop, and neither the tab nor
++// its opener an essential.
++bool OpensAsChild(const TabStripModel& model, int index);
++
++// Makes `child` a child of `parent`, giving `parent` a token when it has none,
++// and writes both to the session.
++void SetTabParent(BrowserWindowInterface* browser,
++                  tabs::TabInterface* child,
++                  tabs::TabInterface* parent);
++
++// R59: when a parent closes, each of its children takes the parent's own
++// parent, or none, and moves up a level in its place. `closed` is the closing
++// parent's contents, still alive while the strip reports the removal. The
++// session learns the new places with its next rewrite.
++void ReparentChildrenOf(BrowserWindowInterface* browser,
++                        const content::WebContents* closed);
++
++// sessions S9: the tokens ride on the WebContents, so when a tab's contents
++// are replaced (a jar change, a pin's reset) they move to the new ones.
++void CarryTabParent(content::WebContents* from, content::WebContents* to);
++
++// Session restore: adopt the tokens stored with a restored tab, if any.
++void RestoreTabParentFromExtraData(
++    content::WebContents* contents,
++    const std::map<std::string, std::string>& extra_data);
++
++// Registers the session-rebuild provider once per process
++// (chrome/browser/sessions/stedding_session_rebuild.h).
++void RegisterTabParentSessionRebuild();
++
++// One row of the sidebar, in the order drawn, for NestDepths.
++struct NestRow {
++  // The row's own token and its parent's, empty when it has none.
++  std::string token;
++  std::string parent;
++  // Names the collection the row sits in (the strip's own, or a folder): a
++  // child nests only beside its parent, in the same one.
++  uintptr_t run = 0;
++  // The deepest the row may nest: kMaxNestDepth less its folders.
++  int limit = 0;
++};
++
++// R57: the depth each row is drawn at under its parent, in order. A row
++// nests one level under its parent while every row between them descends
++// from the parent too, in the same run; a row moved away from its parent, a
++// parent closed or in another run, puts it back at the left. A row at its
++// limit has its children beside it, at the same depth.
++std::vector<int> NestDepths(const std::vector<NestRow>& rows);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_TAB_PARENTS_H_
+diff --git a/chrome/browser/ui/stedding/tab_parents_unittest.cc b/chrome/browser/ui/stedding/tab_parents_unittest.cc
+new file mode 100644
+index 0000000000000..2484bd0d5b980
+--- /dev/null
++++ b/chrome/browser/ui/stedding/tab_parents_unittest.cc
+@@ -0,0 +1,147 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/tab_parents.h"
++
++#include <algorithm>
++#include <cstdint>
++#include <string>
++#include <vector>
++
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/browser_with_test_window_test.h"
++#include "components/tabs/public/tab_interface.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace stedding {
++namespace {
++
++// Rows in one run that nest up to the full depth.
++NestRow Row(std::string token, std::string parent, uintptr_t run = 0) {
++  return {std::move(token), std::move(parent), run, kMaxNestDepth};
++}
++
++// tabs R57: a child sits one level under its parent, a grandchild two, and a
++// second child of the same parent comes back to the first child's level.
++TEST(TabParentsTest, ChildrenNestUnderTheirParent) {
++  EXPECT_EQ((std::vector<int>{0, 1, 2, 1, 0}),
++            NestDepths({Row("p", ""), Row("c1", "p"), Row("g", "c1"),
++                        Row("c2", "p"), Row("q", "")}));
++}
++
++// R57: a child nests only while every row between it and its parent
++// descends from the parent: a row of its own, or one moved in between, puts
++// the child back at the left.
++TEST(TabParentsTest, ARowBetweenPartsAChildFromItsParent) {
++  EXPECT_EQ((std::vector<int>{0, 0, 0}),
++            NestDepths({Row("p", ""), Row("x", ""), Row("c", "p")}));
++  // Another parent's child in between parts it too.
++  EXPECT_EQ((std::vector<int>{0, 0, 1, 0}),
++            NestDepths({Row("p", ""), Row("q", ""), Row("d", "q"),
++                        Row("c", "p")}));
++}
++
++// R59: a child whose parent is gone, or in another run (a folder), sits at
++// the left.
++TEST(TabParentsTest, AChildWithoutItsParentBesideItSitsAtTheLeft) {
++  EXPECT_EQ((std::vector<int>{0, 0}),
++            NestDepths({Row("x", ""), Row("c", "closed")}));
++  constexpr uintptr_t kStrip = 1;
++  constexpr uintptr_t kFolder = 2;
++  EXPECT_EQ((std::vector<int>{0, 0}),
++            NestDepths({Row("p", "", kStrip), Row("c", "p", kFolder)}));
++  // In one folder they nest as in the strip.
++  EXPECT_EQ((std::vector<int>{0, 1}),
++            NestDepths({Row("p", "", kFolder), Row("c", "p", kFolder)}));
++}
++
++// R57: folders and children share one depth: a row at its limit has its
++// children beside it.
++TEST(TabParentsTest, ARowAtItsLimitHasItsChildrenBesideIt) {
++  std::vector<NestRow> rows = {Row("a", "")};
++  for (int i = 1; i <= kMaxNestDepth + 2; ++i) {
++    rows.push_back(Row("t" + std::to_string(i),
++                       i == 1 ? "a" : "t" + std::to_string(i - 1)));
++  }
++  std::vector<int> want = {0};
++  for (int i = 1; i <= kMaxNestDepth + 2; ++i) {
++    want.push_back(std::min(i, kMaxNestDepth));
++  }
++  EXPECT_EQ(want, NestDepths(rows));
++
++  // Two folders deep, a child may go three levels further.
++  std::vector<NestRow> deep;
++  for (int i = 0; i < 6; ++i) {
++    deep.push_back({"d" + std::to_string(i),
++                    i ? "d" + std::to_string(i - 1) : "", /*run=*/2,
++                    kMaxNestDepth - 2});
++  }
++  EXPECT_EQ((std::vector<int>{0, 1, 2, 3, 3, 3}), NestDepths(deep));
++}
++
++class TabParentsStripTest : public BrowserWithTestWindowTest {
++ protected:
++  TabStripModel& tabs() { return *browser()->tab_strip_model(); }
++  tabs::TabInterface* Open(const char* url) {
++    AddTab(browser(), GURL(url));
++    return tabs().GetActiveTab();
++  }
++};
++
++// R56, R58: a parent gets a token once, its children keep it, and a
++// restored tab reads both back from the session's extra data.
++TEST_F(TabParentsStripTest, ParentsGetATokenAndRestoreReadsBoth) {
++  tabs::TabInterface* const parent = Open("https://example.com/");
++  tabs::TabInterface* const first = Open("https://example.com/1");
++  tabs::TabInterface* const second = Open("https://example.com/2");
++  EXPECT_EQ("", TabToken(parent->GetContents()));
++  SetTabParent(browser(), first, parent);
++  const std::string token = TabToken(parent->GetContents());
++  EXPECT_FALSE(token.empty());
++  SetTabParent(browser(), second, parent);
++  EXPECT_EQ(token, TabToken(parent->GetContents())) << "one token a parent";
++  EXPECT_EQ(token, TabParentToken(first->GetContents()));
++  EXPECT_EQ(token, TabParentToken(second->GetContents()));
++
++  tabs::TabInterface* const restored = Open("https://example.com/r");
++  RestoreTabParentFromExtraData(restored->GetContents(), {{"other", "x"}});
++  EXPECT_EQ("", TabParentToken(restored->GetContents()));
++  RestoreTabParentFromExtraData(
++      restored->GetContents(),
++      {{kSessionTabTokenKey, "own"}, {kSessionTabParentKey, token}});
++  EXPECT_EQ("own", TabToken(restored->GetContents()));
++  EXPECT_EQ(token, TabParentToken(restored->GetContents()));
++}
++
++// R59: when a parent closes, its children take its own parent, and a top
++// level parent's children go to the left.
++TEST_F(TabParentsStripTest, AClosedParentsChildrenMoveUp) {
++  tabs::TabInterface* const root = Open("https://example.com/");
++  tabs::TabInterface* const middle = Open("https://example.com/m");
++  tabs::TabInterface* const leaf = Open("https://example.com/l");
++  SetTabParent(browser(), middle, root);
++  SetTabParent(browser(), leaf, middle);
++  ReparentChildrenOf(browser(), middle->GetContents());
++  EXPECT_EQ(TabToken(root->GetContents()), TabParentToken(leaf->GetContents()));
++  ReparentChildrenOf(browser(), root->GetContents());
++  EXPECT_EQ("", TabParentToken(leaf->GetContents()));
++  EXPECT_EQ("", TabParentToken(middle->GetContents()));
++}
++
++// sessions S9: new contents in a tab's place (a jar change, a pin's reset)
++// keep its place in the tree.
++TEST_F(TabParentsStripTest, ReplacedContentsKeepTheirPlace) {
++  tabs::TabInterface* const parent = Open("https://example.com/");
++  tabs::TabInterface* const child = Open("https://example.com/c");
++  tabs::TabInterface* const other = Open("https://example.com/o");
++  SetTabParent(browser(), child, parent);
++  CarryTabParent(child->GetContents(), other->GetContents());
++  EXPECT_EQ(TabToken(parent->GetContents()),
++            TabParentToken(other->GetContents()));
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/spaces/BUILD.gn b/chrome/browser/ui/views/spaces/BUILD.gn
+index c033f9a43e6e1..0b757dbcfab4e 100644
+--- a/chrome/browser/ui/views/spaces/BUILD.gn
++++ b/chrome/browser/ui/views/spaces/BUILD.gn
+@@ -38,6 +38,9 @@ source_set("spaces") {
+     "//chrome/browser/ui/toasts/api:toasts",
+     # routing D4, sessions S33: the switches for their notices.
+     "//chrome/browser/ui/stedding:prefs",
++    "//chrome/browser/ui/stedding:tab_parents",
++    "//chrome/browser/tab_list",
++    "//components/prefs",
+     # splits J10 (BACKLOG S-113): Chromium's "Create split view" words.
+     "//chrome/app:generated_resources",
+     "//chrome/browser/ui/views/stedding:glyph_ink",
+diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
+index b1036b72f391d..6857d81e502e8 100644
+--- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
++++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
+@@ -11,7 +11,11 @@
+ #include "base/functional/bind.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/tab_list/tab_removed_reason.h"
+ #include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -21,6 +25,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
++#include "components/prefs/pref_service.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+@@ -89,6 +94,13 @@ SpaceTabVisibilityController::SpaceTabVisibilityController(
+   }
+   tab_strip_model.AddObserver(this);
+   tab_strip_model.Root()->AddObserver(this);
++  if (Profile* const profile = tab_strip_model.profile()) {
++    pref_registrar_.Init(profile->GetPrefs());
++    pref_registrar_.Add(
++        stedding::prefs::kNestChildTabs,
++        base::BindRepeating(&SpaceTabVisibilityController::UpdateTabVisibility,
++                            base::Unretained(this)));
++  }
+ 
+ #if !defined(OFFICIAL_BUILD)
+   if (stedding::kPinTabsForTesting.Get() > 0 ||
+@@ -180,6 +192,7 @@ void SpaceTabVisibilityController::PinTabsForTesting() {
+ }
+ 
+ void SpaceTabVisibilityController::UpdateTabVisibility() {
++  UpdateNestIndents();
+   UpdateSubtree(*tab_strip_root_);
+   PostDropHiddenRowsFromSelection();
+ }
+@@ -236,12 +249,110 @@ void SpaceTabVisibilityController::DropHiddenRowsFromSelection() {
+   }
+ }
+ 
++bool SpaceTabVisibilityController::NestsChildTabs() const {
++  const Profile* const profile = tab_strip_model_->profile();
++  return profile &&
++         profile->GetPrefs()->GetBoolean(stedding::prefs::kNestChildTabs);
++}
++
++void SpaceTabVisibilityController::AdoptChildren(
++    const TabStripModelChange& change) {
++  if (!NestsChildTabs()) {
++    return;
++  }
++  TabStripModel& strip = *tab_strip_model_;
++  for (const TabStripModelChange::ContentsWithIndex& inserted :
++       change.GetInsert()->contents) {
++    tabs::TabInterface* const tab = inserted.tab;
++    const int index = tab ? strip.GetIndexOfTab(tab) : TabStripModel::kNoTab;
++    // A tab that comes back (a restore, an undo, a drop from another window)
++    // brings its own place.
++    if (index == TabStripModel::kNoTab ||
++        !stedding::TabParentToken(tab->GetContents()).empty() ||
++        !stedding::OpensAsChild(strip, index)) {
++      continue;
++    }
++    tabs::TabInterface* const opener = strip.GetOpenerOfTabAt(index);
++    // pins H1: a Space's pin takes no children, as an essential takes none.
++    if (model_ && (model_->IsSpacePinned(opener) || model_->IsSpacePinned(tab))) {
++      continue;
++    }
++    stedding::SetTabParent(tab->GetBrowserWindowInterface(), tab, opener);
++  }
++}
++
++void SpaceTabVisibilityController::ReparentClosedParents(
++    const TabStripModelChange& change) {
++  TabStripModel& strip = *tab_strip_model_;
++  BrowserWindowInterface* browser = nullptr;
++  for (int i = 0; i < strip.count() && !browser; ++i) {
++    browser = strip.GetTabAtIndex(i)->GetBrowserWindowInterface();
++  }
++  if (!browser) {
++    return;
++  }
++  for (const TabStripModelChange::RemovedTab& removed :
++       change.GetRemove()->contents) {
++    // A tab moved to another window keeps its children's places: they stay
++    // its children, at the left in this window (R57).
++    if (removed.remove_reason == TabRemovedReason::kDeleted ||
++        removed.remove_reason == TabRemovedReason::kDeletedAndExpandSidePanel) {
++      stedding::ReparentChildrenOf(browser, removed.contents);
++    }
++  }
++}
++
++void SpaceTabVisibilityController::UpdateNestIndents() {
++  nest_indents_.clear();
++  TabStripModel& strip = *tab_strip_model_;
++  if (strip.closing_all() || !NestsChildTabs()) {
++    return;
++  }
++  // As far in as a folder's rows (folder_view.cc), a level at a time.
++  constexpr int kNestIndent = 14;
++  std::vector<stedding::NestRow> rows;
++  std::vector<const tabs::TabInterface*> row_tabs;
++  for (int i = 0; i < strip.count(); ++i) {
++    const tabs::TabInterface* const tab = strip.GetTabAtIndex(i);
++    // Only rows on screen take part: another Space's tab, or one folded
++    // into a collapsed folder, neither nests nor parts a parent from its
++    // child. An essential, a Space's pin and a split's pane take no place.
++    if (!tab || strip.IsTabPinned(i) || strip.IsTabHidden(i) ||
++        tab->IsSplit() || (model_ && model_->IsSpacePinned(tab))) {
++      continue;
++    }
++    const tabs::TabCollection* const run = tab->GetParentCollection();
++    int folders = 0;
++    for (const tabs::TabCollection* collection = run; collection;
++         collection = collection->GetParentCollection()) {
++      if (collection->type() == tabs::TabCollection::Type::FOLDER) {
++        ++folders;
++      }
++    }
++    const content::WebContents* const contents = tab->GetContents();
++    rows.push_back({stedding::TabToken(contents),
++                    stedding::TabParentToken(contents),
++                    reinterpret_cast<uintptr_t>(run),
++                    stedding::kMaxNestDepth - folders});
++    row_tabs.push_back(tab);
++  }
++  const std::vector<int> depths = stedding::NestDepths(rows);
++  for (size_t i = 0; i < depths.size(); ++i) {
++    if (depths[i] > 0) {
++      nest_indents_[row_tabs[i]] = depths[i] * kNestIndent;
++    }
++  }
++}
++
+ void SpaceTabVisibilityController::UpdateSubtree(views::View& parent) {
+   for (views::View* const child : parent.children()) {
+     if (auto* const tab_view = views::AsViewClass<TabView>(child)) {
+       // A row whose tab has left the strip is animating out; leave it be.
+       if (const tabs::TabInterface* const tab = tab_view->GetTabInterface()) {
+         tab_view->SetVisible(ShowsRow(tab));
++        const auto indent = nest_indents_.find(tab);
++        tab_view->SetSteddingNestIndent(
++            indent == nest_indents_.end() ? 0 : indent->second);
+       }
+       continue;
+     }
+@@ -412,6 +523,11 @@ void SpaceTabVisibilityController::OnTabStripModelChanged(
+   if (selection.active_tab_changed()) {
+     UpdateTabVisibility();
+   }
++  if (change.type() == TabStripModelChange::Type::kInserted) {
++    AdoptChildren(change);
++  } else if (change.type() == TabStripModelChange::Type::kRemoved) {
++    ReparentClosedParents(change);
++  }
+   if (change.type() == TabStripModelChange::Type::kInserted ||
+       change.type() == TabStripModelChange::Type::kMoved ||
+       change.type() == TabStripModelChange::Type::kRemoved) {
+diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h
+index 9aead120b4f52..de44c7ecf0774 100644
+--- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h
++++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_SPACES_SPACE_TAB_VISIBILITY_CONTROLLER_H_
+ #define CHROME_BROWSER_UI_VIEWS_SPACES_SPACE_TAB_VISIBILITY_CONTROLLER_H_
+ 
++#include <map>
++
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ref.h"
+ #include "base/memory/weak_ptr.h"
+@@ -12,6 +14,7 @@
+ #include "chrome/browser/ui/spaces/space_id.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "components/tabs/public/tab_collection_observer.h"
+ 
+ class FolderView;
+@@ -144,6 +147,14 @@ class SpaceTabVisibilityController : public SpaceModel::Observer,
+   // Dev affordance; see stedding::kPinTabsForTesting.
+   void PinTabsForTesting();
+ 
++  // tabs R56-R59: child tabs. A tab opened from a link becomes a child of
++  // the tab it came from; when a parent closes, its children move up; and
++  // each pass works out every row's indent under its parent.
++  void AdoptChildren(const TabStripModelChange& change);
++  void ReparentClosedParents(const TabStripModelChange& change);
++  void UpdateNestIndents();
++  bool NestsChildTabs() const;
++
+   base::RepeatingClosure on_space_changed_;
+   base::RepeatingCallback<void(const SpaceId&, const SpaceId&)>
+       on_active_space_changed_;
+@@ -156,6 +167,10 @@ class SpaceTabVisibilityController : public SpaceModel::Observer,
+   // A deselecting pass is posted and has not run yet.
+   bool drop_posted_ = false;
+   const raw_ref<views::View> tab_strip_root_;
++  // tabs R57: each indented row's indent, from the last pass.
++  std::map<const tabs::TabInterface*, int> nest_indents_;
++  // settings T26: the switch applies to the rows on screen at once.
++  PrefChangeRegistrar pref_registrar_;
+   base::ScopedObservation<SpaceModel, SpaceModel::Observer> observation_{this};
+   base::WeakPtrFactory<SpaceTabVisibilityController> weak_factory_{this};
+ };
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
+index f95124721d4be..8260c396e1b12 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -1917,6 +1917,24 @@ bool TabView::IsRailRow(int width) const {
+   return collapsed_ && !IsInExpandOnHover(width);
+ }
+ 
++void TabView::SetSteddingNestIndent(int indent) {
++  if (stedding_nest_indent_ == indent) {
++    return;
++  }
++  stedding_nest_indent_ = indent;
++  InvalidateLayout();
++  SchedulePaint();
++}
++
++int TabView::SteddingNestIndent() const {
++  if (orientation_ != TabStripOrientation::kVertical || pinned_ || split_ ||
++      IsRailRow(width())) {
++    return 0;
++  }
++  // Never so far that the favicon leaves the row.
++  return std::clamp(stedding_nest_indent_, 0, std::max(0, width() / 2));
++}
++
+ const tabs::TabInterface* TabView::GetTabInterface() const {
+   if (!collection_node_) {
+     return nullptr;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view.h b/chrome/browser/ui/views/tabs/common/tab_view.h
+index bbc7014b0923b..5d67ac6a1b0d8 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -116,6 +116,13 @@ class TabView : public views::View,
+   bool pinned() const { return pinned_; }
+   const tabs::TabInterface* GetTabInterface() const;
+ 
++  // Stedding (tabs R57): how far the row is indented under the tab that
++  // opened it, set by the sidebar's controller. The row's shape and its
++  // contents start that far in at the open width; an essential, a split's
++  // pane and the rail have none.
++  void SetSteddingNestIndent(int indent);
++  int SteddingNestIndent() const;
++
+   GlowHoverController* GetHoverControllerForTesting() {
+     return hover_controller_.get();
+   }
+@@ -333,6 +340,8 @@ class TabView : public views::View,
+   // Stedding (tabs R14): the left press now held is a double click's second
+   // whose first this row took too, so its release may rename (OnMousePressed).
+   bool rename_on_release_ = false;
++  // tabs R57: the indent under the tab that opened this one, in DIP.
++  int stedding_nest_indent_ = 0;
+   bool should_fill_background_tab_color_ = false;
+   // Stedding (tabs R4, R7): the row drawn as asleep, which the folders above
+   // it were last told (UpdateColors).
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
+index 64c97f5247aa6..e26596d53d841 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
+@@ -72,6 +72,9 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
+ 
+   gfx::Rect bounds_remaining = gfx::Rect(layouts.host_size);
+   bounds_remaining.Inset(TabView().tab_styling()->GetContentsInsets());
++  // Stedding (tabs R57): a child tab's row starts under its parent's title.
++  bounds_remaining.Inset(
++      gfx::Insets().set_left(TabView().SteddingNestIndent()));
+ 
+   // Stedding (docs/features/tabs.md): Arc's rows. The close slot is reserved
+   // whether or not the glyph is drawn (R2), and an essentials card's alert is
+diff --git a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+index dd7a0a899fae6..876ec1e7f37e3 100644
+--- a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+@@ -55,6 +55,11 @@ SkPath VerticalTabStyleViews::GetPath(TabStyle::PathType path_type,
+                                       const TabPathFlags& flags) const {
+   const SkScalar corner_radius = GetCornerRadius();
+   gfx::RectF bounds(delegate_->GetView()->GetLocalBounds());
++  // Stedding (tabs R57): a child tab's row is indented, its shape with it.
++  if (const auto* const row =
++          views::AsViewClass<TabView>(delegate_->GetView())) {
++    bounds.Inset(gfx::InsetsF::TLBR(0, row->SteddingNestIndent(), 0, 0));
++  }
+ 
+   if (flags.render_units == TabStyle::RenderUnits::kPixels) {
+     bounds.Scale(scale);
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index b272475c602d7..a3c95f1d21dea 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -1102,6 +1102,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                     "and folder. Off, ",
+                     key("\u21E7\u2318T", "Ctrl+Shift+T"),
+                     " still reopens them one at a time."}));
++  // tabs R56, settings T26 (the owner, 2026-10-21).
++  html_source->AddString("steddingNestChildTabsLabel",
++                         "Show tabs under the tab that opened them");
++  html_source->AddString(
++      "steddingNestChildTabsSubLabel",
++      "A link opened in a new tab sits indented under its page in the "
++      "sidebar. Off, every tab sits at the left.");
+   html_source->AddString("steddingShortcutsTitle", "Shortcuts");
+   html_source->AddString(
+       "steddingShortcutsIntro",
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index e2dcc7b9218cd..74ad5b40315ef 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -22,6 +22,7 @@ test("stedding_browser_tests") {
+     "archive_sweep_browsertest.cc",
+     "branding_browsertest.cc",
+     "certificate_checks_browsertest.cc",
++    "child_tabs_browsertest.cc",
+     "chromium_version_browsertest.cc",
+     "clear_space_browsertest.cc",
+     "command_bar_browsertest.cc",
+@@ -166,6 +167,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/stedding:sleep_tabs",
+     "//chrome/browser/ui/stedding:startup_load",
+     "//chrome/browser/ui/stedding:tab_names",
++    "//chrome/browser/ui/stedding:tab_parents",
+     "//chrome/browser/ui/stedding:tab_numbers",
+     "//chrome/browser/ui/stedding:thanks_pages",
+     "//chrome/browser/ui/stedding:version",
+diff --git a/chrome/test/stedding/child_tabs_browsertest.cc b/chrome/test/stedding/child_tabs_browsertest.cc
+new file mode 100644
+index 0000000000000..0beab703fad82
+--- /dev/null
++++ b/chrome/test/stedding/child_tabs_browsertest.cc
+@@ -0,0 +1,294 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Child tabs (docs/features/tabs.md R56-R60): a link opened in a new tab sits
++// indented under the page it came from, in the sidebar as drawn; a new tab,
++// a duplicate and an essential's link do not; a closed parent's children
++// move up; the tree survives a restart; and the setting turns it off.
++
++#include <map>
++#include <memory>
++#include <set>
++#include <string>
++#include <vector>
++
++#include "base/run_loop.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_service.h"
++#include "chrome/browser/sessions/session_service_factory.h"
++#include "chrome/browser/sessions/session_service_test_helper.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "chrome/browser/ui/views/tabs/tab/tab_title.h"
++#include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/prefs/pref_service.h"
++#include "components/sessions/content/session_tab_helper.h"
++#include "components/sessions/core/command_storage_manager.h"
++#include "components/sessions/core/command_storage_read_status.h"
++#include "components/sessions/core/session_command.h"
++#include "components/sessions/core/session_id.h"
++#include "components/sessions/core/session_service_commands.h"
++#include "components/sessions/core/session_types.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/base/page_transition_types.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/views/test/views_test_utils.h"
++#include "url/gurl.h"
++
++namespace {
++
++class ChildTabsTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
++ protected:
++  void SetUpOnMainThread() override {
++    VerticalTabsBrowserTestMixin<InProcessBrowserTest>::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    ASSERT_TRUE(embedded_test_server()->Start());
++    SessionStartupPref::SetStartupPref(
++        browser()->GetProfile(), SessionStartupPref(SessionStartupPref::LAST));
++  }
++
++  TabStripModel* tabs() { return browser()->tab_strip_model(); }
++  views::Widget* widget() {
++    return BrowserView::GetBrowserViewForBrowser(browser())->GetWidget();
++  }
++
++  GURL Url(const std::string& host) {
++    return embedded_test_server()->GetURL(host, "/title1.html");
++  }
++
++  // The row of `tab` as drawn once the rows are in place, or null.
++  TabView* DrawnRow(tabs::TabInterface* tab) {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    return stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++  }
++
++  // The indent `tab`'s row is drawn at, or -1 when it has no row.
++  int Indent(tabs::TabInterface* tab) {
++    TabView* const row = DrawnRow(tab);
++    return row ? row->SteddingNestIndent() : -1;
++  }
++
++  // A link opened from `from` in a background tab, as a middle click or
++  // Cmd-click opens one (Chromium's OpenURLFromTab).
++  tabs::TabInterface* OpenLinkFrom(tabs::TabInterface* from,
++                                   const std::string& host) {
++    tabs()->ActivateTabAt(tabs()->GetIndexOfTab(from));
++    NavigateParams params(browser(), Url(host), ui::PAGE_TRANSITION_LINK);
++    params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
++    params.source_contents = from->GetContents();
++    Navigate(&params);
++    content::WebContents* const opened = params.navigated_or_inserted_contents;
++    // Loaded, so the session has its page: a tab with none is left out of
++    // what a restart reads.
++    EXPECT_TRUE(opened && content::WaitForLoadStop(opened));
++    const int index = tabs()->GetIndexOfWebContents(opened);
++    return index == TabStripModel::kNoTab ? nullptr
++                                          : tabs()->GetTabAtIndex(index);
++  }
++};
++
++// R56, R57: links opened from a page nest under it, a link from a child one
++// level further, and a page's own window.open too; a new tab and a duplicate
++// are no one's child. The child's title is drawn right of its parent's.
++IN_PROC_BROWSER_TEST_F(ChildTabsTest, ALinkOpensUnderItsPage) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("a.test")));
++  tabs::TabInterface* const page = tabs()->GetActiveTab();
++  tabs::TabInterface* const first = OpenLinkFrom(page, "b.test");
++  ASSERT_TRUE(first);
++  tabs::TabInterface* const second = OpenLinkFrom(page, "c.test");
++  ASSERT_TRUE(second);
++  tabs::TabInterface* const grandchild = OpenLinkFrom(first, "d.test");
++  ASSERT_TRUE(grandchild);
++
++  const std::string token = stedding::TabToken(page->GetContents());
++  ASSERT_FALSE(token.empty());
++  EXPECT_EQ(token, stedding::TabParentToken(first->GetContents()));
++  EXPECT_EQ(token, stedding::TabParentToken(second->GetContents()));
++  EXPECT_EQ(stedding::TabToken(first->GetContents()),
++            stedding::TabParentToken(grandchild->GetContents()));
++
++  EXPECT_EQ(0, Indent(page));
++  EXPECT_EQ(14, Indent(first));
++  EXPECT_EQ(28, Indent(grandchild));
++  EXPECT_EQ(14, Indent(second));
++  TabView* const page_row = DrawnRow(page);
++  TabView* const first_row = DrawnRow(first);
++  ASSERT_TRUE(page_row && first_row);
++  EXPECT_EQ(page_row->title_for_testing()->GetBoundsInScreen().x() + 14,
++            first_row->title_for_testing()->GetBoundsInScreen().x())
++      << "the child's title starts a level right of its parent's";
++
++  {
++    SCOPED_TRACE("a page's own window.open nests too");
++    tabs()->ActivateTabAt(tabs()->GetIndexOfTab(page));
++    content::TestNavigationObserver opened(nullptr);
++    opened.StartWatchingNewWebContents();
++    ASSERT_TRUE(content::ExecJs(
++        page->GetContents(),
++        content::JsReplace("window.open($1)", Url("e.test"))));
++    opened.Wait();
++    tabs::TabInterface* const popup = tabs()->GetActiveTab();
++    ASSERT_NE(popup, page);
++    EXPECT_EQ(token, stedding::TabParentToken(popup->GetContents()));
++    EXPECT_EQ(14, Indent(popup));
++  }
++  {
++    SCOPED_TRACE("a new tab is no one's child");
++    tabs()->ActivateTabAt(tabs()->GetIndexOfTab(page));
++    chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
++    tabs::TabInterface* const blank = tabs()->GetActiveTab();
++    EXPECT_EQ("", stedding::TabParentToken(blank->GetContents()));
++    EXPECT_EQ(0, Indent(blank));
++  }
++  {
++    SCOPED_TRACE("a duplicate is no one's child");
++    tabs()->ActivateTabAt(tabs()->GetIndexOfTab(second));
++    content::WebContents* const copy =
++        chrome::DuplicateTabAt(browser(), tabs()->GetIndexOfTab(second));
++    ASSERT_TRUE(copy);
++    EXPECT_EQ("", stedding::TabParentToken(copy));
++  }
++}
++
++// R56: an essential's links open beside the rows, not under it.
++IN_PROC_BROWSER_TEST_F(ChildTabsTest, AnEssentialHasNoChildren) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("a.test")));
++  tabs::TabInterface* const essential = tabs()->GetActiveTab();
++  tabs()->SetTabPinned(tabs()->GetIndexOfTab(essential), true);
++  tabs::TabInterface* const opened = OpenLinkFrom(essential, "b.test");
++  ASSERT_TRUE(opened);
++  EXPECT_EQ("", stedding::TabParentToken(opened->GetContents()));
++  EXPECT_EQ(0, Indent(opened));
++}
++
++// R59: a closed parent's children move up a level in its place; R57: a row
++// moved away from its parent goes back to the left.
++IN_PROC_BROWSER_TEST_F(ChildTabsTest, AClosedParentsChildrenMoveUp) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("a.test")));
++  tabs::TabInterface* const page = tabs()->GetActiveTab();
++  tabs::TabInterface* const child = OpenLinkFrom(page, "b.test");
++  ASSERT_TRUE(child);
++  tabs::TabInterface* const grandchild = OpenLinkFrom(child, "c.test");
++  ASSERT_TRUE(grandchild);
++  ASSERT_EQ(28, Indent(grandchild));
++
++  tabs()->CloseWebContentsAt(tabs()->GetIndexOfTab(child),
++                             TabCloseTypes::CLOSE_USER_GESTURE);
++  EXPECT_EQ(stedding::TabToken(page->GetContents()),
++            stedding::TabParentToken(grandchild->GetContents()));
++  EXPECT_EQ(14, Indent(grandchild));
++
++  tabs::TabInterface* const other = OpenLinkFrom(page, "d.test");
++  ASSERT_TRUE(other);
++  // The grandchild, now the page's child, goes to the strip's end, past a
++  // row of its own: it is no longer beside its parent.
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), Url("e.test"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  tabs()->MoveWebContentsAt(tabs()->GetIndexOfTab(grandchild),
++                            tabs()->count() - 1, /*select_after_move=*/false);
++  EXPECT_EQ(0, Indent(grandchild));
++  EXPECT_EQ(14, Indent(other));
++}
++
++// settings T26: off, every row sits at the left and a new link is no one's
++// child; on again, the children already made nest again.
++IN_PROC_BROWSER_TEST_F(ChildTabsTest, TheSettingTurnsItOff) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("a.test")));
++  tabs::TabInterface* const page = tabs()->GetActiveTab();
++  tabs::TabInterface* const child = OpenLinkFrom(page, "b.test");
++  ASSERT_TRUE(child);
++  ASSERT_EQ(14, Indent(child));
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  prefs->SetBoolean(stedding::prefs::kNestChildTabs, false);
++  EXPECT_EQ(0, Indent(child));
++  tabs::TabInterface* const later = OpenLinkFrom(page, "c.test");
++  ASSERT_TRUE(later);
++  EXPECT_EQ("", stedding::TabParentToken(later->GetContents()));
++  prefs->SetBoolean(stedding::prefs::kNestChildTabs, true);
++  EXPECT_EQ(14, Indent(child));
++}
++
++// R58: the tree is in what a restart reads: the session's pending commands
++// written, the file moved aside as the last session and read back as session
++// restore reads it, each tab's extra data naming its token and its parent's.
++IN_PROC_BROWSER_TEST_F(ChildTabsTest, TheTreeIsInWhatARestartReads) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("a.test")));
++  tabs::TabInterface* const page = tabs()->GetActiveTab();
++  tabs::TabInterface* const child = OpenLinkFrom(page, "b.test");
++  ASSERT_TRUE(child);
++  tabs::TabInterface* const grandchild = OpenLinkFrom(child, "c.test");
++  ASSERT_TRUE(grandchild);
++  base::RunLoop().RunUntilIdle();
++
++  SessionService* const service =
++      SessionServiceFactory::GetForProfile(browser()->GetProfile());
++  ASSERT_TRUE(service);
++  SessionServiceTestHelper helper(service);
++  sessions::CommandStorageManager* const storage =
++      helper.command_storage_manager();
++  service->MoveCurrentSessionToLastSession();
++  base::test::TestFuture<std::vector<std::unique_ptr<sessions::SessionCommand>>,
++                         sessions::CommandStorageReadStatus>
++      read;
++  storage->GetLastSessionCommands(read.GetCallback());
++  auto [commands, read_status] = read.Take();
++  ASSERT_EQ(read_status, sessions::CommandStorageReadStatus::kSuccess);
++  std::vector<std::unique_ptr<sessions::SessionWindow>> windows;
++  SessionID active = SessionID::InvalidValue();
++  std::string platform;
++  std::set<SessionID> discarded;
++  sessions::RestoreSessionFromCommands(commands, &windows, &active, &platform,
++                                       &discarded);
++
++  const auto saved = [&](tabs::TabInterface* tab) {
++    const SessionID id =
++        sessions::SessionTabHelper::IdForTab(tab->GetContents());
++    for (const auto& window : windows) {
++      for (const auto& each : window->tabs) {
++        if (each->tab_id == id) {
++          return each->extra_data;
++        }
++      }
++    }
++    return std::map<std::string, std::string>();
++  };
++  const auto value = [](const std::map<std::string, std::string>& data,
++                        const char* key) {
++    const auto it = data.find(key);
++    return it == data.end() ? std::string() : it->second;
++  };
++  EXPECT_EQ(stedding::TabToken(page->GetContents()),
++            value(saved(page), stedding::kSessionTabTokenKey));
++  EXPECT_EQ(stedding::TabToken(page->GetContents()),
++            value(saved(child), stedding::kSessionTabParentKey));
++  EXPECT_EQ(stedding::TabToken(child->GetContents()),
++            value(saved(child), stedding::kSessionTabTokenKey));
++  EXPECT_EQ(stedding::TabToken(child->GetContents()),
++            value(saved(grandchild), stedding::kSessionTabParentKey))
++      << saved(grandchild).size() << " keys saved for the grandchild";
++  EXPECT_FALSE(stedding::TabToken(child->GetContents()).empty());
++}
++
++}  // namespace

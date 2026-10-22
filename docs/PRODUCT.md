@@ -119,8 +119,9 @@ yet, `docs/features/library.md`) and a `+`.
 - **Copy URL, and copy as Markdown** **[1.0]** — `⇧⌘C` and `⌥⇧⌘C`, with tracking
   parameters removed (`features/copy-link.md`).
 - **Reopen closed tab** **[1.0]** — `⇧⌘T`, Chromium's.
-- **Child tabs** **[M10]** — a link opened in a new tab sits under its opener, and Back
-  returns to it (`S-92`).
+- **Child tabs** **[M10]** — a link opened in a new tab sits indented under the page it came
+  from, a closed parent's children move up, and the tree survives a restart; a setting turns it
+  off (`features/tabs.md` R56–R59). Back returning to the parent is not built yet (R60, `S-92`).
 - **Undo after closing tabs** **[M10]** — after a close, a toast with Undo that reopens those
   tabs in their Space and folder; a setting turns it off (`features/tabs.md` R25–R28, R30).
 - **The sidebar on the right** **[M10]** — a setting (`S-96`).
