@@ -90,9 +90,9 @@ that owns its code (patches/README.md, the round-patch exception).
  .../spaces/space_tab_visibility_controller.cc |    8 +
  .../spaces/space_tab_visibility_controller.h  |   12 +
  .../views/tabs/common/clear_tabs_separator.cc |    8 +-
- .../ui/views/tabs/common/folder_view.cc       |  100 +-
+ .../ui/views/tabs/common/folder_view.cc       |  117 +-
  .../ui/views/tabs/common/folder_view.h        |   13 +-
- .../views/tabs/common/folder_view_unittest.cc |   97 ++
+ .../views/tabs/common/folder_view_unittest.cc |  139 ++
  .../tabs/common/stedding_tab_row_rules.cc     |    5 +-
  .../tabs/common/stedding_tab_row_rules.h      |    8 +-
  .../common/stedding_tab_row_rules_unittest.cc |   11 +-
@@ -124,7 +124,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   |  177 ++-
  components/tabs/impl/tab_strip_collection.cc  |   80 +-
  components/tabs/public/tab_strip_collection.h |   32 +-
- 71 files changed, 4825 insertions(+), 340 deletions(-)
+ 71 files changed, 4884 insertions(+), 340 deletions(-)
 
 diff --git a/chrome/browser/global_keyboard_shortcuts_mac.mm b/chrome/browser/global_keyboard_shortcuts_mac.mm
 index 7d5e56feddfe8..1d222e4dd0f90 100644
@@ -3006,7 +3006,7 @@ index 50320bc6a3f70..4414be4ecbe89 100644
  
  gfx::Rect ClearTabsSeparator::GetClearRect() const {
 diff --git a/chrome/browser/ui/views/tabs/common/folder_view.cc b/chrome/browser/ui/views/tabs/common/folder_view.cc
-index eb3571b88588d..4c385dbac97b4 100644
+index eb3571b88588d..0f6380177acdb 100644
 --- a/chrome/browser/ui/views/tabs/common/folder_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/folder_view.cc
 @@ -26,16 +26,21 @@
@@ -3091,7 +3091,7 @@ index eb3571b88588d..4c385dbac97b4 100644
        return;
      }
      if (event.GetClickCount() >= 2) {
-@@ -115,6 +140,24 @@ class FolderView::HeaderView : public views::View {
+@@ -115,6 +140,41 @@ class FolderView::HeaderView : public views::View {
      }
    }
  
@@ -3104,19 +3104,36 @@ index eb3571b88588d..4c385dbac97b4 100644
 +    return true;
 +  }
 +
-+  // A screen reader's press, as a click.
++  // A screen reader's press, as a click. Windows' UI Automation opens and
++  // closes a control that reports itself expanded or collapsed with Expand
++  // and Collapse instead, which failed: Narrator could not toggle a folder
++  // (S-140, 2026-10-22).
 +  bool HandleAccessibleAction(const ui::AXActionData& action_data) override {
-+    if (action_data.action != ax::mojom::Action::kDoDefault) {
-+      return views::View::HandleAccessibleAction(action_data);
++    switch (action_data.action) {
++      case ax::mojom::Action::kDoDefault:
++        owner_->ToggleCollapsed();
++        return true;
++      case ax::mojom::Action::kExpand:
++      case ax::mojom::Action::kCollapse: {
++        const tabs::FolderTabCollection* const folder = owner_->folder();
++        if (!folder) {
++          return false;
++        }
++        if (folder->collapsed() !=
++            (action_data.action == ax::mojom::Action::kCollapse)) {
++          owner_->ToggleCollapsed();
++        }
++        return true;
++      }
++      default:
++        return views::View::HandleAccessibleAction(action_data);
 +    }
-+    owner_->ToggleCollapsed();
-+    return true;
 +  }
 +
   private:
    const raw_ptr<FolderView> owner_;
  };
-@@ -151,6 +194,10 @@ FolderView::FolderView(TabCollectionNode* collection_node)
+@@ -151,6 +211,10 @@ FolderView::FolderView(TabCollectionNode* collection_node)
    name_->SetSkipSubpixelRenderingOpacityCheck(true);
    name_->SetSubpixelRenderingEnabled(false);
    name_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -3127,7 +3144,7 @@ index eb3571b88588d..4c385dbac97b4 100644
  
    auto rename = std::make_unique<views::Textfield>();
    rename->set_controller(this);
-@@ -247,8 +294,15 @@ void FolderView::UpdateHeaderBackground() {
+@@ -247,8 +311,15 @@ void FolderView::UpdateHeaderBackground() {
    const float radius =
        GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius);
    if (drop_highlighted_) {
@@ -3145,7 +3162,7 @@ index eb3571b88588d..4c385dbac97b4 100644
    } else if (header_hovered_) {
      // The tab rows' hover tint (folders F12).
      header_->SetBackground(views::CreateRoundedRectBackground(
-@@ -263,11 +317,23 @@ void FolderView::OnThemeChanged() {
+@@ -263,11 +334,23 @@ void FolderView::OnThemeChanged() {
    views::View::OnThemeChanged();
    // sidebar Y1, Y2: a density change reaches the window as a theme change.
    UpdateHeader();
@@ -3169,7 +3186,7 @@ index eb3571b88588d..4c385dbac97b4 100644
    if (!details.is_add || details.parent != this ||
        views::IsViewClass<HeaderView>(details.child)) {
      return;
-@@ -384,6 +450,15 @@ void FolderView::UpdateHeader() {
+@@ -384,6 +467,15 @@ void FolderView::UpdateHeader() {
        gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
    const std::string& title = f->title();
    name_->SetText(title.empty() ? u"New Folder" : base::UTF8ToUTF16(title));
@@ -3185,7 +3202,7 @@ index eb3571b88588d..4c385dbac97b4 100644
    UpdateSleptLook();
    UpdateCount();
  }
-@@ -440,6 +515,15 @@ void FolderView::UpdateSleptLook() {
+@@ -440,6 +532,15 @@ void FolderView::UpdateSleptLook() {
    const SkColor text =
        provider ? provider->GetColor(kColorTabForegroundInactiveFrameActive)
                 : kHeaderText;
@@ -3253,7 +3270,7 @@ index 4b7eae9d31e4f..20b3a3def23b4 100644
    bool rail_ = false;
    std::unique_ptr<ui::SimpleMenuModel> menu_model_;
 diff --git a/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc b/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc
-index d8e94b3d4c620..e5ac04ebac54e 100644
+index d8e94b3d4c620..995a6e230d29d 100644
 --- a/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/common/folder_view_unittest.cc
 @@ -27,16 +27,22 @@
@@ -3279,7 +3296,7 @@ index d8e94b3d4c620..e5ac04ebac54e 100644
  #include "ui/views/controls/image_view.h"
  #include "ui/views/controls/label.h"
  #include "ui/views/controls/textfield/textfield.h"
-@@ -221,6 +227,97 @@ TEST_F(FolderViewTest, ACollapsedHeaderCountsItsTabs) {
+@@ -221,6 +227,139 @@ TEST_F(FolderViewTest, ACollapsedHeaderCountsItsTabs) {
    EXPECT_EQ(u"3", count->GetText());
  }
  
@@ -3372,6 +3389,48 @@ index d8e94b3d4c620..e5ac04ebac54e 100644
 +    EXPECT_EQ(u"New Folder", node_data().GetString16Attribute(
 +                                 ax::mojom::StringAttribute::kName));
 +  }
++}
++
++// BACKLOG S-140, on Windows (2026-10-22): UI Automation, and with it
++// Narrator, opens and closes a control that says it is expanded or collapsed
++// through Expand and Collapse, and offers no Invoke on it. The header turned
++// both down, so a screen reader could not toggle a folder there. Each now
++// sets the state it names; asking for the state the folder is in already
++// leaves it so.
++TEST_F(FolderViewTest, TheHeaderOpensAndClosesThroughExpandAndCollapse) {
++  tabs::FolderTabCollection folder(tabs::FolderId::GenerateNew(), "Reading",
++                                   /*collapsed=*/false);
++  TabCollectionNode node(&folder, TabStripOrientation::kVertical);
++  std::unique_ptr<views::Widget> widget =
++      CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++  FolderView* const view =
++      widget->SetContentsView(std::make_unique<FolderView>(&node));
++  widget->SetBounds(gfx::Rect(0, 0, 240, 200));
++  widget->Show();
++  widget->LayoutRootViewIfNecessary();
++  views::View* const header = view->header_for_testing();
++  ASSERT_TRUE(header);
++  const auto act = [&](ax::mojom::Action action) {
++    ui::AXActionData data;
++    data.action = action;
++    return header->HandleAccessibleAction(data);
++  };
++  const auto node_data = [&]() {
++    ui::AXNodeData data;
++    header->GetViewAccessibility().GetAccessibleNodeData(&data);
++    return data;
++  };
++
++  EXPECT_TRUE(act(ax::mojom::Action::kCollapse));
++  EXPECT_TRUE(folder.collapsed());
++  EXPECT_TRUE(node_data().HasState(ax::mojom::State::kCollapsed));
++  EXPECT_TRUE(act(ax::mojom::Action::kCollapse));
++  EXPECT_TRUE(folder.collapsed()) << "Collapse on a collapsed folder opened it";
++  EXPECT_TRUE(act(ax::mojom::Action::kExpand));
++  EXPECT_FALSE(folder.collapsed());
++  EXPECT_TRUE(node_data().HasState(ax::mojom::State::kExpanded));
++  EXPECT_TRUE(act(ax::mojom::Action::kExpand));
++  EXPECT_FALSE(folder.collapsed()) << "Expand on an open folder closed it";
 +}
 +
  // menus M7, folders F31, F32: the header's menu reads Rename Folder…,

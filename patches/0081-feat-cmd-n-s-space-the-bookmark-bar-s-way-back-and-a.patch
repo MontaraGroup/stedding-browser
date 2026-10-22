@@ -1,0 +1,676 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 22 Oct 2026 02:35:18 -0400
+Subject: feat: Cmd-N's Space, the bookmark bar's way back, and a question
+ before a big conversion
+
+The three decisions left open for the owner, made on the night of
+2026-10-22 with the owner away and asking for them to be decided:
+
+- Cmd-N opens on the Space of the window it is pressed in (windows G6;
+  BACKLOG S-145), as a window a tab is dragged into or moved to already
+  did. A window made with no window to come from, as the Dock's New Window
+  with none open, keeps the profile's first Space. The Space rides from
+  NewWindow to the new window's SpaceModel through
+  SpaceModel::SetNextWindowSpace, cleared once the window is made.
+- Settings > Stedding > Tabs > "Show the bookmark bar and the star"
+  (settings T27, import I14; docs/history/plan-2026-09-26.md WIN-15, its
+  option B): the inverse of stedding.bookmarks.converted, off after Turn
+  Bookmarks into Pinned Tabs; turned on, the bar and the star come back in
+  every window at once, since both already watch the preference. Option A,
+  hiding the bar once through Chromium's own setting, would have undone
+  the sidebar standing for the bookmark bar.
+- Turn Bookmarks into Pinned Tabs, from the command bar, asks first above
+  50 bookmarks (import I16; WEB-11): a dialog over the window names how
+  many it would add, not counting those an earlier run made pins of, with
+  Turn into Pinned Tabs and Cancel. Up to 50 it converts at once, as
+  before.
+
+Tests: SpaceSwitchTest.CmdNOpensOnTheSpaceItIsPressedIn;
+CommandBarActionsTest.TheSettingsRowBringsTheBarAndTheStarBack and
+CommandBarActionsTest.ManyBookmarksAskBeforeTurningIntoPins.
+
+Why: the owner left these three for a decision and, away for the night,
+asked for them to be decided; each also closes a way a user got stuck (no
+way back to the bookmark bar, hundreds of tabs from one command, Cmd-N
+leaving the Space in use).
+Removable when: never; the next re-cut folds each into the patch that owns
+its feature (windows, import, settings).
+---
+ .../api/settings_private/prefs_util.cc        |   3 +
+ .../stedding_page/stedding_page.html.ts       |   8 +
+ chrome/browser/ui/browser_commands.cc         |   7 +
+ chrome/browser/ui/spaces/space_model.cc       |  33 +++-
+ chrome/browser/ui/spaces/space_model.h        |   4 +
+ chrome/browser/ui/stedding/BUILD.gn           |  19 +++
+ .../ui/stedding/bookmarks_to_pins_dialog.cc   | 101 +++++++++++
+ .../ui/stedding/bookmarks_to_pins_dialog.h    |  26 +++
+ chrome/browser/ui/views/commandbar/BUILD.gn   |   1 +
+ .../ui/views/commandbar/command_bar_view.cc   |   9 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  10 ++
+ chrome/test/stedding/BUILD.gn                 |   1 +
+ .../test/stedding/command_bar_browsertest.cc  | 160 +++++++++++++++++-
+ .../test/stedding/space_switch_browsertest.cc |  28 +++
+ 14 files changed, 396 insertions(+), 14 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/bookmarks_to_pins_dialog.cc
+ create mode 100644 chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 15e6294575dc1..09b5c385c32ed 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -379,6 +379,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+   // tabs R56, settings T26.
+   (*s_allowlist)[stedding::prefs::kNestChildTabs] =
+       settings_api::PrefType::kBoolean;
++  // import I14, settings T27.
++  (*s_allowlist)[stedding::prefs::kBookmarksConverted] =
++      settings_api::PrefType::kBoolean;
+   // routing D4, settings T23.
+   (*s_allowlist)[stedding::prefs::kSpaceNotices] =
+       settings_api::PrefType::kBoolean;
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 26c26890e773f..0cbee9176ff42 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -148,6 +148,14 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingNestChildTabsLabel}"
+       sub-label="$i18n{steddingNestChildTabsSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="bookmarksShown"
++      class="hr"
++      pref-key="stedding.bookmarks.converted"
++      inverted
++      label="$i18n{steddingBookmarksShownLabel}"
++      sub-label="$i18n{steddingBookmarksShownSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="ctrlTabMru"
+       class="hr"
+diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
+index f33043e837644..594f1d7109536 100644
+--- a/chrome/browser/ui/browser_commands.cc
++++ b/chrome/browser/ui/browser_commands.cc
+@@ -1330,7 +1330,14 @@ void NewWindow(BrowserWindowInterface* browser) {
+   }
+ #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+ #endif  // BUILDFLAG(IS_MAC)
++  // Stedding windows G6 (decided 2026-10-22, the owner away and asking for
++  // a decision): Cmd-N opens on the Space of the window it is pressed in, as
++  // a window a tab is dragged into or moved to does. It opened on the
++  // profile's first Space.
++  spaces::SpaceModel::SetNextWindowSpace(
++      spaces::SpaceModel::InitialSpaceForWindowFrom(browser));
+   NewEmptyWindow(profile->GetOriginalProfile());
++  spaces::SpaceModel::SetNextWindowSpace(std::string());
+ }
+ 
+ void NewIncognitoWindow(Profile* profile) {
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 1804c3e9d6ba4..ca531490e2626 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -16,6 +16,7 @@
+ #include "base/check.h"
+ #include "base/auto_reset.h"
+ #include "base/functional/bind.h"
++#include "base/no_destructor.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/time/time.h"
+ #include "base/json/json_reader.h"
+@@ -89,6 +90,12 @@ bool& NextWindowIsBlank() {
+   return blank;
+ }
+ 
++// windows G6: set by SetNextWindowSpace, consumed by the next model made.
++std::string& NextWindowSpace() {
++  static base::NoDestructor<std::string> space;
++  return *space;
++}
++
+ // sessions S17: the jar of a deleted Space stays on the profile's pending
+ // list until its wipe has finished. A quit during the wait, or a window
+ // without Spaces still showing the jar when the last window with Spaces
+@@ -293,14 +300,19 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+   // that Space's jar. It showed the profile's first Space, and a tab of a
+   // Space with its own session was made again in the shared jar, signed out.
+   // No observer exists yet and no tab, so nothing else follows the change.
+-  if (const BrowserInitState* const init = BrowserInitState::From(&browser)) {
+-    if (const std::optional<base::Token> token = base::Token::FromString(
+-            init->create_params().stedding_initial_space);
+-        token) {
+-      if (const SpaceId source = SpaceId::FromRawToken(*token);
+-          GetSpace(source)) {
+-        active_id_ = source;
+-      }
++  // A window Cmd-N opens shows the Space of the window it was pressed in, the
++  // same way (SetNextWindowSpace).
++  std::string initial = std::exchange(NextWindowSpace(), std::string());
++  if (const BrowserInitState* const init = BrowserInitState::From(&browser);
++      init && !init->create_params().stedding_initial_space.empty()) {
++    initial = init->create_params().stedding_initial_space;
++  }
++  if (const std::optional<base::Token> token =
++          base::Token::FromString(initial);
++      token) {
++    if (const SpaceId source = SpaceId::FromRawToken(*token);
++        GetSpace(source)) {
++      active_id_ = source;
+     }
+   }
+ 
+@@ -470,6 +482,11 @@ void SpaceModel::SetNextWindowBlank() {
+   NextWindowIsBlank() = true;
+ }
+ 
++// static
++void SpaceModel::SetNextWindowSpace(std::string space) {
++  NextWindowSpace() = std::move(space);
++}
++
+ // static
+ std::string SpaceModel::InitialSpaceForWindowFrom(
+     BrowserWindowInterface* source) {
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index c735a29e74bc7..f79b6994af4cc 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -156,6 +156,10 @@ class SpaceModel : public TabStripModelObserver,
+   // `stedding_initial_space` carries it. A tab dragged out and Move Tab to New
+   // Window set it. Empty when `source` has no Spaces.
+   static std::string InitialSpaceForWindowFrom(BrowserWindowInterface* source);
++  // windows G6: the Space the next window made shows first, for a window
++  // made with no create params of its own (Cmd-N, through NewEmptyWindow);
++  // consumed by that window's model. An empty `space` clears it.
++  static void SetNextWindowSpace(std::string space);
+ 
+   // Whether a window's session data (`kSessionSpacesKey` among `extra_data`)
+   // is a Blank Window's. Session restore never puts one into a window that
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 22e98028bf177..c8f9dfd969422 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -248,6 +248,25 @@ source_set("pin_home_dialog") {
+   ]
+ }
+ 
++# docs/features/import.md I16: Turn Bookmarks into Pinned Tabs from the
++# command bar, asking first above kBookmarksToPinsWithoutAsking bookmarks.
++source_set("bookmarks_to_pins_dialog") {
++  public = [ "bookmarks_to_pins_dialog.h" ]
++  sources = [ "bookmarks_to_pins_dialog.cc" ]
++  deps = [
++    "//base",
++    "//chrome/browser/bookmarks",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/browser_window",
++    "//chrome/browser/ui/dialogs:browser_dialogs",
++    ":prefs",
++    "//chrome/browser/ui/spaces",
++    "//components/bookmarks/browser",
++    "//components/prefs",
++    "//ui/base",
++  ]
++}
++
+ # The one answer to "should this animate" (docs/features/motion.md).
+ source_set("tab_names") {
+   public = [ "tab_names.h" ]
+diff --git a/chrome/browser/ui/stedding/bookmarks_to_pins_dialog.cc b/chrome/browser/ui/stedding/bookmarks_to_pins_dialog.cc
+new file mode 100644
+index 0000000000000..1d9cd6ba2dc91
+--- /dev/null
++++ b/chrome/browser/ui/stedding/bookmarks_to_pins_dialog.cc
+@@ -0,0 +1,101 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h"
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/containers/flat_set.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/memory/weak_ptr.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/values.h"
++#include "chrome/browser/bookmarks/bookmark_model_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/dialogs/browser_dialogs.h"
++#include "chrome/browser/ui/spaces/bookmarks_to_pins.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/bookmarks/browser/bookmark_model.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/models/dialog_model.h"
++#include "ui/base/models/dialog_model_field.h"
++
++namespace stedding {
++
++namespace {
++
++// The bookmarks a conversion would make into tabs: those no earlier run
++// made a tab of (I13: a second run adds nothing).
++size_t CountNewTabs(const std::vector<spaces::ArcImportPlan::Node>& nodes,
++                    const base::flat_set<std::string>& done) {
++  size_t tabs = 0;
++  for (const spaces::ArcImportPlan::Node& node : nodes) {
++    if (node.kind == spaces::ArcImportPlan::Node::Kind::kFolder) {
++      tabs += CountNewTabs(node.children, done);
++    } else if (!done.contains(node.arc_id)) {
++      ++tabs;
++    }
++  }
++  return tabs;
++}
++
++void Convert(base::WeakPtr<BrowserWindowInterface> browser) {
++  if (browser) {
++    ConvertBookmarksToPins(browser.get());
++  }
++}
++
++}  // namespace
++
++void ConvertBookmarksToPinsAsking(BrowserWindowInterface* browser) {
++  if (!browser) {
++    return;
++  }
++  bookmarks::BookmarkModel* const model =
++      BookmarkModelFactory::GetForBrowserContextIfExists(
++          browser->GetProfile());
++  if (!model || !model->loaded()) {
++    return;
++  }
++  std::vector<std::string> done;
++  for (const base::Value& id :
++       browser->GetProfile()->GetPrefs()->GetList(prefs::kArcImportedIds)) {
++    if (id.is_string()) {
++      done.push_back(id.GetString());
++    }
++  }
++  const size_t count = CountNewTabs(
++      NodesFromBookmarks(*model), base::flat_set<std::string>(std::move(done)));
++  if (count <= kBookmarksToPinsWithoutAsking) {
++    ConvertBookmarksToPins(browser);
++    return;
++  }
++  // Each becomes a tab, asleep until it is shown; hundreds of them are a
++  // sidebar of hundreds of rows, so the count is said before.
++  const std::u16string number = base::NumberToString16(count);
++  chrome::ShowBrowserModal(
++      browser,
++      ui::DialogModel::Builder()
++          .SetInternalName("SteddingBookmarksToPinsDialog")
++          .SetTitle(base::StrCat(
++              {u"Turn ", number, u" bookmarks into pinned tabs?"}))
++          .AddParagraph(ui::DialogModelLabel(base::StrCat(
++              {u"Each of your ", number,
++               u" bookmarks becomes a pinned tab in the sidebar, in its "
++               u"folder, asleep until you open it. The bookmark bar and the "
++               u"star are hidden; Settings → Stedding → Tabs "
++               u"brings them back."})))
++          .AddOkButton(base::BindOnce(&Convert, browser->GetWeakPtr()),
++                       ui::DialogModel::Button::Params().SetLabel(
++                           u"Turn into Pinned Tabs"))
++          .AddCancelButton(base::DoNothing())
++          .Build());
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h b/chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h
+new file mode 100644
+index 0000000000000..64ebddf15393c
+--- /dev/null
++++ b/chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h
+@@ -0,0 +1,26 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_BOOKMARKS_TO_PINS_DIALOG_H_
++#define CHROME_BROWSER_UI_STEDDING_BOOKMARKS_TO_PINS_DIALOG_H_
++
++#include <cstddef>
++
++class BrowserWindowInterface;
++
++namespace stedding {
++
++// import I16: how many bookmarks Turn Bookmarks into Pinned Tabs turns into
++// tabs without asking first (decided 2026-10-22, the owner away and asking
++// for a decision; docs/history/plan-2026-09-26.md WEB-11).
++inline constexpr size_t kBookmarksToPinsWithoutAsking = 50;
++
++// The command bar's Turn Bookmarks into Pinned Tabs: converts at once up to
++// kBookmarksToPinsWithoutAsking bookmarks, and above that asks first, with
++// the count, in a dialog over the window.
++void ConvertBookmarksToPinsAsking(BrowserWindowInterface* browser);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_BOOKMARKS_TO_PINS_DIALOG_H_
+diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
+index e928e4806f270..0fb86ffcbbe5b 100644
+--- a/chrome/browser/ui/views/commandbar/BUILD.gn
++++ b/chrome/browser/ui/views/commandbar/BUILD.gn
+@@ -24,6 +24,7 @@ source_set("commandbar") {
+     "//base:i18n",
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:app_updater",
++    "//chrome/browser/ui/stedding:bookmarks_to_pins_dialog",
+     "//chrome/browser/ui/stedding:dark_pages",
+     "//chrome/browser/ui/stedding:make_app",
+     "//chrome/browser:browser_process",
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index 99f706aa1b20a..a95d5a359b385 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -37,7 +37,6 @@
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/singleton_tabs.h"
+ #include "chrome/browser/ui/spaces/arc_sidebar_importer.h"
+-#include "chrome/browser/ui/spaces/bookmarks_to_pins.h"
+ #include "chrome/browser/ui/spaces/folder_commands.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_colors.h"
+@@ -48,6 +47,7 @@
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/browser/ui/spaces/space_query.h"
+ #include "chrome/browser/ui/stedding/app_updater.h"
++#include "chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h"
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding/make_app.h"
+ #include "chrome/browser/ui/stedding/media_keys.h"
+@@ -830,12 +830,11 @@ void CommandBarView::BuildActions() {
+         sidebar_row(u"Hide Sidebar", stedding::prefs::kSidebarClosedHidden);
+       }
+     }
+-    // import I16: bookmarks a profile already holds.
++    // import I16: bookmarks a profile already holds; above
++    // kBookmarksToPinsWithoutAsking it asks first.
+     actions_.push_back({u"Turn Bookmarks into Pinned Tabs", std::u16string(),
+                         base::BindRepeating(
+-                            [](BrowserWindowInterface* browser) {
+-                              stedding::ConvertBookmarksToPins(browser);
+-                            },
++                            &stedding::ConvertBookmarksToPinsAsking,
+                             base::Unretained(browser_))});
+     // archive A7: the archived view.
+     actions_.push_back({u"Show Archived Tabs", std::u16string(),
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index a3c95f1d21dea..9a4e2d01a952e 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -1109,6 +1109,16 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingNestChildTabsSubLabel",
+       "A link opened in a new tab sits indented under its page in the "
+       "sidebar. Off, every tab sits at the left.");
++  // import I14, settings T27 (WIN-15; decided 2026-10-22, the owner away
++  // and asking for a decision): the way back from Turn Bookmarks into Pinned
++  // Tabs.
++  html_source->AddString("steddingBookmarksShownLabel",
++                         "Show the bookmark bar and the star");
++  html_source->AddString(
++      "steddingBookmarksShownSubLabel",
++      "Turn Bookmarks into Pinned Tabs turns this off: the sidebar holds them "
++      "then. On, the bar follows Show bookmarks bar again and the star "
++      "bookmarks a page.");
+   html_source->AddString("steddingShortcutsTitle", "Shortcuts");
+   html_source->AddString(
+       "steddingShortcutsIntro",
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 74ad5b40315ef..01729ced92cc4 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -157,6 +157,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/spaces",
+     "//chrome/browser/ui/stedding:address_row",
+     "//chrome/browser/ui/stedding:app_updater_test_support",
++    "//chrome/browser/ui/stedding:bookmarks_to_pins_dialog",
+     "//chrome/browser/ui/stedding:dark_pages",
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:media_keys",
+diff --git a/chrome/test/stedding/command_bar_browsertest.cc b/chrome/test/stedding/command_bar_browsertest.cc
+index 9c86633355a72..ee19ab68e5127 100644
+--- a/chrome/test/stedding/command_bar_browsertest.cc
++++ b/chrome/test/stedding/command_bar_browsertest.cc
+@@ -16,6 +16,7 @@
+ 
+ #include "base/files/scoped_temp_dir.h"
+ #include "base/run_loop.h"
++#include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/test/run_until.h"
+@@ -37,6 +38,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h"
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+@@ -93,7 +95,10 @@
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/test/views_test_utils.h"
++#include "ui/views/test/widget_test.h"
++#include "ui/views/widget/any_widget_observer.h"
+ #include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
+ #include "url/gurl.h"
+ 
+ namespace {
+@@ -599,7 +604,8 @@ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest, EveryRowRuns) {
+ // Space pin of the bookmark, and the bar and the star leave the window at
+ // once. The star watched the preference; the bar read it only at the
+ // window's next navigation or tab switch (read in the code, 2026-10-18).
+-// Whether the conversion can be undone is the owner's to decide (I14).
++// Settings brings them back (settings T27):
++// TheSettingsRowBringsTheBarAndTheStarBack.
+ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest,
+                        TurningBookmarksIntoPinsHidesTheBarAndTheStar) {
+   Profile* const profile = browser()->GetProfile();
+@@ -665,6 +671,158 @@ IN_PROC_BROWSER_TEST_F(CommandBarActionsTest,
+   })) << "the star stayed after the conversion";
+ }
+ 
++// import I14, settings T27 (WIN-15): Settings -> Stedding's "Show the
++// bookmark bar and the star", off after the conversion, brings both back in
++// the window when it is turned on, without a navigation.
++IN_PROC_BROWSER_TEST_F(CommandBarActionsTest,
++                       TheSettingsRowBringsTheBarAndTheStarBack) {
++  Profile* const profile = browser()->GetProfile();
++  bookmarks::BookmarkModel* const bookmarks =
++      BookmarkModelFactory::GetForBrowserContext(profile);
++  ASSERT_TRUE(bookmarks);
++  bookmarks::test::WaitForBookmarkModelToLoad(bookmarks);
++  bookmarks->AddURL(
++      bookmarks->bookmark_bar_node(), 0, u"Kept",
++      embedded_test_server()->GetURL("kept.test", "/title1.html"));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("page.test", "/title2.html")));
++  BrowserView* const view = BrowserView::GetBrowserViewForBrowser(browser());
++  BookmarkBarController* const bar = BookmarkBarController::From(browser());
++  ASSERT_TRUE(bar);
++  if (bar->bookmark_bar_state() != BookmarkBar::SHOW) {
++    chrome::ExecuteCommand(browser(), IDC_SHOW_BOOKMARK_BAR);  // ⇧⌘B
++  }
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(view);
++    return view->IsBookmarkBarVisible();
++  })) << "the premise: the bookmark bar shows";
++  page_actions::PageActionView* const star =
++      view->GetLocationBarView()->page_action_container()->GetPageActionView(
++          kActionBookmarkThisTab);
++  ASSERT_TRUE(star);
++  Run(browser(), u"Turn Bookmarks into Pinned Tabs");
++  ASSERT_TRUE(profile->GetPrefs()->GetBoolean(
++      stedding::prefs::kBookmarksConverted));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(view);
++    return !view->IsBookmarkBarVisible() && !star->GetVisible();
++  })) << "the premise: the conversion hid the bar and the star";
++
++  // The row, in Settings in a second window, reads off, and a click turns it
++  // on.
++  BrowserWindowInterface* const settings = CreateBrowser(profile);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      settings, GURL("chrome://settings/stedding")));
++  content::WebContents* const page =
++      settings->GetTabStripModel()->GetActiveWebContents();
++  constexpr char kRow[] = R"(
++    (() => {
++      const find = root => {
++        for (const element of root.querySelectorAll('*')) {
++          if (element.localName === 'settings-stedding-page') {
++            return element;
++          }
++          if (element.shadowRoot) {
++            const found = find(element.shadowRoot);
++            if (found) {
++              return found;
++            }
++          }
++        }
++        return null;
++      };
++      const section = find(document);
++      return section && section.shadowRoot &&
++          section.shadowRoot.querySelector('#bookmarksShown');
++    })())";
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return content::EvalJs(page, base::StrCat({"!!", kRow})).ExtractBool();
++  })) << "no row #bookmarksShown on chrome://settings/stedding";
++  EXPECT_EQ(false,
++            content::EvalJs(page, base::StrCat({kRow, ".checked"})));
++  ASSERT_TRUE(content::ExecJs(page, base::StrCat({kRow, ".click()"})));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return !profile->GetPrefs()->GetBoolean(
++        stedding::prefs::kBookmarksConverted);
++  })) << "the row did not turn the preference off";
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(view);
++    return bar->bookmark_bar_state() == BookmarkBar::SHOW &&
++           view->IsBookmarkBarVisible();
++  })) << "the bookmark bar did not come back";
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(view);
++    return star->GetVisible();
++  })) << "the star did not come back";
++}
++
++// import I16 (PLAN.md WEB-11; decided 2026-10-22): up to
++// kBookmarksToPinsWithoutAsking bookmarks turn into pinned tabs at once (the
++// test above); above that the command asks first, with the count of the ones
++// it would add. Cancel changes nothing; Turn into Pinned Tabs converts.
++IN_PROC_BROWSER_TEST_F(CommandBarActionsTest,
++                       ManyBookmarksAskBeforeTurningIntoPins) {
++  Profile* const profile = browser()->GetProfile();
++  bookmarks::BookmarkModel* const bookmarks =
++      BookmarkModelFactory::GetForBrowserContext(profile);
++  ASSERT_TRUE(bookmarks);
++  bookmarks::test::WaitForBookmarkModelToLoad(bookmarks);
++  constexpr size_t kMany = stedding::kBookmarksToPinsWithoutAsking + 1;
++  // In a folder of the bar, so that the count is of tabs, not of folders.
++  const bookmarks::BookmarkNode* const folder = bookmarks->AddFolder(
++      bookmarks->bookmark_bar_node(), 0, u"Reading");
++  for (size_t i = 0; i < kMany; ++i) {
++    bookmarks->AddURL(folder, i, base::NumberToString16(i),
++                      GURL(base::StrCat({"https://example.com/",
++                                         base::NumberToString(i)})));
++  }
++  TabStripModel* const strip = browser()->GetTabStripModel();
++  const int tabs_before = strip->count();
++
++  const auto ask = [&]() -> views::Widget* {
++    views::NamedWidgetShownWaiter shown(views::test::AnyWidgetTestPasskey{},
++                                        "SteddingBookmarksToPinsDialog");
++    Run(browser(), u"Turn Bookmarks into Pinned Tabs");
++    return shown.WaitIfNeededAndGet();
++  };
++  views::Widget* dialog = ask();
++  ASSERT_TRUE(dialog);
++  EXPECT_EQ(ui::mojom::ModalType::kWindow,
++            dialog->widget_delegate()->GetModalType());
++  EXPECT_EQ(base::StrCat({u"Turn ", base::NumberToString16(kMany),
++                          u" bookmarks into pinned tabs?"}),
++            dialog->widget_delegate()->GetWindowTitle());
++  EXPECT_EQ(tabs_before, strip->count()) << "converted before the answer";
++  {
++    views::test::WidgetDestroyedWaiter closed(dialog);
++    dialog->widget_delegate()->AsDialogDelegate()->CancelDialog();
++    closed.Wait();
++  }
++  EXPECT_EQ(tabs_before, strip->count()) << "Cancel converted";
++  EXPECT_FALSE(
++      profile->GetPrefs()->GetBoolean(stedding::prefs::kBookmarksConverted));
++
++  dialog = ask();
++  ASSERT_TRUE(dialog);
++  {
++    views::test::WidgetDestroyedWaiter closed(dialog);
++    dialog->widget_delegate()->AsDialogDelegate()->AcceptDialog();
++    closed.Wait();
++  }
++  EXPECT_EQ(tabs_before + static_cast<int>(kMany), strip->count());
++  EXPECT_TRUE(
++      profile->GetPrefs()->GetBoolean(stedding::prefs::kBookmarksConverted));
++
++  // A second run adds nothing, so it does not ask.
++  Run(browser(), u"Turn Bookmarks into Pinned Tabs");
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(tabs_before + static_cast<int>(kMany), strip->count());
++  for (views::Widget* const widget : views::test::WidgetTest::GetAllWidgets()) {
++    EXPECT_NE("SteddingBookmarksToPinsDialog", widget->GetName())
++        << "asked about bookmarks already pins";
++  }
++}
++
+ // The bar's keys in a real window (commandbar K2-K8, K14). The tabs are
+ // data: pages, which history does not keep, so the rows for a query are the
+ // typed text, the tabs and the archived tabs, and nothing else.
+diff --git a/chrome/test/stedding/space_switch_browsertest.cc b/chrome/test/stedding/space_switch_browsertest.cc
+index 2962ecd2c8b4e..6e3f9409caa3d 100644
+--- a/chrome/test/stedding/space_switch_browsertest.cc
++++ b/chrome/test/stedding/space_switch_browsertest.cc
+@@ -3413,4 +3413,32 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchRtlTest, MoveLeftAndADragMoveTheChip) {
+   }
+ }
+ 
++// windows G6 (decided 2026-10-22): Cmd-N opens on the Space of the window it
++// is pressed in, as a window a tab is moved to does; a window opened with no
++// window to come from, as the Dock's New Window can, keeps the profile's
++// first Space. Cmd-N had always opened on the first Space.
++IN_PROC_BROWSER_TEST_F(SpaceSwitchTest, CmdNOpensOnTheSpaceItIsPressedIn) {
++  spaces::SpaceModel* const here = model();
++  ASSERT_TRUE(here);
++  const spaces::SpaceId first = here->spaces()[0]->id();
++  spaces::Space* const work = here->AddSpace("Work", SK_ColorBLUE);
++  ASSERT_TRUE(here->SetActiveSpace(work->id()));
++
++  ui_test_utils::BrowserCreatedObserver opened;
++  chrome::ExecuteCommand(browser(), IDC_NEW_WINDOW);
++  BrowserWindowInterface* const window = opened.Wait();
++  ASSERT_TRUE(window);
++  spaces::SpaceModel* const there = spaces::SpaceModel::From(window);
++  ASSERT_TRUE(there);
++  EXPECT_EQ(work->id(), there->active_id()) << "it opened on another Space";
++
++  ui_test_utils::BrowserCreatedObserver plain;
++  chrome::NewEmptyWindow(browser()->GetProfile());
++  BrowserWindowInterface* const fresh = plain.Wait();
++  ASSERT_TRUE(fresh);
++  ASSERT_TRUE(spaces::SpaceModel::From(fresh));
++  EXPECT_EQ(first, spaces::SpaceModel::From(fresh)->active_id())
++      << "a window from nowhere took the last Cmd-N's Space";
++}
++
+ }  // namespace

@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 22 Oct 2026 02:35:21 -0400
+Subject: test: every thread's stack when a Mac test's shutdown overruns
+
+A browser test on a busy Mac now and then fails with "CompleteShutdown
+took more than 30 seconds" and no task running (BACKLOG S-257): the
+thread pool waits on a BLOCK_SHUTDOWN task that was queued and never
+started. The test task tracker printed only the running tasks, so the log
+could not say what the wait was on. On the Mac it now runs the system's
+sampler on the test process for one second before ending it, which prints
+every thread's stack to the test's log. Test support only; nothing in the
+browser changes.
+
+Why: the overrun recurs in the Mac's sweeps and nothing in its log says
+what the shutdown waits on.
+Removable when: the overrun is understood and fixed, or no longer seen.
+---
+ base/test/task_environment.cc | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/base/test/task_environment.cc b/base/test/task_environment.cc
+index 10210cf71ec3e..c08255d00c5b7 100644
+--- a/base/test/task_environment.cc
++++ b/base/test/task_environment.cc
+@@ -10,8 +10,10 @@
+ #include <type_traits>
+ 
+ #include "base/check.h"
++#include "base/command_line.h"
+ #include "base/containers/enum_set.h"
+ #include "base/debug/stack_trace.h"
++#include "base/files/file_path.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/lazy_instance.h"
+ #include "base/location.h"
+@@ -23,8 +25,10 @@
+ #include "base/message_loop/message_pump_type.h"
+ #include "base/no_destructor.h"
+ #include "base/notreached.h"
++#include "base/process/launch.h"
+ #include "base/process/process.h"
+ #include "base/run_loop.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/synchronization/condition_variable.h"
+ #include "base/synchronization/lock.h"
+ #include "base/task/common/lazy_now.h"
+@@ -1098,6 +1102,22 @@ void TaskEnvironment::TestTaskTracker::BeginCompleteShutdown(
+   ADD_FAILURE() << "TaskEnvironment: CompleteShutdown took more than "
+                 << kTimeout.InSeconds() << " seconds.\n"
+                 << failure_tasks;
++#if BUILDFLAG(IS_MAC)
++  // Stedding (BACKLOG S-257): on a busy Mac a browser test now and then
++  // overruns this wait with no task running, so the wait is on work queued
++  // and never started. Every thread's stack, printed to the test's log by
++  // the system's sampler before the process goes, says what it waits on.
++  {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    base::CommandLine sample(base::FilePath("/usr/bin/sample"));
++    sample.AppendArg(base::NumberToString(base::Process::Current().Pid()));
++    sample.AppendArg("1");
++    sample.AppendArg("-mayDie");
++    base::Process sampler = base::LaunchProcess(sample, base::LaunchOptions());
++    int exit_code = 0;
++    sampler.WaitForExitWithTimeout(base::Seconds(30), &exit_code);
++  }
++#endif  // BUILDFLAG(IS_MAC)
+   base::Process::TerminateCurrentProcessImmediately(-1);
+ }
+ 
