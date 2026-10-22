@@ -166,7 +166,7 @@ An early **beta**, fixed release by release. Known limits: the Windows installer
 (`S-56`); Safe Browsing is off (above); on a Mac with a second desktop, Mission Control takes
 ⌃1–⌃9 (the Spaces menu keeps them); while Arc runs it takes ⌥⌘N from every app (`S-79`;
 [the FAQ](docs/FAQ.md) has the way round); Netflix, Disney+ and Spotify's web player do not
-play, since Widevine is not built (`S-241`). Open work is in [BACKLOG.md](BACKLOG.md), the
+play, since Widevine is not built yet (`S-270`). Open work is in [BACKLOG.md](BACKLOG.md), the
 milestones in [docs/ROADMAP.md](docs/ROADMAP.md), and every release's changes in
 [docs/release-notes/](docs/release-notes/).
 

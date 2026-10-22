@@ -501,7 +501,7 @@ features that users expect from a real product just to make a purity claim.
   `enable_widevine` on for Google Chrome builds only, and no `tooling/args/*.gn` sets it, so
   Stedding has neither the CDM nor its component: Netflix, Disney+ and Spotify's web player
   do not play. Shipping it needs a licence agreement with Google, and for some services a
-  signing step through Google or castlabs; that is the owner's decision (`S-241`).
+  signing step through Google or castlabs. The owner wants it; the steps are `S-270`.
 - **Default search, suggestions, spellcheck, translate, DNS/preconnect defaults:**
   privacy-preserving defaults per `PRIVACY.md`. Up to beta 14 a fresh profile also
   checked Google's account list and registered with Google's push service unasked; beta 15

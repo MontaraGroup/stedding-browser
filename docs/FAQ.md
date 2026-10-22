@@ -161,6 +161,12 @@ Yes. It is Chromium; extensions install from the Chrome Web Store. ⌘E (Ctrl+Al
 runs one from the keyboard: keep the keys down and press E again to choose, let go to run it.
 The command bar's actions mode lists them too, which matters when the address row is hidden.
 
+**Does Netflix play?**
+Not yet. Netflix, Disney+, Prime Video and Spotify's web player need Widevine, the DRM that
+Chrome, Brave and Vivaldi license from Google. Stedding does not have that licence yet; getting
+it is planned (`S-270` in [BACKLOG.md](../BACKLOG.md)). Video that is not DRM-protected, such
+as YouTube, plays normally.
+
 **Can I switch Spaces with the mouse?**
 Yes. Over the sidebar or its icons, scroll sideways: a two-finger swipe on a touchpad, a mouse's
 tilting wheel, or Shift with the wheel. On Windows, Ctrl with the wheel over the sidebar does it
