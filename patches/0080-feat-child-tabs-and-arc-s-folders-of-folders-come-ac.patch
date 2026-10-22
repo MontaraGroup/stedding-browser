@@ -8,7 +8,8 @@ The owner's requests of the night of 2026-10-21, for 0.3.0 beta 2:
 - Child tabs (docs/features/tabs.md R56-R59, settings T26; BACKLOG S-92):
   a link opened in a new tab (a middle click, Cmd-click, "Open link in new
   tab") or a page's own window.open becomes a child of the tab it came
-  from and is drawn a level, 14 DIP, right of it in the sidebar, its pill
+  from (for window.open, the page that called it, not the tab on screen
+  Chromium takes as the opener) and is drawn a level, 14 DIP, right of it in the sidebar, its pill
   and its contents both; a grandchild two levels. A row nests while every
   row between it and its parent descends from the parent, in the same
   folder or list; rows of another Space and rows in a collapsed folder take
@@ -30,8 +31,8 @@ The owner's requests of the night of 2026-10-21, for 0.3.0 beta 2:
 
 Tests: TabParentsTest and TabParentsStripTest (the nesting rule, tokens,
 restore, carry, a closed parent); ChildTabsTest (links, window.open, a new
-tab, a duplicate, an essential, a closed parent, a moved row, the setting,
-the session as a restart reads it); ArcSidebarImportWindowTest.
+tab, a duplicate, an essential, a background page's window, a closed
+parent, a moved row, the setting, the session as a restart reads it); ArcSidebarImportWindowTest.
 AFolderOfFoldersKeepsItsShape; SteddingPrefsTest for the new preference.
 
 Why: the owner asked for child tabs, and the import check found the folders.
@@ -43,7 +44,7 @@ and folds the import fix into the importer's patch.
  chrome/browser/ui/BUILD.gn                    |   1 +
  chrome/browser/ui/browser_tabrestore.cc       |   3 +
  chrome/browser/ui/spaces/BUILD.gn             |   2 +
- .../browser/ui/spaces/arc_sidebar_importer.cc | 115 +++++--
+ .../browser/ui/spaces/arc_sidebar_importer.cc | 115 ++++--
  .../spaces/arc_sidebar_importer_unittest.cc   |  78 +++++
  chrome/browser/ui/spaces/space_model.cc       |   4 +
  .../ui/spaces/space_storage_partition.cc      |   3 +
@@ -52,20 +53,20 @@ and folds the import fix into the importer's patch.
  chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   3 +
  .../ui/stedding/stedding_prefs_unittest.cc    |   3 +-
- chrome/browser/ui/stedding/tab_parents.cc     | 275 ++++++++++++++++
+ chrome/browser/ui/stedding/tab_parents.cc     | 286 +++++++++++++++
  chrome/browser/ui/stedding/tab_parents.h      |  97 ++++++
- .../ui/stedding/tab_parents_unittest.cc       | 147 +++++++++
+ .../ui/stedding/tab_parents_unittest.cc       | 147 ++++++++
  chrome/browser/ui/views/spaces/BUILD.gn       |   3 +
  .../spaces/space_tab_visibility_controller.cc | 116 +++++++
  .../spaces/space_tab_visibility_controller.h  |  15 +
- .../browser/ui/views/tabs/common/tab_view.cc  |  18 ++
+ .../browser/ui/views/tabs/common/tab_view.cc  |  18 +
  .../browser/ui/views/tabs/common/tab_view.h   |   9 +
  .../tabs/common/tab_view_vertical_layout.cc   |   3 +
  .../tabs/common/vertical_tab_style_views.cc   |   5 +
  .../browser/ui/webui/settings/settings_ui.cc  |   7 +
  chrome/test/stedding/BUILD.gn                 |   2 +
- .../test/stedding/child_tabs_browsertest.cc   | 294 ++++++++++++++++++
- 27 files changed, 1209 insertions(+), 28 deletions(-)
+ .../test/stedding/child_tabs_browsertest.cc   | 326 ++++++++++++++++++
+ 27 files changed, 1252 insertions(+), 28 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/tab_parents.cc
  create mode 100644 chrome/browser/ui/stedding/tab_parents.h
  create mode 100644 chrome/browser/ui/stedding/tab_parents_unittest.cc
@@ -561,10 +562,10 @@ index eb3f97ddc1e63..7201c1426c8ac 100644
    }
 diff --git a/chrome/browser/ui/stedding/tab_parents.cc b/chrome/browser/ui/stedding/tab_parents.cc
 new file mode 100644
-index 0000000000000..ff236eec5bcde
+index 0000000000000..144b1604afd62
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/tab_parents.cc
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,286 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -593,6 +594,7 @@ index 0000000000000..ff236eec5bcde
 +#include "components/tabs/public/tab_interface.h"
 +#include "content/public/browser/navigation_controller.h"
 +#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/browser/web_contents_user_data.h"
 +#include "ui/base/page_transition_types.h"
@@ -693,31 +695,41 @@ index 0000000000000..ff236eec5bcde
 +  return data ? data->parent() : std::string();
 +}
 +
-+bool OpensAsChild(const TabStripModel& model, int index) {
++tabs::TabInterface* ParentOfNewTab(const TabStripModel& model, int index) {
 +  if (index < 0 || index >= model.count() || model.IsTabPinned(index)) {
-+    return false;
++    return nullptr;
 +  }
-+  const tabs::TabInterface* const opener = model.GetOpenerOfTabAt(index);
-+  const tabs::TabInterface* const tab = model.GetTabAtIndex(index);
-+  if (!opener || !tab || opener == tab || opener->IsPinned()) {
-+    return false;
-+  }
-+  content::WebContents* const contents = tab->GetContents();
++  tabs::TabInterface* const tab = model.GetTabAtIndex(index);
++  content::WebContents* const contents = tab ? tab->GetContents() : nullptr;
 +  if (!contents) {
-+    return false;
++    return nullptr;
 +  }
-+  // A page's own window.open keeps its opener; a link opened in a new tab
-+  // (a middle click, Cmd-click, a "New tab" link) starts its first load as a
-+  // link. Chromium gives a new tab, a typed address opened beside the tab
-+  // and a duplicate an opener too, so that closing them returns to it; none
-+  // of those is a child.
-+  if (contents->GetOpener()) {
-+    return true;
++  tabs::TabInterface* parent = nullptr;
++  if (content::RenderFrameHost* const frame = contents->GetOpener()) {
++    // A page's own window.open names its page. Chromium takes the tab on
++    // screen as the new tab's opener, which is another tab when a page in
++    // the background opens one.
++    const int source = model.GetIndexOfWebContents(
++        content::WebContents::FromRenderFrameHost(frame));
++    parent = source == TabStripModel::kNoTab ? model.GetOpenerOfTabAt(index)
++                                             : model.GetTabAtIndex(source);
++  } else {
++    // A link opened in a new tab (a middle click, Cmd-click, "Open link in
++    // new tab") starts its first load as a link, from the tab on screen.
++    // Chromium gives a new tab, a typed address opened beside the tab and a
++    // duplicate an opener too, so that closing them returns to it; none of
++    // those is a child.
++    const content::NavigationEntry* const entry =
++        contents->GetController().GetPendingEntry();
++    if (entry && ui::PageTransitionCoreTypeIs(entry->GetTransitionType(),
++                                              ui::PAGE_TRANSITION_LINK)) {
++      parent = model.GetOpenerOfTabAt(index);
++    }
 +  }
-+  const content::NavigationEntry* const entry =
-+      contents->GetController().GetPendingEntry();
-+  return entry && ui::PageTransitionCoreTypeIs(entry->GetTransitionType(),
-+                                               ui::PAGE_TRANSITION_LINK);
++  if (!parent || parent == tab || parent->IsPinned()) {
++    return nullptr;
++  }
++  return parent;
 +}
 +
 +void SetTabParent(BrowserWindowInterface* browser,
@@ -842,7 +854,7 @@ index 0000000000000..ff236eec5bcde
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/tab_parents.h b/chrome/browser/ui/stedding/tab_parents.h
 new file mode 100644
-index 0000000000000..9f513ceaa73fd
+index 0000000000000..1f4d5d9daeb33
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/tab_parents.h
 @@ -0,0 +1,97 @@
@@ -889,11 +901,11 @@ index 0000000000000..9f513ceaa73fd
 +// parent.
 +std::string TabParentToken(const content::WebContents* contents);
 +
-+// R56: whether a tab inserted into `model` at `index` is a child of the tab
-+// that opened it: a link opened in a new tab or a page's own window.open,
-+// not a new tab, a bookmark, a duplicate or a drop, and neither the tab nor
-+// its opener an essential.
-+bool OpensAsChild(const TabStripModel& model, int index);
++// R56: the tab a tab inserted into `model` at `index` is a child of, or null:
++// the page whose own window.open made it, or the tab a link was opened from
++// in a new tab; not for a new tab, a bookmark, a duplicate or a drop, and
++// never an essential's or for an essential.
++tabs::TabInterface* ParentOfNewTab(const TabStripModel& model, int index);
 +
 +// Makes `child` a child of `parent`, giving `parent` a token when it has none,
 +// and writes both to the session.
@@ -1111,7 +1123,7 @@ index c033f9a43e6e1..0b757dbcfab4e 100644
      "//chrome/app:generated_resources",
      "//chrome/browser/ui/views/stedding:glyph_ink",
 diff --git a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
-index b1036b72f391d..6857d81e502e8 100644
+index b1036b72f391d..d5e5adda9cdb5 100644
 --- a/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
 +++ b/chrome/browser/ui/views/spaces/space_tab_visibility_controller.cc
 @@ -11,7 +11,11 @@
@@ -1179,13 +1191,13 @@ index b1036b72f391d..6857d81e502e8 100644
 +    // A tab that comes back (a restore, an undo, a drop from another window)
 +    // brings its own place.
 +    if (index == TabStripModel::kNoTab ||
-+        !stedding::TabParentToken(tab->GetContents()).empty() ||
-+        !stedding::OpensAsChild(strip, index)) {
++        !stedding::TabParentToken(tab->GetContents()).empty()) {
 +      continue;
 +    }
-+    tabs::TabInterface* const opener = strip.GetOpenerOfTabAt(index);
++    tabs::TabInterface* const opener = stedding::ParentOfNewTab(strip, index);
 +    // pins H1: a Space's pin takes no children, as an essential takes none.
-+    if (model_ && (model_->IsSpacePinned(opener) || model_->IsSpacePinned(tab))) {
++    if (!opener || (model_ && (model_->IsSpacePinned(opener) ||
++                               model_->IsSpacePinned(tab)))) {
 +      continue;
 +    }
 +    stedding::SetTabParent(tab->GetBrowserWindowInterface(), tab, opener);
@@ -1452,10 +1464,10 @@ index e2dcc7b9218cd..74ad5b40315ef 100644
      "//chrome/browser/ui/stedding:version",
 diff --git a/chrome/test/stedding/child_tabs_browsertest.cc b/chrome/test/stedding/child_tabs_browsertest.cc
 new file mode 100644
-index 0000000000000..0beab703fad82
+index 0000000000000..b73ee0bbc7ac4
 --- /dev/null
 +++ b/chrome/test/stedding/child_tabs_browsertest.cc
-@@ -0,0 +1,294 @@
+@@ -0,0 +1,326 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1627,6 +1639,38 @@ index 0000000000000..0beab703fad82
 +    ASSERT_TRUE(copy);
 +    EXPECT_EQ("", stedding::TabParentToken(copy));
 +  }
++}
++
++// R56: a page in the background that opens a window is the new tab's
++// parent, not the tab on screen, which Chromium takes as the opener. Seen on
++// a real build, 2026-10-21: the second window a page opened nested under the
++// first.
++IN_PROC_BROWSER_TEST_F(ChildTabsTest, ABackgroundPagesWindowIsItsOwnChild) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("a.test")));
++  tabs::TabInterface* const page = tabs()->GetActiveTab();
++  tabs::TabInterface* const first = OpenLinkFrom(page, "b.test");
++  ASSERT_TRUE(first);
++  tabs()->ActivateTabAt(tabs()->GetIndexOfTab(first));
++  ASSERT_EQ(first, tabs()->GetActiveTab());
++
++  content::TestNavigationObserver opened(nullptr);
++  opened.StartWatchingNewWebContents();
++  ASSERT_TRUE(
++      content::ExecJs(page->GetContents(),
++                      content::JsReplace("window.open($1)", Url("c.test"))));
++  opened.Wait();
++  tabs::TabInterface* popup = nullptr;
++  for (int i = 0; i < tabs()->count(); ++i) {
++    tabs::TabInterface* const tab = tabs()->GetTabAtIndex(i);
++    if (tab != page && tab != first) {
++      popup = tab;
++    }
++  }
++  ASSERT_TRUE(popup);
++  EXPECT_EQ(stedding::TabToken(page->GetContents()),
++            stedding::TabParentToken(popup->GetContents()))
++      << "the page that called window.open, not the tab on screen";
++  EXPECT_EQ(14, Indent(popup));
 +}
 +
 +// R56: an essential's links open beside the rows, not under it.
