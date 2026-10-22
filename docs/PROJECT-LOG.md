@@ -7,6 +7,24 @@ unchanged, and is where the dated record goes from now on: an agent opening the 
 should not have to read four hundred lines of rounds to learn the rules.
 
 
+## 2026-10-21, night -- child tabs, the owner's Arc import checked, 0.3.0 beta 2
+
+The owner asked, before sleeping, for every bug and check that could be done, child tabs, and a
+release by morning. Child tabs came in patch 0080 (tabs R56-R59, settings T26): a link opened in
+a new tab, or a page's own window, sits a level under the page it came from, the tree survives a
+restart and a closed parent's children move up. Seen on a real build through DevTools, a window
+opened by a page in the background nested under the tab on screen, which Chromium names as the
+opener; the page that called `window.open` is the parent now, with a test. A test of the tree
+across a restart had failed only because a background tab not yet loaded is not in the session
+file at all. Checking the owner's own Arc import (S-48) by reading copies of both profiles found
+everything there but two folders of folders, which came out a level up; fixed in 0080 too.
+
+The Mac's sweep of the release build passed but for one browser test that overran its 33
+seconds once (S-257). On Windows, two tests that need the desktop to themselves failed only
+when run four at a time and passed alone, and joined the one-at-a-time list; the checks build
+had no DCHECK and no dangling pointer. Both installers, the Windows installer test and both
+updaters from 0.3.0 beta 1 passed, and 0.3.0 beta 2 was released with 0078, 0079 and 0080.
+
 ## 2026-10-21, evening -- after 0.3.0 beta 1: quieter defaults, a split's row, the Space row, folders
 
 After the release the owner asked for quieter defaults and sooner update checks (patch 0078,
