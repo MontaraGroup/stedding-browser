@@ -152,7 +152,7 @@ the hover card).
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
- chrome/test/stedding/copy_link_browsertest.cc | 330 ++++++++++-
+ chrome/test/stedding/copy_link_browsertest.cc | 332 ++++++++++-
  .../test/stedding/folder_tabs_browsertest.cc  | 552 +++++++++++++++++-
  .../hover_card_picture_browsertest.cc         | 255 +++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
@@ -166,7 +166,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 87 files changed, 5598 insertions(+), 727 deletions(-)
+ 87 files changed, 5600 insertions(+), 727 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -6021,7 +6021,7 @@ index b73ee0bbc7ac4..dc13c5fbd7f26 100644
  
    TabStripModel* tabs() { return browser()->tab_strip_model(); }
 diff --git a/chrome/test/stedding/copy_link_browsertest.cc b/chrome/test/stedding/copy_link_browsertest.cc
-index 81eddea0a4a79..fc0d3bd6144d9 100644
+index 81eddea0a4a79..820e0173536b0 100644
 --- a/chrome/test/stedding/copy_link_browsertest.cc
 +++ b/chrome/test/stedding/copy_link_browsertest.cc
 @@ -5,54 +5,128 @@
@@ -6234,7 +6234,7 @@ index 81eddea0a4a79..fc0d3bd6144d9 100644
  };
  
  IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
-@@ -79,6 +223,184 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
+@@ -79,6 +223,186 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
    EXPECT_EQ(std::u16string::npos, copied.find(u"fbclid"));
  }
  
@@ -6301,12 +6301,14 @@ index 81eddea0a4a79..fc0d3bd6144d9 100644
 +  const gfx::Point on = button->GetBoundsInScreen().CenterPoint();
 +  const gfx::Point off =
 +      browser_view->contents_container()->GetBoundsInScreen().CenterPoint();
-+  views::InkDrop* const ink = views::InkDrop::Get(button)->GetInkDrop();
-+  ASSERT_TRUE(ink);
++  // Asked for each time: the button makes its ink drop again whenever its
++  // background is set again (ConfigureInkDropForRefresh2023), so one held
++  // across the click was a freed one (AddressSanitizer, 2026-10-22).
++  const auto ink = [&]() { return views::InkDrop::Get(button)->GetInkDrop(); };
 +  const auto lit = [&]() {
-+    return ink->IsHighlightFadingInOrVisible() ||
-+           (ink->GetTargetInkDropState() != views::InkDropState::HIDDEN &&
-+            ink->GetTargetInkDropState() != views::InkDropState::DEACTIVATED);
++    return ink()->IsHighlightFadingInOrVisible() ||
++           (ink()->GetTargetInkDropState() != views::InkDropState::HIDDEN &&
++            ink()->GetTargetInkDropState() != views::InkDropState::DEACTIVATED);
 +  };
 +
 +  SendMouse(widget, ui::EventType::kMouseMoved, on);
@@ -6318,8 +6320,8 @@ index 81eddea0a4a79..fc0d3bd6144d9 100644
 +  SendMouse(widget, ui::EventType::kMouseMoved, off);
 +  EXPECT_TRUE(base::test::RunUntil([&]() { return !lit(); }))
 +      << "the hover fill stayed with the pointer gone: highlight "
-+      << ink->IsHighlightFadingInOrVisible() << ", ink drop state "
-+      << static_cast<int>(ink->GetTargetInkDropState()) << ", button state "
++      << ink()->IsHighlightFadingInOrVisible() << ", ink drop state "
++      << static_cast<int>(ink()->GetTargetInkDropState()) << ", button state "
 +      << static_cast<int>(button->GetState()) << ", hovered "
 +      << button->IsMouseHovered();
 +  ASSERT_TRUE(base::test::RunUntil([&]() {
