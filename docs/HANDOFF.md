@@ -46,7 +46,7 @@ you, not the list.
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100, 123 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121, 130 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121, 130, 132 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126, 127 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125, 128 |
 | Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129, 131 |
@@ -1716,6 +1716,15 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     publish. Run the next release's real-feed check from a fixed copy (beta 10 or later) with
     `--log-net-log` straight after publishing. Both `publish-appcast` scripts also fetch the published image and
     compare its checksum before they write the feed, which checks what users will get.
+
+132. **While the operator works in a full-screen app, a capture finds no window.** A full-screen
+    window is a macOS Space of its own, and a browser launched in the background
+    (`tooling/capture-state`) opens its window on the desktop instead, where the window list
+    marks it off screen: "no window owned by pid", every still refused (2026-10-23, the
+    owner's Stedding in full screen). `tooling/capture-windows` now takes the largest window
+    from another Space when the current one has none, as its `--largest` form already did for
+    `tooling/drive`'s shots; `screencapture -l` captures it there. A capture beside the
+    owner's own Stedding still needs a copy with its own bundle id (trap 124).
 
 ## The Windows build
 

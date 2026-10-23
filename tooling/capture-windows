@@ -5,7 +5,9 @@
     tooling/capture-windows --largest PID OUTPUT.png
 
 The first form writes PREFIX.png for the largest on-screen window and
-PREFIX-2.png, PREFIX-3.png ... for the rest, largest first. A dialog that is
+PREFIX-2.png, PREFIX-3.png ... for the rest, largest first; with none on the
+current Space (the person at the Mac in a full-screen app) it takes the
+largest from another Space, as --largest does. A dialog that is
 its own window (the welcome flow, a bubble that became a window) is a second
 file; tooling/capture-state uses this form.
 
@@ -96,8 +98,16 @@ def main(argv: list[str]) -> int:
 
     windows = windows_for(pid)
     if not windows:
-        print(f"no window owned by pid {pid}", file=sys.stderr)
-        return 1
+        # None on the current Space: the person at the Mac works in a full-screen
+        # app, which is a Space of its own, and a browser launched in the
+        # background opens its window on the desktop instead (2026-10-23). The
+        # largest window is taken from there, as --largest does.
+        window_id = largest_window_for(pid)
+        if window_id is None:
+            print(f"no window owned by pid {pid}", file=sys.stderr)
+            return 1
+        print(f"no window on the current Space; the largest, {window_id}, from another")
+        return 0 if capture(window_id, f"{target}.png") else 1
     for index, (_, window_id, bounds) in enumerate(windows):
         out = f"{target}.png" if index == 0 else f"{target}-{index + 1}.png"
         if not capture(window_id, out):

@@ -119,7 +119,7 @@ Windows copy needs one install by hand). Checksums are in each release's notes;
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/hero-dark.png">
-  <img src="docs/images/readme/hero.png" alt="The Stedding window: four essentials as cards at the top of the sidebar, then the Work Space with a folder holding a nested one, tabs for Django, PyPI, a sample app on localhost:5173 and GitHub Trending, and three Space chips at the foot; the project's GitHub page on a card, its full address on the top row in the page's own black">
+  <img src="docs/images/readme/hero.png" alt="The Stedding window: four essentials as cards at the top of the sidebar, then the Work Space with a folder holding a nested one, tabs for Django, PyPI, a sample app on localhost:5173 and the project's own GitHub page, and three Space chips at the foot; GitHub's trending page for Swift projects on a card, its full address on the top row in the page's own black">
 </picture>
 
 ## Keyboard shortcuts

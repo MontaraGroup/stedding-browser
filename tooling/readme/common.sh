@@ -30,6 +30,9 @@ URL_PY_TUTORIAL="https://docs.python.org/3/tutorial/"
 URL_DJANGO="https://www.djangoproject.com/"
 URL_PYTHON="https://www.python.org/"
 URL_TRENDING="https://github.com/trending"
+# The stills' front page: GitHub's trending page, the week's Swift projects, which
+# leaned to Mac apps when the main trending list leaned to AI tools (2026-10-23).
+URL_TRENDING_FRONT="https://github.com/trending/swift?since=weekly"
 URL_LOBSTERS="https://lobste.rs/"
 URL_OSM="https://www.openstreetmap.org/"
 URL_WIKI_COOKIE="https://en.wikipedia.org/wiki/HTTP_cookie"
@@ -55,10 +58,12 @@ DEMO_URLS=("$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_HN"
            "$URL_MDN_CSS" "$URL_PY_TUTORIAL"
            "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_TRENDING"
            "$URL_LOBSTERS" "$URL_OSM" "$URL_ARCH" "$URL_LWN")
-# The same window without the pages that leave Work, for the stills.
-WORK_URLS=("$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_HN"
+# The same window without the pages that leave Work, for the stills. A GitHub
+# trending page is the one on screen: the repository's own page put a star count
+# and a file list on the site that went stale (the owner, 2026-10-23).
+WORK_URLS=("$URL_TRENDING_FRONT" "$URL_MDN" "$URL_DDG" "$URL_HN"
            "$URL_MDN_CSS" "$URL_PY_TUTORIAL"
-           "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_TRENDING")
+           "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_REPO")
 DEMO_PARAMS="$FEATURE:pin_tabs/4/folder_tabs/6"
 # Every launch: no search-engine chooser over the window (run-mac.sh passes the same).
 BROWSER_ARGS=(--disable-search-engine-choice-screen)
