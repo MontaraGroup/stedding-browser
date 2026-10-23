@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Parks the real cursor at the right edge of the Mac's main screen before a run of the
+# browser tests (docs/HANDOFF.md, trap 78): test windows open at the screen's top left, and
+# a cursor resting over a test window's rows hovers them, which fails the hover and paint
+# tests. It moves the cursor only when nobody has touched the mouse or keyboard for ten
+# seconds, so it never takes the pointer from the operator's hand; then it says so and does
+# nothing. The right edge, halfway down, and not a corner: a corner may be a hot corner.
+#
+# macOS; tooling/dev runs it before stedding_browser_tests, as it runs
+# tooling/win/park-cursor.ps1 on Windows:
+#
+#   tooling/park-cursor
+#
+# The exit code is 0 when the cursor is parked, 1 when the operator was busy.
+set -euo pipefail
+
+idle_ns="$(ioreg -c IOHIDSystem | awk '/HIDIdleTime/ && !v { v = $NF } END { print v }')"
+idle_s=$(( ${idle_ns:-0} / 1000000000 ))
+if [ "$idle_s" -lt 10 ]; then
+  echo "cursor not parked: the mouse or keyboard was used ${idle_s} s ago (trap 78)"
+  exit 1
+fi
+
+osascript -l JavaScript -e '
+  ObjC.import("CoreGraphics");
+  const screen = $.CGDisplayBounds($.CGMainDisplayID());
+  const x = screen.origin.x + screen.size.width - 2;
+  const y = screen.origin.y + Math.round(screen.size.height / 2);
+  $.CGWarpMouseCursorPosition({ x: x, y: y });
+  "cursor parked at " + x + "," + y;
+'

@@ -1079,7 +1079,13 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     browser-suite run, and only while the operator is idle: `tooling/dev` does it on Windows
     through `tooling/win/park-cursor.ps1`, which leaves a cursor in use alone (the earlier
     parking lived in uncommitted scripts, and the suite failed the three again on
-    2026-10-14 after a live check left the cursor mid-screen).
+    2026-10-14 after a live check left the cursor mid-screen). The Mac had no parking until
+    2026-10-23, when a live drag check left the cursor at the sidebar's height and the next
+    sweep failed `EssentialCardTest.ACardIsAFrostedTileWithNoEdge` (the plain row hovered,
+    so filled) and `HoverCardPictureTest.ACardShowsItsTabsUseAfterAPause` (a hover card up,
+    so the task manager running), both passing with the cursor moved; `tooling/dev` now runs
+    `tooling/park-cursor` there, which parks it at the right edge, halfway down (a corner may
+    be a hot corner), under the same ten-second rule.
 
 79. **A `base::test::RunUntil` check must only look, never wait.**
     `FolderTabsTest.TheHeadersMenuSortsAndOpensATab` called a helper that runs a loop of
