@@ -1,0 +1,645 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 22 Oct 2026 22:53:27 -0400
+Subject: feat: a drag takes a tab into the essentials and out (issue 16)
+
+As in Arc (pins H27; BACKLOG S-277, GitHub issue 16): a tab's row
+dragged over the essentials, or the room above the Space's title down to
+the list, lights the essentials, and released there it becomes an
+essential, before the card it was dropped on or after the last. An
+essential's card dragged onto the list shows the bar between the rows
+where it will land, and released there it stops being an essential, at
+that place: under the Clear line a tab, over it a pin of the Space. It had
+taken the tab's menu. The drop decides, as a drop across the Clear line
+does (pins H14): TabDragHandlerImpl keeps the pointer's last place,
+PinnedTabContainerView lights for it, and UnpinnedTabContainerView says
+where a row brought into the list would go.
+
+Tests: PinnedRunTest.ADragTakesATabIntoTheEssentialsAndOut.
+
+Why: Arc users move tabs into and out of their Favorites by dragging, and
+asked for it (GitHub issue 16).
+Removable when: never; it is product behaviour.
+---
+ .../tabs/common/pinned_tab_container_view.cc  |  27 ++-
+ .../tabs/common/pinned_tab_container_view.h   |   8 +
+ .../ui/views/tabs/common/tab_drag_handler.cc  | 194 +++++++++++++++++-
+ .../ui/views/tabs/common/tab_drag_handler.h   |  10 +
+ .../common/unpinned_tab_container_view.cc     |  71 +++++++
+ .../tabs/common/unpinned_tab_container_view.h |  22 ++
+ .../test/stedding/pinned_run_browsertest.cc   |  83 ++++++++
+ 7 files changed, 410 insertions(+), 5 deletions(-)
+
+diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+index a4fe56648df6f..cd59312799fbd 100644
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -7,13 +7,13 @@
+ #include <algorithm>
+ 
+ #include "base/feature_list.h"
+-#include "chrome/browser/ui/stedding_ui_metrics.h"
+-#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+-
+ #include "base/i18n/rtl.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+@@ -23,7 +23,9 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_provider.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/views/background.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/layout/delegating_layout_manager.h"
+ #include "ui/views/layout/layout_types.h"
+@@ -557,5 +559,24 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+   return layouts;
+ }
+ 
++void PinnedTabContainerView::SetEssentialsDropHighlight(bool highlighted) {
++  if (essentials_drop_highlighted_ == highlighted) {
++    return;
++  }
++  essentials_drop_highlighted_ = highlighted;
++  // The sidebar's own text colour, faint, as a folder's header is lit for a
++  // drop (folders F7).
++  const ui::ColorProvider* const provider = GetColorProvider();
++  if (!highlighted || !provider) {
++    SetBackground(nullptr);
++    return;
++  }
++  constexpr SkAlpha kDropHighlightAlpha = 0x2E;
++  SetBackground(views::CreateRoundedRectBackground(
++      SkColorSetA(provider->GetColor(kColorTabForegroundActiveFrameActive),
++                  kDropHighlightAlpha),
++      GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)));
++}
++
+ BEGIN_METADATA(PinnedTabContainerView)
+ END_METADATA
+diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h
+index 0c0aa68e467c0..765f5b39c5e67 100644
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h
+@@ -39,6 +39,13 @@ class PinnedTabContainerView
+   // views::View:
+   gfx::Size GetMinimumSize() const override;
+ 
++  // Stedding pins H27 (BACKLOG S-277, GitHub issue 16): lit while a tab
++  // dragged over the essentials would become one at the release.
++  void SetEssentialsDropHighlight(bool highlighted);
++  bool essentials_drop_highlighted() const {
++    return essentials_drop_highlighted_;
++  }
++
+   // TabCollectionAnimatingLayoutManager::Delegate:
+   bool IsDragging() const override;
+   bool IsViewDragging(const views::View& child_view) const override;
+@@ -82,6 +89,7 @@ class PinnedTabContainerView
+ 
+   raw_ptr<TabCollectionNode> collection_node_;
+   const raw_ref<TabCollectionAnimatingLayoutManager> layout_manager_;
++  bool essentials_drop_highlighted_ = false;
+ 
+   base::CallbackListSubscription node_destroyed_subscription_;
+   base::CallbackListSubscription collapsed_state_changed_subscription_;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+index 7ef0fb7a695ee..0b6be7392d154 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+@@ -10,6 +10,7 @@
+ #include <vector>
+ 
+ #include "base/check_deref.h"
++#include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/location.h"
+ #include "base/notreached.h"
+@@ -17,16 +18,19 @@
+ #include "base/types/to_address.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_group_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_link_drop_handler.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/dragging/drag_session_data.h"
+ #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+@@ -52,6 +56,7 @@
+ #include "ui/events/event_target.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/vector2d.h"
++#include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/view_targeter.h"
+@@ -155,6 +160,107 @@ void SettleDroppedPins(const std::vector<tabs::TabHandle>& dropped,
+   }
+ }
+ 
++// Stedding pins H27 (BACKLOG S-277, GitHub issue 16): where a tab dropped
++// becomes an essential, as in Arc: over the essentials, and the room above the
++// Space's title row, down to the list. Nothing outside the open sidebar.
++std::optional<gfx::Rect> EssentialsDropZone(TabStripView* strip) {
++  if (!strip || !base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    return std::nullopt;
++  }
++  views::ScrollView* const list = strip->unpinned_tabs_scroll_view();
++  if (!list || !list->IsDrawn()) {
++    return std::nullopt;
++  }
++  int bottom = list->GetBoundsInScreen().y();
++  if (views::View* const title = strip->GetSpaceTitleRow();
++      title && title->IsDrawn()) {
++    bottom = std::min(bottom, title->GetBoundsInScreen().y());
++  }
++  const gfx::Rect bounds = strip->GetBoundsInScreen();
++  if (bottom <= bounds.y()) {
++    return std::nullopt;
++  }
++  return gfx::Rect(bounds.x(), bounds.y(), bounds.width(), bottom - bounds.y());
++}
++
++// Whether `point` is on the list's own rows, in its scroll view: a Space's
++// chip under the list, or the rows' room past it, is not the list.
++bool OnTheList(TabStripView* strip, const gfx::Point& point) {
++  views::ScrollView* const list =
++      strip ? strip->unpinned_tabs_scroll_view() : nullptr;
++  return list && list->IsDrawn() && list->GetBoundsInScreen().Contains(point);
++}
++
++// The essential whose card is under `point`, if one is.
++const tabs::TabInterface* EssentialAt(const PinnedTabContainerView* grid,
++                                      const gfx::Point& point) {
++  if (!grid) {
++    return nullptr;
++  }
++  for (const views::View* const child : grid->children()) {
++    const auto* const card = views::AsViewClass<TabView>(child);
++    if (card && card->IsDrawn() && card->GetBoundsInScreen().Contains(point)) {
++      return card->GetTabInterface();
++    }
++  }
++  return nullptr;
++}
++
++// Pins H27: dropped over the essentials, the dragged tabs become essentials,
++// before the card they were dropped on or after the last; dropped on the
++// list, dragged essentials leave the essentials for the place the bar showed,
++// and over the Clear line they are the Space's pins there.
++struct EssentialsMove {
++  bool into = false;
++  std::vector<tabs::TabHandle> tabs;
++  std::optional<tabs::TabHandle> before;
++  bool over_line = false;
++};
++
++void MoveAcrossTheEssentials(const EssentialsMove& move) {
++  for (const tabs::TabHandle& handle : move.tabs) {
++    tabs::TabInterface* const tab = handle.Get();
++    BrowserWindowInterface* const window =
++        tab ? tab->GetBrowserWindowInterface() : nullptr;
++    TabStripModel* const model = window ? window->GetTabStripModel() : nullptr;
++    if (!model || model->GetIndexOfTab(tab) == TabStripModel::kNoTab) {
++      continue;
++    }
++    tabs::TabInterface* const before =
++        move.before ? move.before->Get() : nullptr;
++    if (move.into) {
++      if (!tab->IsPinned()) {
++        model->SetTabPinned(model->GetIndexOfTab(tab), true);
++      }
++      if (!tab->IsPinned() || !before || before == tab || !before->IsPinned()) {
++        continue;
++      }
++    } else {
++      if (tab->IsPinned()) {
++        model->SetTabPinned(model->GetIndexOfTab(tab), false);
++      }
++      if (tab->IsPinned()) {
++        continue;
++      }
++    }
++    const int from = model->GetIndexOfTab(tab);
++    int to = before && model->GetIndexOfTab(before) != TabStripModel::kNoTab
++                 ? model->GetIndexOfTab(before)
++                 : model->count();
++    if (from < to) {
++      --to;
++    }
++    if (to != from) {
++      model->MoveWebContentsAt(from, to, /*select_after_move=*/false);
++    }
++    if (!move.into && move.over_line) {
++      if (spaces::SpaceModel* const spaces = spaces::SpaceModel::From(window)) {
++        spaces->SetSpacePinnedInPlace(tab, true);
++      }
++    }
++  }
++}
++
+ // Stedding: the strip range of a folder's tabs. They sit together in the
+ // strip, and an emptied folder leaves the tree, so there is a first tab.
+ gfx::Range GetFolderRange(const TabCollectionNode& folder_node,
+@@ -414,9 +520,43 @@ bool TabDragHandlerImpl::ContinueDrag(views::View& event_source_view,
+     ResetDragState();
+     return false;
+   }
++  last_drag_point_in_screen_ = screen_location;
++  UpdateEssentialsDropFeedback();
+   return true;
+ }
+ 
++void TabDragHandlerImpl::UpdateEssentialsDropFeedback() {
++  auto* const strip = views::AsViewClass<TabStripView>(
++      tab_strip_region_view_->GetTabStripView());
++  PinnedTabContainerView* const grid =
++      strip ? strip->GetPinnedTabsContainer() : nullptr;
++  UnpinnedTabContainerView* const list =
++      strip ? strip->GetUnpinnedTabsContainer() : nullptr;
++  bool lit = false;
++  std::optional<int> bar;
++  if (drag_controller_ && last_drag_point_in_screen_ &&
++      drag_controller_->GetSessionData().dragging_groups.empty() &&
++      drag_controller_->GetSessionData().source_view_drag_data()) {
++    if (!drag_controller_->GetSessionData().source_view_drag_data()->pinned) {
++      const std::optional<gfx::Rect> zone = EssentialsDropZone(strip);
++      lit = zone && zone->Contains(*last_drag_point_in_screen_);
++    } else if (list && EssentialsDropZone(strip) &&
++               OnTheList(strip, *last_drag_point_in_screen_)) {
++      if (const std::optional<UnpinnedTabContainerView::RowDropPlace> place =
++              list->RowDropPlaceAt(*last_drag_point_in_screen_)) {
++        bar = place->indicator_y;
++      }
++    }
++  }
++  if (grid) {
++    grid->SetEssentialsDropHighlight(lit);
++  }
++  if (list && (bar || essentials_bar_shown_)) {
++    list->SetRowDropIndicator(bar);
++  }
++  essentials_bar_shown_ = bar.has_value();
++}
++
+ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+   // Note: we avoid ending the SystemDnD if the `EndDragReason` is "capture
+   // lost" because some window managers on Wayland don't send exit events to tab
+@@ -434,10 +574,55 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+   // on, the side the line was drawn on during the drag
+   // (UnpinnedTabContainerView::dragged_rows_pinned()). Read before the drag
+   // ends, which clears its state; set once the release is done.
+-  std::optional<bool> pinned;
+-  std::vector<tabs::TabHandle> dropped;
++  std::optional<EssentialsMove> essentials_move;
+   if (reason == EndDragReason::kComplete && drag_controller_ &&
+       drag_controller_->attached_context() == this &&
++      last_drag_point_in_screen_ &&
++      drag_controller_->GetSessionData().dragging_groups.empty() &&
++      drag_controller_->GetSessionData().source_view_drag_data()) {
++    const DragSessionData& session = drag_controller_->GetSessionData();
++    auto* const strip = views::AsViewClass<TabStripView>(
++        tab_strip_region_view_->GetTabStripView());
++    const std::optional<gfx::Rect> zone = EssentialsDropZone(strip);
++    const bool essential = session.source_view_drag_data()->pinned;
++    EssentialsMove move;
++    if (!essential && zone && zone->Contains(*last_drag_point_in_screen_)) {
++      move.into = true;
++      if (const tabs::TabInterface* const card = EssentialAt(
++              strip->GetPinnedTabsContainer(), *last_drag_point_in_screen_)) {
++        move.before = card->GetHandle();
++      }
++      essentials_move = move;
++    } else if (essential && zone && strip->GetUnpinnedTabsContainer() &&
++               OnTheList(strip, *last_drag_point_in_screen_)) {
++      if (const std::optional<UnpinnedTabContainerView::RowDropPlace> place =
++              strip->GetUnpinnedTabsContainer()->RowDropPlaceAt(
++                  *last_drag_point_in_screen_)) {
++        if (place->before) {
++          move.before = place->before->GetHandle();
++        }
++        move.over_line = place->over_line;
++        essentials_move = move;
++      }
++    }
++    if (essentials_move) {
++      for (const TabDragData& data : session.tab_drag_data_) {
++        if (data.contents && data.pinned == essential) {
++          if (tabs::TabInterface* const tab =
++                  tabs::TabInterface::MaybeGetFromContents(data.contents)) {
++            essentials_move->tabs.push_back(tab->GetHandle());
++          }
++        }
++      }
++    }
++  }
++  last_drag_point_in_screen_.reset();
++  UpdateEssentialsDropFeedback();
++
++  std::optional<bool> pinned;
++  std::vector<tabs::TabHandle> dropped;
++  if (!essentials_move && reason == EndDragReason::kComplete &&
++      drag_controller_ && drag_controller_->attached_context() == this &&
+       drag_controller_->GetSessionData().dragging_groups.empty()) {
+     const DragSessionData& session = drag_controller_->GetSessionData();
+     for (TabSlotView* const slot : session.attached_views()) {
+@@ -472,6 +657,11 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+         FROM_HERE,
+         base::BindOnce(&SettleDroppedPins, std::move(dropped), *pinned));
+   }
++  if (essentials_move && !essentials_move->tabs.empty()) {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&MoveAcrossTheEssentials, std::move(*essentials_move)));
++  }
+ }
+ 
+ void TabDragHandlerImpl::HandleDraggedTabsIntoNode(
+diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.h b/chrome/browser/ui/views/tabs/common/tab_drag_handler.h
+index c576d9b3ed3d3..66d86308dd28e 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.h
++++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.h
+@@ -224,6 +224,11 @@ class TabDragHandlerImpl : public TabDragHandler,
+   // Resets member variables that track a drag being managed by this handler.
+   void ResetDragState();
+ 
++  // Stedding pins H27 (BACKLOG S-277): lights the essentials while a tab
++  // dragged over them would become one, and shows the list's bar where an
++  // essential dragged out of them would land; clears both otherwise.
++  void UpdateEssentialsDropFeedback();
++
+   // Cleans up state tracked by this handler for a given node.
+   void OnNodeWillDestroy(TabCollectionNode& node);
+ 
+@@ -242,6 +247,11 @@ class TabDragHandlerImpl : public TabDragHandler,
+ 
+   std::unique_ptr<ExpandOnHoverLock> expand_on_hover_lock_;
+ 
++  // Stedding pins H27: the pointer's last place in the drag, and whether
++  // the list's bar is this handler's to clear.
++  std::optional<gfx::Point> last_drag_point_in_screen_;
++  bool essentials_bar_shown_ = false;
++
+   std::vector<std::unique_ptr<views::ScrollView::ScopedScrollSynchronizer>>
+       scroll_synchronizers_;
+ 
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+index 09d239c9886d9..6245978c04ea5 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <optional>
++#include <variant>
+ #include <vector>
+ 
+ #include "cc/paint/paint_flags.h"
+@@ -13,6 +14,7 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
++#include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+@@ -21,12 +23,16 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.h"
++#include "components/tabs/public/folder_tab_collection.h"
++#include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_group.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/color/color_provider.h"
+ #include "ui/compositor/paint_recorder.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/layout/layout_types.h"
+@@ -156,6 +162,71 @@ gfx::Rect RowDropIndicatorBounds(const views::View& container, int y) {
+ }
+ }  // namespace
+ 
++namespace {
++// The first tab of a row of the list: the tab, a split's first pane, or a
++// folder's or a group's first tab.
++const tabs::TabInterface* FirstTabOfRow(const views::View& row) {
++  if (const auto* const tab = views::AsViewClass<TabView>(&row)) {
++    return tab->GetTabInterface();
++  }
++  if (const auto* const folder = views::AsViewClass<FolderView>(&row)) {
++    const std::vector<tabs::TabInterface*> tabs =
++        folder->folder() ? folder->folder()->GetTabsRecursive()
++                         : std::vector<tabs::TabInterface*>();
++    return tabs.empty() ? nullptr : tabs.front();
++  }
++  const TabCollectionNode* node = nullptr;
++  if (const auto* const split = views::AsViewClass<SplitTabView>(&row)) {
++    node = split->collection_node();
++  } else if (const auto* const group = views::AsViewClass<TabGroupView>(&row)) {
++    node = group->collection_node();
++  }
++  if (!node) {
++    return nullptr;
++  }
++  const tabs::ConstChildPtr data = node->GetNodeData();
++  if (const auto* const collection =
++          std::get_if<tabs::ConstDanglingUntriagedTabCollection>(&data)) {
++    return (*collection)->GetTabAtIndexRecursive(0);
++  }
++  return nullptr;
++}
++}  // namespace
++
++std::optional<UnpinnedTabContainerView::RowDropPlace>
++UnpinnedTabContainerView::RowDropPlaceAt(const gfx::Point& screen_point) const {
++  if (!collection_node_ || !IsDrawn()) {
++    return std::nullopt;
++  }
++  gfx::Point point = screen_point;
++  views::View::ConvertPointFromScreen(this, &point);
++  if (point.x() < 0 || point.x() >= width() || point.y() < 0) {
++    return std::nullopt;
++  }
++  RowDropPlace place;
++  const views::View* previous = nullptr;
++  for (views::View* const child : collection_node_->GetDirectChildren()) {
++    // Another Space's rows are not on screen, and take no drop.
++    if (!child->GetVisible() || child->bounds().IsEmpty()) {
++      continue;
++    }
++    if (point.y() < child->bounds().CenterPoint().y()) {
++      place.before = FirstTabOfRow(*child);
++      place.indicator_y = child->bounds().y() - 1;
++      break;
++    }
++    previous = child;
++  }
++  if (!place.before) {
++    place.indicator_y = previous ? previous->bounds().bottom() + 1 : 0;
++  }
++  if (boundary_clear_line_ && boundary_clear_line_->GetVisible()) {
++    place.over_line =
++        point.y() < boundary_clear_line_->bounds().CenterPoint().y();
++  }
++  return place;
++}
++
+ void UnpinnedTabContainerView::SetRowDropIndicator(std::optional<int> y) {
+   if (row_drop_indicator_y_ == y) {
+     return;
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+index 52f218e554a65..b56c2f8f69b5f 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+@@ -18,6 +18,14 @@
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/view.h"
+ 
++namespace gfx {
++class Point;
++}  // namespace gfx
++
++namespace tabs {
++class TabInterface;
++}  // namespace tabs
++
+ class TabCollectionNode;
+ class TabGroupView;
+ class UnpinnedTabContainerViewLayout;
+@@ -78,6 +86,20 @@ class UnpinnedTabContainerView
+       std::unique_ptr<views::View> new_tab_row,
+       base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
+   views::View* space_boundary_clear_line() { return boundary_clear_line_; }
++  // Stedding pins H27 (BACKLOG S-277, GitHub issue 16): where a release at
++  // `screen_point` would put a row brought into this list from outside it,
++  // an essential dragged out of the grid: before `before`'s row (null, after
++  // the last row), with the bar at `indicator_y` in this view's coordinates,
++  // and whether that is over the Clear line, in the Space's pinned run.
++  // Nothing when the point is off the list.
++  struct RowDropPlace {
++    raw_ptr<const tabs::TabInterface> before = nullptr;
++    int indicator_y = 0;
++    bool over_line = false;
++  };
++  std::optional<RowDropPlace> RowDropPlaceAt(
++      const gfx::Point& screen_point) const;
++
+   // Stedding (pins H14, BACKLOG S-271): while rows of this container are
+   // dragged, whether a release here puts them in the Space's pinned run, over
+   // the Clear line, or under it; nothing while no row of it is dragged. The
+diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
+index aea87f5e1c66d..5e9d7ad357996 100644
+--- a/chrome/test/stedding/pinned_run_browsertest.cc
++++ b/chrome/test/stedding/pinned_run_browsertest.cc
+@@ -1196,4 +1196,87 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest,
+   }
+ }
+ 
++// pins H27 (BACKLOG S-277, GitHub issue 16): as in Arc, a tab's row dragged
++// onto the essentials becomes an essential, before the card it is dropped on;
++// an essential dragged into the list leaves the essentials for the place the
++// bar shows, under the Clear line a tab, over it a pin of the Space. Only the
++// tab's menu did either.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADragTakesATabIntoTheEssentialsAndOut) {
++  tabs::TabInterface* const essential = tabs().GetActiveTab();
++  tabs::TabInterface* const pin = AddBlankTab();
++  model().SetSpacePinned(pin, true);
++  tabs::TabInterface* const loose = AddBlankTab();
++  tabs::TabInterface* const tail = AddBlankTab();
++  tabs::TabInterface* const last = AddBlankTab();
++  tabs().SetTabPinned(tabs().GetIndexOfTab(essential), true);
++  ASSERT_TRUE(essential->IsPinned());
++  ASSERT_TRUE(IsAboveTheLine(pin));
++  ASSERT_FALSE(IsAboveTheLine(loose));
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  // A press on `tab`'s row or card and a drag in steps to `to`, the window
++  // laying out between two, then the release there.
++  const auto drag_to = [&](const tabs::TabInterface* tab,
++                           const gfx::Point& to) {
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    const TabView* const row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++    ASSERT_TRUE(row) << "the sidebar shows no row for the tab";
++    const gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed, from);
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, to);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  };
++  const auto card_centre = [&](const tabs::TabInterface* tab) {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    const TabView* const card =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++    EXPECT_TRUE(card) << "no card for the essential";
++    return card ? card->GetBoundsInScreen().CenterPoint() : gfx::Point();
++  };
++
++  {
++    SCOPED_TRACE("a tab dropped on an essential's card");
++    ASSERT_NO_FATAL_FAILURE(drag_to(loose, card_centre(essential)));
++    ASSERT_TRUE(base::test::RunUntil([&]() { return loose->IsPinned(); }))
++        << "the tab did not become an essential";
++    EXPECT_FALSE(model().IsSpacePinned(loose));
++    EXPECT_EQ(Index(loose) + 1, Index(essential))
++        << "not before the card it was dropped on";
++    EXPECT_TRUE(IsAboveTheLine(pin)) << "the pin left the run";
++  }
++  {
++    SCOPED_TRACE("an essential dropped under the line");
++    ASSERT_NO_FATAL_FAILURE(drag_to(loose, JustInsideTheTopOf(last)));
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !loose->IsPinned(); }))
++        << "it stayed an essential";
++    EXPECT_FALSE(model().IsSpacePinned(loose));
++    EXPECT_EQ(Index(loose) + 1, Index(last)) << "not where it was dropped";
++    EXPECT_FALSE(IsAboveTheLine(loose));
++    EXPECT_TRUE(IsAboveTheLine(pin));
++  }
++  {
++    SCOPED_TRACE("an essential dropped over the line, in the pinned run");
++    ASSERT_NO_FATAL_FAILURE(drag_to(essential, JustInsideTheTopOf(pin)));
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return !essential->IsPinned() && model().IsSpacePinned(essential);
++    })) << "it did not become a pin of the Space";
++    EXPECT_EQ(Index(essential) + 1, Index(pin)) << "not before the pin";
++    EXPECT_TRUE(IsAboveTheLine(essential));
++    EXPECT_TRUE(IsAboveTheLine(pin));
++    EXPECT_FALSE(IsAboveTheLine(tail));
++  }
++}
++
+ }  // namespace
