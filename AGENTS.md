@@ -1,9 +1,9 @@
 # AGENTS.md — start here
 
-You are an AI agent (or a human) opening this repository cold. This file is the brief:
-what the project is, the rules, how to work, where to look. It is model-agnostic and
-tool-agnostic; everything you need is in this repo, nothing depends on a particular
-assistant, session or machine. What was built and when is `docs/PROJECT-LOG.md`; the order
+This is the brief for anyone opening this repository cold, a contributor or the tools
+they work with: what the project is, the rules, how to work, where to look. Everything
+needed is in this repo; nothing depends on a particular editor, tool, session or
+machine. What was built and when is `docs/PROJECT-LOG.md`; the order
 of work is `BACKLOG.md`; the owner's decisions and the rules of done are `PLAN.md`; the
 procedure is `docs/AGENT-LOOP.md`; the traps are `docs/HANDOFF.md`.
 
@@ -162,7 +162,7 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 | `CONTRIBUTING.md` | How to contribute |
 | `SECURITY.md` | How to report vulnerabilities |
 
-## Conventions for agents working here
+## Conventions for contributors
 
 - **Write docs and code in plain, correct English.** Terse is fine; cryptic is not.
 - **Decisions get ADRs.** Anything hard to reverse (dependency, base version policy,
