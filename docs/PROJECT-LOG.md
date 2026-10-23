@@ -40,9 +40,15 @@ between two pins joined the run there, every pin over the line; a pin dragged am
 rows left the run; the Copy Link button lit under the pointer, showed the check mark after a
 click and had no fill once the pointer left; the new setting asked "One Space still shares the
 session ... One open page reloads ...", Turn On for All gave the Space its own session, and a
-Space made with "+" came with one. On the PC (the series before the setting's wording fix)
-`win-release` passed 1033 unit tests and 619 browser tests. The Mac's sweep, the PC's checks
-and ASan builds: TBD.
+Space made with "+" came with one. The Mac's release sweep on the series: 1042 of 1042 unit tests and 653 of 653
+browser tests (143 one at a time), no retries. On the PC, on the series before the setting's
+wording fix (two strings of patch 0084 and its test's expectation): `win-release` and
+`win-checks` (DCHECKs and the dangling-pointer detector) each passed 1033 unit tests and 619
+browser tests (148 one at a time), with no DCHECK and no dangling pointer. `win-asan` passed the unit tests and every browser
+test but one, with one AddressSanitizer report: a heap use after free in the new Copy Link
+test, which held the button's ink drop while the button made a new one (its background is set
+again after the click); the test now asks for it each time (patch 0083), and the product had no
+report. The PC's second pass, on the final series: TBD.
 
 `tooling/drive` refused every point on the Mac: a waiting notification keeps a window of
 Notification Centre over the whole screen on macOS 27; the harness now lets through what is
