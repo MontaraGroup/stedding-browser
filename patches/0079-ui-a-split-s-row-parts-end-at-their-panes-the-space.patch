@@ -52,9 +52,9 @@ the split row, the Space row and the folder header.
  .../ui/views/tabs/common/folder_view.cc       | 56 +----------
  .../ui/views/tabs/common/folder_view.h        | 25 ++---
  .../views/tabs/common/folder_view_unittest.cc | 92 ++++++++-----------
- .../test/stedding/address_band_browsertest.cc | 40 +++-----
+ .../test/stedding/address_band_browsertest.cc | 49 ++++------
  .../test/stedding/folder_tabs_browsertest.cc  | 31 ++++---
- 13 files changed, 309 insertions(+), 289 deletions(-)
+ 13 files changed, 315 insertions(+), 292 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
 index 335120c25fb1d..2d48bc74f9f51 100644
@@ -927,7 +927,7 @@ index e63be5ff05a2d..ce82e5a1a3bce 100644
  
  }  // namespace
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index cd60572674933..d1d8bd7b8a6c0 100644
+index cd60572674933..6369dc0b78ba0 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -1022,8 +1022,8 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
@@ -1022,6 +1022,31 @@ index cd60572674933..d1d8bd7b8a6c0 100644
      const int old_middle = view()->multi_contents_view()->GetBoundsInScreen()
                                 .CenterPoint()
                                 .x();
+@@ -1592,10 +1580,12 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, EveryChipFitsTheField) {
+       bar()->page_action_container();
+   ASSERT_TRUE(container);
+   // AI Mode's own action exists only where its button is offered; any page
+-  // action shows its chip the same way.
++  // action shows its chip the same way. Zoom's comes before Translate's: the
++  // translate controller hides its action once the page's language is known,
++  // which on a slow build arrives after the test showed it (BACKLOG S-280).
+   actions::ActionId chip_id = kActionAiMode;
+   for (const actions::ActionId id :
+-       {kActionAiMode, kActionShowTranslate, kActionShowZoomBubble}) {
++       {kActionAiMode, kActionShowZoomBubble, kActionShowTranslate}) {
+     if (container->GetPageActionView(id)) {
+       chip_id = id;
+       break;
+@@ -1623,7 +1613,8 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, EveryChipFitsTheField) {
+   ASSERT_TRUE(base::test::RunUntil([&]() {
+     views::test::RunScheduledLayout(view());
+     return chip->GetVisible() && chip->IsChipVisible() && icon->GetVisible();
+-  })) << "the page actions did not show";
++  })) << "the page actions did not show: chip " << chip->GetVisible() << "/"
++      << chip->IsChipVisible() << ", icon " << icon->GetVisible();
+   views::test::RunScheduledLayout(view());
+ 
+   // The address's own margin in the field, above and below.
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
 index ab2a2ade39c7e..291f9f1a8a074 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc

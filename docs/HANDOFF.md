@@ -1698,18 +1698,20 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     does, a 1200-point one put the address field's buttons under it. Do not try to close
     the panel with a click: there is no panel open, and a click is input into the owner's
     machine for nothing.
-131. **The first download of a just-published Windows installer fails in Stedding's updater.**
-    For 0.3.0 beta 7, 8 and 9, an installed copy started five minutes after publishing read the
-    new feed and, with Chromium's log on (beta 9's check), logged "Stedding update: The new
-    version could not be downloaded." about three minutes later; nothing was installed, and
-    before beta 9 the next check came six hours later. In the same minutes `curl` fetched the
-    same installer in four seconds, its checksum right, from GitHub's download cache (`X-Cache:
-    MISS, HIT`), and the copy started again half an hour later downloaded it in seconds. The
-    Mac's Sparkle never failed this way. Since 2026-10-23 both `publish-appcast` scripts fetch
-    the published image from the release's download address and compare its checksum before
-    they write the feed, which also leaves it in the cache; and from beta 9 a failed download
-    tries again within the hour (BACKLOG S-279). Why Chromium's fetch fails where curl's does
-    not is not known.
+131. **Windows update downloads starve while a UI Automation client reads the window.** For
+    0.3.0 beta 7, 8 and 9 the real-feed check showed no pill: the installed copy read the new
+    feed and, with Chromium's log on, logged "Stedding update: The new version could not be
+    downloaded." three minutes later, then waited six hours. A network log (`--log-net-log`)
+    showed the installer's HTTP/2 stream stall after its first 6.3 MB (the stream's window) and
+    GitHub reset it at 180 seconds (`ERR_HTTP2_PROTOCOL_ERROR`, "Server reset stream"). The
+    request ran at IDLE, its default, so SimpleURLLoader wrote the file on a BEST_EFFORT
+    sequence, and the check's harness read the window through UI Automation every five
+    seconds; with that polling replaced by a file check the same copy updated in 20 seconds, as
+    it did when started by hand. The local-feed check's steady 192 seconds is likely the same
+    stall against a server that does not give up (not measured). From beta 9 a failed download tries again within the
+    hour, and from beta 10 the installer downloads at LOW (BACKLOG S-279). A screen reader is a UI
+    Automation client too. Both `publish-appcast` scripts also fetch the published image and
+    compare its checksum before they write the feed, which checks what users will get.
 
 ## The Windows build
 

@@ -68,10 +68,8 @@ if (-not $local) {
   if (($releaseSha -split '\s+')[0].ToLower() -ne $hash) { throw "dist's installer is not the one the release $tag carries" }
   Report 'release' "$tag on $github carries this installer"
   if (-not $Url) { $Url = "https://github.com/$github/releases/download/$tag/Stedding-$version-win-x64.exe" }
-  # BACKLOG S-279: the installer as installed copies fetch it, from that address, is this one;
-  # the fetch also leaves it in GitHub's download cache before the feed offers it. The first
-  # download of a just-published installer through that cache failed in Stedding's own
-  # updater after about three minutes (0.3.0 beta 7 to beta 9), where curl took seconds.
+  # The installer as installed copies fetch it, from that address, is this one: what the feed
+  # is about to offer is checked as users will get it.
   $probe = Join-Path ([IO.Path]::GetTempPath()) "stedding-release-probe-$version.exe"
   Remove-Item $probe -ErrorAction SilentlyContinue
   $took = Measure-Command { & curl.exe -sSfL --retry 3 -o $probe $Url 2>$null }
