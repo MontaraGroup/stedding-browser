@@ -48,7 +48,17 @@ browser tests (148 one at a time), with no DCHECK and no dangling pointer. `win-
 test but one, with one AddressSanitizer report: a heap use after free in the new Copy Link
 test, which held the button's ink drop while the button made a new one (its background is set
 again after the click); the test now asks for it each time (patch 0083), and the product had no
-report. The PC's second pass, on the final series: TBD.
+report. On the final series the PC passed again: `win-release` 1033 unit and 619 browser
+tests, and `win-checks` and `win-asan` the round's suites (`CopyLinkTest.*`,
+`SettingsSpacesTest.*`, `PinnedRunTest.*`), with no report. The rerun under ASan then found the
+new Copy Link test failing at its first step: the button makes its ink drop again when the
+address row takes the page's colour, late on that build, and the new one did not know it was
+hovered; and on the Mac 7 runs in 25 of it clicked a neighbour, another page action having
+moved the button along the field after the load. The test now moves the pointer off and on
+until the button is lit and takes the button's place at each step: `CopyLinkTest.*` passed
+200 runs on the Mac, and on the PC under release, checks and twice under ASan, with no report.
+A Windows installer of version 0.3.0-beta.6 is built from the final product code; nothing was
+published.
 
 `tooling/drive` refused every point on the Mac: a waiting notification keeps a window of
 Notification Centre over the whole screen on macOS 27; the harness now lets through what is
