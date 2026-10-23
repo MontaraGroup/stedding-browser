@@ -45,7 +45,14 @@ its items still open on 2026-10-14 are BACKLOG rows that name their ids.
     scroll never switches (`docs/features/spaces.md` B39).
 16. An issue a user files on GitHub is a suggestion unless it reports a bug (2026-10-21):
     bugs are fixed, a requested feature is built only once the owner has said yes, and
-    nothing is said, labelled or closed on GitHub (`AGENTS.md`, red lines).
+    nothing is said or closed on GitHub (`AGENTS.md`, red lines). Labels are kept to the
+    owner's replies when the owner asks (2026-10-23): an area, a platform, and a status
+    (`status: needs decision`, `status: planned`, `done`).
+17. The address must not jump when the field takes focus: the owner calls it a bug, and the
+    field stays the row's full width for now (2026-10-23, GitHub issue 14; `S-275`).
+18. Sync with no server, through a folder the user picks, is wanted, "in the next few days"
+    (2026-10-23, GitHub issue 20; `S-282`): the sidebar folder withdrawn on 2026-09-26
+    (`docs/features/sidebar-file.md` Sf3) is taken up again.
 
 The operator's own request in chat comes before any of this and before BACKLOG's order.
 
