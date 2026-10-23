@@ -86,6 +86,12 @@ Yes, as in Arc. Drag a tab up over the line among the pinned tabs and it is pinn
 it; drag a pinned tab down under the line and it is unpinned. The line moves during the drag to
 show where the tab will land.
 
+**Can I make a tab an essential by dragging it?**
+Yes, as in Arc. Drag a tab up over the essentials: they light up, and the tab becomes an essential
+where you drop it. Drag an essential down into the list and it stops being one: under the line it
+is a tab again, above it a pinned tab of the Space. **Add to Essentials** and **Remove from
+Essentials** on a tab's menu do the same.
+
 **Can a folder hold pinned tabs?**
 Yes. Drag a folder over the line into the pinned tabs, or choose **Pin Folder** on its menu: every
 tab in it becomes a pinned tab and the folder stays a folder. **Unpin Folder**, or a drag back
