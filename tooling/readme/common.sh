@@ -57,9 +57,9 @@ URL_SAMPLE_API="http://localhost:$SAMPLE_API_PORT/"
 # threw the captions' sync). Reading's two pages are the split scene's, one dark along
 # the top and one white, at half the window's width too (the TypeScript handbook put a
 # white cookie notice on top there), so the row over the split shows two colours.
-DEMO_URLS=("$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_HN"
+DEMO_URLS=("$URL_TRENDING_FRONT" "$URL_MDN" "$URL_DDG" "$URL_HN"
            "$URL_MDN_CSS" "$URL_PY_TUTORIAL"
-           "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_TRENDING"
+           "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_REPO"
            "$URL_LOBSTERS" "$URL_OSM" "$URL_NASA" "$URL_APOLLO")
 # The same window without the pages that leave Work, for the stills. A GitHub
 # trending page is the one on screen: the repository's own page put a star count
