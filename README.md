@@ -30,7 +30,7 @@ account, no telemetry, BSD-3-Clause.
   </tr>
   <tr>
     <td><img src="docs/images/readme/clip-little-window.gif" alt="A link from another app opens a small window over Stedding, its top row green like the Django page in it, the traffic lights in that row; a click on Open in Stedding at the row's right end moves the page into a tab of the main window"><br>
-      <b>Little windows, then a tab</b> (Mac). A link from another app opens small, its row in the page's colour; <b>Open in Stedding</b> (⌘O) moves it into a tab.</td>
+      <b>Little windows, then a tab</b>. A link from another app opens small, its row in the page's colour; <b>Open in Stedding</b> (⌘O) moves it into a tab.</td>
     <td><img src="docs/images/readme/clip-pin-close.gif" alt="A pinned Django tab that had wandered to another page is closed with Command-W: it stays in its place, asleep, with its own title again, and a click opens it on its pinned page"><br>
       <b>⌘W on a pinned tab</b>, as in Arc: it goes back to its pinned page, asleep, in its place.</td>
   </tr>
@@ -78,7 +78,7 @@ with 0.2.0 beta 20 on the Mac.
 - **⌘T for everything**: a URL, a search, or any open or archived tab in any Space; ⇧⌘P lists
   every command with its key.
 - **Split view**: drag a tab onto the page, and it opens beside it.
-- **Little windows** for links from other apps (Mac), with **Open in Stedding** to keep the
+- **Little windows** for links from other apps, with **Open in Stedding** to keep the
   page as a tab; sites **routed** to their Space, **sleeping tabs**, and an **archive** for
   idle tabs, off until you choose.
 - **Local development tabs** marked with Arc's dashed tape, with host and port.
@@ -99,14 +99,14 @@ Each feature has a specification naming the test behind every behaviour:
 - **The Library panel and Live Folders**: later (`S-61`).
 - **Sync and sharing**: there is no account, by design. A Space moves between machines as a file.
 - **AI (Arc Max)**: never, by choice ([ADR 0020](docs/decisions/0020-no-bundled-model.md)).
-- **On Windows**: little windows (links from other apps open as tabs) and import from Arc.
+- **On Windows**: import from Arc.
 - **Phones** (Arc Search): not planned.
 
 ## Download
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.3.0 beta 6**, for macOS and Windows, on Chromium 156.0.8078.48.
+is **0.3.0 beta 7**, for macOS and Windows, on Chromium 156.0.8078.48.
 
 | Platform | File | |
 |---|---|---|
