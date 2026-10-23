@@ -49,7 +49,7 @@ you, not the list.
 | Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121, 130 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126, 127 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125, 128 |
-| Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129 |
+| Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129, 131 |
 | Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113, 122 |
 
 ## Where things live
@@ -1698,6 +1698,18 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     does, a 1200-point one put the address field's buttons under it. Do not try to close
     the panel with a click: there is no panel open, and a click is input into the owner's
     machine for nothing.
+131. **The first download of a just-published Windows installer fails in Stedding's updater.**
+    For 0.3.0 beta 7, 8 and 9, an installed copy started five minutes after publishing read the
+    new feed and, with Chromium's log on (beta 9's check), logged "Stedding update: The new
+    version could not be downloaded." about three minutes later; nothing was installed, and
+    before beta 9 the next check came six hours later. In the same minutes `curl` fetched the
+    same installer in four seconds, its checksum right, from GitHub's download cache (`X-Cache:
+    MISS, HIT`), and the copy started again half an hour later downloaded it in seconds. The
+    Mac's Sparkle never failed this way. Since 2026-10-23 both `publish-appcast` scripts fetch
+    the published image from the release's download address and compare its checksum before
+    they write the feed, which also leaves it in the cache; and from beta 9 a failed download
+    tries again within the hour (BACKLOG S-279). Why Chromium's fetch fails where curl's does
+    not is not known.
 
 ## The Windows build
 

@@ -81,6 +81,21 @@ main() {
                        | cut -d' ' -f1 || true)"
       if [ "$local_sum" = "$released_sum" ]; then
         report "image" "$(basename "$dmg"), the release's (sha256 $local_sum)"
+        # BACKLOG S-279: the image as installed copies fetch it, from the release's download
+        # address, is this one; the fetch also leaves it in GitHub's download cache before
+        # the feed offers it (on Windows the first download of a just-published installer
+        # through that cache failed in Stedding's own updater, where curl took seconds).
+        probe="$(mktemp "${TMPDIR:-/tmp}/stedding-release-probe.XXXXXX")"
+        started=$SECONDS
+        if curl -fsSL --retry 3 -o "$probe" \
+             "https://github.com/$repo/releases/download/$tag/$(basename "$dmg")" &&
+           [ "$(sha256_of "$probe")" = "$local_sum" ]; then
+          report "download" "the release's address gives this image ($((SECONDS - started)) s)"
+        else
+          report "download" "MISSING: the release's download address does not give this image"
+          missing=1
+        fi
+        rm -f "$probe"
       else
         report "image" "MISSING: $(basename "$dmg") is $local_sum; the release says '${released_sum:-nothing}'"
         missing=1
