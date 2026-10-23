@@ -190,10 +190,11 @@ dragged on that half. ⌃⌘N (Alt+Shift+N) splits the current tab with a new on
 right-click menu has **New Split View with Current Tab**.
 
 **A link from another app opened in a small window. How do I keep it?**
-On the Mac a link from another app opens in a little window, to read and close. Its **Open in
-Stedding** button, ⌘O, or the page's right-click menu moves the page into a tab of your window,
-without reloading it; ⇧⌘O puts it in a split instead. Settings → Stedding → Pages and menus
-turns little windows off. On Windows such links open as tabs.
+A link from another app opens in a little window, to read and close, when Stedding is your
+default browser. Its **Open in Stedding** button, ⌘O (Ctrl+O on Windows), or the page's
+right-click menu moves the page into a tab of your window, without reloading it; ⇧⌘O
+(Ctrl+Shift+O) puts it in a split instead. Settings → Stedding → Pages and menus turns little
+windows off. On Windows, since 0.3.0 beta 7, the little window keeps Windows' own title bar.
 
 **Why does ⌥⌘N open Arc?**
 While Arc runs it takes ⌥⌘N from every app for Little Arc. Split with ⌃⌘N, which Arc leaves

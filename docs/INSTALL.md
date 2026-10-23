@@ -113,8 +113,7 @@ Uninstall from **Settings → Apps**, as with any app.
 ### What the Windows preview does not have yet
 
 The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctrl and
-Alt, the name and icon, and a per-user installer. Still open: little windows for links
-from other apps (they open as tabs) and signing (`S-56`); a two-finger Space swipe whose
+Alt, the name and icon, and a per-user installer. Still open: signing (`S-56`); a two-finger Space swipe whose
 list follows the fingers, as on the Mac (a touchpad's sideways scroll changes one Space
 instead, `docs/history/plan-2026-09-26.md` TAB-31); and importing from Arc, whose Windows files
 Stedding does not read yet (`S-81`).

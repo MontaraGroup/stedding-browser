@@ -1,0 +1,556 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Thu, 22 Oct 2026 21:58:49 -0400
+Subject: feat: little windows on Windows, and essentials that shrink to fit
+
+Little windows on Windows (BACKLOG S-56; little E1, E2, E4; routing D3):
+Windows hands a link from another app over as the address after
+--single-argument, the way the installer registers Stedding for http and
+https. With "Open links from other apps in a small window" on and no route
+for the site, it opens in a little window, as on the Mac: while Stedding
+runs, that is the whole launch, with no window of its own behind it; at
+startup the window the session brings back comes first. Otherwise the link
+is marked, so its tab lands in the Space for links from other apps, which
+Windows did not do either. Settings shows the switch on Windows too, and
+Ctrl+Shift+O in a little window sends its page into a split, as
+Shift-Cmd-O does on the Mac.
+
+Essentials that shrink to fit (sidebar Y33; BACKLOG S-276, GitHub issue
+15): as in Arc, more cards share a row before the grid takes more rows: up
+to four on one row, then two rows, the first the fuller, each card the
+narrower, and a third row only once a card would be narrower than the
+rail's square. They were two to a row whatever their number.
+
+Tests: LittleWindowTest.ALinkFromAnotherAppOpensSmall (Windows);
+SidebarRailTest.TheEssentialsShrinkToFitTwoRows, and
+SidebarRailTest.TheHoverExpandedRailShowsTheEssentialsGrid for the new
+row of three.
+
+Why: links from other apps opened as plain tabs on Windows, and a long
+essentials grid ran down the sidebar in rows of two (GitHub issue 15).
+Removable when: never; both are product behaviour.
+---
+ .../stedding_page/stedding_page.html.ts       |   3 +-
+ .../browser/ui/browser_command_controller.cc  |  13 +++
+ chrome/browser/ui/startup/BUILD.gn            |   2 +
+ .../startup/startup_browser_creator_impl.cc   |  63 +++++++++++
+ .../ui/startup/startup_browser_creator_impl.h |   4 +
+ .../ui/views/frame/browser_frame_view_win.cc  |   4 +
+ .../tabs/common/pinned_tab_container_view.cc  |  16 ++-
+ .../stedding/little_window_browsertest.cc     |  81 +++++++++++++
+ .../stedding/sidebar_forms_browsertest.cc     |   7 +-
+ .../test/stedding/sidebar_rail_browsertest.cc | 107 +++++++++++++++---
+ 10 files changed, 274 insertions(+), 26 deletions(-)
+
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 660036ebb8725..39e05d4572407 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -338,14 +338,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         @change="${this.onDarkPagesAddChange_}">
+     </cr-input>
+   </div>
+-  ${!isWindows ? html`
+   <settings-toggle-button
+       id="littleWindow"
+       class="hr"
+       pref-key="stedding.little.enabled"
+       label="$i18n{steddingLittleLabel}"
+       sub-label="$i18n{steddingLittleSubLabel}">
+-  </settings-toggle-button>` : ''}
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="newTabHint"
+       class="hr"
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index c49be659559d2..5edb3edc97431 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -1485,6 +1485,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+                          kChromeUIHistorySyncedTabs);
+       break;
+     case IDC_SHOW_BOOKMARK_MANAGER:
++#if !BUILDFLAG(IS_MAC)
++      // Stedding little E2 (BACKLOG S-56): Ctrl+Shift+O inside a little
++      // window sends its page into a split, as Shift-Cmd-O does on the Mac;
++      // the chord is the bookmark manager's everywhere else.
++      if (stedding::IsLittleWindow(browser_)) {
++        stedding::PromoteLittleWindow(browser_, nullptr, /*split=*/true);
++        break;
++      }
++#endif
+       ShowBookmarkManager(webui::GetBrowserForOpeningWebUi(browser_));
+       break;
+     case IDC_MANAGE_SKILLS:
+@@ -3098,6 +3107,10 @@ void BrowserCommandController::UpdateCommandsForLittleWindow() {
+   command_updater_->UpdateCommandEnabled(IDC_STEDDING_LITTLE_CLOSE, little);
+   if (little) {
+     command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, true);
++#if !BUILDFLAG(IS_MAC)
++    // Ctrl+Shift+O's command, which a little window turns into the split.
++    command_updater_->UpdateCommandEnabled(IDC_SHOW_BOOKMARK_MANAGER, true);
++#endif
+   }
+ }
+ 
+diff --git a/chrome/browser/ui/startup/BUILD.gn b/chrome/browser/ui/startup/BUILD.gn
+index 716f94e0dcb3b..4d89d411218f9 100644
+--- a/chrome/browser/ui/startup/BUILD.gn
++++ b/chrome/browser/ui/startup/BUILD.gn
+@@ -242,7 +242,9 @@ source_set("impl") {
+       "//chrome/browser/ui/extensions",
+       "//chrome/browser/ui/navigator",
+       "//chrome/browser/ui/omnibox/omnibox_everywhere",
++      "//chrome/browser/ui/spaces:router",
+       "//chrome/browser/ui/startup/focus",
++      "//chrome/browser/ui/stedding:little_window",
+       "//chrome/browser/ui/tabs",
+       "//chrome/browser/ui/tabs:tab_group",
+       "//chrome/browser/ui/tabs:tab_strip",
+diff --git a/chrome/browser/ui/startup/startup_browser_creator_impl.cc b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
+index c19d4ba646850..c3fa5fa9c8f5f 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator_impl.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
+@@ -43,12 +43,14 @@
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/spaces/space_router.h"
+ #include "chrome/browser/ui/startup/infobar_utils.h"
+ #include "chrome/browser/ui/startup/startup_browser_creator.h"
+ #include "chrome/browser/ui/startup/startup_infobar_observer.h"
+ #include "chrome/browser/ui/startup/startup_tab.h"
+ #include "chrome/browser/ui/startup/startup_tab_provider.h"
+ #include "chrome/browser/ui/startup/startup_types.h"
++#include "chrome/browser/ui/stedding/little_window.h"
+ #include "chrome/browser/ui/tabs/shared_tab_group_version_upgrade_modal.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -264,6 +266,47 @@ void StartupBrowserCreatorImpl::Launch(
+   }
+ #endif
+ 
++#if BUILDFLAG(IS_WIN)
++  // Stedding little E1, routing D3 (BACKLOG S-56): Windows hands a link from
++  // another app over as the address after --single-argument, the way the
++  // installer registers Stedding for http and https. With the setting on and
++  // no route for it, it opens in a little window, as on the Mac; else it is
++  // marked, so its tab lands in the Space for links from other apps. With
++  // Stedding already running and every such link opening small, that is the
++  // whole launch: no window of its own comes up behind it.
++  if (command_line_->HasSingleArgumentSwitch() && !profile_->IsOffTheRecord()) {
++    const StartupTabs handed = StartupTabProviderImpl().GetCommandLineTabs(
++        *command_line_, cur_dir_, profile_);
++    for (const StartupTab& tab : handed) {
++      if (stedding::ShouldOpenLittle(profile_->GetPrefs(), tab.url)) {
++        little_tabs_.push_back(tab);
++      } else {
++        spaces::MarkExternalOpen(tab.url);
++      }
++    }
++    if (!little_tabs_.empty() && little_tabs_.size() == handed.size() &&
++        process_startup == chrome::startup::IsProcessStartup::kNo &&
++        GetLastActiveBrowserWindowInterfaceWithAnyProfile()) {
++      StartupTabs not_opened;
++      for (const StartupTab& tab : little_tabs_) {
++        if (!stedding::OpenLittleWindow(profile_, tab.url, nullptr,
++                                        tab.is_untrusted_launch)) {
++          not_opened.push_back(tab);
++        }
++      }
++      little_tabs_ = std::move(not_opened);
++      if (little_tabs_.empty()) {
++        return;
++      }
++      // A profile that may not open one gets its tabs the ordinary way.
++      for (const StartupTab& tab : little_tabs_) {
++        spaces::MarkExternalOpen(tab.url);
++      }
++      little_tabs_.clear();
++    }
++  }
++#endif  // BUILDFLAG(IS_WIN)
++
+   DetermineURLsAndLaunch(process_startup, restore_tabbed_browser);
+ 
+   // It's possible for there to be no browser window, e.g. if someone
+@@ -276,6 +319,20 @@ void StartupBrowserCreatorImpl::Launch(
+     return;
+   }
+ 
++#if BUILDFLAG(IS_WIN)
++  // Stedding little E1: at process startup the window the session brings
++  // back comes first, and the link's little window over it.
++  for (const StartupTab& tab : little_tabs_) {
++    if (!stedding::OpenLittleWindow(profile_, tab.url, browser,
++                                    tab.is_untrusted_launch)) {
++      spaces::MarkExternalOpen(tab.url);
++      StartupTabs as_tab = {tab};
++      OpenTabsInBrowser(browser, process_startup, as_tab, TabOverWrite::kNo);
++    }
++  }
++  little_tabs_.clear();
++#endif  // BUILDFLAG(IS_WIN)
++
+   if (command_line_->HasSwitch(switches::kInstallChromeApp)) {
+     install_chrome_app::InstallChromeApp(
+         command_line_->GetSwitchValueASCII(switches::kInstallChromeApp),
+@@ -617,6 +674,12 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
+     bool whats_new_enabled) {
+   StartupTabs tabs =
+       provider.GetCommandLineTabs(*command_line_, cur_dir_, profile_);
++  // Stedding little E1: an address that opens in a little window is no tab.
++  std::erase_if(tabs, [this](const StartupTab& tab) {
++    return std::ranges::any_of(little_tabs_, [&tab](const StartupTab& little) {
++      return little.url == tab.url;
++    });
++  });
+   LaunchResult launch_result =
+       tabs.empty() ? LaunchResult::kNormally : LaunchResult::kWithGivenUrls;
+ 
+diff --git a/chrome/browser/ui/startup/startup_browser_creator_impl.h b/chrome/browser/ui/startup/startup_browser_creator_impl.h
+index d1c7316a1ee82..7bccd50714ecd 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator_impl.h
++++ b/chrome/browser/ui/startup/startup_browser_creator_impl.h
+@@ -238,6 +238,10 @@ class StartupBrowserCreatorImpl {
+   raw_ptr<StartupBrowserCreator> browser_creator_;
+   chrome::startup::IsFirstRun is_first_run_;
+ 
++  // Stedding little E1 (BACKLOG S-56): the addresses another app handed over
++  // that open in a little window, kept out of the startup tabs.
++  StartupTabs little_tabs_;
++
+   std::optional<std::string> current_chrome_version_string_for_testing_;
+ };
+ 
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+index 686229e272bbd..dd467013cfd01 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -748,8 +748,12 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
+   // edge, which put their centre 4 DIP above the row's (operator,
+   // 2026-09-08). The row is the card gutter below the client's top and
+   // the toolbar's preferred height.
++  // A popup -- a little window among them (little E10) -- keeps them in its
++  // own title bar: moved down, they sat over the right end of its row, on
++  // "Open in Stedding".
+   const ToolbarView* const toolbar = GetBrowserView()->toolbar();
+   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) && toolbar &&
++      GetBrowserView()->GetIsNormalType() &&
+       GetClientFrameElementInfo().tabstrip_preferred_height == 0 &&
+       GetBrowserView()->IsToolbarVisible() &&
+       GetBrowserView()->GetWebAppFrameToolbarPreferredSize().IsEmpty() &&
+diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+index 37da39507c76e..a4fe56648df6f 100644
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -466,12 +466,22 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+     // spans it rather than sitting half-width beside nothing. It was keyed
+     // on the expanded state, and the hover-expanded rail drew its essentials
+     // as one wide row each (PLAN.md TAB-23, TAB-L5).
++    //
++    // sidebar Y33 (BACKLOG S-276, GitHub issue 15): as in Arc, more cards
++    // share a row before the grid takes more rows. Up to four sit on one row;
++    // past four the grid takes two rows, the first the fuller, each card the
++    // narrower; and only once a card would be narrower than the rail's square
++    // (sidebar Y8) does the grid take a third row. It was two to a row
++    // whatever their number, so ten essentials were five rows of wide cards.
+     if (arc_style && !rail) {
+-      const int cards_per_row = std::min(std::clamp(shown, 1, 2),
+-                                         std::max(children_on_row, 1));
++      const int min_card = stedding::RailRowSide();
++      const int fit = std::max(
++          1, (available_width + kTabPadding) / (min_card + kTabPadding));
++      const int wanted = shown <= 4 ? shown : (shown + 1) / 2;
++      const int cards_per_row = std::clamp(wanted, 1, fit);
+       child_width =
+           (available_width - kTabPadding * (cards_per_row - 1)) / cards_per_row;
+-      children_on_row = std::min(children_on_row, cards_per_row);
++      children_on_row = cards_per_row;
+     } else {
+       // Allocate extra space to the tabs.
+       available_width -= (children_on_row * child_width) +
+diff --git a/chrome/test/stedding/little_window_browsertest.cc b/chrome/test/stedding/little_window_browsertest.cc
+index e9be2a2ff8195..2a2b5cd56d76e 100644
+--- a/chrome/test/stedding/little_window_browsertest.cc
++++ b/chrome/test/stedding/little_window_browsertest.cc
+@@ -17,9 +17,11 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/strings/strcat.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "base/synchronization/lock.h"
+ #include "base/test/bind.h"
+ #include "base/test/run_until.h"
+@@ -34,7 +36,10 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
++#include "chrome/browser/ui/startup/startup_types.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
+@@ -166,6 +171,82 @@ IN_PROC_BROWSER_TEST_F(LittleWindowTest,
+   }
+ }
+ 
++#if BUILDFLAG(IS_WIN)
++// little E1, routing D3 (BACKLOG S-56): on Windows a link another app hands
++// over -- the address after --single-argument, as the installer registers
++// Stedding for http and https -- opens in a little window while Stedding
++// runs, and no other window comes up for it; Ctrl+Shift+O there sends the page
++// into a split, as Shift-Cmd-O does on the Mac. With the setting off it opens
++// as a tab of the window already there. Such links opened as tabs.
++IN_PROC_BROWSER_TEST_F(LittleWindowTest, ALinkFromAnotherAppOpensSmall) {
++  const GURL url = embedded_test_server()->GetURL("/title1.html");
++  const auto handed_over = [&]() {
++    return base::CommandLine::FromString(base::StrCat(
++        {L"stedding.exe --single-argument ", base::UTF8ToWide(url.spec())}));
++  };
++  const auto windows = [&](BrowserWindowInterface::Type type) {
++    int count = 0;
++    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++        [&](BrowserWindowInterface* window) {
++          count += window->GetType() == type;
++          return true;
++        });
++    return count;
++  };
++  const int tabs_before = browser()->GetTabStripModel()->count();
++
++  {
++    SCOPED_TRACE("the setting on: a little window, and nothing else");
++    ui_test_utils::BrowserCreatedObserver opened;
++    const base::CommandLine command_line = handed_over();
++    ASSERT_TRUE(command_line.HasSingleArgumentSwitch());
++    StartupBrowserCreatorImpl(base::FilePath(), command_line,
++                              chrome::startup::IsFirstRun::kNo)
++        .Launch(browser()->GetProfile(), chrome::startup::IsProcessStartup::kNo,
++                /*restore_tabbed_browser=*/true);
++    BrowserWindowInterface* const little = opened.Wait();
++    ASSERT_TRUE(little);
++    EXPECT_TRUE(stedding::IsLittleWindow(little));
++    EXPECT_EQ(BrowserWindowInterface::Type::TYPE_POPUP, little->GetType());
++    EXPECT_EQ(1, windows(BrowserWindowInterface::Type::TYPE_NORMAL))
++        << "a window of its own came up behind it";
++    EXPECT_EQ(tabs_before, browser()->GetTabStripModel()->count());
++    content::WebContents* const page =
++        little->GetTabStripModel()->GetActiveWebContents();
++    ASSERT_TRUE(page);
++    EXPECT_TRUE(content::WaitForLoadStop(page));
++    EXPECT_EQ(url, page->GetLastCommittedURL());
++
++    // Ctrl+Shift+O: the split, through the window's command for the chord.
++    ASSERT_TRUE(chrome::IsCommandEnabled(little, IDC_SHOW_BOOKMARK_MANAGER));
++    chrome::ExecuteCommand(little, IDC_SHOW_BOOKMARK_MANAGER);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return windows(BrowserWindowInterface::Type::TYPE_POPUP) == 0;
++    })) << "the little window stayed";
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return browser()->GetTabStripModel()->GetActiveWebContents() == page;
++    })) << "the page did not reach the main window";
++    EXPECT_TRUE(browser()->GetTabStripModel()->GetActiveTab()->IsSplit())
++        << "Ctrl+Shift+O did not make a split";
++  }
++  {
++    SCOPED_TRACE("the setting off: a tab of the window there");
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kLittleEnabled, false);
++    const int tabs = browser()->GetTabStripModel()->count();
++    StartupBrowserCreatorImpl(base::FilePath(), handed_over(),
++                              chrome::startup::IsFirstRun::kNo)
++        .Launch(browser()->GetProfile(), chrome::startup::IsProcessStartup::kNo,
++                /*restore_tabbed_browser=*/true);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return browser()->GetTabStripModel()->count() == tabs + 1;
++    })) << "no tab for the link";
++    EXPECT_EQ(0, windows(BrowserWindowInterface::Type::TYPE_POPUP));
++    EXPECT_EQ(1, windows(BrowserWindowInterface::Type::TYPE_NORMAL));
++  }
++}
++#endif  // BUILDFLAG(IS_WIN)
++
+ #if BUILDFLAG(IS_MAC)
+ // little E7: the ways from a little window into the main window. Each moves
+ // the page as it is -- the same WebContents, its history, nothing loaded
+diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
+index ef2e6822dc1ff..1aab5b529ffc6 100644
+--- a/chrome/test/stedding/sidebar_forms_browsertest.cc
++++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
+@@ -1139,13 +1139,14 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, AShortWindowCutsNoRowOff) {
+   spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
+   ASSERT_TRUE(model);
+   ASSERT_TRUE(model->AddSpace("Work", SK_ColorBLUE));
+-  // Twelve essentials, the grid's six rows, over two tabs.
+-  for (int i = 0; i < 12; ++i) {
++  // Thirty essentials, six rows of the grid at five or so to a row (sidebar
++  // Y33), over two tabs.
++  for (int i = 0; i < 30; ++i) {
+     AppendPinnedTab();
+   }
+   AppendTab();
+   TabStripModel* const tabs = tab_strip_model();
+-  ASSERT_EQ(14, tabs->count());
++  ASSERT_EQ(32, tabs->count());
+   tabs::TabInterface* const last = tabs->GetActiveTab();
+   ASSERT_FALSE(tabs->IsTabPinned(tabs->GetIndexOfTab(last)));
+   views::Widget* const widget = browser_view()->GetWidget();
+diff --git a/chrome/test/stedding/sidebar_rail_browsertest.cc b/chrome/test/stedding/sidebar_rail_browsertest.cc
+index da7d730d617a2..4faaf0539ff86 100644
+--- a/chrome/test/stedding/sidebar_rail_browsertest.cc
++++ b/chrome/test/stedding/sidebar_rail_browsertest.cc
+@@ -13,6 +13,7 @@
+ #include <algorithm>
+ #include <cstddef>
+ #include <cstdlib>
++#include <map>
+ #include <memory>
+ #include <optional>
+ #include <set>
+@@ -27,6 +28,7 @@
+ #include "base/memory/scoped_refptr.h"
+ #include "base/run_loop.h"
+ #include "base/strings/strcat.h"
++#include "base/strings/stringprintf.h"
+ #include "base/synchronization/lock.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/test/bind.h"
+@@ -628,16 +630,15 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest,
+   }
+ }
+ 
+-// PLAN.md TAB-23, TAB-L5 (BACKLOG S-141; sidebar Y8, Y20): expanded on
++// PLAN.md TAB-23, TAB-L5 (BACKLOG S-141; sidebar Y8, Y20, Y33): expanded on
+ // hover, the rail draws the essentials as the open sidebar does, a grid of
+-// cards two to a row with no title; in the rail they are a column of
+-// squares. The grid was keyed on the expanded state, which stays collapsed
+-// while the rail is drawn open on hover, so there each essential took a row
+-// of its own, with its title.
++// cards on one row with no title (three of them; sidebar Y33); in the rail
++// they are a column of squares. The grid was keyed on the expanded state, which
++// stays collapsed while the rail is drawn open on hover, so there each
++// essential took a row of its own, with its title.
+ IN_PROC_BROWSER_TEST_F(SidebarRailTest,
+                        TheHoverExpandedRailShowsTheEssentialsGrid) {
+-  // Three essentials, two to the grid's first row and one to its second,
+-  // and a tab under them.
++  // Three essentials, on the grid's one row, and a tab under them.
+   AppendPinnedTab();
+   AppendPinnedTab();
+   AppendPinnedTab();
+@@ -677,20 +678,20 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest,
+     }
+     return drawn;
+   };
+-  // Two cards side by side on the first row, the third under them, each the
+-  // same width and none with a title.
++  // The three cards side by side on one row, each the same width and none
++  // with a title.
+   const auto expect_the_grid = [&]() {
+     const std::vector<Card> drawn = cards();
+     ASSERT_EQ(3u, drawn.size());
+-    EXPECT_EQ(drawn[0].bounds.y(), drawn[1].bounds.y())
+-        << "the first two cards share a row: " << drawn[0].bounds.ToString()
+-        << " and " << drawn[1].bounds.ToString();
+-    EXPECT_GE(drawn[1].bounds.x(), drawn[0].bounds.right())
+-        << "side by side: " << drawn[0].bounds.ToString() << " and "
+-        << drawn[1].bounds.ToString();
+-    EXPECT_EQ(drawn[0].bounds.width(), drawn[1].bounds.width());
+-    EXPECT_GE(drawn[2].bounds.y(), drawn[0].bounds.bottom())
+-        << "the third card on the next row: " << drawn[2].bounds.ToString();
++    for (size_t i = 1; i < drawn.size(); ++i) {
++      EXPECT_EQ(drawn[0].bounds.y(), drawn[i].bounds.y())
++          << "the cards share a row: " << drawn[0].bounds.ToString() << " and "
++          << drawn[i].bounds.ToString();
++      EXPECT_GE(drawn[i].bounds.x(), drawn[i - 1].bounds.right())
++          << "side by side: " << drawn[i - 1].bounds.ToString() << " and "
++          << drawn[i].bounds.ToString();
++      EXPECT_EQ(drawn[0].bounds.width(), drawn[i].bounds.width());
++    }
+     for (const Card& card : drawn) {
+       EXPECT_FALSE(card.titled)
+           << "a card shows a title: " << card.bounds.ToString();
+@@ -746,6 +747,76 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest,
+   }
+ }
+ 
++// sidebar Y33 (BACKLOG S-276, GitHub issue 15): as more essentials are added
++// the grid puts more cards on a row before it takes more rows, as Arc's does:
++// up to four on one row, then two rows, the first the fuller; every card the
++// same width and none narrower than the rail's square, and each full row
++// spanning the grid, as a lone essential does. They were two to a row
++// whatever their number, so eight essentials made four rows of wide cards.
++IN_PROC_BROWSER_TEST_F(SidebarRailTest, TheEssentialsShrinkToFitTwoRows) {
++  AppendTab();
++  views::Widget* const widget = browser_view()->GetWidget();
++  TabStripModel* const strip = tab_strip_model();
++  // The essentials' drawn cards in the sidebar's coordinates, row by row,
++  // each row from left to right.
++  const auto rows = [&]() {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget));
++    views::test::RunScheduledLayout(widget);
++    std::map<int, std::vector<gfx::Rect>> by_y;
++    for (int i = 0; i < strip->count(); ++i) {
++      if (!strip->IsTabPinned(i)) {
++        continue;
++      }
++      TabView* const card = stedding::test::FindDrawnRow(
++          widget->GetRootView(), strip->GetTabAtIndex(i));
++      if (!card) {
++        ADD_FAILURE() << "an essential has no drawn card";
++        continue;
++      }
++      const gfx::Rect bounds = views::View::ConvertRectToTarget(
++          card, region(), card->GetLocalBounds());
++      by_y[bounds.y()].push_back(bounds);
++    }
++    std::vector<std::vector<gfx::Rect>> drawn;
++    for (auto& [y, row] : by_y) {
++      std::ranges::sort(row, {}, &gfx::Rect::x);
++      drawn.push_back(row);
++    }
++    return drawn;
++  };
++
++  int essentials = 0;
++  gfx::Rect lone;
++  for (const int count : {1, 2, 3, 4, 5, 6, 8}) {
++    SCOPED_TRACE(base::StringPrintf("%d essentials", count));
++    while (essentials < count) {
++      AppendPinnedTab();
++      ++essentials;
++    }
++    const std::vector<std::vector<gfx::Rect>> drawn = rows();
++    const size_t per_row = count <= 4 ? count : (count + 1) / 2;
++    ASSERT_FALSE(drawn.empty());
++    EXPECT_EQ(per_row, drawn[0].size()) << "cards on the first row";
++    EXPECT_EQ((count + per_row - 1) / per_row, drawn.size()) << "rows";
++    if (count == 1) {
++      lone = drawn[0][0];
++    }
++    for (const std::vector<gfx::Rect>& row : drawn) {
++      EXPECT_EQ(lone.x(), row.front().x()) << "a row starts off the grid";
++      for (const gfx::Rect& card : row) {
++        EXPECT_EQ(drawn[0][0].width(), card.width()) << card.ToString();
++        EXPECT_EQ(drawn[0][0].height(), card.height()) << card.ToString();
++        EXPECT_GE(card.width(), stedding::RailRowSide())
++            << "narrower than the rail's square: " << card.ToString();
++      }
++    }
++    // A full row spans the grid, to the rounding of its cards' widths.
++    EXPECT_NEAR(lone.right(), drawn[0].back().right(),
++                static_cast<int>(per_row))
++        << "the first row stops short of the grid";
++  }
++}
++
+ // What the user sees of `icon`: the strongest alpha it paints with, times
+ // the opacity of a layer it paints to.
+ float DrawnStrength(views::View* icon) {

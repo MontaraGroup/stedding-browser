@@ -25,9 +25,9 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Pin the tab in its Space, or unpin it | ⌘D | Ctrl+D |
 | Clear: close the Space's unpinned tabs | ⇧⌘K | Ctrl+Shift+K |
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
-| In a little window (macOS): move the page into your window as a tab, as its Open in Stedding button does (a new window opens when none is) | ⌘O | — |
-| In a little window (macOS): send the page into a split of your window (File menu and the page's menu: Open in Split View) | ⇧⌘O | — |
-| In a little window (macOS): close it (the bare key may not reach the window yet, `docs/history/plan-2026-09-26.md` CMD-15) | Esc | — |
+| In a little window: move the page into your window as a tab, as its Open in Stedding button does (a new window opens when none is) | ⌘O | Ctrl+O |
+| In a little window: send the page into a split of your window (File menu and the page's menu: Open in Split View) | ⇧⌘O | Ctrl+Shift+O |
+| In a little window: close it (the bare key may not reach the window yet, `docs/history/plan-2026-09-26.md` CMD-15) | Esc | Esc |
 
 ### Switching Spaces with the mouse
 
