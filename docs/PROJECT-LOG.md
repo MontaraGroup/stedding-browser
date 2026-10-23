@@ -10,6 +10,49 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-23, small hours -- a drag into the essentials and out, 0.3.0 beta 8
+
+Next on the owner's plan for the night: GitHub issue 16 (`S-277`), patch 0086. As in Arc, a
+tab's row dragged over the essentials, or the room above the Space's title, lights the grid
+(`PinnedTabContainerView::SetEssentialsDropHighlight`), and dropped there it becomes an
+essential before the card under the pointer or after the last; an essential's card dragged onto
+the list shows the drop bar between the rows (`UnpinnedTabContainerView::RowDropPlaceAt`) and,
+dropped, stops being an essential at that place, a tab under the Clear line or a pin of the Space
+over it (`SpaceModel::SetSpacePinnedInPlace`). `TabDragHandlerImpl` keeps the pointer's last
+place and decides at the drop, as the drop across the Clear line does (pins H14, H27). A first
+build unpinned an essential dropped on a Space's chip: only a point over the list's own scroll
+view now counts as the list (`OnTheList`).
+
+Evidence. `PinnedRunTest.ADragTakesATabIntoTheEssentialsAndOut` (a tab dropped on an
+essential's card, an essential dropped under the line and one over it) is new and runs with the
+other drag tests one at a time. On the Mac's release build, with the real pointer on a copy of
+the app: Notes, dragged up onto Calendar's card, lit the grid and became an essential there;
+Mail, dragged from the essentials down between Music and Code, showed the bar there and became a
+tab in that place. The Mac's sweep: 1042 of 1042 unit tests and, at the second run, 658 of 658
+browser tests (146 one at a time). The first run failed `EssentialCardTest.ACardIsAFrostedTileWithNoEdge`
+and `HoverCardPictureTest.ACardShowsItsTabsUseAfterAPause`, three runs in three alone: the
+live check had left the real pointer at the sidebar's height, so a test window's plain row was
+hovered and filled, and a hover card's task manager ran. With the pointer moved both passed;
+`tooling/dev` now parks it on the Mac as on Windows (`tooling/park-cursor`, trap 78).
+
+The PC, on the same series: `win-release`, `win-checks` and `win-asan` each passed 1033 unit and
+625 browser tests (151 one at a time), with no DCHECK, no dangling pointer and no
+AddressSanitizer report. Released the same night as 0.3.0 beta 8: the Mac's app signed,
+notarized and stapled, `syspolicy_check` and `verify-build --offline` passed, and a copy of the
+released beta 7 updated itself to it through a local signed feed (pill after 25 seconds,
+relaunch in 1). On the PC the installer upgraded an installed beta 7, uninstalled keeping the
+profile and installed fresh, the installed `chrome.dll` this build's each time; the installed
+beta 7 updated itself through a local feed (pill after 192 seconds, restart in 2). After
+publishing, the Mac's beta 7 copy showed the pill from the real feed in 29 seconds. The PC's
+installed beta 7, launched five minutes after publishing, read the new feed 10 seconds after
+launch and showed no pill in 20 minutes, with no download folder left, as beta 7's first try had
+done; launched again half an hour after publishing, with Chromium's log on, it downloaded and
+installed at once (pill in 25 seconds, restart in 2) and logged no failure. A failed download
+waits six hours for the next check: `S-279` makes it try again within the hour and asks the next
+release's check to run with the log on. stedding.dev rebuilt for beta 8 through its Rebuild
+workflow.
+
+
 ## 2026-10-22, late night -- little windows on Windows, essentials that shrink to fit, 0.3.0 beta 7
 
 The owner asked for little windows on Windows now and for the essentials that shrink to fit
