@@ -57,8 +57,18 @@ hovered; and on the Mac 7 runs in 25 of it clicked a neighbour, another page act
 moved the button along the field after the load. The test now moves the pointer off and on
 until the button is lit and takes the button's place at each step: `CopyLinkTest.*` passed
 200 runs on the Mac, and on the PC under release, checks and twice under ASan, with no report.
-A Windows installer of version 0.3.0-beta.6 is built from the final product code; nothing was
-published.
+Released the same night as 0.3.0 beta 6, on the owner's word ("push and release 0.3.0 beta 6
+on the current pin, full cycle on both platforms"): the Mac's suites again on this version
+(1042 unit, 653 browser), the app signed, notarized and stapled, `syspolicy_check` and
+`verify-build --offline` passed, and a copy of the released beta 5 updated itself to it through a
+local signed feed (pill after 25 seconds, relaunch in 1). On the PC, with the owner's yes to
+quit the Stedding open there, the installer upgraded an installed beta 5, uninstalled keeping the
+profile and installed fresh, the installed `chrome.dll` this build's each time; the installed
+beta 5 updated itself through a local feed (pill after 192 seconds, restart in 2). After
+publishing, both real feeds offered it: the Mac's beta 5 copy showed the pill in 32 seconds, the
+PC's installed beta 5 in 25 and restarted into beta 6. stedding.dev serves beta 6, with a line
+on the new setting. The PC's Stedding, quit for the installer test, is installed at beta 6 with
+its profile; it was not started again.
 
 `tooling/drive` refused every point on the Mac: a waiting notification keeps a window of
 Notification Centre over the whole screen on macOS 27; the harness now lets through what is
