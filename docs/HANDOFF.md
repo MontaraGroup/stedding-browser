@@ -1726,19 +1726,15 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     `tooling/drive`'s shots; `screencapture -l` captures it there. A capture beside the
     owner's own Stedding still needs a copy with its own bundle id (trap 124).
 
-133. **A screen recorder records the screen; record the window.** The README demo was
-    recorded with `screencapture -v -R` or ffmpeg's screen input, a rectangle of the whole
-    display cut out afterwards. On 2026-10-23 that put the operator's own window into a take
-    when it came over the browser's (the harness then refused the click under it, rightly),
-    and the raw file held the whole screen. `tooling/record-window` records the browser's
-    window alone (ScreenCaptureKit's single-window filter), behind other windows or on
-    another Space, and `tooling/readme/record-demo.sh` uses it unless another recorder is
-    named. macOS 27 marks a window being captured with a purple badge where its traffic
-    lights are; the conversion paints the active window's lights over it
-    (`clean_window_badge`, `media.py lights`). The same day's take also showed why a scene
-    must be re-measured after a layout change: the essentials went to one row of four in
-    0.3.0 beta 7, every sidebar row moved up 54 points, and the split scene's drag caught
-    the row already on screen, which makes no split (splits J13).
+133. **A screen recorder records the screen; record the window.** `screencapture -v -R` and
+    ffmpeg's screen input record a rectangle of the whole display: another window that comes
+    over the browser's lands in the take, and the raw file holds the whole screen.
+    `tooling/record-window` records the browser's window alone (ScreenCaptureKit's
+    single-window filter), and `tooling/readme/record-demo.sh` uses it unless another recorder
+    is named. macOS 27 badges a captured window where its traffic lights are; the conversion
+    paints the lights back (`clean_window_badge`). Re-measure the scenes after any sidebar
+    layout change: when the essentials went to one row (0.3.0 beta 7) every row moved up 54
+    points and the split scene's drag caught the row on screen, which makes no split (J13).
 
 ## The Windows build
 
