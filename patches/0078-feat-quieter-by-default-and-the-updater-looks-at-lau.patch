@@ -19,11 +19,16 @@ they share the preferences, Settings' Stedding page and the updater:
   and every six hours while the browser runs, on the Mac through Sparkle's
   schedule and a background check at launch, on Windows through its own
   schedule (updates Up1, Up6, Up7, Up14, Up20). A copy that checked in the
-  morning had not been offered an evening's release until the next day.
+  morning had not been offered an evening's release until the next day. On
+  Windows a download that fails tries again within the hour, as a feed that
+  cannot be reached does (BACKLOG S-279): the first checks after the last two
+  releases were published read the new feed but did not install it, and
+  then waited six hours.
 
 Tests: UndoCloseByDefaultTest, IsolationMarkTest's two notice tests,
 FullscreenHintTest (a person's full screen and a page's), AppUpdaterMacTest
-and WinAppUpdaterTest's schedule tests; each fails without its change, and the
+and WinAppUpdaterTest's schedule tests (AFailedDownloadTriesAgainWithinTheHour
+among them); each fails without its change, and the
 toast tests turn their switch on.
 
 Why: the owner found the hints in the way and the release late to arrive.
@@ -44,8 +49,8 @@ its own (patches/README.md).
  chrome/browser/ui/stedding/app_updater_mac.h  |  30 +++
  chrome/browser/ui/stedding/app_updater_mac.mm |  47 ++++-
  .../ui/stedding/app_updater_mac_unittest.mm   | 191 ++++++++++++++++++
- chrome/browser/ui/stedding/app_updater_win.cc |  51 +++--
- .../ui/stedding/app_updater_win_unittest.cc   |  95 ++++++++-
+ chrome/browser/ui/stedding/app_updater_win.cc |  55 +++--
+ .../ui/stedding/app_updater_win_unittest.cc   | 121 ++++++++++-
  chrome/browser/ui/stedding/stedding_prefs.cc  |  11 +-
  chrome/browser/ui/stedding/stedding_prefs.h   |  16 +-
  .../ui/stedding/stedding_prefs_unittest.cc    |  20 +-
@@ -61,7 +66,7 @@ its own (patches/README.md).
  chrome/test/stedding/restore_browsertest.cc   |  69 ++++++-
  .../stedding/settings_spaces_browsertest.cc   |  28 +++
  chrome/test/stedding/tab_drop_browsertest.cc  |   8 +-
- 31 files changed, 973 insertions(+), 64 deletions(-)
+ 31 files changed, 1003 insertions(+), 64 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/app_updater_mac.h
  create mode 100644 chrome/browser/ui/stedding/app_updater_mac_unittest.mm
  create mode 100644 chrome/test/stedding/fullscreen_hint_browsertest.cc
@@ -695,7 +700,7 @@ index 0000000000000..587bcb2150fed
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/app_updater_win.cc b/chrome/browser/ui/stedding/app_updater_win.cc
-index fd14a4c65ccb4..20ab49fcaab76 100644
+index fd14a4c65ccb4..2a9816d4af831 100644
 --- a/chrome/browser/ui/stedding/app_updater_win.cc
 +++ b/chrome/browser/ui/stedding/app_updater_win.cc
 @@ -4,7 +4,8 @@
@@ -813,7 +818,18 @@ index fd14a4c65ccb4..20ab49fcaab76 100644
      local_state_->SetTime(prefs::kUpdatesLastCheck, base::Time::Now());
      // updates Up15: nothing in a feed is read until its signature verifies.
      const std::optional<std::string_view> signed_body =
-@@ -512,8 +519,8 @@ class WinAppUpdater : public AppUpdater {
+@@ -441,6 +448,10 @@ class WinAppUpdater : public AppUpdater {
+     loader_.reset();
+     if (path.empty()) {
+       Forget(download_, /*keep_log=*/false);
++      // updates Up14 (BACKLOG S-279): a download that failed, as one refused
++      // in the minutes after a release is published, tries again within the
++      // hour, as a feed that could not be reached does, not six hours later.
++      retry_soon_ = true;
+       Fail(u"The new version could not be downloaded.");
+       return;
+     }
+@@ -512,8 +523,8 @@ class WinAppUpdater : public AppUpdater {
  
    // A check that found nothing, or failed: an answer for the user who asked,
    // or for anyone watching once a download had begun (the pill, About), and
@@ -825,10 +841,18 @@ index fd14a4c65ccb4..20ab49fcaab76 100644
      busy_ = false;
      if (user_asked_ || state() == State::kChecking ||
 diff --git a/chrome/browser/ui/stedding/app_updater_win_unittest.cc b/chrome/browser/ui/stedding/app_updater_win_unittest.cc
-index 2c8f60d81a9e2..02409a9e7c930 100644
+index 2c8f60d81a9e2..047e99a93a016 100644
 --- a/chrome/browser/ui/stedding/app_updater_win_unittest.cc
 +++ b/chrome/browser/ui/stedding/app_updater_win_unittest.cc
-@@ -131,6 +131,14 @@ class WinAppUpdaterTest : public testing::Test, public AppUpdater::Observer {
+@@ -24,6 +24,7 @@
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "components/prefs/testing_pref_service.h"
+ #include "net/base/net_errors.h"
++#include "net/http/http_status_code.h"
+ #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
+ #include "services/network/public/cpp/url_loader_completion_status.h"
+ #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+@@ -131,6 +132,14 @@ class WinAppUpdaterTest : public testing::Test, public AppUpdater::Observer {
      loader_factory_.AddResponse(kInstallerUrl, installer);
    }
  
@@ -843,7 +867,7 @@ index 2c8f60d81a9e2..02409a9e7c930 100644
    // AppUpdater::Observer:
    void OnAppUpdaterChanged() override { states_.push_back(updater_->state()); }
  
-@@ -238,7 +246,8 @@ TEST_F(WinAppUpdaterTest, NothingLaterIsUpToDateAndAFailedInstallSaysSo) {
+@@ -238,7 +247,8 @@ TEST_F(WinAppUpdaterTest, NothingLaterIsUpToDateAndAFailedInstallSaysSo) {
  }
  
  // updates Up20: with automatic updates off no request is made until the
@@ -853,7 +877,7 @@ index 2c8f60d81a9e2..02409a9e7c930 100644
  TEST_F(WinAppUpdaterTest, AutomaticOffAsksNothingUntilTheUserDoes) {
    const std::string installer = "MZ the beta 19 installer";
    Serve(SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()),
-@@ -254,16 +263,86 @@ TEST_F(WinAppUpdaterTest, AutomaticOffAsksNothingUntilTheUserDoes) {
+@@ -254,16 +264,86 @@ TEST_F(WinAppUpdaterTest, AutomaticOffAsksNothingUntilTheUserDoes) {
    EXPECT_EQ(State::kReady, updater_->state());
  
    updater_.reset();
@@ -867,14 +891,14 @@ index 2c8f60d81a9e2..02409a9e7c930 100644
 +  // Running beta 19 now: a check is the feed's request alone.
 +  Start(/*running=*/"156.2.0.19");
 +  task_environment_.FastForwardBy(base::Hours(1));
-+  EXPECT_EQ(before, loader_factory_.total_requests())
-+      << "off: a launch two hours after a check makes none";
-+  local_state_.SetBoolean(prefs::kUpdatesAutomatic, true);
-+  task_environment_.FastForwardBy(base::Hours(2) + base::Minutes(59));
    EXPECT_EQ(before, loader_factory_.total_requests())
 -      << "a check six hours ago: the next is due in eighteen";
 -  task_environment_.FastForwardBy(base::Hours(2));
 -  EXPECT_LT(before, loader_factory_.total_requests());
++      << "off: a launch two hours after a check makes none";
++  local_state_.SetBoolean(prefs::kUpdatesAutomatic, true);
++  task_environment_.FastForwardBy(base::Hours(2) + base::Minutes(59));
++  EXPECT_EQ(before, loader_factory_.total_requests())
 +      << "turned on three hours after a check: the next is due in three";
 +  task_environment_.FastForwardBy(base::Minutes(2));
 +  EXPECT_EQ(before + 1, loader_factory_.total_requests());
@@ -947,6 +971,38 @@ index 2c8f60d81a9e2..02409a9e7c930 100644
  }
  
  // updates Up17: an update installed and not yet restarted into offers the
+@@ -322,6 +402,31 @@ TEST_F(WinAppUpdaterTest, AnOfflineCheckTriesAgainWithinTheHour) {
+   EXPECT_EQ(2u, loader_factory_.total_requests());
+ }
+ 
++// updates Up14 (BACKLOG S-279): a download that fails, as one refused in the
++// minutes after a release is published, does not wait six hours for the next
++// check: the next one comes within the hour, and installs.
++TEST_F(WinAppUpdaterTest, AFailedDownloadTriesAgainWithinTheHour) {
++  const std::string installer = "MZ the beta 19 installer";
++  loader_factory_.AddResponse(
++      kFeedUrl,
++      SignedFeed(key_, "156.2.0.19", key_.Sign(installer), installer.size()));
++  loader_factory_.AddResponse(kInstallerUrl, "Not Found", net::HTTP_NOT_FOUND);
++  Start();
++  task_environment_.FastForwardBy(base::Seconds(11));
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(2u, loader_factory_.total_requests()) << "the feed and the download";
++  EXPECT_EQ(0, installer_runs());
++  EXPECT_NE(State::kReady, updater_->state());
++
++  loader_factory_.AddResponse(kInstallerUrl, installer);
++  task_environment_.FastForwardBy(base::Hours(1));
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(4u, loader_factory_.total_requests())
++      << "the feed and the download again, within the hour";
++  EXPECT_EQ(1, installer_runs());
++  EXPECT_EQ(State::kReady, updater_->state());
++}
++
+ // updates Up20 (BACKLOG S-249): automatic updates turned off while a check
+ // the user did not ask for downloads: the download is not installed.
+ TEST_F(WinAppUpdaterTest, TurningAutomaticOffDuringADownloadInstallsNothing) {
 diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
 index b5ed193301331..b5f4f80486abe 100644
 --- a/chrome/browser/ui/stedding/stedding_prefs.cc
