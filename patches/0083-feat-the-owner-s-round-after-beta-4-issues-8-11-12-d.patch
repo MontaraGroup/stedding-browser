@@ -152,7 +152,7 @@ the hover card).
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
- chrome/test/stedding/copy_link_browsertest.cc | 332 ++++++++++-
+ chrome/test/stedding/copy_link_browsertest.cc | 350 ++++++++++-
  .../test/stedding/folder_tabs_browsertest.cc  | 552 +++++++++++++++++-
  .../hover_card_picture_browsertest.cc         | 255 +++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
@@ -166,7 +166,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 87 files changed, 5600 insertions(+), 727 deletions(-)
+ 87 files changed, 5618 insertions(+), 727 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -6021,10 +6021,10 @@ index b73ee0bbc7ac4..dc13c5fbd7f26 100644
  
    TabStripModel* tabs() { return browser()->tab_strip_model(); }
 diff --git a/chrome/test/stedding/copy_link_browsertest.cc b/chrome/test/stedding/copy_link_browsertest.cc
-index 81eddea0a4a79..820e0173536b0 100644
+index 81eddea0a4a79..038dee03a5a29 100644
 --- a/chrome/test/stedding/copy_link_browsertest.cc
 +++ b/chrome/test/stedding/copy_link_browsertest.cc
-@@ -5,54 +5,128 @@
+@@ -5,54 +5,129 @@
  // Copy a Markdown link (⌥⇧⌘C; docs/features/copy-link.md, PLAN.md WIN-5): on
  // a page with no title, at an address carrying tracking parameters, the
  // link copied names the host and keeps the address without the trackers.
@@ -6082,6 +6082,7 @@ index 81eddea0a4a79..820e0173536b0 100644
 +#include "ui/events/event_utils.h"
 +#include "ui/events/types/event_type.h"
 +#include "ui/gfx/geometry/point.h"
++#include "ui/gfx/geometry/vector2d.h"
 +#include "ui/views/accessibility/view_accessibility.h"
 +#include "ui/views/animation/ink_drop.h"
 +#include "ui/views/animation/ink_drop_host.h"
@@ -6157,7 +6158,7 @@ index 81eddea0a4a79..820e0173536b0 100644
      ui::Clipboard::DestroyClipboardForCurrentThread();
      InProcessBrowserTest::TearDownOnMainThread();
    }
-@@ -64,6 +138,76 @@ class CopyLinkTest : public InProcessBrowserTest {
+@@ -64,6 +139,76 @@ class CopyLinkTest : public InProcessBrowserTest {
          text.GetCallback());
      return text.Get();
    }
@@ -6234,7 +6235,7 @@ index 81eddea0a4a79..820e0173536b0 100644
  };
  
  IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
-@@ -79,6 +223,186 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
+@@ -79,6 +224,203 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
    EXPECT_EQ(std::u16string::npos, copied.find(u"fbclid"));
  }
  
@@ -6298,7 +6299,12 @@ index 81eddea0a4a79..820e0173536b0 100644
 +  ASSERT_TRUE(widget);
 +  BrowserView* const browser_view =
 +      BrowserView::GetBrowserViewForBrowser(browser());
-+  const gfx::Point on = button->GetBoundsInScreen().CenterPoint();
++  // Where the button is when asked: another page action showing beside it
++  // once the page has loaded moves it along the field.
++  const auto on = [&]() { return button->GetBoundsInScreen().CenterPoint(); };
++  const auto aside = [&]() {
++    return on() - gfx::Vector2d(2 * button->width(), 0);
++  };
 +  const gfx::Point off =
 +      browser_view->contents_container()->GetBoundsInScreen().CenterPoint();
 +  // Asked for each time: the button makes its ink drop again whenever its
@@ -6311,12 +6317,24 @@ index 81eddea0a4a79..820e0173536b0 100644
 +            ink()->GetTargetInkDropState() != views::InkDropState::DEACTIVATED);
 +  };
 +
-+  SendMouse(widget, ui::EventType::kMouseMoved, on);
-+  ASSERT_TRUE(base::test::RunUntil([&]() { return lit(); }))
-+      << "no hover fill under the pointer";
-+  SendMouse(widget, ui::EventType::kMousePressed, on);
-+  SendMouse(widget, ui::EventType::kMouseReleased, on);
-+  EXPECT_TRUE(ShowsTheCheckMark(button)) << "the click copied nothing";
++  // The pointer onto the button, and onto the field's text beside it and
++  // back until the button is lit: an ink drop made again after the pointer
++  // came -- the address row taking the page's colour, late on a slow build --
++  // does not know it is hovered.
++  SendMouse(widget, ui::EventType::kMouseMoved, on());
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    if (lit()) {
++      return true;
++    }
++    SendMouse(widget, ui::EventType::kMouseMoved, aside());
++    SendMouse(widget, ui::EventType::kMouseMoved, on());
++    return false;
++  })) << "no hover fill under the pointer";
++  const gfx::Point at = on();
++  SendMouse(widget, ui::EventType::kMousePressed, at);
++  SendMouse(widget, ui::EventType::kMouseReleased, at);
++  EXPECT_TRUE(ShowsTheCheckMark(button))
++      << "the click copied nothing: clipboard \"" << ClipboardText() << "\"";
 +  SendMouse(widget, ui::EventType::kMouseMoved, off);
 +  EXPECT_TRUE(base::test::RunUntil([&]() { return !lit(); }))
 +      << "the hover fill stayed with the pointer gone: highlight "
