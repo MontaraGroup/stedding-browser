@@ -2,6 +2,125 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 9
+
+Chromium **156.0.8078.48**, Chrome 156's stable release, a **macOS image** (Apple silicon,
+signed and notarized) and a **Windows x64 preview** (unsigned), with Stedding's patch series
+(`patches/README.md`). One fix to the Windows updater.
+
+### What changed since 0.3.0 beta 8
+
+- **Windows: a failed update download tries again within the hour.** Right after the last two
+  releases were published, the first update checks on Windows found the new version but did not
+  install it (most likely its download was refused so soon after publishing), and then waited
+  six hours to check again. A download that fails now tries again
+  within the hour, as a check that cannot reach the update server already did. The Mac is not
+  affected.
+
+### For Mac users
+
+With automatic updates on, 0.3.0 beta 2 and later look for this version when they start and
+every six hours; 0.2.0 beta 16 to 0.3.0 beta 1 look once a day. **Check for Updates** in the
+command bar looks at once.
+
+### For Windows users
+
+With automatic updates on, 0.3.0 beta 2 and later look for this version when they start and
+every six hours, and 0.2.0 beta 19 to 0.3.0 beta 1 once a day; each installs it by itself. From
+beta 18 or earlier, install this one by hand once.
+
+### How it was checked
+
+On macOS 27 on Apple silicon, on the series this tag carries (86 patches on 156.0.8078.48):
+
+- `tooling/dev test unit` and `tooling/dev test browser` on the release build: 1042 of 1042 unit
+  tests and 658 of 658 browser tests (146 of them one at a time after the rest), with no
+  retries.
+- The update itself, from the release people have: a copy of the released 0.3.0 beta 8, with a
+  bundle id of its own and pointed at a local signed feed offering a Developer-ID-signed copy of
+  this build, fetched it and showed **New Stedding Version Available** 25 seconds after launch;
+  a press of it relaunched the copy as this version within a second, on the "updated" thank-you
+  page.
+- `tooling/verify-build` on the signed app: the page, WebGL, video decoding and full screen
+  passed (its network check left out, `--offline`); Apple's `syspolicy_check distribution`
+  passed it, and it is notarized and stapled.
+- After it was published, through the real feed: a copy of the released 0.3.0 beta 8, on a
+  profile of its own, found this version on GitHub and showed **New Stedding Version
+  Available** 28 seconds after launch (not pressed: the Mac's relaunch would open the operator's
+  own profile, `docs/HANDOFF.md` trap 117).
+
+On Windows 11, on the same series:
+
+- The fix's own test, `WinAppUpdaterTest.AFailedDownloadTriesAgainWithinTheHour` (a download
+  refused once, then the next check within the hour installs), failed before the fix and passes
+  with it, with the other 15 updater tests.
+- The release build: 1033 of 1033 unit tests and 625 browser tests (151 one at a time), with no
+  retries. The build with DCHECKs and the dangling-pointer detector: the same, with no DCHECK
+  and no dangling pointer. The AddressSanitizer build: every unit test and 624 of the 625
+  browser tests, with no AddressSanitizer report; the other, a check that every chip fits the
+  address field, timed out waiting for two page-action buttons to show, and run alone three
+  times it passed twice and timed out once (a test race on that slow build, `S-280`).
+- The installer was run for real, as the user, after a backup of the install and its profile:
+  over an installed 0.3.0 beta 8 (an upgrade), then an uninstall that kept the profile, then a
+  fresh install. Each time the installed `chrome.dll` was this build's, byte for byte, and the
+  profile stayed.
+- The update itself: the installed 0.3.0 beta 8, on a scratch profile and pointed at a local
+  feed signed with the project's key, showed the restart pill 192 seconds after launch; pressing
+  it (through UI Automation) restarted into this version in 2 seconds with both tabs back, About
+  reading "Stedding 0.3.0-beta.9" and up to date.
+- After it was published, through the real feed: the installed 0.3.0 beta 8 found this version
+  on GitHub, but its download stalled and failed three minutes later, with Chromium's log on:
+  "Stedding update: The new version could not be downloaded." That was the fault 0.3.0 beta
+  10 fixes (`S-279`): it happened while the check read the window through UI Automation, and
+  with that reading replaced by a file check the same copy installed this version in 20
+  seconds and restarted into it in 2.
+
+### Install
+
+#### macOS
+
+`Stedding-0.3.0-beta.9-arm64.dmg`: check the checksum below, open the DMG, drag
+**Stedding** to Applications and open it. It is signed with the project's Developer ID and
+notarized by Apple, so macOS opens it with no extra step. Apple silicon (M1 or later) and
+macOS 13 or later.
+
+#### Windows
+
+`Stedding-0.3.0-beta.9-win-x64.exe` installs for the current user only, into
+`%LOCALAPPDATA%\Stedding`, with no administrator prompt, over an earlier Stedding install if
+there is one, and updates itself from then on. Stedding may stay open; the new version takes
+over the next time it starts. It is **not signed**: SmartScreen shows "Windows protected your
+PC" — click **More info**, then **Run anyway**, once. Uninstall from Settings → Apps, as any
+app. Windows 10 and 11, x64.
+
+### Checksums
+
+```
+shasum -a 256 Stedding-0.3.0-beta.9-arm64.dmg
+64a51f27db21d474e06f3cc9591641500f364901cdab9e324acdbbc8e84ddc59  Stedding-0.3.0-beta.9-arm64.dmg
+
+certutil -hashfile Stedding-0.3.0-beta.9-win-x64.exe SHA256
+69ce8e7eec0c5d6fef9616b70abc60e370cf41746641248e7678ac78d27cb326  Stedding-0.3.0-beta.9-win-x64.exe
+```
+
+### Known limits
+
+- Builds on Chromium 156 lose Chromium's built-in list of sites that must load over HTTPS on
+  13 December 2026; a release on a newer base will come before then.
+- On Windows the installer is unsigned (`S-56`). The little window keeps Windows' title bar; the
+  two-finger Space swipe changes one Space when the fingers have gone far enough, without the
+  Mac's list that follows them, and has not yet been tried on a real touchpad
+  (`docs/history/plan-2026-09-26.md` TAB-31).
+- On Windows Ctrl+Esc belongs to the Start menu, so it cannot cancel a Ctrl+Tab run: hold Ctrl
+  and press Shift+Tab back to the first tab instead (`docs/SHORTCUTS.md`).
+- Netflix, Disney+ and Spotify's web player do not play: Widevine is not built (`S-270`).
+- The network sandbox on Windows was not tried with a Hyper-V, WSL or VMware network adapter
+  (`S-234`).
+- While Arc is running it takes Arc's own shortcuts from every app; quit Arc if a Stedding
+  shortcut opens Arc instead (`S-79`).
+- Back on a child tab's first page does not yet return to the tab that opened it, and a
+  parent's children do not fold away with it (`docs/features/tabs.md` R60).
+
 ## Stedding 0.3.0 beta 8
 
 Chromium **156.0.8078.48**, Chrome 156's stable release, a **macOS image** (Apple silicon,
