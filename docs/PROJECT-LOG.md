@@ -10,6 +10,48 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-23, before dawn -- the Windows update that never came, 0.3.0 beta 9 and beta 10
+
+After beta 8 the owner asked for `S-279` to be fixed and shipped, then went to sleep until 6 a.m.
+Beta 9 (patch 0078): a failed download tries again within the hour, as a feed that cannot be
+reached does, not six hours later (`WinAppUpdaterTest.AFailedDownloadTriesAgainWithinTheHour`,
+red before the fix, green after). Its release checks repeated the failure with Chromium's log
+on: "Stedding update: The new version could not be downloaded." three minutes after the check.
+`curl` fetched the same installer from GitHub in four seconds, a hand-started copy updated in
+ten, and the GitHub cache and Windows Defender were ruled out (Defender logged no block; the
+cache answered `HIT`). A network log of the failing run (`--log-net-log`) showed the installer's
+HTTP/2 stream stall after its first 6.3 MB, the stream's window, and GitHub reset it at 180
+seconds (`ERR_HTTP2_PROTOCOL_ERROR`). The difference was the check itself: it read the window
+through UI Automation every five seconds, and with that polling replaced by a file check the
+same copy updated in 20 seconds. The request ran at IDLE, its default, so SimpleURLLoader wrote
+the file on a BEST_EFFORT sequence, which starved while the browser answered UI Automation.
+Beta 10: the installer downloads at LOW (`WinAppUpdaterTest.TheInstallerDownloadIsNotLeftToIdleTime`,
+red at IDLE, green at LOW); a build of the fix labelled 0.2.9-beta.1, installed and checked
+through the same polling against the real feed, showed the pill in 25 seconds and restarted
+into beta 9 in 2 (trap 131). The local-feed check's steady 192 seconds is likely the same
+stall against a server that waits (not measured). Both `publish-appcast` scripts now fetch the published image from
+the release's address and compare its checksum before they write the feed.
+
+Beta 9's `win-asan` pass also found `AddressBandTest.EveryChipFitsTheField` timing out now and
+then (`S-280`): the test showed the translate action's chip, and on the slow build the translate
+controller hid it again once the page's language was known. The test now takes the zoom
+action's chip, and names which action stayed hidden if one does.
+
+Released before 6 a.m. as 0.3.0 beta 9 and beta 10. Beta 9: Mac 1042 unit and 658 browser
+tests; PC 1033 and 625 on `win-release` and `win-checks`, `win-asan` all but the chip test;
+the installer and the local-feed update from beta 8 (pill 192 s) passed; the Mac's real feed
+showed the pill in 28 seconds. Beta 10: Mac the same suites, signed, notarized, its update from
+beta 9 in 25 seconds and the real feed in 32; PC `win-checks` and `win-asan` every test,
+`win-release` all but `PinnedRunTest.ADragTakesATabIntoTheEssentialsAndOut` once (five in
+five alone, `S-281`); the installer and the local-feed update from beta 9 (203 seconds)
+passed. Through the real feed the installed beta 9 failed to download beta 10 five minutes
+after publishing, this time with no UI Automation polling, so the stall is not the polling's
+alone; the fixed build, nineteen minutes after publishing and with the polling, installed beta
+10 in 25 seconds. Whether IDLE was the whole cause is not proven: two fixed runs passed and the
+unfixed copies failed six times in eleven, every first try after a publish among them.
+
+
+
 ## 2026-10-23, small hours -- a drag into the essentials and out, 0.3.0 beta 8
 
 Next on the owner's plan for the night: GitHub issue 16 (`S-277`), patch 0086. As in Arc, a

@@ -1710,7 +1710,11 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     it did when started by hand. The local-feed check's steady 192 seconds is likely the same
     stall against a server that does not give up (not measured). From beta 9 a failed download tries again within the
     hour, and from beta 10 the installer downloads at LOW (BACKLOG S-279). A screen reader is a UI
-    Automation client too. Both `publish-appcast` scripts also fetch the published image and
+    Automation client too. Not proven whole: the installed beta 9 also failed to download beta 10
+    five minutes after it was published with no polling at all, and every first try after a
+    publish failed; the fixed build passed twice, the second time nineteen minutes after a
+    publish. Run the next release's real-feed check from a fixed copy (beta 10 or later) with
+    `--log-net-log` straight after publishing. Both `publish-appcast` scripts also fetch the published image and
     compare its checksum before they write the feed, which checks what users will get.
 
 ## The Windows build
