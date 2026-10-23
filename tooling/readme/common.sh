@@ -38,8 +38,11 @@ URL_OSM="https://www.openstreetmap.org/"
 URL_WIKI_COOKIE="https://en.wikipedia.org/wiki/HTTP_cookie"
 URL_ARXIV="https://arxiv.org/"
 URL_PYPI="https://pypi.org/"
-URL_ARCH="https://archlinux.org/"
-URL_LWN="https://lwn.net/"
+# Reading's two pages, the split scene's: NASA's home, dark along its top, and
+# Wikipedia's Apollo 11 article, white (the owner, 2026-10-23: the Linux pages before
+# them looked dated).
+URL_NASA="https://www.nasa.gov/"
+URL_APOLLO="https://en.wikipedia.org/wiki/Apollo_11"
 URL_MDN_JS="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
 URL_WEB_APP="https://squoosh.app/"
 SAMPLE_APP_PORT=5173
@@ -57,7 +60,7 @@ URL_SAMPLE_API="http://localhost:$SAMPLE_API_PORT/"
 DEMO_URLS=("$URL_REPO" "$URL_MDN" "$URL_DDG" "$URL_HN"
            "$URL_MDN_CSS" "$URL_PY_TUTORIAL"
            "$URL_DJANGO" "$URL_PYPI" "$URL_SAMPLE_APP" "$URL_TRENDING"
-           "$URL_LOBSTERS" "$URL_OSM" "$URL_ARCH" "$URL_LWN")
+           "$URL_LOBSTERS" "$URL_OSM" "$URL_NASA" "$URL_APOLLO")
 # The same window without the pages that leave Work, for the stills. A GitHub
 # trending page is the one on screen: the repository's own page put a star count
 # and a file list on the site that went stale (the owner, 2026-10-23).

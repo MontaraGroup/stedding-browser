@@ -38,7 +38,7 @@ The fixture is built before the recording, and none of it is recorded.
 | (essentials) | in every Space | GitHub (the project's repository), MDN, DuckDuckGo, Hacker News |
 | Work | Moss, 💼 | pinned: Django, PyPI; a folder Docs holding MDN's CSS reference and a nested folder Python with the Python tutorial; the sample app on localhost:5173; GitHub Trending |
 | Personal | Plum, 🏠, its own session | OpenStreetMap, Lobsters |
-| Reading | Clay, 📚 | Arch Linux, LWN.net |
+| Reading | Clay, 📚 | NASA, Apollo 11 (Wikipedia) |
 
 Made with as little real input as possible: the Spaces, their colours, icons and the
 own session come from a seeded profile (`media.py seed`), the essentials and the
@@ -62,8 +62,8 @@ window wide: its top edge has to keep its colour at that width too.
 | Django | www.djangoproject.com | A dark green header: the row turns green | The row is green |
 | PyPI | pypi.org | A blue header: the row turns blue | The row is blue; no notice bar |
 | OpenStreetMap | www.openstreetmap.org | A map, the colour of the Personal Space's scene; the preroll closes its welcome and any promotion in its side panel | The tiles have loaded; the side panel shows only the search |
-| Arch Linux | archlinux.org | Reading's page with a dark grey bar along its top, at any width: the split's left half, its part of the row dark | The row's left part is dark grey |
-| LWN.net | lwn.net | Reading's white page: the split's right half, its part of the row white; both halves go dark together | The page is white |
+| NASA | www.nasa.gov | Reading's page, dark along its top at any width: the split's left half, its part of the row dark (until 2026-10-23 Arch Linux, which the owner found dated) | The row's left part is dark |
+| Apollo 11 | en.wikipedia.org/wiki/Apollo_11 | Reading's white page: the split's right half, its part of the row white; both halves go dark together (until 2026-10-23 LWN.net) | The page is white |
 | Sample app | localhost:5173 (`tooling/readme/pages/sample-app/`) | A local development page, amber across its top | The outline and host:port, once built |
 | Sample API | localhost:8797 (`tooling/readme/pages/sample-api/`) | A second local page, for the still | |
 
@@ -82,8 +82,8 @@ read from a layout run's pictures (`shots/setup-*.png`) and a rehearsal's marker
 | 1 | `hero` | 2.3 | Nothing: the window at rest | Work: essentials, pins, the folder, the tabs; the GitHub page on its card, the address row in the page's colour | Stedding: an open-source, Arc-style browser built on Chromium |
 | 2 | `colour` | 6.6 | Glide to Django's row, click; glide to PyPI's row, click; back to the rest point | The page changes and the address row with it: green, then blue | The address row takes each page's own colour |
 | 3 | `bar` | 7.0 | ⌘T; type "open", a beat, "street"; ↓; Return | The bar over the page lists the OpenStreetMap tab with its Space; Return slides the sidebar to Personal, its plum tint, the map | **⌘T** Search, open a site, or jump to any tab in any Space |
-| 4 | `spaces` | 4.1 | A beat on Personal; glide to the third chip, click | Reading slides in, clay, its LWN page | **⌃1–⌃9** Spaces, each in its own colour, with its own cookies if you like |
-| 5 | `split` | 7.4 | Glide to Arch Linux's row; press, drag it level out of the sidebar onto the page's left half; hold; let go; back to the rest point | The press shows Arch for a moment; over the page LWN is back and its left half lights in clay with "Create split view"; the drop puts Arch on the left and LWN on the right, the address row dark grey over one and white over the other, blended over the gap, and the sidebar's row becomes the split's two halves | Drag a tab onto the page for split view, the address row in each page's colour |
+| 4 | `spaces` | 4.1 | A beat on Personal; glide to the third chip, click | Reading slides in, clay, its Apollo 11 page | **⌃1–⌃9** Spaces, each in its own colour, with its own cookies if you like |
+| 5 | `split` | 7.4 | Glide to NASA's row, the one not on screen; press, drag it level out of the sidebar onto the page's left half; hold; let go; back to the rest point | The press shows NASA for a moment; over the page Apollo 11 is back and its left half lights in clay with "Create split view"; the drop puts Arch on the left and LWN on the right, the address row dark grey over one and white over the other, blended over the gap, and the sidebar's row becomes the split's two halves | Drag a tab onto the page for split view, the address row in each page's colour |
 | 6 | `dark` | 4.2 | ⌥⇧⌘D, two seconds, ⌥⇧⌘D | Both pages of the split go dark at once, the row with them, and come back | **⌥⇧⌘D** Every website dark at once, with no white flash |
 | 7 | `end` | 7.2 | Glide to the first chip, click; glide to the GitHub essential, click; glide to the rest point; hold | Work slides back with its PyPI page, then the first frame again; the split stays in Reading, out of sight | stedding.dev · free and open source · macOS and Windows |
 

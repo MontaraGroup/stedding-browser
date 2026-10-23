@@ -475,6 +475,30 @@ def cmd_timeline(args: argparse.Namespace) -> int:
 
 # ------------------------------------------------------------------- main
 
+def cmd_lights(args: argparse.Namespace) -> int:
+    """ffmpeg's geq expression for an active window's three traffic lights, red, yellow
+    and green, on a transparent strip at the recording's scale: what record-demo.sh
+    paints over the system's capture badge (measured in points on 2026-10-23)."""
+    s = args.scale
+    centres = [(19.75 * s, 15.75 * s), (42.75 * s, 15.75 * s), (65.75 * s, 15.75 * s)]
+    dist = "min(min({0},{1}),{2})".format(
+        *["hypot(X-%.2f,Y-%.2f)" % c for c in centres])
+    left, middle = int(31 * s), int(54 * s)
+
+    def channel(red: int, yellow: int, green: int) -> str:
+        return "if(lt(X,%d),%d,if(lt(X,%d),%d,%d))" % (left, red, middle, yellow, green)
+
+    parts = {
+        "r": channel(255, 254, 40),
+        "g": channel(95, 188, 200),
+        "b": channel(87, 46, 64),
+        "a": "clip((%.2f-%s)*255,0,255)" % (6.6 * s, dist),
+    }
+    # Commas inside a filter's option are escaped for ffmpeg's filter parser.
+    print(":".join("%s='%s'" % (k, v.replace(",", "\\,")) for k, v in parts.items()))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -512,6 +536,10 @@ def main(argv: list[str]) -> int:
 
     p = sub.add_parser("screen")
     p.set_defaults(func=cmd_screen)
+
+    p = sub.add_parser("lights")
+    p.add_argument("scale", type=float)
+    p.set_defaults(func=cmd_lights)
 
     p = sub.add_parser("lane")
     p.add_argument("--keys", required=True)

@@ -46,7 +46,7 @@ you, not the list.
 |---|---|
 | Building, disk, rebuild cost | 1, 16, 19, 23, 44, 45, 53, 54, 57, 70, 73, 74, 83, 89, 90, 100, 123 |
 | The working loop and the series | 5, 9, 13, 14, 17, 22, 50, 51, 89, 92 |
-| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121, 130, 132 |
+| Driving and capturing the window | 3, 7, 10, 11, 12, 15, 18, 24, 27, 29, 30, 36, 37, 52, 56, 59, 61, 63, 64, 65, 76, 82, 93, 94, 95, 96, 103, 105, 107, 116, 121, 130, 132, 133 |
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126, 127 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125, 128 |
 | Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129, 131 |
@@ -1725,6 +1725,20 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     from another Space when the current one has none, as its `--largest` form already did for
     `tooling/drive`'s shots; `screencapture -l` captures it there. A capture beside the
     owner's own Stedding still needs a copy with its own bundle id (trap 124).
+
+133. **A screen recorder records the screen; record the window.** The README demo was
+    recorded with `screencapture -v -R` or ffmpeg's screen input, a rectangle of the whole
+    display cut out afterwards. On 2026-10-23 that put the operator's own window into a take
+    when it came over the browser's (the harness then refused the click under it, rightly),
+    and the raw file held the whole screen. `tooling/record-window` records the browser's
+    window alone (ScreenCaptureKit's single-window filter), behind other windows or on
+    another Space, and `tooling/readme/record-demo.sh` uses it unless another recorder is
+    named. macOS 27 marks a window being captured with a purple badge where its traffic
+    lights are; the conversion paints the active window's lights over it
+    (`clean_window_badge`, `media.py lights`). The same day's take also showed why a scene
+    must be re-measured after a layout change: the essentials went to one row of four in
+    0.3.0 beta 7, every sidebar row moved up 54 points, and the split scene's drag caught
+    the row already on screen, which makes no split (splits J13).
 
 ## The Windows build
 

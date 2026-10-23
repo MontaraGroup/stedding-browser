@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Records one window of a process and nothing else (macOS): builds tooling/record-window.swift
+# once into a cache outside the repository, then runs it.
+#
+#   tooling/record-window PID OUT.mov MAX_SECONDS
+#
+# SIGINT or SIGTERM stops the recording and writes the file. Only the window's own pixels
+# are taken (ScreenCaptureKit's single-window filter): never the screen, another app's
+# window or the desktop. Needs Screen Recording for the app that runs it.
+set -euo pipefail
+
+source_file="$(cd "$(dirname "$0")" && pwd)/record-window.swift"
+cache="${XDG_CACHE_HOME:-$HOME/Library/Caches}/stedding-tooling"
+binary="$cache/record-window-$(shasum -a 256 "$source_file" | cut -c1-12)"
+if [ ! -x "$binary" ]; then
+  mkdir -p "$cache"
+  xcrun swiftc -O -swift-version 5 -o "$binary.tmp" "$source_file" >&2
+  mv "$binary.tmp" "$binary"
+fi
+exec "$binary" "$@"

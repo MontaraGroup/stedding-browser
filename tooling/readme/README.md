@@ -100,6 +100,9 @@ step reads the Arc sidebar under the home folder, so it never shows the Mac's ow
   line with `tooling/drive-window.py --check`, and that every scene has a caption.
 - `probe` records three seconds of a corner of the screen with `screencapture` and
   with ffmpeg, and says which produced frames.
+  A take uses `tooling/record-window` by default: the browser's window alone, never the
+  screen (`docs/HANDOFF.md` trap 133); the two screen recorders run only when named with
+  `--recorder`.
 - `layout` seeds a profile, starts the local pages, waits until nobody has touched the
   Mac for `--idle` seconds (15 by default), and builds the fixture with
   `steps/setup.steps`. Its pictures in `<out>/shots/` are what the coordinates marked

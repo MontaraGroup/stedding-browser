@@ -27,7 +27,9 @@
 #                       left out to keep the take under 40 seconds)
 #   --with-new          slideshow: add the stills of the features of beta 20
 #   --scheme S          light (default) or dark
-#   --recorder R        auto (default: screencapture if it records here, else ffmpeg),
+#   --recorder R        auto (default: window, which records the browser's window and
+#                       nothing else; screencapture and ffmpeg record the screen and
+#                       are used only when named), window, screencapture or ffmpeg,
 #                       screencapture or ffmpeg
 #   --app PATH          drive an installed copy instead of out/release
 #   --idle SECONDS      how long nobody may have touched the Mac before a driven run
@@ -168,7 +170,7 @@ scenes_run() {
       sleep 0.25
     done
     [ -n "$rect" ] || die "the browser's window did not appear (see $LOGS/scenes.txt)"
-    start_recorder "$rect"
+    start_recorder "$rect" "$pid"
   fi
   wait "$DRIVE_PID" || status=$?
   DRIVE_PID=""
@@ -231,8 +233,16 @@ probe_one() {
 choose_recorder() {
   local file="$WORKDIR/probe.mov"
   case "$RECORDER" in
-    screencapture|ffmpeg) log "recorder: $RECORDER"; return 0 ;;
+    window|screencapture|ffmpeg) log "recorder: $RECORDER"; return 0 ;;
   esac
+  # The browser's own window and nothing else (tooling/record-window): no other app's
+  # window, notification or desktop can reach the file (the owner, 2026-10-23). The two
+  # screen recorders below are kept for a Mac without Swift, used only by name.
+  if xcrun --find swiftc >/dev/null 2>&1; then
+    RECORDER=window
+    log "recorder: window (the browser's window alone)"
+    return 0
+  fi
   if probe_one screencapture "$file"; then
     RECORDER=screencapture
   elif probe_one ffmpeg "$file"; then
@@ -254,6 +264,10 @@ EOF
   rm -f "$OUT/raw.mov"
   T0="$(python3 -c 'import time; print("%.3f" % time.time())')"
   case "$RECORDER" in
+    window)
+      "$STEDDING_ROOT/tooling/record-window" "$2" "$OUT/raw.mov" "$CAP_SECONDS" \
+        >"$LOGS/recorder.txt" 2>&1 &
+      ;;
     screencapture)
       [ "$SHOW_CLICKS" -eq 0 ] || clicks=(-k)
       screencapture -v -x -C ${clicks[@]+"${clicks[@]}"} -V"$CAP_SECONDS" -R"$x,$y,$w,$h" \
@@ -284,8 +298,8 @@ EOF
 stop_recorder() {
   [ -n "$RECORDER_PID" ] || return 0
   case "$RECORDER" in
-    # ffmpeg writes its file out on an interrupt.
-    ffmpeg) kill -INT "$RECORDER_PID" 2>/dev/null || true ;;
+    # ffmpeg and record-window write their file out on an interrupt.
+    ffmpeg|window) kill -INT "$RECORDER_PID" 2>/dev/null || true ;;
     # screencapture stops by itself at -V; an interrupt may leave no file.
     screencapture) log "waiting for screencapture to finish (at most $CAP_SECONDS s from the start)" ;;
   esac
@@ -330,6 +344,29 @@ finish() {
   log "demo.mp4: $(( $(stat -f %z "$OUT/demo.mp4") / 1024 )) KB"
 }
 
+# A window recorded alone carries the system's "being captured" badge where its traffic
+# lights are (macOS 27). It is painted over with the lights an active window shows, in
+# the recording's pixels: raw-clean.mov beside the recording, whose path is printed.
+clean_window_badge() {
+  local raw="$1" clean="$OUT/raw-clean.mov" raw_w win_w scale size box lights
+  if [ "$clean" -nt "$raw" ]; then
+    printf '%s\n' "$clean"
+    return 0
+  fi
+  raw_w="$("$FFPROBE" -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$raw" | head -1)"
+  win_w="$(env_get RECT | awk '{ print $3 }')"
+  scale="$(awk -v a="$raw_w" -v b="$win_w" 'BEGIN { printf "%.4f", a / b }')"
+  # Measured in points on 2026-10-23: the badge's box, and the lights' centres and radius.
+  size="$(awk -v s="$scale" 'BEGIN { printf "%dx%d", int(80*s), int(32*s) }')"
+  box="$(awk -v s="$scale" 'BEGIN { printf "x=%d:y=%d:w=%d:h=%d", int(7*s), int(4*s), int(74*s), int(25*s) }')"
+  lights="$(python3 "$MEDIA_PY" lights "$scale")" || return 1
+  "$FFMPEG" -nostdin -hide_banner -v error -y -i "$raw" \
+    -f lavfi -i "color=c=black@0:s=$size:r=30,format=rgba,geq=$lights" \
+    -filter_complex "[0:v]delogo=${box}[d];[d][1:v]overlay=0:0:shortest=1" \
+    -c:v h264_videotoolbox -b:v 40M "$clean" >"$LOGS/badge.txt" 2>&1 || return 1
+  printf '%s\n' "$clean"
+}
+
 convert_recording() {
   local raw="$OUT/raw.mov" crop="" raw_w rx ry rw rh sw scale changes start stop dur mask
   require_ffmpeg
@@ -338,6 +375,9 @@ convert_recording() {
   RECORDER="$(env_get RECORDER)"
   T0="$(env_get T0)"
   SCENES="$(env_get SCENES)"
+  if [ "$RECORDER" = window ]; then
+    raw="$(clean_window_badge "$raw")" || die "could not paint over the capture badge in $raw (see $LOGS/badge.txt)"
+  fi
   raw_w="$("$FFPROBE" -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$raw" | head -1)"
   [ -n "$raw_w" ] || die "ffprobe cannot read $raw"
   if [ "$RECORDER" = ffmpeg ]; then
