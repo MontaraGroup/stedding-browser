@@ -27,12 +27,15 @@ and configuration may not, because those are what silently go stale.
 - The initial pin is `153.0.8010.12` (M153).
 - Security point releases move the pin on the timetable in `../ROADMAP.md` ("The quality bar") (7 days
   for in-the-wild exploits, 14 otherwise).
-- **Early stable is.** Google ships the next milestone to a small share of stable
-  users about a week before the full rollout; that build is on the stable channel and
-  the pin follows it (amended 2026-09-24, the owner: "always latest one" -- the pin
-  went from M153 straight to the M155 early-stable build). `tooling/check-pin` names
-  such a build as a partial rollout with its share of users, and a respin on the way
-  to the full rollout is a point release on our milestone.
+- **Early stable waits for the rollout.** Google ships the next milestone to a small
+  share of stable users about a week before the full rollout. The pin moves to a build
+  once it reaches more than 1% of a platform's stable users; until then
+  `tooling/check-pin` names it as a partial rollout with its share and reports the pin
+  current. The same holds for a respin on our own milestone. (Amended 2026-09-24, the
+  owner: "always latest one", and the pin went from M153 straight to the M155
+  early-stable build. Amended again 2026-10-23, the owner: a milestone almost nobody
+  runs yet is not worth a six-hour rebuild of both machines; M157 waits for its
+  rollout, about a week after early stable.)
 - **Extended stable is not our channel.** It trades feature currency for enterprise
   change-management we do not need, and it eventually stops receiving fixes.
 - Moving the pin is always its own commit, recording the version, the upstream
