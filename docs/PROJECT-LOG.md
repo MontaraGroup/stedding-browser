@@ -10,6 +10,47 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-22, late night -- little windows on Windows, essentials that shrink to fit, 0.3.0 beta 7
+
+The owner asked for little windows on Windows now and for the essentials that shrink to fit
+(GitHub issue 15), to see them in the morning, and said to release, push and keep going:
+"make a plan so you release stuff at night". Patch 0085. On Windows a link another app hands
+over arrives with `--single-argument`; `StartupBrowserCreatorImpl::Launch` now sends it to a
+little window when the setting is on and the link is not routed to a Space, or to the Space for
+links from other apps otherwise, as on the Mac (little E10, routing D3; `S-56`). Ctrl+Shift+O in
+a little window opens the page in a split, and the setting shows on Windows' settings page. The
+little window keeps Windows' title bar: the rule that lays the caption buttons on the address
+row (toolbar T19) applies to normal windows only, after the first live look showed them over
+**Open in Stedding**. The essentials grid puts up to four on a row, then two rows of narrower
+cards, and a third row only once a card would be narrower than the rail's square (sidebar Y33;
+`S-276`).
+
+Evidence. `LittleWindowTest.ALinkFromAnotherAppOpensSmall` (Windows) and
+`SidebarRailTest.TheEssentialsShrinkToFitTwoRows` (one to eight essentials) are new. The Mac's
+release build: 1042 of 1042 unit tests and 656 of 656 browser tests (145 one at a time), no
+retries; on a copy of its own, three, six and ten essentials made one row of three, two rows of
+three and two rows of five. The PC: `win-release` and `win-checks` each passed 1033 unit and
+623 browser tests (150 one at a time), with no DCHECK and no dangling pointer; `win-asan`
+passed the unit tests and 622 of the 623 browser tests with no report, the other
+(`PageColourRowTest.TheRowsButtonsShowAHoverAndAPress`) running out of time once at 101
+seconds and passing three runs in a row alone. The release build, handed a link as Windows
+hands one, opened it in a 986 by 773 window over the main one, with Windows' title bar and
+**Open in Stedding**.
+
+Released the same night as 0.3.0 beta 7: the Mac's suites on this version, the app signed,
+notarized and stapled, `syspolicy_check` and `verify-build --offline` passed, and a copy of the
+released beta 6 updated itself to it through a local signed feed (pill after 25 seconds,
+relaunch in 1). On the PC the installer upgraded an installed beta 6, uninstalled keeping the
+profile and installed fresh, the installed `chrome.dll` this build's each time; the installed
+beta 6 updated itself through a local feed (pill after 192 seconds, restart in 2). After
+publishing, the Mac's beta 6 copy showed the pill from the real feed in 28 seconds. The PC's
+installed beta 6 found the release on its first check, 10 seconds after launch (Local State's
+`stedding.updates.newest_listed` read 156.3.0.7), but had not finished the 168 MB download from
+GitHub when the check gave up at five minutes; a direct download took 75 seconds just after
+(beta 6's run had shown the pill 25 seconds after launch, download included). Run again with a longer wait, it showed the pill in 20
+seconds and restarted into beta 7 in 2. stedding.dev no longer calls little windows Mac-only.
+
+
 ## 2026-10-22, night -- after beta 5: a drag across the Clear line, the Copy Link button's hover, a session for every new Space
 
 The owner, going to sleep, asked for every GitHub issue and the plan for the next release to be
