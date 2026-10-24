@@ -2,6 +2,151 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 11
+
+Chromium **156.0.8078.48**, Chrome 156's stable release, a **macOS image** (Apple silicon,
+signed and notarized) and a **Windows x64 preview** (unsigned), with Stedding's patch series
+(`patches/README.md`). Essentials that take their clicks again, an address that keeps its place,
+a tab drag that leaves the page alone, new tabs at the top as a setting, and twelve Space
+colours.
+
+### What changed since 0.3.0 beta 10
+
+- **Essentials take their clicks again.** Since the essentials became one row of cards (0.3.0
+  beta 7), that row sits beside the address row, where the window treated a press as a drag of
+  its title bar: a click on a card in the top row moved the window and never opened the card,
+  and with a single row none of them worked (GitHub issue 23). Every card, row and button
+  there now takes its own press; the empty part of the strip there is still the title bar.
+- **The address no longer jumps when you click it.** At rest the address sits centred on the
+  page; a click into the field moved it to the field's left edge (GitHub issue 14). It now
+  keeps its place while you edit it, until what you type no longer fits.
+- **Pressing a tab to drag it no longer opens it first.** A press on a tab that is not on
+  screen now waits: let go and it opens, as a click; drag it and the page on screen stays
+  there for the whole drag. Dropped back in the list, or into the essentials, the tab moves and
+  the page you were on stays; dropped on the page, it makes the split as before. Before, the
+  dragged tab's page showed until the pointer reached the page.
+- **New tabs at the top, if you like.** Settings › Stedding › Tabs › **Open new tabs at the top
+  of the list** opens Cmd-T and + New Tab right under + New Tab, above your older tabs, so the
+  pinned tabs stay in view (GitHub issue 22). Off by default.
+- **Twelve Space colours.** Spaces now choose from twelve colours instead of five: Slate, Plum,
+  Green, Clay, Rose, Blue, Violet, Teal, Coral, Indigo, Pink and Cyan, taken from Radix Colors
+  and Tailwind's palettes. A Space that had one of the old five colours takes its new neighbour
+  of the same hue, and a Space imported from Arc takes the colour nearest its theme's hue.
+
+### For Mac users
+
+With automatic updates on, 0.3.0 beta 2 and later look for this version when they start and
+every six hours; 0.2.0 beta 16 to 0.3.0 beta 1 look once a day. **Check for Updates** in the
+command bar looks at once.
+
+### For Windows users
+
+With automatic updates on, 0.3.0 beta 2 and later look for this version when they start and
+every six hours, and 0.2.0 beta 19 to 0.3.0 beta 1 once a day; each installs it by itself. From
+beta 18 or earlier, install this one by hand once.
+
+### How it was checked
+
+On macOS 27 on Apple silicon, on the series this tag carries (87 patches on 156.0.8078.48):
+
+- `tooling/dev test unit` and `tooling/dev test browser` on the release build: 1042 of 1042 unit
+  tests and 517 of 517 browser tests (149 of them one at a time after the rest), with no
+  retries.
+- Each fix's own test failed on the code before it and passes now:
+  `SidebarFormsTest.TheSlidOutSidebarsEssentialsTakeTheirPress` (the essentials' press was the
+  title bar's), `AddressBandTest.TheAddressKeepsItsPlaceWhenEdited`,
+  `TabDropTest.APressWaitsAndADragKeepsThePage` and `PinnedRunTest.NewTabsOpenAtTheTopWhenAsked`.
+- On the signed app, with real pointer and keys: a tab pressed and dragged above the one on
+  screen moved there while the page stayed on example.com throughout; a click into the address
+  left it where it was; a click at the top edge of an essential's card opened its page; with the
+  new setting on, Cmd-T opened its tab under + New Tab; the Space menu offered the twelve
+  colours. While a tab is dragged, the address row's security chip and page buttons show the
+  dragged tab's state, and come back at the drop (`S-290`, not fixed in this release).
+- The update itself, from the release people have: a copy of the released 0.3.0 beta 10, with a
+  bundle id of its own and pointed at a local signed feed offering a Developer-ID-signed copy of
+  this build, showed **New Stedding Version Available** 28 seconds after launch; a press of it
+  relaunched the copy as this version within a second, on the "Updated" thank-you page.
+- `tooling/verify-build` on the signed app: the page, WebGL, video decoding and full screen
+  passed (its network check left out, `--offline`); Apple's `syspolicy_check distribution`
+  passed it, and it is notarized and stapled.
+- After it was published, through the real feed: a copy of the released 0.3.0 beta 10, on a
+  profile of its own, found this version on GitHub and showed **New Stedding Version
+  Available** 29 seconds after launch (not pressed: the Mac's relaunch would open the operator's
+  own profile, `docs/HANDOFF.md` trap 117).
+
+On Windows 11, on the same series:
+
+- The release build: 1035 of 1035 unit tests and 478 of 479 browser tests (154 one at a time
+  after the rest). In the serial leg `SidebarClickTest.ACloseKeepsTheListWhereItIs` failed once
+  at its premise (the list had not scrolled to the 31st tab), then passed five runs in five
+  alone and in the build with DCHECKs (`S-291`).
+- The two pinned-run drag tests failed on every run that evening, with another application's
+  window maximized over the screen: the drag's search for the window under the pointer passed
+  over the test's window, which the system's occlusion tracker still counted covered, so the
+  tab tore off and the drag cancelled. The test helper now takes its window out of that count
+  (`S-281`, closed); with it the pinned-run tests, the press-and-drag test and the horizontal
+  strip's passed twice over, 50 runs without a failure. The browser itself did not change.
+- The build with DCHECKs and the dangling-pointer detector: 1035 unit and 479 browser tests,
+  with no DCHECK and no dangling pointer. The AddressSanitizer build: every unit and
+  browser test, with no AddressSanitizer report.
+- The installer was run for real, as the user, after a backup of the install and its profile:
+  over an installed 0.3.0 beta 10 (an upgrade), then an uninstall that kept the profile, then a
+  fresh install. Each time the installed `chrome.dll` was this build's, byte for byte, and the
+  profile stayed.
+- The update itself: the installed 0.3.0 beta 10, on a scratch profile and pointed at a local
+  feed signed with the project's key, showed the restart pill 26 seconds after launch; pressing
+  it (through UI Automation) restarted into this version in 2 seconds, About reading "Stedding
+  0.3.0-beta.11" and up to date.
+- After it was published, through the real feed: the installed 0.3.0 beta 10 found this
+  version on GitHub, showed the pill 25 seconds after launch and restarted into it in 2
+  seconds, About reading 0.3.0-beta.11 and up to date.
+
+### Install
+
+#### macOS
+
+`Stedding-0.3.0-beta.11-arm64.dmg`: check the checksum below, open the DMG, drag
+**Stedding** to Applications and open it. It is signed with the project's Developer ID and
+notarized by Apple, so macOS opens it with no extra step. Apple silicon (M1 or later) and
+macOS 13 or later.
+
+#### Windows
+
+`Stedding-0.3.0-beta.11-win-x64.exe` installs for the current user only, into
+`%LOCALAPPDATA%\Stedding`, with no administrator prompt, over an earlier Stedding install if
+there is one, and updates itself from then on. Stedding may stay open; the new version takes
+over the next time it starts. It is **not signed**: SmartScreen shows "Windows protected your
+PC" — click **More info**, then **Run anyway**, once. Uninstall from Settings → Apps, as any
+app. Windows 10 and 11, x64.
+
+### Checksums
+
+```
+shasum -a 256 Stedding-0.3.0-beta.11-arm64.dmg
+9c9d774d08f257c037195d3dd8ea7429166f7c19e0a5ca62942c13aa7cc9648e  Stedding-0.3.0-beta.11-arm64.dmg
+
+certutil -hashfile Stedding-0.3.0-beta.11-win-x64.exe SHA256
+a61e976d777435d3ab561d59db0a866d34af1f11f1f743d7553d85f70ab8a069  Stedding-0.3.0-beta.11-win-x64.exe
+```
+
+### Known limits
+
+- Builds on Chromium 156 lose Chromium's built-in list of sites that must load over HTTPS on
+  13 December 2026; a release on a newer base will come before then.
+- On Windows the installer is unsigned (`S-56`). The little window keeps Windows' title bar; the
+  two-finger Space swipe changes one Space when the fingers have gone far enough, without the
+  Mac's list that follows them, and has not yet been tried on a real touchpad
+  (`docs/history/plan-2026-09-26.md` TAB-31).
+- On Windows Ctrl+Esc belongs to the Start menu, so it cannot cancel a Ctrl+Tab run: hold Ctrl
+  and press Shift+Tab back to the first tab instead (`docs/SHORTCUTS.md`).
+- Netflix, Disney+ and Spotify's web player do not play: Widevine is not built (`S-270`).
+- The network sandbox on Windows was not tried with a Hyper-V, WSL or VMware network adapter
+  (`S-234`).
+- While Arc is running it takes Arc's own shortcuts from every app; quit Arc if a Stedding
+  shortcut opens Arc instead (`S-79`).
+- Back on a child tab's first page does not yet return to the tab that opened it, and a
+  parent's children do not fold away with it (`docs/features/tabs.md` R60).
+
 ## Stedding 0.3.0 beta 10
 
 Chromium **156.0.8078.48**, Chrome 156's stable release, a **macOS image** (Apple silicon,
