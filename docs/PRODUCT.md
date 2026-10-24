@@ -148,7 +148,7 @@ yet, `docs/features/library.md`) and a `+`.
   reorder. Deleting a Space asks first, naming the Space, its tabs and where they go, then
   moves its tabs into the Space the window shows; only the last Space cannot be deleted
   (`PLAN.md` decision 7; B5, B16, B27).
-- **Theme and icon** **[1.0]** — a colour from five swatches and an icon from a fixed set,
+- **Theme and icon** **[1.0]** — a colour from twelve swatches and an icon from a fixed set,
   tinting the sidebar; light, dark or automatic for the whole browser
   (`features/welcome.md` W4, W7; `features/spaces.md` B31). Any colour, a gradient and any
   emoji: **[M10]** (`S-99`).

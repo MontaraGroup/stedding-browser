@@ -32,6 +32,8 @@ Removable when: never; it is product behaviour.
  .../stedding_page/stedding_page.html.ts       |  7 +++
  .../resources/stedding_welcome/app.css        | 10 ++-
  .../browser/resources/stedding_welcome/app.ts |  2 +-
+ .../browser/ui/spaces/arc_sidebar_importer.cc | 26 +++++---
+ .../spaces/arc_sidebar_importer_unittest.cc   |  9 ++-
  chrome/browser/ui/spaces/space_colors.h       | 49 ++++++++++++---
  chrome/browser/ui/spaces/space_model.cc       | 36 +++++++++--
  chrome/browser/ui/spaces/space_model.h        | 13 ++++
@@ -41,8 +43,9 @@ Removable when: never; it is product behaviour.
  chrome/browser/ui/tabs/tab_strip_model.cc     | 13 +++-
  chrome/browser/ui/tabs/tab_strip_model.h      |  8 +++
  .../browser/ui/webui/settings/settings_ui.cc  |  8 +++
+ .../stedding_welcome_handler_unittest.cc      |  2 +-
  .../test/stedding/pinned_run_browsertest.cc   | 63 +++++++++++++++++++
- 14 files changed, 205 insertions(+), 18 deletions(-)
+ 17 files changed, 232 insertions(+), 28 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -121,6 +124,85 @@ index debd2903cb537..c4e75fdf54023 100644
        if (state.spaceColors.length > 0) {
          const swatches = el('div', 'swatches');
          swatches.setAttribute('role', 'radiogroup');
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+index 20d11f6e7be29..1bdf2502e8cd0 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/spaces/arc_sidebar_importer.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <map>
+ #include <memory>
+ #include <optional>
+@@ -47,6 +48,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/referrer.h"
+ #include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/base/page_transition_types.h"
+ #include "url/url_constants.h"
+ 
+@@ -820,16 +822,24 @@ bool IsArcRunning() {
+ }
+ 
+ SkColor NearestSpaceColor(SkColor arc_color) {
++  // I10, spaces B40: the swatch of the nearest hue, with saturation and
++  // lightness weighing less; a grey goes to Slate. By RGB distance a muted
++  // Arc theme went to Slate whatever its hue once the swatches were the
++  // twelve saturated ones (2026-10-23).
++  color_utils::HSL arc;
++  color_utils::SkColorToHSL(arc_color, &arc);
++  if (arc.s < 0.1) {
++    return kSpaceColors.front().color;
++  }
+   SkColor nearest = kSpaceColors.front().color;
+-  int best = -1;
++  double best = -1;
+   for (const SpaceColorChoice& choice : kSpaceColors) {
+-    const int dr = static_cast<int>(SkColorGetR(choice.color)) -
+-                   static_cast<int>(SkColorGetR(arc_color));
+-    const int dg = static_cast<int>(SkColorGetG(choice.color)) -
+-                   static_cast<int>(SkColorGetG(arc_color));
+-    const int db = static_cast<int>(SkColorGetB(choice.color)) -
+-                   static_cast<int>(SkColorGetB(arc_color));
+-    const int distance = dr * dr + dg * dg + db * db;
++    color_utils::HSL swatch;
++    color_utils::SkColorToHSL(choice.color, &swatch);
++    double hue = std::abs(arc.h - swatch.h);
++    hue = std::min(hue, 1.0 - hue);  // around the wheel, at most a half turn
++    const double distance = hue * 2.0 + 0.25 * std::abs(arc.s - swatch.s) +
++                            0.5 * std::abs(arc.l - swatch.l);
+     if (best < 0 || distance < best) {
+       best = distance;
+       nearest = choice.color;
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+index 7e938ddbc36dc..4db4fdfde19aa 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+@@ -138,13 +138,20 @@ TEST(ArcSidebarImporterTest, SummaryCountsThePlan) {
+       << summary;
+ }
+ 
+-// I10: every theme lands on one of the five swatches, the nearest.
++// I10: every theme lands on one of the swatches (spaces B40), the nearest
++// by hue, and a grey on Slate.
+ TEST(ArcSidebarImporterTest, ThemeMapsToTheNearestSwatch) {
+   EXPECT_EQ(kSpaceColors[1].color, NearestSpaceColor(kSpaceColors[1].color));
+   EXPECT_EQ(kSpaceColors[2].color,
+             NearestSpaceColor(SkColorSetRGB(0x50, 0x90, 0x70)));
+   EXPECT_EQ(kSpaceColors[4].color,
+             NearestSpaceColor(SkColorSetRGB(0x90, 0x50, 0x60)));
++  EXPECT_EQ(kSpaceColors[0].color,
++            NearestSpaceColor(SkColorSetRGB(0x80, 0x80, 0x80)))
++      << "a grey is Slate";
++  for (const SpaceColorChoice& choice : kSpaceColors) {
++    EXPECT_EQ(choice.color, NearestSpaceColor(choice.color));
++  }
+ }
+ 
+ // I9: the file is read through a copy.
 diff --git a/chrome/browser/ui/spaces/space_colors.h b/chrome/browser/ui/spaces/space_colors.h
 index e0afc51c8b8fc..d37e786a4a853 100644
 --- a/chrome/browser/ui/spaces/space_colors.h
@@ -436,6 +518,19 @@ index e955a23d09ccd..984e9ca752295 100644
    // import I14, settings T27 (WIN-15; decided 2026-10-22, the owner away
    // and asking for a decision): the way back from Turn Bookmarks into Pinned
    // Tabs.
+diff --git a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
+index f946739260551..32d1eac6018ab 100644
+--- a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
++++ b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
+@@ -143,7 +143,7 @@ TEST_F(SteddingWelcomeHandlerTest, GetSpaceColorsListsTheTable) {
+   EXPECT_EQ("cr.webUIResponse", call.function_name());
+   ASSERT_TRUE(call.arg3()->is_list());
+   EXPECT_EQ(spaces::kSpaceColors.size(), call.arg3()->GetList().size());
+-  EXPECT_EQ("#7A5B8C", *call.arg3()->GetList()[1].GetDict().FindString("color"));
++  EXPECT_EQ("#AB4ABA", *call.arg3()->GetList()[1].GetDict().FindString("color"));
+ }
+ 
+ // welcome W12: the behaviour step reads the profile. A fresh one answers
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
 index 5e9d7ad357996..d6192dbdc78b6 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc
