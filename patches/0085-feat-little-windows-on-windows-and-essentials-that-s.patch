@@ -38,9 +38,9 @@ Removable when: never; both are product behaviour.
  .../ui/views/frame/browser_frame_view_win.cc  |   4 +
  .../tabs/common/pinned_tab_container_view.cc  |  16 ++-
  .../stedding/little_window_browsertest.cc     |  81 +++++++++++++
- .../stedding/sidebar_forms_browsertest.cc     |   7 +-
+ .../stedding/sidebar_forms_browsertest.cc     |  57 +++++++++-
  .../test/stedding/sidebar_rail_browsertest.cc | 107 +++++++++++++++---
- 10 files changed, 274 insertions(+), 26 deletions(-)
+ 10 files changed, 324 insertions(+), 26 deletions(-)
 
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 index 660036ebb8725..39e05d4572407 100644
@@ -381,10 +381,18 @@ index e9be2a2ff8195..2a2b5cd56d76e 100644
  // little E7: the ways from a little window into the main window. Each moves
  // the page as it is -- the same WebContents, its history, nothing loaded
 diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
-index 03d4871a22cc0..a0024f192b6f2 100644
+index 03d4871a22cc0..38ad2efaeee20 100644
 --- a/chrome/test/stedding/sidebar_forms_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
-@@ -1140,13 +1140,14 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, AShortWindowCutsNoRowOff) {
+@@ -59,6 +59,7 @@
+ #include "chrome/browser/ui/views/frame/stedding_window_background.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
++#include "chrome/browser/ui/views/infobars/infobar_view.h"
+ #include "chrome/browser/ui/views/session_restore_infobar/session_restore_infobar_delegate.h"
+ #include "chrome/browser/ui/views/session_restore_infobar/session_restore_infobar_manager.h"
+ #include "chrome/browser/ui/views/stedding/sidebar_resize_handle.h"
+@@ -1140,13 +1141,14 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, AShortWindowCutsNoRowOff) {
    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
    ASSERT_TRUE(model);
    ASSERT_TRUE(model->AddSpace("Work", SK_ColorBLUE));
@@ -402,6 +410,62 @@ index 03d4871a22cc0..a0024f192b6f2 100644
    tabs::TabInterface* const last = tabs->GetActiveTab();
    ASSERT_FALSE(tabs->IsTabPinned(tabs->GetIndexOfTab(last)));
    views::Widget* const widget = browser_view()->GetWidget();
+@@ -1318,6 +1320,55 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsRtlTest, TheRightHandEdge) {
+ // title bar; every card there takes its own press, with one row of cards and
+ // with two. A press on a card moved the window and never reached the card,
+ // and with one row none of them worked (the reporter's recording, beta 10).
++// GitHub issue 24: the restore bar ("Continue where you left off") closes from
++// its button: the window takes the button's press as the button's, and a
++// click on it closes the bar in every tab. A user pressed it and nothing
++// happened, at every launch.
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheRestoreBarClosesFromItsButton) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), GURL("about:blank"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  views::Widget* const widget = browser_view()->GetWidget();
++  stedding::test::KeepAboveOtherWindows(widget);
++  session_restore_infobar::SessionRestoreInfoBarManager::GetInstance()
++      ->ShowInfoBar(
++          *browser()->GetProfile(),
++          session_restore_infobar::InfobarMessageType::kTurnOffFromRestart);
++  views::View* const container = browser_view()->infobar_container();
++  ASSERT_TRUE(container);
++  InfoBarView* bar = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(widget);
++    for (views::View* const child : container->children()) {
++      if (auto* const view = views::AsViewClass<InfoBarView>(child);
++          view && view->GetVisible() && view->height() > 0) {
++        bar = view;
++        return true;
++      }
++    }
++    return false;
++  })) << "the restore bar did not show";
++  views::View* const close = bar->close_button();
++  ASSERT_TRUE(close && close->GetVisible());
++  const gfx::Point centre =
++      close->ConvertRectToWidget(close->GetLocalBounds()).CenterPoint();
++  EXPECT_EQ(HTCLIENT, widget->GetNonClientComponent(centre))
++      << "the window takes the close button's press as its title bar's";
++  stedding::test::ClickLeftMouse(widget,
++                                 close->GetBoundsInScreen().CenterPoint());
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    for (int i = 0; i < browser()->tab_strip_model()->count(); ++i) {
++      if (!infobars::ContentInfoBarManager::FromWebContents(
++               browser()->tab_strip_model()->GetWebContentsAt(i))
++               ->infobars()
++               .empty()) {
++        return false;
++      }
++    }
++    return true;
++  })) << "a click on its close button left the restore bar";
++}
++
+ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheSlidOutSidebarsEssentialsTakeTheirPress) {
+   for (int i = 0; i < 7; ++i) {
+     AppendTab();
 diff --git a/chrome/test/stedding/sidebar_rail_browsertest.cc b/chrome/test/stedding/sidebar_rail_browsertest.cc
 index da7d730d617a2..4faaf0539ff86 100644
 --- a/chrome/test/stedding/sidebar_rail_browsertest.cc

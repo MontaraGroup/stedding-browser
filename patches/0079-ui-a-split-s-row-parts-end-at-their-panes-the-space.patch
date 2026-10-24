@@ -41,20 +41,20 @@ room to spare, and the folder counts pointless.
 Removable when: never; the next re-cut folds it into the patches that own
 the split row, the Space row and the folder header.
 ---
- chrome/browser/ui/stedding_ui_metrics.cc      |  6 ++
- chrome/browser/ui/stedding_ui_metrics.h       |  5 +
- .../views/frame/stedding_window_background.cc | 82 +++-------------
- .../ui/views/spaces/space_switcher_rules.cc   | 48 +++++++--
- .../ui/views/spaces/space_switcher_rules.h    | 47 +++++++--
- .../spaces/space_switcher_rules_unittest.cc   | 88 +++++++++++++----
- .../ui/views/spaces/space_switcher_view.cc    | 53 +++++++---
- .../spaces/space_tab_visibility_controller.cc | 25 +++--
- .../ui/views/tabs/common/folder_view.cc       | 56 +----------
- .../ui/views/tabs/common/folder_view.h        | 25 ++---
- .../views/tabs/common/folder_view_unittest.cc | 92 ++++++++---------
- .../test/stedding/address_band_browsertest.cc | 98 +++++++++++++------
- .../test/stedding/folder_tabs_browsertest.cc  | 31 +++---
- 13 files changed, 364 insertions(+), 292 deletions(-)
+ chrome/browser/ui/stedding_ui_metrics.cc      |   6 +
+ chrome/browser/ui/stedding_ui_metrics.h       |   5 +
+ .../views/frame/stedding_window_background.cc |  82 ++------
+ .../ui/views/spaces/space_switcher_rules.cc   |  48 ++++-
+ .../ui/views/spaces/space_switcher_rules.h    |  47 ++++-
+ .../spaces/space_switcher_rules_unittest.cc   |  88 ++++++--
+ .../ui/views/spaces/space_switcher_view.cc    |  53 +++--
+ .../spaces/space_tab_visibility_controller.cc |  25 ++-
+ .../ui/views/tabs/common/folder_view.cc       |  56 +----
+ .../ui/views/tabs/common/folder_view.h        |  25 +--
+ .../views/tabs/common/folder_view_unittest.cc |  92 ++++----
+ .../test/stedding/address_band_browsertest.cc | 198 +++++++++++++-----
+ .../test/stedding/folder_tabs_browsertest.cc  |  31 +--
+ 13 files changed, 435 insertions(+), 321 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
 index 335120c25fb1d..2d48bc74f9f51 100644
@@ -927,9 +927,97 @@ index e63be5ff05a2d..ce82e5a1a3bce 100644
  
  }  // namespace
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index cd60572674933..7e7a1fcff010d 100644
+index cd60572674933..a2f2ad7e71fbc 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
+@@ -263,32 +263,33 @@ class PageColourRowTest : public AddressBandTest {
+   }
+ };
+ 
+-// The band, the field while it is edited or hovered, and a toast all leave
+-// the address readable (toolbar T34, T35).
++// toolbar T34 (GitHub issue 14): the field is whole in every state. With the
++// address gathered on the page's middle, the field's empty start before the
++// chip is the field's, not the window's title bar, and a click there focuses
++// the address. The hover tint had started at the chip, and the empty start
++// had been the title bar, while focus took the whole field.
++IN_PROC_BROWSER_TEST_F(AddressBandTest, TheFieldIsWholeInEveryState) {
++  views::test::RunScheduledLayout(view());
++  const int edge = LeadingEdge();
++  ASSERT_GT(edge, 40) << "a short address is gathered on the middle";
++  const gfx::Point in_bar(edge / 2, bar()->height() / 2);
++  gfx::Point in_widget = in_bar;
++  views::View::ConvertPointToWidget(bar(), &in_widget);
++  EXPECT_EQ(HTCLIENT, view()->GetWidget()->GetNonClientComponent(in_widget))
++      << "the field's empty start is the window's title bar";
++  gfx::Point on_screen = in_bar;
++  views::View::ConvertPointToScreen(bar(), &on_screen);
++  ASSERT_FALSE(bar()->omnibox_view()->HasFocus());
++  stedding::test::ClickLeftMouse(view()->GetWidget(), on_screen);
++  EXPECT_TRUE(base::test::RunUntil(
++      [&]() { return bar()->omnibox_view()->HasFocus(); }))
++      << "a click on the field's empty start did not focus the address";
++}
++
++// The field while it is edited or hovered, and a toast, all leave the
++// address readable (toolbar T34, T35).
+ IN_PROC_BROWSER_TEST_F(AddressBandTest,
+                        TheBandTheFieldAndAToastLeaveTheAddressReadable) {
+-  {
+-    SCOPED_TRACE("band starts at the chip");
+-    const std::optional<gfx::Rect>& band = bar()->stedding_band_for_testing();
+-    ASSERT_TRUE(band.has_value())
+-        << "a short address is gathered on the middle";
+-    EXPECT_GT(band->x(), 0) << "the band no longer starts at the field's edge";
+-    const int edge = LeadingEdge();
+-    EXPECT_LE(band->x(), edge) << "the chip sits inside the band";
+-    EXPECT_LE(edge - band->x(), 8) << "and the band starts just before it";
+-    EXPECT_EQ(bar()->width(), band->right())
+-        << "the band still ends with the page actions";
+-  }
+-  {
+-    SCOPED_TRACE("editing paints the whole field");
+-    bar()->omnibox_view()->RequestFocus();
+-    views::test::RunScheduledLayout(view());
+-    EXPECT_FALSE(bar()->stedding_band_for_testing().has_value())
+-        << "editing keeps Chromium's whole field";
+-    view()->GetFocusManager()->ClearFocus();
+-    views::test::RunScheduledLayout(view());
+-    EXPECT_TRUE(bar()->stedding_band_for_testing().has_value());
+-  }
+   {
+     SCOPED_TRACE("hovered address adds no translucent coat");
+     // Hovered, the field's colour is translucent in the Stedding window; the
+@@ -537,8 +538,8 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowStopsShortOfTheCaptionButtons) {
+ }
+ 
+ // sidebar Y29 on Windows: the address row's empty parts -- the gaps between
+-// its buttons, the field's empty start and the stretch between the app menu
+-// and the caption buttons -- are the window's caption, so a drag moves the
++// its buttons and the stretch between the app menu and the caption buttons
++// -- are the window's caption, so a drag moves the
+ // window and a double click maximizes it, as Windows does for a caption. The
+ // stretch before the caption buttons lay outside the top container and read
+ // as the page's: it did nothing (the coordinator, 2026-10-20, beta 21).
+@@ -575,7 +576,6 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowsEmptyPartsAreTheCaption) {
+   }
+   const gfx::Rect row = in_widget(view()->toolbar());
+   const gfx::Rect field = in_widget(bar());
+-  const std::optional<gfx::Rect>& band = bar()->stedding_band_for_testing();
+   const int buttons_left = in_widget(captions).x();
+   std::vector<std::string> wrong;
+   int checked = 0;
+@@ -586,8 +586,8 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheRowsEmptyPartsAreTheCaption) {
+         })) {
+       continue;
+     }
+-    if (field.Contains(point) &&
+-        (!band || x >= field.x() + band->x() - 2)) {
++    // The field is whole, its empty start too (toolbar T34).
++    if (field.Contains(point)) {
+       continue;
+     }
+     ++checked;
 @@ -1022,8 +1022,8 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
  
  // toolbar T41: a split's row as the window's background paints it, along
@@ -1047,7 +1135,50 @@ index cd60572674933..7e7a1fcff010d 100644
    views::test::RunScheduledLayout(view());
  
    // The address's own margin in the field, above and below.
-@@ -1865,4 +1856,53 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheRowsButtonsShowAHoverAndAPress) {
+@@ -1697,6 +1688,42 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, EveryChipFitsTheField) {
+   EXPECT_GE(check_every_button("the keyword chip"), 1);
+ }
+ 
++// toolbar T44 (the owner, 2026-10-24): a chip the field makes shorter than
++// its own height lays its icon and its text out inside itself, centred on
++// its middle. The "Not Secure" chip's warning sat 1.5 DIP low: the icon and
++// the text were laid out in the chip's own 24 DIP from its top, 3 DIP past
++// the bottom of the 21 DIP chip.
++IN_PROC_BROWSER_TEST_F(AddressBandTest, AChipCentresItsIconAndText) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("plain.test", "/title1.html")));
++  LocationIconView* const chip = bar()->location_icon_view();
++  const auto text = [&]() -> views::Label* {
++    for (views::View* const child : chip->children()) {
++      if (auto* const label = views::AsViewClass<views::Label>(child)) {
++        return label;
++      }
++    }
++    return nullptr;
++  };
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(view());
++    return !chip->GetText().empty() && !chip->is_animating_label() && text() &&
++           text()->GetVisible();
++  })) << "a plain http page shows no \"Not Secure\" chip";
++  views::test::RunScheduledLayout(view());
++  const gfx::Rect inside(chip->size());
++  for (const views::View* const part :
++       std::vector<const views::View*>{chip->GetImageContainerView(), text()}) {
++    EXPECT_TRUE(inside.Contains(part->bounds()))
++        << part->GetClassName() << " at " << part->bounds().ToString()
++        << " runs out of the chip, " << inside.ToString();
++    EXPECT_LE(
++        std::abs(part->bounds().CenterPoint().y() - inside.CenterPoint().y()),
++        1)
++        << part->GetClassName() << " is not on the chip's middle";
++  }
++}
++
+ // How plainly a highlight of `colour` at `opacity` shows over `ground`: the
+ // contrast between the ground and the ground under the highlight.
+ double HighlightContrast(SkColor colour, float opacity, SkColor ground) {
+@@ -1865,4 +1892,59 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheRowsButtonsShowAHoverAndAPress) {
    }
  }
  
@@ -1059,7 +1190,15 @@ index cd60572674933..7e7a1fcff010d 100644
 +// the field's left edge as soon as the field took focus.
 +IN_PROC_BROWSER_TEST_F(AddressBandTest, TheAddressKeepsItsPlaceWhenEdited) {
 +  OmniboxViewViews* const omnibox = bar()->omnibox_view();
-+  views::test::RunScheduledLayout(view());
++  // The site chip's text slides in and out; the cluster is measured once it
++  // has settled, not half way through the slide.
++  const auto settled = [&]() {
++    return base::test::RunUntil([&]() {
++      views::test::RunScheduledLayout(view());
++      return !bar()->location_icon_view()->is_animating_label();
++    });
++  };
++  ASSERT_TRUE(settled());
 +  const int at_rest = omnibox->bounds().CenterPoint().x();
 +  const int rest_x = omnibox->x();
 +  int focused_x = 0;
@@ -1067,7 +1206,7 @@ index cd60572674933..7e7a1fcff010d 100644
 +    SCOPED_TRACE("the field takes focus");
 +    chrome::FocusLocationBar(browser());
 +    ASSERT_TRUE(base::test::RunUntil([&]() { return omnibox->HasFocus(); }));
-+    views::test::RunScheduledLayout(view());
++    ASSERT_TRUE(settled());
 +    // The chip beside it may change with the focus, a few DIP either way;
 +    // the left edge it had jumped to is hundreds of DIP away.
 +    EXPECT_NEAR(at_rest, omnibox->bounds().CenterPoint().x(), 12)
@@ -1090,8 +1229,6 @@ index cd60572674933..7e7a1fcff010d 100644
 +    views::test::RunScheduledLayout(view());
 +    EXPECT_GT(omnibox->x(), filled_x)
 +        << "a short address is not gathered on the middle while edited";
-+    EXPECT_FALSE(bar()->stedding_band_for_testing().has_value())
-+        << "editing keeps Chromium's whole field (T34)";
 +  }
 +  omnibox->RevertAll();
 +  view()->GetFocusManager()->ClearFocus();

@@ -125,12 +125,14 @@ its own (patches/README.md).
  chrome/browser/ui/views/frame/BUILD.gn        |    7 +
  .../ui/views/frame/browser_frame_view_mac.mm  |    8 +-
  .../views/frame/browser_native_widget_mac.mm  |   77 +-
- chrome/browser/ui/views/frame/browser_view.cc |   36 +-
+ chrome/browser/ui/views/frame/browser_view.cc |   43 +-
  .../layout/browser_view_popup_layout_impl.cc  |   38 +
  .../frame/vertical_tab_strip_region_view.cc   |  288 +++-
  .../frame/vertical_tab_strip_region_view.h    |   60 +-
- .../views/location_bar/location_bar_view.cc   |   16 +
- .../ui/views/location_bar/location_bar_view.h |    5 +
+ .../views/location_bar/location_bar_view.cc   |   44 +-
+ .../ui/views/location_bar/location_bar_view.h |   11 -
+ .../views/location_bar/location_icon_view.cc  |   13 +-
+ ...ndard_icon_label_bubble_layout_strategy.cc |   10 +-
  .../omnibox_popup_webui_base_content.cc       |   58 +-
  .../omnibox_popup_webui_base_content.h        |   16 +
  .../ui/views/spaces/page_split_drag_target.cc |   19 +-
@@ -168,7 +170,7 @@ its own (patches/README.md).
  chrome/browser/ui/views/toolbar/BUILD.gn      |    3 +
  .../toolbar/stedding_little_promote_button.cc |  133 ++
  .../toolbar/stedding_little_promote_button.h  |   66 +
- .../browser/ui/views/toolbar/toolbar_view.cc  |  111 +-
+ .../browser/ui/views/toolbar/toolbar_view.cc  |  104 +-
  chrome/test/stedding/BUILD.gn                 |   12 +
  .../test/stedding/address_band_browsertest.cc |  582 ++++++-
  .../test/stedding/folder_tabs_browsertest.cc  |  183 +-
@@ -177,7 +179,7 @@ its own (patches/README.md).
  .../hover_card_picture_browsertest.cc         |  144 ++
  .../stedding/little_window_browsertest.cc     |  346 +++-
  .../little_window_menu_mac_browsertest.mm     |  154 ++
- .../little_window_row_mac_browsertest.mm      |  487 ++++++
+ .../little_window_row_mac_browsertest.mm      |  480 ++++++
  .../test/stedding/local_tabs_browsertest.cc   |   17 +-
  .../stedding/motion_frames_browsertest.cc     | 1479 +++++++++++++++++
  .../test/stedding/pinned_run_browsertest.cc   |  459 +++++
@@ -195,14 +197,14 @@ its own (patches/README.md).
  .../test/stedding/startup_load_browsertest.cc |  368 +++-
  chrome/test/stedding/tab_drop_browsertest.cc  |  526 ++++++
  .../stedding/window_buttons_browsertest.mm    |    7 +
- .../test/stedding/window_top_browsertest.mm   |  340 ++++
+ .../test/stedding/window_top_browsertest.mm   |  332 ++++
  components/tabs/impl/tab_strip_collection.cc  |   18 +
  components/tabs/public/tab_strip_collection.h |    6 +
  .../cert_verifier/cert_verifier_service.cc    |   19 +
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 131 files changed, 11310 insertions(+), 410 deletions(-)
+ 133 files changed, 11311 insertions(+), 451 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -3732,7 +3734,7 @@ index 7316905cfc8e7..139d5b1821819 100644
    if (auto* const glass_frame_service = GlassFrameService::GetInstance()) {
      glass_frame_service_subscription_ =
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index ec46978a2ab19..12510c2453056 100644
+index ec46978a2ab19..f800b0ef8bca7 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -123,6 +123,7 @@
@@ -3765,7 +3767,7 @@ index ec46978a2ab19..12510c2453056 100644
    if (vertical_tab_strip_region_view_ &&
        vertical_tab_strip_region_view_->GetVisible()) {
      // See if the mouse pointer is within the bounds of the
-@@ -4916,10 +4932,22 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+@@ -4916,10 +4932,29 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
        return HTCLIENT;
      } else {
        gfx::Point test_point2(point);
@@ -3779,6 +3781,13 @@ index ec46978a2ab19..12510c2453056 100644
 +          // controls before finally falling back to HTCAPTION.
 +          return HTNOWHERE;
 +        }
++      } else if (gfx::Point in_bars(point);
++                 infobar_container_ && infobar_container_->GetVisible() &&
++                 ConvertedHitTest(parent(), infobar_container_, &in_bars)) {
++        // Stedding (GitHub issue 24): an infobar between the address row and
++        // the page card is the page's, not the window's top below: the
++        // restore bar's close button took no press, at every launch.
++        return HTCLIENT;
 +      } else if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
 +                 contents_container() &&
 +                 point_in_browser_view_coords.y() <
@@ -4535,7 +4544,7 @@ index 0c9d55bed3781..0185935446a09 100644
    void RemoveClickHandler();
    std::unique_ptr<VerticalTabStripFocusSwipeController> focus_swipe_controller_;
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-index 4ef853952597d..b07106cd8f9da 100644
+index 4ef853952597d..08255fa850608 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
 @@ -160,6 +160,8 @@
@@ -4564,33 +4573,164 @@ index 4ef853952597d..b07106cd8f9da 100644
  
    auto clear_all_button = views::CreateVectorImageButton(base::BindRepeating(
        static_cast<void (OmniboxView::*)(const std::u16string&)>(
-@@ -845,6 +857,10 @@ void LocationBarView::CentreSteddingCluster() {
+@@ -774,13 +786,8 @@ void LocationBarView::CentreSteddingCluster() {
+   // from the laid-out bounds: a field sized to a predicted content width
+   // elided "github.com" to "githu..." (2026-09-05). With the field the whole
+   // row (T29) the middle it gathers on is the page's (`SetSteddingCentre`),
+-  // as far as the field's own edges allow.
+-  //
+-  // The band the field paints (hover, input in progress) follows the
+-  // cluster (toolbar T34): `stedding_band_` is set below only when the
+-  // cluster has moved off the field's leading edge; Layout() paints the
+-  // background again whenever the band changes.
+-  stedding_band_.reset();
++  // as far as the field's own edges allow. The field itself stays whole in
++  // every state, hovered, focused and edited (T34; GitHub issue 14).
+   if (!base::FeatureList::IsEnabled(stedding::kArcStyleWindow) ||
+       !IsInitialized() || ShouldShowKeywordBubble() ||
+       ime_inline_autocomplete_view_->GetVisible() ||
+@@ -837,12 +844,6 @@ void LocationBarView::CentreSteddingCluster() {
+     view->SetX(view->x() + shift);
    }
+   omnibox_view_->SetBounds(box.x() + shift, box.y(), text_width, box.height());
+-  // The band is the hover's and an unfocused field's: while the address is
+-  // edited the whole field is painted, as Chromium paints it (T34).
+-  if (shift > 0 && !omnibox_view_->HasFocus()) {
+-    const int band_x = std::max(0, lead_x + shift - padding);
+-    stedding_band_ = gfx::Rect(band_x, 0, width() - band_x, height());
+-  }
  }
  
-+bool LocationBarView::IsSteddingEmptyAt(const gfx::Point& point) const {
-+  return stedding_band_ && GetMirroredXInView(point.x()) < stedding_band_->x();
-+}
-+
  void LocationBarView::SteddingClusterMayHaveChanged() {
-   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
-     InvalidateLayout();
-diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
-index d8515492b98a0..4ffd83b9b842d 100644
---- a/chrome/browser/ui/views/location_bar/location_bar_view.h
-+++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
-@@ -146,6 +146,11 @@ class LocationBarView
-     return stedding_band_;
+@@ -1141,11 +1142,7 @@ void LocationBarView::Layout(PassKey) {
    }
  
-+  // sidebar Y29: whether `point`, in this view's coordinates, is on the
-+  // field's empty start -- before the band, where nothing is painted -- which
-+  // is the window's title bar, as the row around the field is.
-+  bool IsSteddingEmptyAt(const gfx::Point& point) const;
-+
+   LayoutSuperclass<View>(this);
+-  const std::optional<gfx::Rect> old_band = stedding_band_;
+   CentreSteddingCluster();
+-  if (stedding_band_ != old_band && GetColorProvider()) {
+-    RefreshBackground();
+-  }
+ }
+ 
+ void LocationBarView::OnThemeChanged() {
+@@ -1550,15 +1547,6 @@ void LocationBarView::RefreshBackground() {
+ 
+   if (is_popup_mode_) {
+     SetBackground(views::CreateSolidBackground(background_color_));
+-  } else if (stedding_band_ && border_color == SK_ColorTRANSPARENT) {
+-    // Stedding (toolbar T34): with the chip and the address gathered on the
+-    // page's middle, the hover band starts where they do, not at the field's
+-    // far edge, and ends with the page actions at the field's other edge.
+-    SetBackground(views::CreateBackgroundFromPainter(
+-        views::Painter::CreateSolidRoundRectPainter(
+-            background_color_, ComputeBorderRadius(size()),
+-            gfx::Insets::TLBR(0, stedding_band_->x(), 0,
+-                              width() - stedding_band_->right()))));
+   } else {
+     SetBackground(CreateRoundRectBackground(
+         background_color_, border_color, size(),
+@@ -1568,8 +1556,8 @@ void LocationBarView::RefreshBackground() {
+ 
+   // Keep the views::Textfield in sync. It needs an opaque background to
+   // correctly enable subpixel AA. Stedding (toolbar T34): a translucent
+-  // colour, the Stedding window's hover band, is not painted a second time
+-  // under the address: over the band it read as a lighter pill cut to the
++  // colour, the Stedding window's hover tint, is not painted a second time
++  // under the address: over the field it read as a lighter pill cut to the
+   // text, its rounded edge through the first letter. A transparent
+   // background also turns subpixel AA off, as a translucent one must.
+   omnibox_view_->SetBackgroundColor(
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
+index d8515492b98a0..a47976194cf69 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -139,13 +139,6 @@ class LocationBarView
+   // instead of on the field's own centre (within the field's limits).
+   void SetSteddingCentre(int centre_x);
+ 
+-  // toolbar T34: where the field's background is painted, in its own
+-  // coordinates, while the chip and the address are gathered on the page's
+-  // middle; unset while the field paints whole (editing, a full field).
+-  const std::optional<gfx::Rect>& stedding_band_for_testing() const {
+-    return stedding_band_;
+-  }
+-
    // Returns the location bar border radius in DIPs.
    int GetBorderRadius() const;
    static int ComputeBorderRadius(gfx::Size size);
+@@ -365,10 +358,6 @@ class LocationBarView
+   void CentreSteddingCluster();
+   void SteddingClusterMayHaveChanged();
+   std::optional<int> stedding_centre_x_;
+-  // toolbar T34: the part of the field its background is painted on while
+-  // the cluster is gathered on the page's middle, from the chip to the
+-  // field's far edge; unset when the field paints whole.
+-  std::optional<gfx::Rect> stedding_band_;
+ 
+   // Returns the amount of space required to the left of the omnibox text.
+   int GetMinimumLeadingWidth() const;
+diff --git a/chrome/browser/ui/views/location_bar/location_icon_view.cc b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+index 9b355a4392845..8ecd900d0cb60 100644
+--- a/chrome/browser/ui/views/location_bar/location_icon_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+ #include "chrome/browser/ui/page_info/page_info_dialog.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
+@@ -344,7 +345,17 @@ void LocationIconView::UpdateBackground() {
+           is_text_dangerous ? kColorOmniboxSecurityChipDangerousBackground
+                             : kColorOmniboxIconBackground);
+ 
+-  SetBackgroundColor(GetColorProvider()->GetColor(id));
++  // Stedding (toolbar T44, the owner, 2026-10-24): on the page-coloured row
++  // the chip with no text, the site icon alone, has no capsule at rest; its
++  // capsule read as the chip held in its hover. With its text ("Not Secure")
++  // the capsule stays, to hold the text.
++  if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
++      !GetShowText() && !is_text_dangerous &&
++      !delegate_->GetLocationIconBackgroundColorOverride()) {
++    SetBackgroundColor(SK_ColorTRANSPARENT);
++  } else {
++    SetBackgroundColor(GetColorProvider()->GetColor(id));
++  }
+ 
+   if (is_text_dangerous) {
+     ConfigureInkDropForRefresh2023(this, kColorOmniboxSecurityChipInkDropHover,
+diff --git a/chrome/browser/ui/views/location_bar/standard_icon_label_bubble_layout_strategy.cc b/chrome/browser/ui/views/location_bar/standard_icon_label_bubble_layout_strategy.cc
+index 7e31adf619058..d3e8335abe38e 100644
+--- a/chrome/browser/ui/views/location_bar/standard_icon_label_bubble_layout_strategy.cc
++++ b/chrome/browser/ui/views/location_bar/standard_icon_label_bubble_layout_strategy.cc
+@@ -8,7 +8,9 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/feature_list.h"
+ #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
+ #include "ui/gfx/animation/slide_animation.h"
+ #include "ui/gfx/geometry/insets.h"
+@@ -56,8 +58,14 @@ StandardIconLabelBubbleAnimationLayoutStrategy::CalculateProposedLayout(
+       can_expand_label_for_animation = false;
+     }
+   }
++  // Stedding (toolbar T44): a chip the field makes shorter than it would be
++  // (AddressBandTest.EveryChipFitsTheField) lays its icon and text out in the
++  // height it has. Laid out in its own 24 DIP from its top, they ran 3 DIP
++  // past its bottom, and the "Not Secure" chip's warning sat 1.5 DIP low (the
++  // owner, 2026-10-24).
+   if (size_bounds.height().is_bounded() &&
+-      preferred_size.height() < size_bounds.height()) {
++      (preferred_size.height() < size_bounds.height() ||
++       base::FeatureList::IsEnabled(stedding::kArcStyleWindow))) {
+     preferred_size.set_height(size_bounds.height().value());
+   }
+   layout.host_size = preferred_size;
 diff --git a/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc b/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc
 index fafe939a64042..9c86f02bd9d0b 100644
 --- a/chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.cc
@@ -6997,7 +7137,7 @@ index 0000000000000..55d4d8c9f23e9
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_STEDDING_LITTLE_PROMOTE_BUTTON_H_
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-index 1dc615cf13b9a..fdf443eb2a8c0 100644
+index 1dc615cf13b9a..4c6d1d5ed0a62 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
 @@ -61,6 +61,7 @@
@@ -7016,21 +7156,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
  #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_controller.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_divider.h"
-@@ -244,6 +246,13 @@ bool IsPositionInWindowCaptionForView(const views::View* view,
-         views::IsViewClass<ToolbarDivider>(child)) {
-       return true;
-     }
-+    // Stedding (sidebar Y29): the field's empty start, where nothing is
-+    // painted while the address is gathered on the page's middle, is the
-+    // window's title bar as the row around it is.
-+    if (const auto* const bar = views::AsViewClass<LocationBarView>(child)) {
-+      return bar->IsSteddingEmptyAt(
-+          views::View::ConvertPointToTarget(view, child, point));
-+    }
-     // The point hit an interactive control (button, location bar, etc.).
-     return false;
-   }
-@@ -308,7 +317,11 @@ ToolbarView::ToolbarView(BrowserWindowInterface* browser,
+@@ -308,7 +310,11 @@ ToolbarView::ToolbarView(BrowserWindowInterface* browser,
  
    GetViewAccessibility().SetRole(ax::mojom::Role::kToolbar);
  
@@ -7043,7 +7169,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
      for (const auto& view_and_command : GetViewCommandMap()) {
        chrome::AddCommandObserver(browser_, view_and_command.second, this);
      }
-@@ -326,6 +339,13 @@ ToolbarView::~ToolbarView() {
+@@ -326,6 +332,13 @@ ToolbarView::~ToolbarView() {
    }
  
    if (display_mode_ != DisplayMode::kNormal) {
@@ -7057,7 +7183,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
      return;
    }
  
-@@ -367,10 +387,13 @@ void ToolbarView::Init() {
+@@ -367,10 +380,13 @@ void ToolbarView::Init() {
        display_mode_ == DisplayMode::kNormal) {
      webui_location_bar = std::make_unique<WebUILocationBar>(browser_, this);
    } else {
@@ -7072,7 +7198,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
    }
  
    // Make sure the toolbar shows by default.
-@@ -401,9 +424,12 @@ void ToolbarView::Init() {
+@@ -401,9 +417,12 @@ void ToolbarView::Init() {
      pinned_toolbar_actions_container_ = AddChildView(
          std::make_unique<PinnedToolbarActionsContainer>(browser_view_, this));
      pinned_toolbar_actions_ = pinned_toolbar_actions_container_;
@@ -7088,7 +7214,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
          .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
          .SetDefault(views::kFlexBehaviorKey,
                      views::FlexSpecification(
-@@ -417,6 +443,57 @@ void ToolbarView::Init() {
+@@ -417,6 +436,57 @@ void ToolbarView::Init() {
                                     views::MinimumFlexSizeRule::kScaleToZero,
                                     views::MaximumFlexSizeRule::kUnbounded));
      }
@@ -7146,7 +7272,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
      initialized_ = true;
      return;
    }
-@@ -1412,10 +1489,12 @@ ToolbarView::GetContentSettingBubbleModelDelegate() {
+@@ -1412,10 +1482,12 @@ ToolbarView::GetContentSettingBubbleModelDelegate() {
  // ToolbarView, CommandObserver implementation:
  
  void ToolbarView::EnabledStateChangedForCommand(int id, bool enabled) {
@@ -7161,7 +7287,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
      toolbar_webview_->SetBackForwardEnabled(id, enabled);
      return;
    }
-@@ -1450,6 +1529,15 @@ gfx::Size ToolbarView::CalculatePreferredSize(
+@@ -1450,6 +1522,15 @@ gfx::Size ToolbarView::CalculatePreferredSize(
        break;
      case DisplayMode::kLocation:
        size = location_bar_->PreferredSize();
@@ -7177,7 +7303,7 @@ index 1dc615cf13b9a..fdf443eb2a8c0 100644
        break;
      case DisplayMode::kNormal:
        size = AccessiblePaneView::CalculatePreferredSize(available_size);
-@@ -1556,6 +1644,15 @@ void ToolbarView::Layout(PassKey) {
+@@ -1556,6 +1637,15 @@ void ToolbarView::Layout(PassKey) {
      location_bar_view_->SetSteddingCentre(
          (width() + stedding_trailing_reserve_) / 2);
    }
@@ -9423,10 +9549,10 @@ index 0000000000000..b70dcd8a72901
 +}  // namespace
 diff --git a/chrome/test/stedding/little_window_row_mac_browsertest.mm b/chrome/test/stedding/little_window_row_mac_browsertest.mm
 new file mode 100644
-index 0000000000000..5db969fa59ef8
+index 0000000000000..ba876097fcc33
 --- /dev/null
 +++ b/chrome/test/stedding/little_window_row_mac_browsertest.mm
-@@ -0,0 +1,487 @@
+@@ -0,0 +1,480 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -9614,8 +9740,8 @@ index 0000000000000..5db969fa59ef8
 +        rects, [&](const gfx::Rect& rect) { return rect.Contains(point); });
 +  }
 +
-+  // The row's empty parts, along its middle: around the lights, between its
-+  // buttons, and the field's empty start before its chip (toolbar T34).
++  // The row's empty parts, along its middle: around the lights and between
++  // its buttons. The field is whole, its empty start too (toolbar T34).
 +  std::vector<Spot> EmptyRow() {
 +    views::test::RunScheduledLayout(widget());
 +    std::vector<Spot> spots;
@@ -9626,9 +9752,7 @@ index 0000000000000..5db969fa59ef8
 +      light.Outset(1);
 +    }
 +    CollectButtons(toolbar, &taken);
-+    LocationBarView* const bar = view()->GetLocationBarView();
-+    const gfx::Rect field = InWidget(bar);
-+    const std::optional<gfx::Rect>& band = bar->stedding_band_for_testing();
++    const gfx::Rect field = InWidget(view()->GetLocationBarView());
 +    const int middle = row.CenterPoint().y();
 +    // Clear of the window's edge, where a press resizes the window.
 +    for (int x = 6; x < row.x(); x += 3) {
@@ -9643,10 +9767,6 @@ index 0000000000000..5db969fa59ef8
 +        continue;
 +      }
 +      if (field.Contains(point)) {
-+        if (!band || x >= field.x() + band->x() - 2) {
-+          continue;
-+        }
-+        spots.push_back({"the field's empty start", point});
 +        continue;
 +      }
 +      spots.push_back({"the row between its buttons", point});
@@ -9801,12 +9921,11 @@ index 0000000000000..5db969fa59ef8
 +}
 +
 +// E8: every empty part of the row is the window's title bar -- around the
-+// lights, between the buttons, the field's empty start -- and its buttons
-+// and the page are not; a double click on each kind zooms the window.
++// lights and between the buttons -- and its buttons, the field and the page
++// are not; a double click on each kind zooms the window.
 +IN_PROC_BROWSER_TEST_F(LittleWindowRowTest, TheRowIsTheTitleBar) {
 +  const std::vector<Spot> spots = EmptyRow();
-+  for (const char* const kind :
-+       {"around the traffic lights", "the field's empty start"}) {
++  for (const char* const kind : {"around the traffic lights"}) {
 +    EXPECT_TRUE(std::ranges::any_of(
 +        spots, [&](const Spot& spot) { return spot.what == kind; }))
 +        << "no spot " << kind;
@@ -15639,20 +15758,21 @@ index 9461f77149796..3c88aa9e55830 100644
      measure();
 diff --git a/chrome/test/stedding/window_top_browsertest.mm b/chrome/test/stedding/window_top_browsertest.mm
 new file mode 100644
-index 0000000000000..161ab30f52e72
+index 0000000000000..86eb70c397499
 --- /dev/null
 +++ b/chrome/test/stedding/window_top_browsertest.mm
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,332 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
 +
 +// sidebar Y29: every empty part of the window's top -- the sidebar's top row
 +// around the traffic lights and the toggle, the gutter between the sidebar
-+// and the address row, the address row between its buttons and the field's
-+// empty start, and with the row hidden the strip above the page -- moves the
-+// window when dragged and does what macOS's "Double-click a window's title
-+// bar to" setting says when double-clicked, as Safari's and Chrome's tops do.
++// and the address row, the address row between its buttons (the field is
++// whole, toolbar T34), and with the row hidden the strip above the page --
++// moves the window when dragged and does what macOS's "Double-click a
++// window's title bar to" setting says when double-clicked, as Safari's and
++// Chrome's tops do.
 +// The owner double-clicked the top of the window and it sometimes did not
 +// fill the screen (2026-10-20).
 +
@@ -15829,21 +15949,12 @@ index 0000000000000..161ab30f52e72
 +        spots.push_back({"the gutter beside the row",
 +                         gfx::Point(x, row.CenterPoint().y())});
 +      }
-+      // The address row between its buttons, and the field's empty start:
-+      // the field paints only from its chip on (toolbar T34).
-+      LocationBarView* const bar = view()->GetLocationBarView();
-+      const gfx::Rect field = InWidget(bar);
-+      const std::optional<gfx::Rect>& band = bar->stedding_band_for_testing();
++      // The address row between its buttons. The field is whole, its
++      // empty start before the chip too (toolbar T34, GitHub issue 14).
++      const gfx::Rect field = InWidget(view()->GetLocationBarView());
 +      for (int x = row.x() + 2; x < row.right() - 2; x += 4) {
 +        const gfx::Point point(x, row.CenterPoint().y());
-+        if (InAny(taken, point)) {
-+          continue;
-+        }
-+        if (field.Contains(point)) {
-+          if (!band || x >= field.x() + band->x() - 2) {
-+            continue;
-+          }
-+          spots.push_back({"the field's empty start", point});
++        if (InAny(taken, point) || field.Contains(point)) {
 +          continue;
 +        }
 +        spots.push_back({"the address row", point});
@@ -15951,7 +16062,7 @@ index 0000000000000..161ab30f52e72
 +  const std::vector<Spot> spots = EmptyTop();
 +  ASSERT_FALSE(spots.empty());
 +  for (const char* const kind :
-+       {"the sidebar's top row", "the address row", "the field's empty start"}) {
++       {"the sidebar's top row", "the address row"}) {
 +    EXPECT_TRUE(std::ranges::any_of(
 +        spots, [&](const Spot& spot) { return spot.what == kind; }))
 +        << "no spot in " << kind;
