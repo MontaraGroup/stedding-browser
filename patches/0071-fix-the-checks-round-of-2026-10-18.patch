@@ -190,7 +190,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../test/stedding/command_bar_browsertest.cc  | 572 +++++++++-
  chrome/test/stedding/defaults_browsertest.cc  |  45 +-
  chrome/test/stedding/downloads_browsertest.cc | 368 +++++++
- chrome/test/stedding/import_browsertest.cc    | 421 ++++++++
+ chrome/test/stedding/import_browsertest.cc    | 426 ++++++++
  .../test/stedding/pinned_run_browsertest.cc   | 160 +++
  .../stedding/privacy_defaults_browsertest.cc  | 199 ++++
  .../test/stedding/private_coat_browsertest.cc |  12 +-
@@ -212,7 +212,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 128 files changed, 11340 insertions(+), 777 deletions(-)
+ 128 files changed, 11345 insertions(+), 777 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -8679,7 +8679,7 @@ index 0000000000000..2f9c2add9f39e
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/import_browsertest.cc b/chrome/test/stedding/import_browsertest.cc
-index 0f65eb30b0153..ac2224cc68df4 100644
+index 0f65eb30b0153..230dd53a30e20 100644
 --- a/chrome/test/stedding/import_browsertest.cc
 +++ b/chrome/test/stedding/import_browsertest.cc
 @@ -6,30 +6,60 @@
@@ -8752,7 +8752,7 @@ index 0f65eb30b0153..ac2224cc68df4 100644
  #include "url/gurl.h"
  #include "url/url_constants.h"
  
-@@ -327,4 +359,393 @@ IN_PROC_BROWSER_TEST_F(SidebarImportTest, TheFirstLoadSettlesARedirectedHome) {
+@@ -327,4 +359,398 @@ IN_PROC_BROWSER_TEST_F(SidebarImportTest, TheFirstLoadSettlesARedirectedHome) {
    }
  }
  
@@ -8813,9 +8813,14 @@ index 0f65eb30b0153..ac2224cc68df4 100644
 +    return content::EvalJs(page, "steddingWelcomeTest.state.sources.length")
 +               .ExtractInt() > 0;
 +  })) << "the importer's list never came";
-+  // Next to the import step, its last row (the bookmarks file), Import.
++  // Past the welcome screen (welcome W14) and step 1 to the import step,
++  // its last row (the bookmarks file), Import.
 +  ASSERT_TRUE(content::ExecJs(page, R"(
-+      document.querySelector('footer button.primary').click();)"));
++      for (let i = 0;
++           i < 3 && !document.querySelector('main [data-focus^="source-"]');
++           ++i) {
++        document.querySelector('footer button.primary').click();
++      })"));
 +  ASSERT_TRUE(content::ExecJs(page, R"(
 +      const tiles = document.querySelectorAll('main [data-focus^="source-"]');
 +      tiles[tiles.length - 1].click();

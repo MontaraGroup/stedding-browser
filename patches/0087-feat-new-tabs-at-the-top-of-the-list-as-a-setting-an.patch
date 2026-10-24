@@ -21,7 +21,21 @@ order; a Space saved with one of the old five takes its new neighbour
 when it is read back (UpdatedSpaceColor). The welcome flow's swatches
 wrap to a second row.
 
-Tests: PinnedRunTest.NewTabsOpenAtTheTopWhenAsked.
+Welcome W3, W4, W5, W13, W14, W15 (the owner, 2026-10-24: a better
+first-run screen, and ask people to make Stedding the default browser):
+the flow opens on a welcome screen ahead of step 1, with Get started and
+Skip setup; the header names the six steps over short bars; the
+appearance step's choices are drawings of a Stedding window in each look,
+tinted by the Space colour chosen below them; the default-browser step
+asks with one large button beside a drawing of a link opening in
+Stedding; each step's title has a glyph; the importer rows carry marks as
+the engines do; every control shows an amber ring with the keyboard
+focus. Drawn by the page in boxes and SVG paths, in the brand's palette;
+nothing is fetched.
+
+Tests: PinnedRunTest.NewTabsOpenAtTheTopWhenAsked,
+WelcomeFlowTest.TheFlowOpensOnAWelcomeScreen,
+WelcomeFlowTest.TheDefaultStepAsksWithOneLargeButton.
 
 Why: people coming from Arc keep their pinned tabs in view by opening new
 tabs at the top (GitHub issue 22); the five muted Space colours were too
@@ -30,12 +44,12 @@ Removable when: never; it is product behaviour.
 ---
  .../api/settings_private/prefs_util.cc        |   3 +
  .../stedding_page/stedding_page.html.ts       |   7 +
- .../resources/stedding_welcome/app.css        |  82 +++++-
- .../browser/resources/stedding_welcome/app.ts |  71 ++++-
- .../browser/ui/spaces/arc_sidebar_importer.cc |  79 +++++-
+ .../resources/stedding_welcome/app.css        | 827 +++++++++++++++---
+ .../browser/resources/stedding_welcome/app.ts | 365 ++++++--
+ .../browser/ui/spaces/arc_sidebar_importer.cc |  79 +-
  .../spaces/arc_sidebar_importer_unittest.cc   |   9 +-
- chrome/browser/ui/spaces/space_colors.h       |  49 +++-
- chrome/browser/ui/spaces/space_model.cc       |  36 ++-
+ chrome/browser/ui/spaces/space_colors.h       |  49 +-
+ chrome/browser/ui/spaces/space_model.cc       |  36 +-
  chrome/browser/ui/spaces/space_model.h        |  13 +
  chrome/browser/ui/spaces/space_registry.cc    |   5 +-
  chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
@@ -44,9 +58,9 @@ Removable when: never; it is product behaviour.
  chrome/browser/ui/tabs/tab_strip_model.h      |   8 +
  .../browser/ui/webui/settings/settings_ui.cc  |   8 +
  .../stedding_welcome_handler_unittest.cc      |   2 +-
- .../test/stedding/pinned_run_browsertest.cc   | 242 ++++++++++++++++++
- chrome/test/stedding/welcome_browsertest.cc   |  49 ++++
- 18 files changed, 635 insertions(+), 47 deletions(-)
+ .../test/stedding/pinned_run_browsertest.cc   | 242 +++++
+ chrome/test/stedding/welcome_browsertest.cc   |  90 ++
+ 18 files changed, 1550 insertions(+), 212 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -81,10 +95,197 @@ index 39e05d4572407..bc6ebcee8a883 100644
        id="bookmarksShown"
        class="hr"
 diff --git a/chrome/browser/resources/stedding_welcome/app.css b/chrome/browser/resources/stedding_welcome/app.css
-index 5ee34e22a3fcf..aa389f3eb6cd1 100644
+index 5ee34e22a3fcf..7bd88c02c9c67 100644
 --- a/chrome/browser/resources/stedding_welcome/app.css
 +++ b/chrome/browser/resources/stedding_welcome/app.css
-@@ -118,6 +118,77 @@ h1 {
+@@ -8,14 +8,22 @@ body {
+   margin: 0;
+ }
+ 
++/* The brand's palette (docs/VISION.md, "Visual direction"): sand by day, a
++ * blue-to-plum gradient by night, slate and amber from the mark. */
+ #app {
+   --sand: #c8b377;
+   --ink: #1f2330;
+   --ink-muted: rgba(31, 35, 48, 0.62);
+   --card: rgba(255, 255, 255, 0.72);
++  --card-strong: rgba(255, 255, 255, 0.9);
+   --line: rgba(31, 35, 48, 0.12);
+   --accent: #2f4858;
+   --accent-ink: #f2e9de;
++  --amber: #e8b04b;
++  /* What is chosen: slate on sand, where amber would not show. */
++  --select: #2f4858;
++  --shadow: 0 10px 28px rgba(31, 35, 48, 0.16);
++  --arch: rgba(47, 72, 88, 0.05);
+   background:
+     radial-gradient(1200px 600px at 100% 0%, rgba(232, 176, 75, 0.18), transparent 60%),
+     linear-gradient(180deg, #e9dfc2 0%, var(--sand) 100%);
+@@ -23,6 +31,8 @@ body {
+   display: block;
+   font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+   height: 100%;
++  overflow: hidden;
++  position: relative;
+ }
+ 
+ @media (prefers-color-scheme: dark) {
+@@ -30,79 +40,132 @@ body {
+     --ink: #edebf2;
+     --ink-muted: rgba(237, 235, 242, 0.62);
+     --card: rgba(255, 255, 255, 0.06);
++    --card-strong: rgba(255, 255, 255, 0.12);
+     --line: rgba(255, 255, 255, 0.12);
+     --accent: #edebf2;
+     --accent-ink: #21263a;
++    --select: #e8b04b;
++    --shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
++    --arch: rgba(242, 233, 222, 0.035);
+     background:
+       radial-gradient(1200px 600px at 100% 0%, rgba(232, 176, 75, 0.1), transparent 60%),
+       linear-gradient(135deg, #21263a 0%, #31243a 100%);
+   }
+ }
+ 
++/* The mark's arch, large and faint, standing at the bottom right behind
++ * every screen. */
++#app::before {
++  border: 56px solid var(--arch);
++  border-bottom: 0;
++  border-radius: 260px 260px 0 0;
++  bottom: -260px;
++  content: '';
++  height: 620px;
++  pointer-events: none;
++  position: absolute;
++  right: -110px;
++  width: 520px;
++}
++
+ .frame {
+   box-sizing: border-box;
+   display: grid;
+   grid-template-rows: auto 1fr auto;
+   height: 100%;
+-  padding: 36px 44px 28px;
++  padding: 28px 40px 24px;
++  position: relative;
+ }
+ 
+ header {
+   align-items: center;
+   display: flex;
+-  gap: 14px;
++  gap: 12px;
+ }
+ 
+ .mark {
+   align-items: center;
+   background: #2f4858;
+-  border-radius: 12px;
++  border-radius: 10px;
+   display: inline-flex;
+-  height: 44px;
++  flex: none;
++  height: 36px;
+   justify-content: center;
+-  width: 44px;
++  width: 36px;
+ }
+ 
+ .mark svg {
+-  height: 30px;
+-  width: 30px;
++  height: 25px;
++  width: 25px;
+ }
+ 
+ .wordmark {
+-  font-size: 22px;
++  font-size: 19px;
+   font-weight: 650;
+   letter-spacing: -0.01em;
+ }
+ 
+-.dots {
++/* welcome W15: the steps by name, each over a bar; the one shown is
++ * marked, those behind are filled. */
++.progress {
+   display: flex;
+-  gap: 8px;
+-  margin-inline-start: auto;
++  gap: 14px;
++  list-style: none;
++  margin: 0 0 0 auto;
++  padding: 0;
+ }
+ 
+-.dots span {
+-  background: var(--line);
+-  border-radius: 999px;
+-  height: 8px;
+-  transition: width 200ms ease, background 200ms ease;
+-  width: 8px;
++.progress li {
++  color: var(--ink-muted);
++  font-size: 12.5px;
++  font-weight: 600;
++  padding-bottom: 7px;
++  position: relative;
++  white-space: nowrap;
+ }
+ 
+-.dots span.on {
+-  background: var(--ink);
+-  width: 26px;
++.progress li::after {
++  background: var(--line);
++  border-radius: 2px;
++  bottom: 0;
++  content: '';
++  height: 3px;
++  left: 0;
++  position: absolute;
++  right: 0;
++  transition: background 200ms ease;
+ }
+ 
+-.dots span.done {
++.progress li.done::after {
+   background: var(--ink-muted);
+ }
+ 
++.progress li.on {
++  color: var(--ink);
++}
++
++.progress li.on::after {
++  background: var(--select);
++}
++
+ main {
+   align-content: start;
+   display: grid;
+   gap: 18px;
+   overflow: auto;
+-  padding-top: 26px;
++  padding-top: 24px;
++}
++
++/* A new step comes in; a redraw of the same step does not. Opacity alone,
++ * so the step's size is the same while it runs. */
++main.enter > * {
++  animation: come-in 220ms ease both;
++}
++
++@keyframes come-in {
++  from {
++    opacity: 0;
++  }
+ }
+ 
+ /* welcome W11: more below the footer, so the step fades out there. */
+@@ -118,17 +181,362 @@ h1 {
    margin: 0;
  }
  
@@ -107,7 +308,8 @@ index 5ee34e22a3fcf..aa389f3eb6cd1 100644
 +  width: 42px;
 +}
 +
-+.step-icon svg {
++.step-icon svg,
++.file-mark svg {
 +  fill: none;
 +  height: 22px;
 +  stroke: currentColor;
@@ -117,7 +319,546 @@ index 5ee34e22a3fcf..aa389f3eb6cd1 100644
 +  width: 22px;
 +}
 +
-+/* welcome W5: the ask, its one large button and a line under it. */
+ .lead {
+   color: var(--ink-muted);
+   font-size: 16px;
+   margin: 0;
+-  max-width: 62ch;
++  max-width: 82ch;
++}
++
++.lead a {
++  color: var(--ink);
++}
++
++/* welcome W14: the welcome screen, the words beside a drawing. */
++main.cover {
++  align-content: center;
++  align-items: center;
++  gap: 36px;
++  grid-template-columns: minmax(0, 1fr) auto;
++  padding-top: 8px;
++}
++
++.intro {
++  display: grid;
++  gap: 12px;
++  justify-items: start;
++}
++
++.mark.big {
++  border-radius: 16px;
++  box-shadow: var(--shadow);
++  height: 64px;
++  margin-bottom: 6px;
++  width: 64px;
++}
++
++.mark.big svg {
++  height: 44px;
++  width: 44px;
++}
++
++.intro h1 {
++  font-size: 36px;
++}
++
++.tagline {
++  font-size: 19px;
++  font-weight: 550;
++  margin: 0;
++}
++
++.intro .lead {
++  font-size: 15px;
++  max-width: 46ch;
++}
++
++.note {
++  background: var(--card);
++  border: 1.5px solid var(--line);
++  border-inline-start: 3px solid var(--amber);
++  border-radius: 12px;
++  font-size: 13.5px;
++  margin: 4px 0 0;
++  max-width: 46ch;
++  padding: 10px 14px;
++}
++
++/* welcome W4, W14: a Stedding window drawn in boxes, sized in em so one
++ * font size scales the whole drawing. */
++.mini {
++  --m-frame: linear-gradient(180deg, #e9dfc2, #cdb980);
++  --m-page: #fbf8f1;
++  --m-chip: rgba(255, 255, 255, 0.55);
++  --m-mark: rgba(31, 35, 48, 0.5);
++  --m-bar: rgba(31, 35, 48, 0.15);
++  --m-arch: #2f4858;
++  --m-tint-alpha: 0.22;
++  background: var(--m-frame);
++  border-radius: 1.3em;
++  box-shadow: var(--shadow);
++  box-sizing: border-box;
++  display: grid;
++  flex: none;
++  font-size: 10px;
++  gap: 0.7em;
++  grid-template-columns: 12.5em 1fr;
++  height: 28em;
++  overflow: hidden;
++  padding: 0.7em;
++  position: relative;
++  width: 40em;
++}
++
++.mini.dark {
++  --m-frame: linear-gradient(150deg, #262b42, #382a42);
++  --m-page: #1a1d29;
++  --m-chip: rgba(255, 255, 255, 0.09);
++  --m-mark: rgba(237, 235, 242, 0.55);
++  --m-bar: rgba(237, 235, 242, 0.16);
++  --m-arch: #f2e9de;
++  --m-tint-alpha: 0.3;
++}
++
++@media (prefers-color-scheme: dark) {
++  .mini.current {
++    --m-frame: linear-gradient(150deg, #262b42, #382a42);
++    --m-page: #1a1d29;
++    --m-chip: rgba(255, 255, 255, 0.09);
++    --m-mark: rgba(237, 235, 242, 0.55);
++    --m-bar: rgba(237, 235, 242, 0.16);
++    --m-arch: #f2e9de;
++    --m-tint-alpha: 0.3;
++  }
++}
++
++/* Follow the system: the day's window with the night's laid over it, cut on
++ * the diagonal. */
++.mini-pair {
++  flex: none;
++  position: relative;
++}
++
++.mini-pair > .mini + .mini {
++  clip-path: polygon(62% 0, 100% 0, 100% 100%, 38% 100%);
++  inset: 0;
++  position: absolute;
++}
++
++.mini.tinted::before {
++  background: var(--tint);
++  content: '';
++  inset: 0;
++  opacity: var(--m-tint-alpha);
++  pointer-events: none;
++  position: absolute;
++}
++
++.mini > * {
++  position: relative;
++}
++
++.mini-side {
++  display: flex;
++  flex-direction: column;
++  gap: 0.7em;
++  min-width: 0;
++  padding: 0.5em 0.2em 0.2em;
++}
++
++.mini-url {
++  background: var(--m-chip);
++  border-radius: 0.8em;
++  flex: none;
++  height: 2.2em;
++}
++
++.mini-essentials {
++  display: grid;
++  gap: 0.6em;
++  grid-template-columns: 1fr 1fr;
++}
++
++.mini-essentials span {
++  align-items: center;
++  background: var(--m-chip);
++  border-radius: 0.9em;
++  display: flex;
++  height: 3em;
++  justify-content: center;
++}
++
++.mini-essentials span::after {
++  background: var(--dot);
++  border-radius: 0.4em;
++  content: '';
++  height: 1.3em;
++  width: 1.3em;
++}
++
++.mini-essentials span:nth-child(1) {
++  --dot: #e8b04b;
++}
++
++.mini-essentials span:nth-child(2) {
++  --dot: #5b7a99;
++}
++
++.mini-essentials span:nth-child(3) {
++  --dot: #6f9a7a;
++}
++
++.mini-essentials span:nth-child(4) {
++  --dot: #b5735a;
++}
++
++.mini-space {
++  background: var(--m-mark);
++  border-radius: 0.45em;
++  flex: none;
++  height: 0.9em;
++  margin-top: 0.3em;
++  opacity: 0.75;
++  width: 55%;
++}
++
++.mini-rows {
++  display: flex;
++  flex-direction: column;
++  gap: 0.35em;
++}
++
++.mini-rows span {
++  align-items: center;
++  border-radius: 0.7em;
++  display: flex;
++  gap: 0.7em;
++  height: 2.2em;
++  padding: 0 0.7em;
++}
++
++.mini-rows span.on {
++  background: var(--m-chip);
++}
++
++.mini-rows span::before {
++  background: var(--m-mark);
++  border-radius: 0.35em;
++  content: '';
++  flex: none;
++  height: 1.1em;
++  opacity: 0.6;
++  width: 1.1em;
++}
++
++.mini-rows span::after {
++  background: var(--m-bar);
++  border-radius: 0.33em;
++  content: '';
++  height: 0.65em;
++  width: var(--w, 70%);
++}
++
++.mini-rows span:nth-child(1) {
++  --w: 72%;
++}
++
++.mini-rows span:nth-child(2) {
++  --w: 58%;
++}
++
++.mini-rows span:nth-child(3) {
++  --w: 80%;
++}
++
++.mini-rows span:nth-child(4) {
++  --w: 50%;
++}
++
++.mini-spaces {
++  display: flex;
++  gap: 0.7em;
++  justify-content: center;
++  margin-top: auto;
++  padding-bottom: 0.3em;
++}
++
++.mini-spaces span {
++  background: var(--m-bar);
++  border-radius: 50%;
++  height: 0.8em;
++  width: 0.8em;
++}
++
++.mini-spaces span.on {
++  background: var(--m-mark);
++}
++
++.mini-page {
++  background: var(--m-page);
++  border-radius: 0.9em;
++  box-shadow: 0 0.2em 0.8em rgba(0, 0, 0, 0.08);
++  display: flex;
++  flex-direction: column;
++  gap: 0.7em;
++  padding: 2em 2.2em;
++}
++
++.mini-line {
++  background: var(--m-bar);
++  border-radius: 0.4em;
++  display: block;
++  flex: none;
++  height: 0.8em;
++  width: 70%;
++}
++
++.mini-line.short {
++  width: 45%;
++}
++
++.mini-page svg {
++  margin: auto;
++  max-width: 11em;
++  width: 42%;
++}
++
++.mini-page svg path {
++  fill: none;
++  opacity: 0.18;
++  stroke: var(--m-arch);
++  stroke-linecap: round;
++  stroke-linejoin: round;
++  stroke-width: 11;
++}
++
++.mini-page svg circle {
++  fill: #e8b04b;
++  opacity: 0.85;
++}
++
++.cover .mini {
++  font-size: 9.2px;
+ }
+ 
+ .list {
+   display: grid;
+   gap: 10px;
+-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
++  grid-template-columns: repeat(3, minmax(0, 1fr));
+ }
+ 
+ .tile {
+@@ -140,10 +548,10 @@ h1 {
+   cursor: pointer;
+   display: flex;
+   font: inherit;
+-  gap: 14px;
+-  padding: 14px 16px;
++  gap: 12px;
++  padding: 12px 14px;
+   text-align: start;
+-  transition: border-color 120ms ease, transform 120ms ease;
++  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+ }
+ 
+ .tile:hover {
+@@ -151,23 +559,32 @@ h1 {
+ }
+ 
+ .tile[aria-pressed='true'] {
+-  border-color: var(--ink);
++  border-color: var(--select);
++  box-shadow: 0 0 0 1px var(--select);
+ }
+ 
+-.tile .glyph {
++.glyph {
+   align-items: center;
+-  border-radius: 8px;
++  border-radius: 10px;
+   display: inline-flex;
+   flex: none;
+   font-size: 20px;
+-  height: 28px;
++  height: 34px;
+   justify-content: center;
+-  width: 28px;
++  width: 34px;
++}
++
++/* welcome W2 (S-77): a search engine's mark, its initial on its colour;
++ * the importers' rows and Arc's block take marks the same way (W3). */
++.engine-mark {
++  font: 700 17px/1 system-ui, sans-serif;
+ }
+ 
+-/* welcome W2 (S-77): a search engine's mark, its initial on its colour. */
+-.tile .engine-mark {
+-  font: 700 16px/1 system-ui, sans-serif;
++.file-mark {
++  background: var(--card-strong);
++  border: 1.5px solid var(--line);
++  box-sizing: border-box;
++  color: var(--ink);
+ }
+ 
+ .tile .name {
+@@ -189,92 +606,58 @@ h1 {
+ }
+ 
+ .tile[aria-pressed='true'] .check {
+-  background: var(--ink);
+-  border-color: var(--ink);
+-  box-shadow: inset 0 0 0 3px var(--card);
++  background: var(--select);
++  border-color: var(--select);
++  box-shadow: inset 0 0 0 3px var(--card-strong);
+ }
+ 
+-/* No cap on the width: Windows spells its chords out (Ctrl+Alt+Shift+2), and
+- * in a 60ch grid four of its rows wrapped and the step ran 44px under its
+- * footer (welcome W6). */
+-.keys {
++/* welcome W4: the appearance step's three drawings. */
++.looks {
+   display: grid;
+-  gap: 8px 22px;
+-  grid-template-columns: max-content 1fr;
+-}
+-
+-kbd {
+-  background: var(--card);
+-  border: 1px solid var(--line);
+-  border-radius: 7px;
+-  font: 600 13px/1 system-ui, sans-serif;
+-  padding: 6px 9px;
+-  white-space: nowrap;
+-}
+-
+-footer {
+-  align-items: center;
+-  display: flex;
+-  gap: 12px;
+-  justify-content: flex-end;
+-  padding-top: 18px;
+-}
+-
+-footer .status {
+-  color: var(--ink-muted);
+-  font-size: 13px;
+-  margin-inline-end: auto;
+-}
+-
+-button.primary,
+-button.secondary,
+-button.quiet {
+-  border: 0;
+-  border-radius: 10px;
+-  cursor: pointer;
+-  font: 600 14px/1 system-ui, sans-serif;
+-  padding: 11px 18px;
+-}
+-
+-button.primary {
+-  background: var(--accent);
+-  color: var(--accent-ink);
++  gap: 14px;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
+ }
+ 
+-button.secondary {
++.look {
+   background: var(--card);
+   border: 1.5px solid var(--line);
++  border-radius: 16px;
+   color: var(--ink);
++  cursor: pointer;
++  display: grid;
++  font: inherit;
++  gap: 10px;
++  justify-items: center;
++  padding: 12px 10px 10px;
++  transition: border-color 120ms ease, box-shadow 120ms ease;
+ }
+ 
+-button.quiet {
+-  background: transparent;
+-  color: var(--ink-muted);
++.look .mini {
++  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
++  font-size: 6px;
+ }
+ 
+-button:disabled {
+-  cursor: default;
+-  opacity: 0.5;
++.look .name {
++  font-weight: 600;
+ }
+ 
+-.import-row {
+-  align-items: center;
+-  display: flex;
+-  flex-wrap: wrap;
+-  gap: 12px;
++.look[aria-checked='true'] {
++  border-color: var(--select);
++  box-shadow: 0 0 0 1px var(--select);
+ }
+ 
+-.import-row label {
+-  align-items: center;
+-  display: inline-flex;
+-  gap: 6px;
++.look[aria-checked='true'] .name::before {
++  content: '\2713\00a0';
+ }
+ 
+ /* The Space colour swatches on the appearance step (welcome W7). */
++/* Twelve of them since 2026-10-23 (spaces B40): they wrap to a second row
++ * rather than run out of the card on a narrow window. */
+ .swatches {
+   display: flex;
+-  gap: 12px;
+-  margin-top: 8px;
++  flex-wrap: wrap;
++  gap: 10px;
++  max-width: 480px;
+ }
+ 
+ .swatch {
+@@ -282,9 +665,9 @@ button:disabled {
+   border-radius: 50%;
+   box-shadow: inset 0 0 0 2px var(--card);
+   cursor: pointer;
+-  height: 34px;
++  height: 30px;
+   padding: 0;
+-  width: 34px;
++  width: 30px;
+ }
+ 
+ .swatch[aria-checked='true'] {
+@@ -336,24 +719,225 @@ button:disabled {
+   color: var(--accent-ink);
+ }
+ 
+-.lead a {
++/* welcome W5: the ask beside a drawing of what it does. */
++main.split {
++  align-content: center;
++  align-items: center;
++  gap: 36px;
++  grid-template-columns: minmax(0, 1fr) auto;
++}
++
++.default-text {
++  display: grid;
++  gap: 18px;
++}
++
 +.default-ask {
 +  align-content: start;
 +  display: grid;
@@ -145,10 +886,15 @@ index 5ee34e22a3fcf..aa389f3eb6cd1 100644
 +  background: transparent;
 +  border: 1.5px solid var(--line);
 +  box-shadow: none;
-+  color: var(--ink);
+   color: var(--ink);
 +  opacity: 1;
-+}
-+
+ }
+ 
+-/* Motion follows the system (docs/features/motion.md O1). */
+-@media (prefers-reduced-motion: reduce) {
+-  .dots span,
+-  .tile {
+-    transition: none;
 +.default-ask.done button.cta::before {
 +  content: '\2713\00a0\00a0';
 +}
@@ -159,50 +905,368 @@ index 5ee34e22a3fcf..aa389f3eb6cd1 100644
 +  margin: 0;
 +}
 +
- .lead {
-   color: var(--ink-muted);
-   font-size: 16px;
-@@ -239,6 +310,7 @@ button.quiet {
- button.primary {
-   background: var(--accent);
-   color: var(--accent-ink);
++.default-art {
++  margin: 0 0 18px 34px;
++  position: relative;
++}
++
++.default-art .mini {
++  font-size: 8.2px;
++}
++
++/* A message with a link in it, in front of the window it opens in. */
++.message {
++  background: var(--card-strong);
++  border-radius: 14px 14px 14px 4px;
++  bottom: -18px;
++  box-shadow: var(--shadow);
++  display: grid;
++  gap: 7px;
++  left: -34px;
++  padding: 13px 15px;
++  position: absolute;
++  width: 140px;
++}
++
++@media (prefers-color-scheme: dark) {
++  .message {
++    background: #3a3550;
+   }
+ }
+ 
+-/* import I4: the Arc row on the import step. */
+-.arc-import {
+-  border: 1px solid var(--stedding-hairline, rgba(128, 128, 128, 0.3));
++.message .mini-line {
++  background: var(--line);
++  height: 7px;
++}
++
++.message .link {
++  background: var(--amber);
++  border-radius: 4px;
++  display: block;
++  height: 7px;
++  width: 82%;
++}
++
++/* No cap on the width: Windows spells its chords out (Ctrl+Alt+Shift+2), and
++ * in a 60ch grid four of its rows wrapped and the step ran 44px under its
++ * footer (welcome W6). */
++.keys {
++  display: grid;
++  gap: 8px 22px;
++  grid-template-columns: max-content 1fr;
++}
++
++/* Every key cap as wide as the widest, its chord in the middle. */
++kbd {
++  background: var(--card-strong);
++  border: 1px solid var(--line);
++  border-bottom-width: 2px;
++  border-radius: 7px;
++  font: 600 13px/1 system-ui, sans-serif;
++  justify-self: stretch;
++  padding: 5px 9px;
++  text-align: center;
++  white-space: nowrap;
++}
++
++footer {
++  align-items: center;
++  display: flex;
++  gap: 12px;
++  justify-content: flex-end;
++  padding-top: 18px;
++}
++
++footer .status {
++  color: var(--ink-muted);
++  font-size: 13px;
++  margin-inline-end: auto;
++}
++
++button.primary,
++button.secondary,
++button.quiet {
++  border: 0;
+   border-radius: 12px;
+-  margin-bottom: 16px;
+-  padding: 12px 16px;
++  cursor: pointer;
++  font: 600 14px/1 system-ui, sans-serif;
++  padding: 12px 20px;
++}
++
++button.primary {
++  background: var(--accent);
++  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
++  color: var(--accent-ink);
 +  min-width: 96px;
- }
- 
- button.secondary {
-@@ -271,10 +343,14 @@ button:disabled {
- }
- 
- /* The Space colour swatches on the appearance step (welcome W7). */
-+/* Twelve of them since 2026-10-23 (spaces B40): they wrap to a second row
-+ * rather than run out of the card on a narrow window. */
- .swatches {
-   display: flex;
--  gap: 12px;
++}
++
++/* The way on: an arrow after the label, outside its text. */
++button.primary.forward::after {
++  content: '\00a0\2192';
++}
++
++button.primary:hover:not(:disabled),
++button.secondary:hover:not(:disabled) {
++  filter: brightness(1.06);
++}
++
++button.secondary {
++  background: var(--card);
++  border: 1.5px solid var(--line);
++  color: var(--ink);
++}
++
++button.quiet {
++  background: transparent;
++  color: var(--ink-muted);
++}
++
++button.quiet:hover {
++  color: var(--ink);
++}
++
++button:disabled {
++  cursor: default;
++  opacity: 0.5;
++}
++
++button:focus-visible,
++input:focus-visible,
++a:focus-visible {
++  outline: 2px solid var(--amber);
++  outline-offset: 2px;
++}
++
++.import-row {
++  align-items: center;
++  display: flex;
 +  flex-wrap: wrap;
-+  gap: 10px;
-   margin-top: 8px;
-+  max-width: 480px;
++  gap: 12px;
++}
++
++.import-row label {
++  align-items: center;
++  display: inline-flex;
++  gap: 6px;
++}
++
++/* import I4: Arc's block on the import step, ahead of the browsers. */
++.arc-import {
++  background: var(--card);
++  border: 1.5px solid var(--line);
++  border-inline-start: 3px solid var(--amber);
++  border-radius: 14px;
++  display: grid;
++  gap: 8px;
++  padding: 14px 16px;
++}
++
++.arc-head {
++  align-items: center;
++  display: flex;
++  gap: 12px;
++}
++
++.arc-head .engine-mark {
++  background: var(--accent);
++  color: var(--accent-ink);
  }
  
- .swatch {
-@@ -282,9 +358,9 @@ button:disabled {
-   border-radius: 50%;
-   box-shadow: inset 0 0 0 2px var(--card);
-   cursor: pointer;
--  height: 34px;
-+  height: 30px;
-   padding: 0;
--  width: 34px;
-+  width: 30px;
+ .arc-import .name {
+@@ -361,10 +945,21 @@ button:disabled {
  }
  
- .swatch[aria-checked='true'] {
+ .arc-import .hint {
+-  margin-top: 2px;
+-  opacity: 0.75;
++  color: var(--ink-muted);
++  font-size: 13px;
+ }
+ 
+ .arc-import .import-row {
+-  margin-top: 10px;
++  margin-top: 4px;
++}
++
++/* Motion follows the system (docs/features/motion.md O1). */
++@media (prefers-reduced-motion: reduce) {
++  main.enter > *,
++  .progress li::after,
++  .tile,
++  .look {
++    animation: none;
++    transition: none;
++  }
+ }
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index debd2903cb537..e12f24628dad6 100644
+index debd2903cb537..e3293c00fcca6 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
-@@ -241,10 +241,40 @@ function checkbox(label: string, checked: boolean, focusKey: string,
+@@ -2,8 +2,9 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-// The first-run flow: six steps, each skippable, Finish at the end. Plain
+-// DOM on purpose: no Lit dependency means no visibility hunk upstream.
++// The first-run flow: a welcome screen, then six steps, each skippable,
++// Finish at the end. Plain DOM on purpose: no Lit dependency means no
++// visibility hunk upstream.
+ //
+ // chrome.send rather than Mojo, deliberately: the page reuses Chromium's own
+ // ImportDataHandler, which speaks chrome.send, and a Mojo interface for six
+@@ -29,6 +30,19 @@ type Step = 'search'|'import'|'appearance'|'behaviour'|'default'|'keys';
+ const STEPS: Step[] =
+     ['search', 'import', 'appearance', 'behaviour', 'default', 'keys'];
+ 
++// welcome W14: the screen the flow opens on, ahead of step 1.
++type Screen = 'welcome'|Step;
++
++// welcome W15: the steps' names along the header, so the way ahead shows.
++const STEP_NAMES: Record<Step, string> = {
++  search: 'Search',
++  import: 'Import',
++  appearance: 'Appearance',
++  behaviour: 'Behaviour',
++  default: 'Default browser',
++  keys: 'Keys',
++};
++
+ // The chords the flow names are the platform's: the Mac's glyphs there,
+ // Ctrl and Alt spelled out on Windows (windows N7).
+ const isMac = /Mac/.test(navigator.userAgent);
+@@ -91,7 +105,7 @@ const BEHAVIOURS: Array<{
+ ];
+ 
+ const state = {
+-  step: 'search' as Step,
++  step: 'welcome' as Screen,
+   engines: [] as SearchEngine[],
+   chosenEngine: 0,
+   sources: [] as ImportSource[],
+@@ -110,6 +124,8 @@ const state = {
+   arcStatus: '',
+   spaceColors: [] as SpaceColor[],
+   spaceColor: 0,
++  // A swatch clicked in this flow: the drawings take its tint (W4).
++  spaceColorChosen: false,
+   // Until getBehaviour answers: a fresh profile's values (W12).
+   behaviour: {archiveHours: 0, closedForm: 0, sleepMinutes: 0} as Behaviour,
+   defaultState: 'unknown',
+@@ -210,6 +226,108 @@ function engineMark(engine: SearchEngine): HTMLSpanElement {
+   return glyph;
+ }
+ 
++// welcome W3: each importer's row gets a mark the way an engine does, its
++// initial on a colour it is known by; the bookmarks file a page. Chromium
++// names the sources ("Safari", "Mozilla Firefox", "Microsoft Edge").
++const SOURCE_MARKS: Array<[RegExp, string, string, string]> = [
++  [/safari/i, 'S', '#1b84e8', '#fff'],
++  [/firefox/i, 'F', '#e2620c', '#fff'],
++  [/edge/i, 'E', '#0f7c80', '#fff'],
++  [/explorer/i, 'e', '#1b6ac9', '#fff'],
++];
++
++function sourceMark(source: ImportSource, isFile: boolean): HTMLSpanElement {
++  if (isFile) {
++    const glyph = icon(
++        ['M7 3h7l4 4v14H7z', 'M14 3v4h4', 'M10 12h5', 'M10 16h5'],
++        'glyph engine-mark file-mark');
++    return glyph;
++  }
++  const known = SOURCE_MARKS.find(([pattern]) => pattern.test(source.name));
++  const initial = source.name.match(/[\p{L}\p{N}]/u)?.[0] ?? '?';
++  const glyph = el('span', 'glyph engine-mark',
++                   known ? known[1] : initial.toUpperCase());
++  glyph.setAttribute('aria-hidden', 'true');
++  glyph.style.background = known ? known[2] : 'var(--accent)';
++  glyph.style.color = known ? known[3] : 'var(--accent-ink)';
++  return glyph;
++}
++
++// A glyph the page draws: stroked paths on a 24 by 24 grid, in the text's
++// colour. Nothing is fetched.
++function icon(paths: string[], className: string): HTMLSpanElement {
++  const wrap = el('span', className);
++  wrap.setAttribute('aria-hidden', 'true');
++  const ns = 'http://www.w3.org/2000/svg';
++  const svg = document.createElementNS(ns, 'svg');
++  svg.setAttribute('viewBox', '0 0 24 24');
++  for (const d of paths) {
++    const path = document.createElementNS(ns, 'path');
++    path.setAttribute('d', d);
++    svg.append(path);
++  }
++  wrap.append(svg);
++  return wrap;
++}
++
++// welcome W4, W14: a Stedding window drawn in boxes -- the sidebar with its
++// address field, four essentials, a Space's name and its tabs, the Spaces
++// along the bottom, and the page beside it with the arch of the mark. The
++// look is 'light', 'dark', 'auto' (the day's window with the night's laid
++// over it, cut on the diagonal) or 'current' (the page's own scheme). A tint is the first Space's colour, laid over the sidebar
++// as the browser lays it (spaces B11).
++type Look = 'light'|'dark'|'auto'|'current';
++
++function miniWindow(look: Look, tint?: string): HTMLDivElement {
++  if (look === 'auto') {
++    const pair = el('div', 'mini-pair');
++    pair.append(miniWindow('light', tint), miniWindow('dark', tint));
++    return pair;
++  }
++  const win = el('div', `mini ${look}`);
++  win.setAttribute('aria-hidden', 'true');
++  if (tint) {
++    win.style.setProperty('--tint', tint);
++    win.classList.add('tinted');
++  }
++  const side = el('div', 'mini-side');
++  const essentials = el('div', 'mini-essentials');
++  for (let i = 0; i < 4; ++i) {
++    essentials.append(el('span'));
++  }
++  const rows = el('div', 'mini-rows');
++  for (let i = 0; i < 4; ++i) {
++    rows.append(el('span', i === 1 ? 'on' : ''));
++  }
++  const spaces = el('div', 'mini-spaces');
++  for (let i = 0; i < 3; ++i) {
++    spaces.append(el('span', i === 0 ? 'on' : ''));
++  }
++  side.append(el('div', 'mini-url'), essentials, el('div', 'mini-space'),
++              rows, spaces);
++  const page = el('div', 'mini-page');
++  const ns = 'http://www.w3.org/2000/svg';
++  const arch = document.createElementNS(ns, 'svg');
++  arch.setAttribute('viewBox', '0 0 120 120');
++  const path = document.createElementNS(ns, 'path');
++  path.setAttribute('d', 'M26 98 V58 a34 34 0 0 1 68 0 V98');
++  const dot = document.createElementNS(ns, 'circle');
++  dot.setAttribute('cx', '60');
++  dot.setAttribute('cy', '79');
++  dot.setAttribute('r', '11');
++  arch.append(path, dot);
++  page.append(el('span', 'mini-line'), el('span', 'mini-line short'), arch);
++  win.append(side, page);
++  return win;
++}
++
++// The tint the drawings take: the swatch chosen in this flow, else none,
++// as a profile with one Space shows none.
++function chosenTint(): string|undefined {
++  return state.spaceColorChosen ? state.spaceColors[state.spaceColor]?.color :
++                                  undefined;
++}
++
+ function tile(opts: {
+   mark?: HTMLElement, glyph?: string, name: string, hint?: string,
+   pressed: boolean, focusKey: string, onClick: () => void,
+@@ -241,12 +359,56 @@ function checkbox(label: string, checked: boolean, focusKey: string,
    return wrap;
  }
  
@@ -220,31 +1284,48 @@ index debd2903cb537..e12f24628dad6 100644
 +};
 +
 +function stepIcon(step: Step): HTMLSpanElement {
-+  const wrap = el('span', 'step-icon');
-+  wrap.setAttribute('aria-hidden', 'true');
-+  const ns = 'http://www.w3.org/2000/svg';
-+  const svg = document.createElementNS(ns, 'svg');
-+  svg.setAttribute('viewBox', '0 0 24 24');
-+  for (const d of STEP_GLYPHS[step]) {
-+    const path = document.createElementNS(ns, 'path');
-+    path.setAttribute('d', d);
-+    svg.append(path);
-+  }
-+  wrap.append(svg);
-+  return wrap;
++  return icon(STEP_GLYPHS[step], 'step-icon');
 +}
 +
  function renderStep(main: HTMLElement) {
    main.replaceChildren();
-   const heading = (title: string, lead: string) => {
+-  const heading = (title: string, lead: string) => {
 -    main.append(el('h1', undefined, title), el('p', 'lead', lead));
++  const heading = (title: string, lead: string, into: HTMLElement = main) => {
 +    const row = el('div', 'heading');
-+    row.append(stepIcon(state.step), el('h1', undefined, title));
-+    main.append(row, el('p', 'lead', lead));
++    row.append(stepIcon(state.step as Step), el('h1', undefined, title));
++    into.append(row, el('p', 'lead', lead));
    };
    switch (state.step) {
++    case 'welcome': {
++      // welcome W14: the mark, the name and what the steps ahead do, beside
++      // a drawing of the window the flow sets up.
++      main.classList.add('cover');
++      const intro = el('div', 'intro');
++      const big = el('span', 'mark big');
++      big.append(mark());
++      intro.append(
++          big, el('h1', undefined, 'Welcome to Stedding'),
++          el('p', 'tagline', 'Your haven on the web.'),
++          el('p', 'lead',
++             'Six short steps set it up: a search engine, your bookmarks, ' +
++                 'the look, how tabs behave, the default browser, and the ' +
++                 'keys worth knowing. Skip any of them; Settings has them ' +
++                 'all.'));
++      // import I4: Arc found, so step 2 has more to offer than bookmarks.
++      if (state.arc && state.arc.found) {
++        intro.append(el('p', 'note',
++            'Arc is on this ' + (isMac ? 'Mac' : 'computer') +
++                ': step 2 moves its Spaces, tabs, history and passwords ' +
++                'in one click.'));
++      }
++      main.append(intro, miniWindow('current'));
++      break;
++    }
      case 'search': {
-@@ -273,7 +303,7 @@ function renderStep(main: HTMLElement) {
+       heading('Choose your search engine',
+               'Every search from the address bar and ' + k('⌘T', 'Ctrl+T') +
+@@ -273,18 +435,27 @@ function renderStep(main: HTMLElement) {
        heading('Bring your bookmarks and history',
                'From another browser on this ' + (isMac ? 'Mac' : 'computer') +
                '. Nothing leaves the machine; it is copied into your profile.');
@@ -252,8 +1333,18 @@ index debd2903cb537..e12f24628dad6 100644
 +      // import I4, I27: Arc's sidebar, when this computer has one.
        if (state.arc && state.arc.found) {
          const arc = el('div', 'arc-import');
-         arc.append(el('div', 'name', 'Everything from Arc'),
-@@ -283,8 +313,11 @@ function renderStep(main: HTMLElement) {
+-        arc.append(el('div', 'name', 'Everything from Arc'),
+-                   el('div', 'hint', state.arc.summary));
++        const head = el('div', 'arc-head');
++        const arcMark = el('span', 'glyph engine-mark', 'A');
++        arcMark.setAttribute('aria-hidden', 'true');
++        const title = el('div');
++        title.append(el('div', 'name', 'Everything from Arc'),
++                     el('div', 'hint', state.arc.summary));
++        head.append(arcMark, title);
++        arc.append(head);
+         if (state.arc.arcRunning) {
+           arc.append(el('div', 'hint', 'Arc is running: quit it first for a complete copy.'));
          }
          // import I21: one click moves the sidebar, the history and the
          // passwords; each is a checkbox for whoever wants less.
@@ -267,21 +1358,90 @@ index debd2903cb537..e12f24628dad6 100644
          const choices = el('div', 'import-row');
          choices.append(
              checkbox('Spaces', state.arcSpaces, 'arc-spaces', v => state.arcSpaces = v),
-@@ -397,7 +430,7 @@ function renderStep(main: HTMLElement) {
-         }));
+@@ -326,9 +497,12 @@ function renderStep(main: HTMLElement) {
+       const list = el('div', 'list');
+       list.setAttribute('role', 'radiogroup');
+       list.setAttribute('aria-label', 'Import from');
++      const fileRow = state.sources[state.sources.length - 1];
+       for (const s of state.sources) {
+         list.append(tile({
+-          glyph: '🗂️', name: s.name, hint: s.profileName || '',
++          mark: sourceMark(s, s === fileRow),
++          name: s === fileRow ? 'Bookmarks file' : s.name,
++          hint: s === fileRow ? 'Exported as HTML' : s.profileName || '',
+           pressed: state.chosenSource === s.index,
+           focusKey: `source-${s.index}`,
+           onClick: () => {
+@@ -377,27 +551,32 @@ function renderStep(main: HTMLElement) {
+     case 'appearance': {
+       heading('Light or dark',
+               'Sand by day, a blue-to-plum gradient by night. Follow the system, or pick one.');
+-      const list = el('div', 'list');
+-      list.setAttribute('role', 'radiogroup');
+-      list.setAttribute('aria-label', 'Appearance');
+-      const schemes: Array<[string, string, string]> = [
+-        ['system', 'Follow the system', '🌗'],
+-        ['light', 'Light', '☀️'],
+-        ['dark', 'Dark', '🌙'],
++      // welcome W4: each choice a drawing of the window in that look, tinted
++      // with the swatch chosen below.
++      const looks = el('div', 'looks');
++      looks.setAttribute('role', 'radiogroup');
++      looks.setAttribute('aria-label', 'Appearance');
++      const schemes: Array<[string, string, Look]> = [
++        ['system', 'Follow the system', 'auto'],
++        ['light', 'Light', 'light'],
++        ['dark', 'Dark', 'dark'],
+       ];
+-      for (const [scheme, name, glyph] of schemes) {
+-        list.append(tile({
+-          glyph, name, pressed: state.scheme === scheme,
+-          focusKey: `scheme-${scheme}`,
+-          onClick: () => {
+-            state.scheme = scheme;
+-            chrome.send('setAppearance', [scheme]);
+-            render();
+-          },
+-        }));
++      for (const [scheme, name, look] of schemes) {
++        const card = el('button', 'look');
++        card.type = 'button';
++        card.dataset['focus'] = `scheme-${scheme}`;
++        card.setAttribute('role', 'radio');
++        card.setAttribute('aria-checked', String(state.scheme === scheme));
++        card.append(miniWindow(look, chosenTint()), el('span', 'name', name));
++        card.addEventListener('click', () => {
++          state.scheme = scheme;
++          chrome.send('setAppearance', [scheme]);
++          render();
++        });
++        looks.append(card);
        }
-       main.append(list);
+-      main.append(list);
 -      // The first Space's colour (W7): the switcher's five swatches.
++      main.append(looks);
 +      // The first Space's colour (W7): the switcher's twelve swatches.
        if (state.spaceColors.length > 0) {
          const swatches = el('div', 'swatches');
          swatches.setAttribute('role', 'radiogroup');
-@@ -469,18 +502,28 @@ function renderStep(main: HTMLElement) {
+@@ -414,6 +593,7 @@ function renderStep(main: HTMLElement) {
+               'aria-checked', state.spaceColor === index ? 'true' : 'false');
+           swatch.addEventListener('click', () => {
+             state.spaceColor = index;
++            state.spaceColorChosen = true;
+             chrome.send('setSpaceColor', [index]);
+             render();
+           });
+@@ -469,18 +649,39 @@ function renderStep(main: HTMLElement) {
        break;
      }
      case 'default': {
 +      // welcome W5: the one step that asks for something; its button is the
 +      // step's own call, the largest on any step, and says what it does.
++      // Beside it, a drawing of what it does: a link in a message, and the
++      // window it opens in.
++      main.classList.add('split');
++      const text = el('div', 'default-text');
        heading('Make Stedding your default browser',
 -              'Links from other apps open here. ' +
 -              (isMac ? 'macOS asks once to confirm.'
@@ -290,7 +1450,7 @@ index debd2903cb537..e12f24628dad6 100644
 -      const button = el('button', 'secondary',
 -          state.defaultState === 'default' ? 'Stedding is the default' : 'Set as default');
 +              'Then the links you click in mail, chat and other apps open in ' +
-+              'Stedding, with your Spaces and essentials.');
++              'Stedding, with your Spaces and essentials.', text);
 +      const isDefault = state.defaultState === 'default';
 +      const ask = el('div', 'default-ask' + (isDefault ? ' done' : ''));
 +      const button = el('button', 'cta',
@@ -310,10 +1470,134 @@ index debd2903cb537..e12f24628dad6 100644
 +                             : 'Windows opens its Default apps settings; ' +
 +                               'choose Stedding there. ') +
 +                          'You can change it back any time.'));
-+      main.append(ask);
++      text.append(ask);
++      const art = el('div', 'default-art');
++      art.setAttribute('aria-hidden', 'true');
++      const message = el('div', 'message');
++      message.append(el('span', 'mini-line'), el('span', 'link'),
++                     el('span', 'mini-line short'));
++      art.append(miniWindow('current', chosenTint()), message);
++      main.append(text, art);
        break;
      }
      case 'keys': {
+@@ -612,50 +813,81 @@ function refocus(app: HTMLElement, place: FocusPlace|null) {
+   }
+ }
+ 
++// The screen render() last drew.
++let shownStep: Screen|null = null;
++
+ function render() {
+   const app = document.getElementById('app')!;
+   const place = focusPlace(app);
+   app.replaceChildren();
+   const frame = el('div', 'frame');
+-  const index = STEPS.indexOf(state.step);
++  // -1 on the welcome screen, which is no step.
++  const index = STEPS.indexOf(state.step as Step);
+ 
+   const header = el('header');
+   const markWrap = el('span', 'mark');
+   markWrap.append(mark());
+   header.append(markWrap, el('span', 'wordmark', 'Stedding'));
+-  const dots = el('div', 'dots');
+-  dots.setAttribute('aria-hidden', 'true');
+-  STEPS.forEach((_, i) => {
+-    dots.append(el('span', i === index ? 'on' : i < index ? 'done' : ''));
++  // welcome W15: the steps by name, the one shown marked, those behind
++  // filled. The footer says the same in words for a screen reader.
++  const progress = el('ol', 'progress');
++  progress.setAttribute('aria-hidden', 'true');
++  STEPS.forEach((step, i) => {
++    progress.append(el('li', i === index ? 'on' : i < index ? 'done' : '',
++                       STEP_NAMES[step]));
+   });
+-  header.append(dots);
++  header.append(progress);
+ 
+   const main = el('main');
+   renderStep(main);
++  // A new screen fades in; a late answer's redraw of the same one does not.
++  if (state.step !== shownStep) {
++    main.classList.add('enter');
++    shownStep = state.step;
++  }
+ 
+   const footer = el('footer');
+-  footer.append(el('span', 'status', `Step ${index + 1} of ${STEPS.length}`));
+-  const skip = el('button', 'quiet', 'Skip');
+-  skip.dataset['focus'] = 'skip';
+-  skip.addEventListener('click', () => chrome.send('finish'));
+-  const back = el('button', 'secondary', 'Back');
+-  back.dataset['focus'] = 'back';
+-  back.disabled = index === 0;
+-  back.addEventListener('click', () => {
+-    state.step = STEPS[Math.max(0, index - 1)]!;
+-    render();
+-  });
+-  const next = el('button', 'primary', index === STEPS.length - 1 ? 'Finish' : 'Next');
+-  next.dataset['focus'] = 'next';
+-  next.addEventListener('click', () => {
+-    if (index === STEPS.length - 1) {
+-      chrome.send('finish');
+-    } else {
+-      state.step = STEPS[index + 1]!;
++  if (index < 0) {
++    // welcome W14: Get started, or Skip setup, which ends the flow as Skip
++    // does on any step.
++    footer.append(el('span', 'status', 'Six steps, each one skippable'));
++    const skipAll = el('button', 'quiet', 'Skip setup');
++    skipAll.dataset['focus'] = 'skip';
++    skipAll.addEventListener('click', () => chrome.send('finish'));
++    const start = el('button', 'primary forward', 'Get started');
++    start.dataset['focus'] = 'next';
++    start.addEventListener('click', () => {
++      state.step = STEPS[0]!;
+       render();
+-    }
+-  });
+-  footer.append(skip, back, next);
++    });
++    footer.append(skipAll, start);
++  } else {
++    const last = index === STEPS.length - 1;
++    footer.append(
++        el('span', 'status', `Step ${index + 1} of ${STEPS.length}`));
++    const skip = el('button', 'quiet', 'Skip');
++    skip.dataset['focus'] = 'skip';
++    skip.addEventListener('click', () => chrome.send('finish'));
++    const back = el('button', 'secondary', 'Back');
++    back.dataset['focus'] = 'back';
++    back.disabled = index === 0;
++    back.addEventListener('click', () => {
++      state.step = STEPS[Math.max(0, index - 1)]!;
++      render();
++    });
++    const next =
++        el('button', last ? 'primary' : 'primary forward', last ? 'Finish' : 'Next');
++    next.dataset['focus'] = 'next';
++    next.addEventListener('click', () => {
++      if (last) {
++        chrome.send('finish');
++      } else {
++        state.step = STEPS[index + 1]!;
++        render();
++      }
++    });
++    footer.append(skip, back, next);
++  }
+ 
+   frame.append(header, main, footer);
+   app.append(frame);
+@@ -673,6 +905,7 @@ window.addEventListener('resize', () => {
+ 
+ // A capture opens the flow on a named step: chrome://stedding-welcome#import
+ // (--stedding-welcome=import), import I21; =behaviour opens step 4 (W12).
++// A named step goes past the welcome screen (W14).
+ {
+   const wanted = location.hash.slice(1);
+   if ((STEPS as string[]).includes(wanted)) {
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 index 20d11f6e7be29..030592426b008 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
@@ -1108,10 +2392,26 @@ index 5e9d7ad357996..e6f93a5396a29 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
-index 4d6a0f54cae13..e37dbc9da4bc8 100644
+index 4d6a0f54cae13..6ad1581235bde 100644
 --- a/chrome/test/stedding/welcome_browsertest.cc
 +++ b/chrome/test/stedding/welcome_browsertest.cc
-@@ -315,6 +315,55 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+@@ -120,6 +120,15 @@ std::string GoTo(content::WebContents* page, const std::string& selector) {
+       .ExtractString();
+ }
+ 
++// Get started, on the welcome screen the flow opens on (welcome W14): step 1
++// is shown once this is true.
++bool PastTheWelcomeScreen(content::WebContents* page) {
++  return content::ExecJs(page, R"(
++      if (document.querySelector('main.cover')) {
++        document.querySelector('footer button.primary').click();
++      })");
++}
++
+ // The behaviour step's checked pills, as "name=value" in the step's order.
+ constexpr char kCheckedPills[] = R"(
+     [...document.querySelectorAll('main .pill[aria-checked="true"]')]
+@@ -315,6 +324,84 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
    }
  }
  
@@ -1164,6 +2464,59 @@ index 4d6a0f54cae13..e37dbc9da4bc8 100644
 +        })())"));
 +}
 +
++// welcome W14, W15: the flow opens on a welcome screen ahead of step 1: the
++// name, what the steps do, Get started and Skip setup, and no Back. The
++// header names the six steps, none of them marked; on step 4 the fourth is
++// marked and the three behind it are done.
++IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, TheFlowOpensOnAWelcomeScreen) {
++  content::WebContents* const page = OpenWelcome(*browser());
++  ASSERT_TRUE(page);
++  EXPECT_EQ(
++      "Welcome to Stedding|Get started|Skip setup|no back|"
++      "Search,Import,Appearance,Behaviour,Default browser,Keys|0 on",
++      content::EvalJs(page, R"(
++        (() => {
++          const steps = [...document.querySelectorAll('.progress li')];
++          return [
++            document.querySelector('main h1').textContent,
++            document.querySelector('footer button.primary').textContent,
++            document.querySelector('[data-focus="skip"]').textContent,
++            document.querySelector('[data-focus="back"]') ? 'back' : 'no back',
++            steps.map(step => step.textContent).join(','),
++            steps.filter(step => step.className).length + ' on',
++          ].join('|');
++        })())"));
++  ASSERT_EQ("", GoTo(page, ".choices"));
++  EXPECT_EQ("Step 4 of 6|done,done,done,on,,", content::EvalJs(page, R"(
++        document.querySelector('footer .status').textContent + '|' +
++            [...document.querySelectorAll('.progress li')]
++                .map(step => step.className).join(','))"));
++}
++
  // welcome, import: the "Bookmarks HTML File" row asks for the file, in a file
  // dialog of the welcome window. Sent as a browser's import it read no file
  // and said it had imported; sent as Settings sends it, the page's handler
+@@ -589,6 +676,7 @@ class WelcomeEnginesTest : public InProcessBrowserTest,
+ IN_PROC_BROWSER_TEST_P(WelcomeEnginesTest, EachEngineShowsItsOwnMark) {
+   content::WebContents* const page = OpenWelcome(*browser());
+   ASSERT_TRUE(page);
++  ASSERT_TRUE(PastTheWelcomeScreen(page));
+   ASSERT_TRUE(base::test::RunUntil([&]() {
+     return content::EvalJs(page,
+                            "document.querySelectorAll('main .tile').length")
+@@ -623,6 +711,7 @@ IN_PROC_BROWSER_TEST_P(WelcomeEnginesTest, ASecondPickChangesTheEngine) {
+   search_test_utils::WaitForTemplateURLServiceToLoad(template_urls);
+   content::WebContents* const page = OpenWelcome(*browser());
+   ASSERT_TRUE(page);
++  ASSERT_TRUE(PastTheWelcomeScreen(page));
+   ASSERT_TRUE(base::test::RunUntil([&]() {
+     return content::EvalJs(page,
+                            "document.querySelectorAll('main .tile').length")
+@@ -734,6 +823,7 @@ IN_PROC_BROWSER_TEST_P(WelcomeChooserTest, ASkippedEngineStepAsksNoMore) {
+   ASSERT_TRUE(page);
+   {
+     SCOPED_TRACE("Skip on step 1");
++    ASSERT_TRUE(PastTheWelcomeScreen(page));
+     ASSERT_EQ("Step 1 of 6",
+               content::EvalJs(page,
+                               "document.querySelector('footer .status')"

@@ -130,8 +130,9 @@ instead, `docs/history/plan-2026-09-26.md` TAB-31). Importing from Arc is new on
 
 ## First start
 
-The first window opens the welcome flow, six steps, each one skippable (five before beta
-14, which added step 4):
+The first window opens the welcome flow: a welcome screen with **Get started** and **Skip
+setup**, then six steps, each one skippable (five before beta 14, which added step 4),
+named along the top so you can see what is left:
 
 1. Choose a search engine.
 2. Import from Arc, or through Chromium's importer from Safari (bookmarks) or

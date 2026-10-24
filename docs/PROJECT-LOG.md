@@ -10,6 +10,33 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-24, evening -- betas 13 and 14, and the welcome flow's new look
+
+0.3.0 beta 13 (the three items below) and beta 14 went out on 2026-10-24; what they changed is
+in `docs/release-notes/`. Beta 14 made the default-browser step ask with one large button
+(welcome W5, the owner's ask) and gave each step a glyph (W13); `S-297`'s harness wait is
+serialized on Windows, its cause still open. Arc for Windows was checked against a real
+install on the PC (import I27).
+
+After beta 14 the owner asked for a better first-run screen. The flow now opens on a welcome
+screen ahead of step 1 (W14): the mark, the name, what the six steps set up, a note when Arc is
+on the computer, and a drawing of the window the flow sets up, with Get started and Skip setup.
+The header names the six steps over short bars (W15). The appearance step's three choices are
+drawings of a Stedding window in that look, tinted by the Space colour chosen below them (W4);
+the default-browser step has a drawing of a link opening in Stedding beside its button (W5);
+the importer rows carry marks as the engines do (W3); every control shows an amber ring with
+the keyboard focus, and the mark's arch stands large and faint behind every screen. All of it
+is drawn by the page in the brand's palette; nothing is fetched.
+
+Seen on the Mac's release build: every screen captured in both looks; the real pointer and
+keyboard through Get started, step 1, the Dark choice (the flow turned dark at once) and Tab
+(the ring). The welcome, import and update tests that touch the flow pass (19), the new
+`WelcomeFlowTest.TheFlowOpensOnAWelcomeScreen` among them; the tests that began on step 1 now
+press Get started first. The PC's release build: the same 19 tests pass, and each screen in
+both looks, taken through DevTools, shows the platform's words (Ctrl chords, "this computer",
+Windows' Default apps) and fits, the import step aside, which runs on under its fade (W11).
+
+
 ## 2026-10-24 -- after beta 12: the drag into the essentials animated, Google Pay in a Space, Arc import on Windows
 
 0.3.0 beta 11 and beta 12 went out on 2026-10-23 and 2026-10-24; what they changed is in
