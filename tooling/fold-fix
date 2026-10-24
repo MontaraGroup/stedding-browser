@@ -23,6 +23,9 @@
 # the fixed files, which is the tree-identity check of trap 50. The files are staged, so
 # the index matches the new tip and `git status` shows no change to them.
 #
+# A file the tip does not have yet is a new file of the fix: it is added as it is in the
+# working tree to <commit> and to every commit after it.
+#
 # It does not run tooling/update-patches; run that, then tooling/check-repo, as after a
 # rebase.
 
@@ -35,7 +38,7 @@ main() {
   [ -d "$CHROMIUM_SRC/.git" ] || die "no checkout at $CHROMIUM_SRC"
   cd "$CHROMIUM_SRC" || die "cannot enter $CHROMIUM_SRC"
 
-  local target files branch old_tip work idx prev count c f
+  local target files branch old_tip work idx prev count c f new_files
   target="$(git rev-parse --verify "$1^{commit}")" || die "no commit '$1'"
   shift
   files=("$@")
@@ -51,7 +54,13 @@ main() {
   # shellcheck disable=SC2064  # expand $work now, not at trap time
   trap "rm -rf '$work'" EXIT
   idx="$work/index"
+  new_files=" "
   for f in "${files[@]}"; do
+    if ! git cat-file -e "HEAD:$f" 2>/dev/null; then
+      [ -f "$f" ] || die "$f is neither in HEAD nor in the working tree"
+      new_files="$new_files$f "
+      continue
+    fi
     mkdir -p "$work/base/$(dirname "$f")" "$work/fixed/$(dirname "$f")"
     git show "HEAD:$f" > "$work/base/$f" || die "$f is not in HEAD"
     cp "$f" "$work/fixed/$f" || die "cannot read $f"
@@ -65,6 +74,13 @@ main() {
   for c in $(git rev-list --reverse "$target^..$old_tip"); do
     GIT_INDEX_FILE="$idx" git read-tree "$c^{tree}"
     for f in "${files[@]}"; do
+      case "$new_files" in
+        *" $f "*)
+          GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo \
+            "100644,$(git hash-object -w "$f"),$f"
+          continue
+          ;;
+      esac
       if ! git cat-file -e "$c:$f" 2>/dev/null; then
         log "$(git rev-parse --short=10 "$c"): $f is not there yet, left alone"
         continue
