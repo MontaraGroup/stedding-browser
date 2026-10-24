@@ -53,10 +53,18 @@ of its own (patches/README.md).
  chrome/browser/ui/archive/tab_archiver.cc     | 125 +++
  chrome/browser/ui/archive/tab_archiver.h      |  27 +
  .../ui/archive/tab_archiver_unittest.cc       | 144 ++++
- .../browser/ui/browser_command_controller.cc  |   8 +
+ .../browser/ui/browser_command_controller.cc  |  30 +-
+ .../browser/ui/browser_command_controller.h   |  12 +
+ chrome/browser/ui/browser_commands.cc         |  17 +-
+ chrome/browser/ui/browser_commands.h          |   4 +
+ .../ui/browser_location_bar_model_delegate.cc |  12 +
+ .../ui/browser_location_bar_model_delegate.h  |   8 +
+ .../public/browser_window_features.h          |   6 +
  chrome/browser/ui/cocoa/accelerators_cocoa.mm |   3 +
  chrome/browser/ui/cocoa/main_menu_builder.mm  |   5 +-
  .../ui/cocoa/main_menu_builder_unittest.mm    |  33 +
+ .../ui/page_action/page_action_controller.cc  |  12 +
+ .../ui/page_action/page_action_controller.h   |  10 +
  chrome/browser/ui/spaces/space_model.cc       | 157 +++-
  chrome/browser/ui/spaces/space_model.h        |  28 +
  .../ui/spaces/space_model_window_unittest.cc  | 393 ++++++++++
@@ -83,12 +91,14 @@ of its own (patches/README.md).
  .../ui/views/commandbar/command_bar_view.h    |  51 +-
  .../commandbar/command_bar_view_unittest.cc   | 301 +++++++-
  .../extensions/extensions_toolbar_desktop.cc  |  23 +
- chrome/browser/ui/views/frame/browser_view.cc |  75 ++
- chrome/browser/ui/views/frame/browser_view.h  |  18 +
+ chrome/browser/ui/views/frame/browser_view.cc | 124 +++
+ chrome/browser/ui/views/frame/browser_view.h  |  24 +
  .../ui/views/frame/top_container_view.cc      |  25 +
  .../ui/views/frame/top_container_view.h       |   1 +
  .../frame/vertical_tab_strip_region_view.cc   |   5 +
  .../frame/vertical_tab_strip_region_view.h    |   4 +
+ .../views/location_bar/location_bar_view.cc   |   8 +
+ .../ui/views/location_bar/location_bar_view.h |   5 +
  chrome/browser/ui/views/spaces/BUILD.gn       |   7 +
  .../ui/views/spaces/page_split_drag_target.cc | 376 +++++++++
  .../ui/views/spaces/page_split_drag_target.h  | 109 +++
@@ -101,6 +111,7 @@ of its own (patches/README.md).
  .../views/tabs/dragging/drag_session_data.h   |   6 +
  .../tabs/dragging/tab_drag_controller.cc      |  20 +-
  .../ui/views/tabs/dragging/tab_drag_target.h  |   5 +
+ .../browser/ui/views/toolbar/toolbar_view.cc  |   8 +
  .../web_apps/web_app_diy_install_dialog.cc    |  12 +-
  .../browser/ui/webui/settings/settings_ui.cc  |  22 +
  .../settings/stedding_shortcuts_handler.cc    |   7 +
@@ -119,7 +130,7 @@ of its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |  25 +
  .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
  chrome/test/stedding/tab_drop_browsertest.cc  | 322 +++++++-
- 79 files changed, 6599 insertions(+), 94 deletions(-)
+ 90 files changed, 6769 insertions(+), 103 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -821,10 +832,26 @@ index 851c6ec9ad720..2bdce0cbd63dd 100644
  TEST_F(TabArchiverTest, ArchivesIdleUnpinnedTabs) {
    AddThreeTabs();
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 0b406b917df69..edc8805daa07f 100644
+index 0b406b917df69..3bbb48811a92c 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -1312,6 +1312,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -618,6 +618,15 @@ void BrowserCommandController::TabStateChanged() {
+   UpdateCommandsForWebContentsFocus();
+ }
+ 
++void BrowserCommandController::SetSteddingHeldContents(
++    content::WebContents* contents) {
++  stedding_held_contents_ =
++      contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>();
++  if (!contents) {
++    TabStateChanged();
++  }
++}
++
+ void BrowserCommandController::ZoomStateChanged() {
+   UpdateCommandsForZoomState();
+ }
+@@ -1312,6 +1321,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        stedding::CommandBarView::Show(browser_,
                                       stedding::CommandBarView::Mode::kActions);
        break;
@@ -835,7 +862,7 @@ index 0b406b917df69..edc8805daa07f 100644
      case IDC_FOCUS_SEARCH:
        if (EditAddressInCommandBar(browser_, /*prefill_address=*/false)) {
          break;
-@@ -2218,6 +2222,10 @@ void BrowserCommandController::InitCommandState() {
+@@ -2218,6 +2231,10 @@ void BrowserCommandController::InitCommandState() {
        IDC_STEDDING_COMMAND_PALETTE,
        base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
            browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL);
@@ -846,6 +873,198 @@ index 0b406b917df69..edc8805daa07f 100644
    // Stedding: the Markdown twin goes wherever the plain copy goes.
    command_updater_->UpdateCommandEnabled(IDC_STEDDING_COPY_MARKDOWN_LINK,
                                           enable_copy_url);
+@@ -2424,15 +2441,22 @@ void BrowserCommandController::UpdateCommandsForTabState() {
+ 
+   content::WebContents* current_web_contents =
+       browser_->tab_strip_model()->GetActiveWebContents();
++  if (content::WebContents* const held = stedding_held_contents_.get();
++      held && browser_->tab_strip_model()->GetIndexOfWebContents(held) !=
++                  TabStripModel::kNoTab) {
++    current_web_contents = held;
++  }
+   if (!current_web_contents) {  // May be NULL during tab restore.
+     return;
+   }
+ 
+   // Navigation commands
++  // Stedding (S-290): of `current_web_contents`, the page a drag holds on
++  // screen while it has selected another tab.
+   UpdateCommandAndActionEnabled(IDC_BACK, kActionBack,
+-                                ShouldEnableBackButton(browser_));
+-  command_updater_->UpdateCommandEnabled(IDC_FORWARD,
+-                                         ShouldEnableForwardButton(browser_));
++                                ShouldEnableBackButton(current_web_contents));
++  command_updater_->UpdateCommandEnabled(
++      IDC_FORWARD, ShouldEnableForwardButton(current_web_contents));
+   const bool can_reload = CanReload(browser_);
+   command_updater_->UpdateCommandEnabled(IDC_RELOAD, can_reload);
+   command_updater_->UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE,
+diff --git a/chrome/browser/ui/browser_command_controller.h b/chrome/browser/ui/browser_command_controller.h
+index 2c9963db62e34..313898ffd2bb6 100644
+--- a/chrome/browser/ui/browser_command_controller.h
++++ b/chrome/browser/ui/browser_command_controller.h
+@@ -40,6 +40,10 @@ namespace glic {
+ class GlicInstance;
+ }
+ 
++namespace content {
++class WebContents;
++}  // namespace content
++
+ namespace spaces {
+ class SpaceCommandState;
+ }  // namespace spaces
+@@ -76,6 +80,11 @@ class BrowserCommandController : public CommandUpdater,
+   // Notifies the controller that state has changed in one of the following
+   // areas and it should update command states.
+   void TabStateChanged();
++  // Stedding (tabs R61, BACKLOG S-290): while a drag holds `contents` on
++  // screen, though the drag has selected another tab, the commands that follow
++  // the tab (back, forward, reload, ...) describe the page on screen. Null
++  // follows the active tab again and updates them.
++  void SetSteddingHeldContents(content::WebContents* contents);
+   void ZoomStateChanged();
+   void ContentRestrictionsChanged();
+   void FullscreenStateChanged();
+@@ -294,6 +303,9 @@ class BrowserCommandController : public CommandUpdater,
+ 
+   const raw_ptr<BrowserWindowInterface> browser_;
+ 
++  // SetSteddingHeldContents().
++  base::WeakPtr<content::WebContents> stedding_held_contents_;
++
+   // The CommandUpdater that manages the browser window commands
+   // and optionally syncs state to ActionItems.
+   std::unique_ptr<CommandUpdater> command_updater_;
+diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
+index f33043e837644..f5607f9999a27 100644
+--- a/chrome/browser/ui/browser_commands.cc
++++ b/chrome/browser/ui/browser_commands.cc
+@@ -1018,8 +1018,11 @@ bool CanGoBack(content::WebContents* web_contents) {
+ }
+ 
+ bool ShouldEnableBackButton(const BrowserWindowInterface* browser) {
+-  content::WebContents* web_contents =
+-      browser->GetTabStripModel()->GetActiveWebContents();
++  return ShouldEnableBackButton(
++      browser->GetTabStripModel()->GetActiveWebContents());
++}
++
++bool ShouldEnableBackButton(content::WebContents* web_contents) {
+   if (!web_contents) {
+     return false;
+   }
+@@ -1120,10 +1123,12 @@ bool CanGoForward(content::WebContents* web_contents) {
+ }
+ 
+ bool ShouldEnableForwardButton(const BrowserWindowInterface* browser) {
+-  return browser->GetTabStripModel()
+-      ->GetActiveWebContents()
+-      ->GetController()
+-      .ShouldEnableForwardButton();
++  return ShouldEnableForwardButton(
++      browser->GetTabStripModel()->GetActiveWebContents());
++}
++
++bool ShouldEnableForwardButton(content::WebContents* web_contents) {
++  return web_contents->GetController().ShouldEnableForwardButton();
+ }
+ 
+ void GoForward(BrowserWindowInterface* browser,
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index d0afaefd217de..fa38bac3705e1 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -104,11 +104,15 @@ void OpenURLOffTheRecord(Profile* profile, const GURL& url);
+ bool CanGoBack(const BrowserWindowInterface* browser);
+ bool CanGoBack(content::WebContents* web_contents);
+ bool ShouldEnableBackButton(const BrowserWindowInterface* browser);
++// Stedding (BACKLOG S-290): the same for `web_contents`, the page a drag holds
++// on screen while it has selected another tab.
++bool ShouldEnableBackButton(content::WebContents* web_contents);
+ void GoBack(BrowserWindowInterface* browser, WindowOpenDisposition disposition);
+ void GoBack(content::WebContents* web_contents);
+ bool CanGoForward(const BrowserWindowInterface* browser);
+ bool CanGoForward(content::WebContents* web_contents);
+ bool ShouldEnableForwardButton(const BrowserWindowInterface* browser);
++bool ShouldEnableForwardButton(content::WebContents* web_contents);
+ void GoForward(BrowserWindowInterface* browser,
+                WindowOpenDisposition disposition);
+ void GoForward(content::WebContents* web_contents);
+diff --git a/chrome/browser/ui/browser_location_bar_model_delegate.cc b/chrome/browser/ui/browser_location_bar_model_delegate.cc
+index 4742779b3a558..0123efd6b715d 100644
+--- a/chrome/browser/ui/browser_location_bar_model_delegate.cc
++++ b/chrome/browser/ui/browser_location_bar_model_delegate.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "base/check_deref.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "content/public/browser/web_contents.h"
+ 
+ BrowserLocationBarModelDelegate::BrowserLocationBarModelDelegate(
+     TabStripModel* tab_strip_model)
+@@ -15,5 +16,16 @@ BrowserLocationBarModelDelegate::~BrowserLocationBarModelDelegate() = default;
+ 
+ content::WebContents* BrowserLocationBarModelDelegate::GetActiveWebContents()
+     const {
++  if (content::WebContents* const shown = stedding_shown_contents_.get();
++      shown &&
++      tab_strip_model_->GetIndexOfWebContents(shown) != TabStripModel::kNoTab) {
++    return shown;
++  }
+   return tab_strip_model_->GetActiveWebContents();
+ }
++
++void BrowserLocationBarModelDelegate::SetSteddingShownContents(
++    content::WebContents* contents) {
++  stedding_shown_contents_ =
++      contents ? contents->GetWeakPtr() : base::WeakPtr<content::WebContents>();
++}
+diff --git a/chrome/browser/ui/browser_location_bar_model_delegate.h b/chrome/browser/ui/browser_location_bar_model_delegate.h
+index 95ea5d88f5428..877fafec5a99c 100644
+--- a/chrome/browser/ui/browser_location_bar_model_delegate.h
++++ b/chrome/browser/ui/browser_location_bar_model_delegate.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_BROWSER_LOCATION_BAR_MODEL_DELEGATE_H_
+ 
+ #include "base/memory/raw_ref.h"
++#include "base/memory/weak_ptr.h"
+ #include "chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.h"
+ 
+ class TabStripModel;
+@@ -26,8 +27,15 @@ class BrowserLocationBarModelDelegate : public ChromeLocationBarModelDelegate {
+   // ChromeLocationBarModelDelegate:
+   content::WebContents* GetActiveWebContents() const override;
+ 
++  // Stedding (tabs R61, BACKLOG S-290): while a dragged row's page is held off
++  // screen (BrowserView::HoldPageForSteddingDrag), the address row describes
++  // the page on screen, not the tab the drag selected. Null, or a page no
++  // longer in this window, follows the active tab again.
++  void SetSteddingShownContents(content::WebContents* contents);
++
+  private:
+   const raw_ref<TabStripModel> tab_strip_model_;
++  base::WeakPtr<content::WebContents> stedding_shown_contents_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_BROWSER_LOCATION_BAR_MODEL_DELEGATE_H_
+diff --git a/chrome/browser/ui/browser_window/public/browser_window_features.h b/chrome/browser/ui/browser_window/public/browser_window_features.h
+index 8d002e9309b81..86e238a0dbe2c 100644
+--- a/chrome/browser/ui/browser_window/public/browser_window_features.h
++++ b/chrome/browser/ui/browser_window/public/browser_window_features.h
+@@ -299,6 +299,12 @@ class BrowserWindowFeatures {
+   void set_little_window(bool little) { little_window_ = little; }
+   bool little_window() const { return little_window_; }
+ 
++  // Stedding (tabs R61, BACKLOG S-290): BrowserView points the address row's
++  // model at the page a drag holds on screen.
++  BrowserLocationBarModelDelegate* location_bar_model_delegate() {
++    return location_bar_model_delegate_.get();
++  }
++
+   BrowserWindowFeatures();
+   ~BrowserWindowFeatures();
+ 
 diff --git a/chrome/browser/ui/cocoa/accelerators_cocoa.mm b/chrome/browser/ui/cocoa/accelerators_cocoa.mm
 index 9ff0fc334d95d..8ba4e6d16b27f 100644
 --- a/chrome/browser/ui/cocoa/accelerators_cocoa.mm
@@ -919,6 +1138,72 @@ index 5b018eb9b0679..52dcbcf0f97fe 100644
 +}
 +
  }  // namespace
+diff --git a/chrome/browser/ui/page_action/page_action_controller.cc b/chrome/browser/ui/page_action/page_action_controller.cc
+index 0de06f04779dc..d63e285de61a5 100644
+--- a/chrome/browser/ui/page_action/page_action_controller.cc
++++ b/chrome/browser/ui/page_action/page_action_controller.cc
+@@ -357,7 +357,15 @@ void PageActionControllerImpl::ActionItemChanged(
+   }
+ }
+ 
++void PageActionControllerImpl::SetSteddingHeldOnScreen(bool held) {
++  stedding_held_on_screen_ = held;
++  if (!held && std::exchange(stedding_deactivated_while_held_, false)) {
++    OnTabWillDeactivate(nullptr);
++  }
++}
++
+ void PageActionControllerImpl::OnTabActivated(tabs::TabInterface* tab) {
++  stedding_deactivated_while_held_ = false;
+   SetModelsTabActive(/*is_active=*/true);
+   chip_selector_->OnTabActiveChanged(/*is_tab_active=*/true);
+   if (anchored_message_timeout_.IsRunning()) {
+@@ -366,6 +374,10 @@ void PageActionControllerImpl::OnTabActivated(tabs::TabInterface* tab) {
+ }
+ 
+ void PageActionControllerImpl::OnTabWillDeactivate(tabs::TabInterface* tab) {
++  if (stedding_held_on_screen_) {
++    stedding_deactivated_while_held_ = true;
++    return;
++  }
+   chip_selector_->OnTabActiveChanged(/*is_tab_active=*/false);
+   SetModelsTabActive(/*is_active=*/false);
+ }
+diff --git a/chrome/browser/ui/page_action/page_action_controller.h b/chrome/browser/ui/page_action/page_action_controller.h
+index 73af530de2f3e..4d58a737cc3e5 100644
+--- a/chrome/browser/ui/page_action/page_action_controller.h
++++ b/chrome/browser/ui/page_action/page_action_controller.h
+@@ -233,6 +233,11 @@ class PageActionController {
+ 
+   virtual ~PageActionController() = default;
+ 
++  // Stedding (tabs R61, BACKLOG S-290): while a drag holds this tab's page on
++  // screen, though the drag has selected another tab, the page's actions stay
++  // as an active tab's; when the hold ends they follow the tab's state again.
++  virtual void SetSteddingHeldOnScreen(bool held) {}
++
+   // Requests that the page action be shown or hidden.
+   virtual void Show(actions::ActionId action_id) = 0;
+   virtual void Hide(actions::ActionId action_id) = 0;
+@@ -407,6 +412,7 @@ class PageActionControllerImpl : public PageActionController,
+   ~PageActionControllerImpl() override;
+ 
+   // PageActionController:
++  void SetSteddingHeldOnScreen(bool held) override;
+   void Show(actions::ActionId action_id) override;
+   void Hide(actions::ActionId action_id) override;
+   void ShowSuggestionChip(actions::ActionId action_id) override;
+@@ -564,6 +570,10 @@ class PageActionControllerImpl : public PageActionController,
+ 
+   base::CallbackListSubscription tab_activated_callback_subscription_;
+   base::CallbackListSubscription tab_deactivated_callback_subscription_;
++  // SetSteddingHeldOnScreen: held, and whether the tab was deactivated while
++  // held, which is carried out when the hold ends.
++  bool stedding_held_on_screen_ = false;
++  bool stedding_deactivated_while_held_ = false;
+ 
+   base::OnceCallbackList<void(PageActionController&)>
+       on_will_destroy_callback_list_;
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
 index c803bc9f2d0e2..0240328f42457 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
@@ -4074,10 +4359,36 @@ index db2447a0dbd07..901cc7e10fa2e 100644
  }
  
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index cc05ccc30cb1a..2abe467e7e8d1 100644
+index cc05ccc30cb1a..ec46978a2ab19 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -219,6 +219,8 @@
+@@ -85,6 +85,7 @@
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_init_state.h"
+ #include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/browser_location_bar_model_delegate.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+@@ -109,6 +110,7 @@
+ #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
+ #include "chrome/browser/ui/omnibox/omnibox_popup_view.h"
+ #include "chrome/browser/ui/omnibox/omnibox_view.h"
++#include "chrome/browser/ui/page_action/page_action_controller.h"
+ #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+ #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
+ #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
+@@ -123,7 +125,9 @@
+ #include "chrome/browser/ui/stedding/address_row.h"
+ #include "chrome/browser/ui/stedding/private_window.h"
+ #include "chrome/browser/ui/stedding/thanks_pages.h"
++#include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/views/frame/stedding_fullscreen_sidebar_toggle.h"
+ #include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
+ #include "chrome/browser/ui/tabs/features.h"
+@@ -219,6 +223,8 @@
  #include "chrome/browser/ui/views/side_panel/side_panel.h"
  #include "chrome/browser/ui/views/side_panel/side_panel_animation_content_view.h"
  #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
@@ -4086,7 +4397,7 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
  #include "chrome/browser/ui/views/status_bubble_views.h"
  #include "chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.h"
  #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.h"
-@@ -2010,6 +2012,12 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
+@@ -2010,6 +2016,12 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
                                       int reason) {
    DCHECK(new_contents);
    TRACE_EVENT0("ui", "BrowserView::OnActiveTabChanged");
@@ -4099,7 +4410,7 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
    views::WebView* active_contents_view = GetActiveContentsWebView();
    bool tab_change_in_split_view =
        IsTabChangeInSplitView(old_contents, new_contents);
-@@ -2157,6 +2165,11 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
+@@ -2157,6 +2169,11 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
  void BrowserView::OnTabDetached(content::WebContents* contents,
                                  bool was_active) {
    DCHECK(contents);
@@ -4111,7 +4422,7 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
    if (!was_active) {
      return;
    }
-@@ -2413,6 +2426,10 @@ void BrowserView::UpdateReloadStopState(bool is_loading, bool force) {
+@@ -2413,6 +2430,10 @@ void BrowserView::UpdateReloadStopState(bool is_loading, bool force) {
  }
  
  void BrowserView::UpdateToolbar(content::WebContents* contents) {
@@ -4122,7 +4433,7 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
    // We may end up here during destruction.
    if (toolbar_) {
      toolbar_->Update(contents);
-@@ -2548,6 +2565,13 @@ TabDragTarget* BrowserView::GetTabDragTarget(
+@@ -2548,6 +2569,13 @@ TabDragTarget* BrowserView::GetTabDragTarget(
        return target;
      }
    }
@@ -4136,7 +4447,7 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
    if (multi_contents_view_->IsInSplitView() ||
        !multi_contents_view_->IsDragAndDropEnabled()) {
      return nullptr;
-@@ -2558,6 +2582,57 @@ TabDragTarget* BrowserView::GetTabDragTarget(
+@@ -2558,6 +2586,102 @@ TabDragTarget* BrowserView::GetTabDragTarget(
    return &multi_contents_view_->drop_target_controller();
  }
  
@@ -4154,6 +4465,43 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
 +  if (model) {
 +    model->HoldRecency(true);
 +  }
++  // BACKLOG S-290: what in the window's chrome follows the active tab -- the
++  // address row's address, chip, colour and page buttons, the back and
++  // forward buttons -- stays with the page on screen, not the tab the drag
++  // selects. Before the drag selects it, so the page's buttons stay lit.
++  PointChromeAtSteddingPage(page);
++}
++
++void BrowserView::PointChromeAtSteddingPage(tabs::TabInterface* page) {
++  content::WebContents* const contents = page ? page->GetContents() : nullptr;
++  if (BrowserLocationBarModelDelegate* const delegate =
++          browser()->GetFeatures().location_bar_model_delegate()) {
++    delegate->SetSteddingShownContents(contents);
++  }
++  if (stedding::PageThemeColorController* const colours =
++          stedding::PageThemeColorController::From(browser())) {
++    colours->SetSteddingHeldContents(contents);
++  }
++  if (chrome::BrowserCommandController* const commands =
++          chrome::BrowserCommandController::From(browser())) {
++    commands->SetSteddingHeldContents(contents);
++  }
++  if (tabs::TabFeatures* const features =
++          page ? page->GetTabFeatures() : nullptr;
++      features && features->page_action_controller()) {
++    features->page_action_controller()->SetSteddingHeldOnScreen(true);
++  }
++}
++
++tabs::TabInterface* BrowserView::stedding_held_tab() {
++  if (!stedding_page_hold_) {
++    return nullptr;
++  }
++  tabs::TabInterface* const page = stedding_held_page_.Get();
++  return page && browser()->GetTabStripModel()->GetIndexOfTab(page) !=
++                     TabStripModel::kNoTab
++             ? page
++             : nullptr;
 +}
 +
 +void BrowserView::ReleaseSteddingPageHold() {
@@ -4171,8 +4519,16 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
 +      strip->ActivateTabAt(index);
 +    }
 +  }
++  // The held page's buttons follow its state again: lit if it is the page on
++  // screen now, put out if the drop showed another (S-290).
++  if (tabs::TabFeatures* const features =
++          page ? page->GetTabFeatures() : nullptr;
++      features && features->page_action_controller()) {
++    features->page_action_controller()->SetSteddingHeldOnScreen(false);
++  }
 +  stedding_page_hold_ = false;
 +  stedding_held_page_ = tabs::TabHandle();
++  PointChromeAtSteddingPage(nullptr);
 +  stedding_held_space_.reset();
 +  if (model) {
 +    model->HoldRecency(false);
@@ -4195,7 +4551,7 @@ index cc05ccc30cb1a..2abe467e7e8d1 100644
  
  void BrowserView::OnLockedForOnTaskUpdated(bool locked_for_on_task) {
 diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
-index 5ea1abded5a37..007905a1c8c46 100644
+index 5ea1abded5a37..fbcbee2380432 100644
 --- a/chrome/browser/ui/views/frame/browser_view.h
 +++ b/chrome/browser/ui/views/frame/browser_view.h
 @@ -33,6 +33,8 @@
@@ -4207,7 +4563,7 @@ index 5ea1abded5a37..007905a1c8c46 100644
  #include "chrome/browser/ui/views/frame/contents_container_view.h"
  #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
  #include "chrome/browser/ui/views/frame/shadow_overlay_view.h"
-@@ -822,6 +824,16 @@ class BrowserView : public BrowserWindow,
+@@ -822,6 +824,22 @@ class BrowserView : public BrowserWindow,
    TabDragTarget* GetTabDragTargetInsideTabStrip(
        const gfx::Point& point_in_screen);
  
@@ -4220,11 +4576,17 @@ index 5ea1abded5a37..007905a1c8c46 100644
 +  void HoldPageForSteddingDrag();
 +  void ReleaseSteddingPageHold();
 +  bool stedding_page_held() const { return stedding_page_hold_; }
++  // The page held on screen while it is still in this window, else null: the
++  // tab the address row describes during the hold (BACKLOG S-290).
++  tabs::TabInterface* stedding_held_tab();
++  // S-290: points what in the window's chrome follows the active tab at
++  // `page` for a hold; null follows the active tab again.
++  void PointChromeAtSteddingPage(tabs::TabInterface* page);
 +
  #if BUILDFLAG(IS_CHROMEOS)
    // This is used only for SWA/PWA scenario.
    void OnLockedForOnTaskUpdated(bool locked_for_on_task);
-@@ -1274,6 +1286,12 @@ class BrowserView : public BrowserWindow,
+@@ -1274,6 +1292,12 @@ class BrowserView : public BrowserWindow,
    // True if we have already been initialized.
    bool initialized_ = false;
  
@@ -4337,6 +4699,41 @@ index ec60419b38ed3..d71c31a500879 100644
    // A tab dropped on a folder header joins the folder (folders F7).
    std::unique_ptr<FolderDragTarget> folder_drag_target_;
    raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index d6ad8950a0ed3..4ef853952597d 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -2540,6 +2540,14 @@ page_actions::PageActionController* LocationBarView::GetPageActionController() {
+   }
+ 
+   tabs::TabInterface* active_tab = browser_->GetActiveTabInterface();
++  // Stedding (tabs R61, BACKLOG S-290): the page buttons of the page a drag
++  // holds on screen, not of the tab the drag selected.
++  if (BrowserView* const browser_view =
++          BrowserView::GetBrowserViewForBrowser(browser_)) {
++    if (tabs::TabInterface* const held = browser_view->stedding_held_tab()) {
++      active_tab = held;
++    }
++  }
+   if (!active_tab) {
+     return nullptr;
+   }
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
+index 1abe43e4671a3..d8515492b98a0 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -334,6 +334,11 @@ class LocationBarView
+ 
+   SkColor GetBackgroundColorForTesting() const { return background_color_; }
+ 
++  // Stedding (BACKLOG S-290): the tab whose page buttons the row shows.
++  page_actions::PageActionController* GetPageActionControllerForTesting() {
++    return GetPageActionController();
++  }
++
+   OmniboxPopupUI* GetOmniboxPopupUI();
+ 
+  private:
 diff --git a/chrome/browser/ui/views/spaces/BUILD.gn b/chrome/browser/ui/views/spaces/BUILD.gn
 index e3b8dfe763f42..c61c93a589c3f 100644
 --- a/chrome/browser/ui/views/spaces/BUILD.gn
@@ -5402,6 +5799,32 @@ index 3bd8c25ee8f32..06a77f9e03be4 100644
    // Registers a callback that gets invoked when this is being destroyed.
    virtual base::CallbackListSubscription RegisterWillDestroyCallback(
        base::OnceClosure callback) = 0;
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 62c4bb94e34e5..1dc615cf13b9a 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -139,6 +139,7 @@
+ #include "components/send_tab_to_self/features.h"
+ #include "components/signin/public/base/signin_buildflags.h"
+ #include "components/strings/grit/components_strings.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/render_view_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/skia/include/core/SkPath.h"
+@@ -1384,6 +1385,13 @@ views::LabelButton* ToolbarView::GetGlicButton() {
+ // ToolbarView, LocationBarView::Delegate implementation:
+ 
+ WebContents* ToolbarView::GetWebContents() {
++  // Stedding (tabs R61, BACKLOG S-290): during a drag the address row belongs
++  // to the page held on screen, not to the tab the drag selected.
++  if (browser_view_) {
++    if (tabs::TabInterface* const held = browser_view_->stedding_held_tab()) {
++      return held->GetContents();
++    }
++  }
+   return browser_->GetTabStripModel()->GetActiveWebContents();
+ }
+ 
 diff --git a/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc b/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc
 index 210ab4487152d..d8205384cc88d 100644
 --- a/chrome/browser/ui/views/web_apps/web_app_diy_install_dialog.cc

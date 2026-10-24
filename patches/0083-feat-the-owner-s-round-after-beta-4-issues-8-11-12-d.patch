@@ -91,9 +91,9 @@ the hover card).
  chrome/browser/ui/spaces/new_tab_space.cc     |   4 +-
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
  .../spaces/space_jar_navigation_throttle.cc   |   4 +-
- chrome/browser/ui/spaces/space_model.cc       | 369 +++++++-----
+ chrome/browser/ui/spaces/space_model.cc       | 369 ++++++-----
  chrome/browser/ui/spaces/space_model.h        |  70 +--
- .../ui/spaces/space_model_window_unittest.cc  | 307 +++++++---
+ .../ui/spaces/space_model_window_unittest.cc  | 307 ++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
  .../ui/spaces/tab_space_restore_data.h        |  16 +-
@@ -123,7 +123,7 @@ the hover card).
  .../spaces/space_tab_visibility_controller.cc |  45 ++
  .../spaces/space_tab_visibility_controller.h  |   4 +
  .../ui/views/tabs/common/folder_drag_target.h |   9 +-
- .../ui/views/tabs/common/folder_view.cc       | 459 ++++++++++++---
+ .../ui/views/tabs/common/folder_view.cc       | 459 +++++++++++---
  .../ui/views/tabs/common/folder_view.h        |  77 ++-
  .../views/tabs/common/folder_view_unittest.cc |  48 +-
  .../tabs/common/pinned_tab_container_view.cc  |  24 +-
@@ -146,27 +146,27 @@ the hover card).
  .../hovercard/tab_hover_card_bubble_view.h    |  11 +
  .../hovercard/tab_hover_card_controller.cc    | 162 +++++
  .../hovercard/tab_hover_card_controller.h     |  56 ++
- .../views/tabs/hovercard/tab_resource_line.cc | 171 ++++++
+ .../views/tabs/hovercard/tab_resource_line.cc | 171 +++++
  .../views/tabs/hovercard/tab_resource_line.h  | 112 ++++
- .../hovercard/tab_resource_line_unittest.cc   | 139 +++++
+ .../hovercard/tab_resource_line_unittest.cc   | 139 ++++
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
  chrome/test/stedding/copy_link_browsertest.cc | 350 ++++++++++-
- .../test/stedding/folder_tabs_browsertest.cc  | 552 +++++++++++++++++-
+ .../test/stedding/folder_tabs_browsertest.cc  | 552 +++++++++++++++-
  .../hover_card_picture_browsertest.cc         | 255 +++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
  .../test/stedding/pinned_run_browsertest.cc   | 194 ++++++
  .../stedding/settings_spaces_browsertest.cc   |  19 +-
- .../stedding/sidebar_click_browsertest.cc     | 266 ++++++++-
+ .../stedding/sidebar_click_browsertest.cc     | 266 +++++++-
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
- chrome/test/stedding/tab_drop_browsertest.cc  | 539 ++++++++++++++++-
- components/tabs/impl/tab_strip_collection.cc  |  98 ++++
+ chrome/test/stedding/tab_drop_browsertest.cc  | 594 +++++++++++++++++-
+ components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 87 files changed, 5751 insertions(+), 727 deletions(-)
+ 87 files changed, 5806 insertions(+), 727 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -8332,7 +8332,7 @@ index 737209a88e1f5..326c29e639aa7 100644
    EXPECT_TRUE(base::test::RunUntil(
        [&]() { return model_->CountPagesAJarChangeReloads(work_) == 2; }))
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index 5b2968364e017..132563ebbcd55 100644
+index 5b2968364e017..136d67cff34c6 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -10,7 +10,9 @@
@@ -8354,7 +8354,7 @@ index 5b2968364e017..132563ebbcd55 100644
  #include "base/command_line.h"
  #include "base/functional/callback.h"
  #include "base/i18n/base_i18n_switches.h"
-@@ -30,6 +33,7 @@
+@@ -30,10 +33,12 @@
  #include "base/strings/string_util.h"
  #include "base/test/bind.h"
  #include "base/test/run_until.h"
@@ -8362,15 +8362,41 @@ index 5b2968364e017..132563ebbcd55 100644
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/themes/theme_service.h"
-@@ -57,6 +61,7 @@
+ #include "chrome/browser/themes/theme_service_factory.h"
++#include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -45,6 +50,8 @@
+ #include "chrome/browser/ui/spaces/space_router.h"
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
++#include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+@@ -56,7 +63,11 @@
+ #include "chrome/browser/ui/views/frame/contents_web_view.h"
  #include "chrome/browser/ui/views/frame/multi_contents_view.h"
  #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/page_action/page_action_container_view.h"
++#include "chrome/browser/ui/views/page_action/page_action_view.h"
  #include "chrome/browser/ui/views/spaces/page_split_drag_target.h"
 +#include "chrome/browser/ui/views/spaces/space_drag_target.h"
  #include "chrome/browser/ui/views/spaces/split_drop_rules.h"
  #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
  #include "chrome/browser/ui/views/tabs/common/folder_view.h"
-@@ -86,6 +91,8 @@
+@@ -69,6 +80,7 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/omnibox/browser/location_bar_model.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tab_groups/tab_group_id.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+@@ -86,6 +98,8 @@
  #include "ui/color/color_id.h"
  #include "ui/color/color_provider.h"
  #include "ui/color/color_provider_key.h"
@@ -8379,7 +8405,7 @@ index 5b2968364e017..132563ebbcd55 100644
  #include "ui/display/screen.h"
  #include "ui/events/base_event_utils.h"
  #include "ui/events/event.h"
-@@ -136,6 +143,33 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+@@ -136,6 +150,33 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
      host_resolver()->AddRule("*", "127.0.0.1");
      ASSERT_TRUE(embedded_test_server()->Start());
      stedding::test::KeepAboveOtherWindows(widget());
@@ -8413,7 +8439,7 @@ index 5b2968364e017..132563ebbcd55 100644
    }
  
    BrowserView* browser_view() {
-@@ -181,6 +215,10 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+@@ -181,6 +222,10 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
    // here, before the drag, rather than as a drop that missed.
    bool ShownWhole(std::initializer_list<const tabs::TabInterface*> tabs) {
      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
@@ -8424,7 +8450,7 @@ index 5b2968364e017..132563ebbcd55 100644
      for (const tabs::TabInterface* const tab : tabs) {
        TabView* const row = stedding::test::FindDrawnRow(root(), tab);
        if (!row || row->GetVisibleBounds() != row->GetLocalBounds()) {
-@@ -190,24 +228,32 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+@@ -190,24 +235,32 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
      return true;
    }
  
@@ -8468,7 +8494,7 @@ index 5b2968364e017..132563ebbcd55 100644
    }
  
    // Presses at `from`, moves to `to` in twelve even steps, releases: a
-@@ -253,9 +299,15 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+@@ -253,9 +306,15 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
    // drop there, and the tests passed while a person's drop missed the
    // folder (BACKLOG S-232).
    void PointerPressAndMove(const gfx::Point& from, const gfx::Point& to) {
@@ -8485,7 +8511,7 @@ index 5b2968364e017..132563ebbcd55 100644
      for (int step = 1; step <= kSteps; ++step) {
        stedding::test::SendLeftMouse(
            widget(), ui::EventType::kMouseDragged,
-@@ -273,6 +325,24 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+@@ -273,6 +332,24 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
      Release(to);
    }
  
@@ -8510,7 +8536,7 @@ index 5b2968364e017..132563ebbcd55 100644
    // Collapses the sidebar to the rail, where a folder's header is its glyph
    // alone and the Space chips stack down a column, and waits for the rows.
    // Expand-on-hover goes off first, as in the live check: a pointer's drag
-@@ -544,6 +614,9 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
+@@ -544,6 +621,9 @@ class TabDropTest : public VerticalTabsBrowserTestMixin<InProcessBrowserTest> {
  
    // Set by TheChipLightsAndGoesDark, which every chip test runs first.
    std::optional<spaces::SpaceId> work_id_;
@@ -8520,7 +8546,7 @@ index 5b2968364e017..132563ebbcd55 100644
  };
  
  // A drop on a folder header joins the folder as the tab is (PLAN.md TAB-9).
-@@ -764,6 +837,379 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ChipDropsMoveLightAndSurviveARebuild) {
+@@ -764,6 +844,379 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ChipDropsMoveLightAndSurviveARebuild) {
    ASSERT_NO_FATAL_FAILURE(TabsDroppedOnAChipMove());
  }
  
@@ -8900,7 +8926,7 @@ index 5b2968364e017..132563ebbcd55 100644
  // BACKLOG S-139 (folders F20, F7): a row dropped where another Space's
  // folder sits in the list joins no folder. The drop target looks only at the
  // folders this Space draws, and the other Space's folder draws no header.
-@@ -2102,4 +2548,71 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, OverThePageTheListShowsNoReorder) {
+@@ -2102,4 +2555,119 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, OverThePageTheListShowsNoReorder) {
    }
  }
  
@@ -8919,6 +8945,45 @@ index 5b2968364e017..132563ebbcd55 100644
 +      << "the window is too short for the test's rows";
 +  const auto on_screen = [&]() {
 +    return browser_view()->GetActiveContentsWebView()->web_contents();
++  };
++  // BACKLOG S-290: the address row -- its address and security chip (the
++  // model), its contents, its page buttons and its colour -- and the back
++  // button describe `tab`'s page. The page on screen has a page to go back
++  // to and the dragged one has none, so the back button tells them apart.
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("kept-later.test")));
++  ASSERT_TRUE(shown->GetContents()->GetController().CanGoBack());
++  ASSERT_FALSE(pressed->GetContents()->GetController().CanGoBack());
++  LocationBarView* const location_bar = browser_view()->GetLocationBarView();
++  const auto star = [&]() {
++    const views::View* const view =
++        location_bar->page_action_container()->GetPageActionView(
++            kActionBookmarkThisTab);
++    return view && view->GetVisible();
++  };
++  // The parts that describe another page than `tab`'s, named; empty when
++  // every part describes `tab`'s.
++  const auto address_row_on = [&](tabs::TabInterface* tab) {
++    std::string other;
++    if (LocationBarModel::From(browser())->GetURL() !=
++        tab->GetContents()->GetLastCommittedURL()) {
++      other += " address";
++    }
++    if (location_bar->GetWebContents() != tab->GetContents()) {
++      other += " contents";
++    }
++    if (location_bar->GetPageActionControllerForTesting() !=
++        tab->GetTabFeatures()->page_action_controller()) {
++      other += " page-buttons";
++    }
++    if (stedding::PageThemeColorController::From(browser())->web_contents() !=
++        tab->GetContents()) {
++      other += " colour";
++    }
++    if (chrome::IsCommandEnabled(browser(), IDC_BACK) !=
++        tab->GetContents()->GetController().CanGoBack()) {
++      other += " back";
++    }
++    return other;
 +  };
 +  {
 +    SCOPED_TRACE("a press, then its release");
@@ -8940,15 +9005,20 @@ index 5b2968364e017..132563ebbcd55 100644
 +    tab_strip_model()->ActivateTabAt(Index(shown));
 +    const gfx::Point below_middle(RowCentre(middle).x(),
 +                                  RowCentre(middle).y() + 6);
++    ASSERT_TRUE(star()) << "the page on screen shows no star to keep";
 +    PressAndMove(RowCentre(pressed), below_middle);
 +    EXPECT_EQ(shown->GetContents(), on_screen())
 +        << "the dragged row's page came on screen";
++    EXPECT_EQ("", address_row_on(shown))
++        << "the address row described the dragged row's page";
++    EXPECT_TRUE(star()) << "the page on screen lost its star during the drag";
 +    Release(below_middle);
 +    ASSERT_TRUE(base::test::RunUntil(
 +        [&]() { return !browser_view()->stedding_page_held(); }));
 +    EXPECT_EQ(shown, tab_strip_model()->GetActiveTab())
 +        << "the drop left the dragged row selected";
 +    EXPECT_EQ(shown->GetContents(), on_screen());
++    EXPECT_EQ("", address_row_on(shown));
 +    EXPECT_FALSE(pressed->IsSplit());
 +    EXPECT_EQ(1u, WindowCount()) << "a window tore off";
 +  }
@@ -8959,6 +9029,8 @@ index 5b2968364e017..132563ebbcd55 100644
 +    PressAndMove(RowCentre(pressed), left);
 +    EXPECT_EQ(shown->GetContents(), on_screen())
 +        << "the dragged row's page came on screen";
++    EXPECT_EQ("", address_row_on(shown))
++        << "the address row described the dragged row's page";
 +    Release(left);
 +    ASSERT_TRUE(base::test::RunUntil([&]() { return pressed->IsSplit(); }))
 +        << "the drop made no split";
@@ -8967,6 +9039,8 @@ index 5b2968364e017..132563ebbcd55 100644
 +    EXPECT_TRUE(shown->IsSplit());
 +    EXPECT_EQ(pressed, tab_strip_model()->GetActiveTab())
 +        << "the dropped page is the active pane";
++    EXPECT_EQ("", address_row_on(pressed))
++        << "the address row stayed on the page held during the drag";
 +    EXPECT_EQ(1u, WindowCount());
 +  }
 +}
