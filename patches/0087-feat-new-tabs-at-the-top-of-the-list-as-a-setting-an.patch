@@ -30,8 +30,8 @@ Removable when: never; it is product behaviour.
 ---
  .../api/settings_private/prefs_util.cc        |   3 +
  .../stedding_page/stedding_page.html.ts       |   7 +
- .../resources/stedding_welcome/app.css        |  10 +-
- .../browser/resources/stedding_welcome/app.ts |  11 +-
+ .../resources/stedding_welcome/app.css        |  82 +++++-
+ .../browser/resources/stedding_welcome/app.ts |  71 ++++-
  .../browser/ui/spaces/arc_sidebar_importer.cc |  79 +++++-
  .../spaces/arc_sidebar_importer_unittest.cc   |   9 +-
  chrome/browser/ui/spaces/space_colors.h       |  49 +++-
@@ -45,7 +45,8 @@ Removable when: never; it is product behaviour.
  .../browser/ui/webui/settings/settings_ui.cc  |   8 +
  .../stedding_welcome_handler_unittest.cc      |   2 +-
  .../test/stedding/pinned_run_browsertest.cc   | 242 ++++++++++++++++++
- 17 files changed, 464 insertions(+), 37 deletions(-)
+ chrome/test/stedding/welcome_browsertest.cc   |  49 ++++
+ 18 files changed, 635 insertions(+), 47 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -80,10 +81,96 @@ index 39e05d4572407..bc6ebcee8a883 100644
        id="bookmarksShown"
        class="hr"
 diff --git a/chrome/browser/resources/stedding_welcome/app.css b/chrome/browser/resources/stedding_welcome/app.css
-index 5ee34e22a3fcf..a78b29211d070 100644
+index 5ee34e22a3fcf..aa389f3eb6cd1 100644
 --- a/chrome/browser/resources/stedding_welcome/app.css
 +++ b/chrome/browser/resources/stedding_welcome/app.css
-@@ -271,10 +271,14 @@ button:disabled {
+@@ -118,6 +118,77 @@ h1 {
+   margin: 0;
+ }
+ 
++/* welcome W13: the step's glyph beside its title, on the brand's tile. */
++.heading {
++  align-items: center;
++  display: flex;
++  gap: 14px;
++}
++
++.step-icon {
++  align-items: center;
++  background: var(--card);
++  border: 1.5px solid var(--line);
++  border-radius: 12px;
++  display: inline-flex;
++  flex: none;
++  height: 42px;
++  justify-content: center;
++  width: 42px;
++}
++
++.step-icon svg {
++  fill: none;
++  height: 22px;
++  stroke: currentColor;
++  stroke-linecap: round;
++  stroke-linejoin: round;
++  stroke-width: 1.8;
++  width: 22px;
++}
++
++/* welcome W5: the ask, its one large button and a line under it. */
++.default-ask {
++  align-content: start;
++  display: grid;
++  gap: 12px;
++  justify-items: start;
++  margin-top: 10px;
++}
++
++button.cta {
++  background: var(--accent);
++  border: 0;
++  border-radius: 14px;
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
++  color: var(--accent-ink);
++  cursor: pointer;
++  font: 650 17px/1 system-ui, sans-serif;
++  padding: 17px 26px;
++}
++
++button.cta:hover:not(:disabled) {
++  filter: brightness(1.06);
++}
++
++.default-ask.done button.cta {
++  background: transparent;
++  border: 1.5px solid var(--line);
++  box-shadow: none;
++  color: var(--ink);
++  opacity: 1;
++}
++
++.default-ask.done button.cta::before {
++  content: '\2713\00a0\00a0';
++}
++
++.default-ask .hint {
++  color: var(--ink-muted);
++  font-size: 13px;
++  margin: 0;
++}
++
+ .lead {
+   color: var(--ink-muted);
+   font-size: 16px;
+@@ -239,6 +310,7 @@ button.quiet {
+ button.primary {
+   background: var(--accent);
+   color: var(--accent-ink);
++  min-width: 96px;
+ }
+ 
+ button.secondary {
+@@ -271,10 +343,14 @@ button:disabled {
  }
  
  /* The Space colour swatches on the appearance step (welcome W7). */
@@ -99,7 +186,7 @@ index 5ee34e22a3fcf..a78b29211d070 100644
  }
  
  .swatch {
-@@ -282,9 +286,9 @@ button:disabled {
+@@ -282,9 +358,9 @@ button:disabled {
    border-radius: 50%;
    box-shadow: inset 0 0 0 2px var(--card);
    cursor: pointer;
@@ -112,10 +199,52 @@ index 5ee34e22a3fcf..a78b29211d070 100644
  
  .swatch[aria-checked='true'] {
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index debd2903cb537..e5ef697e18a2e 100644
+index debd2903cb537..e12f24628dad6 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
-@@ -273,7 +273,7 @@ function renderStep(main: HTMLElement) {
+@@ -241,10 +241,40 @@ function checkbox(label: string, checked: boolean, focusKey: string,
+   return wrap;
+ }
+ 
++// welcome W13: each step's own glyph beside its title, drawn by the page in
++// the text's colour (24 by 24, stroked); nothing is fetched.
++const STEP_GLYPHS: Record<Step, string[]> = {
++  search: ['M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13', 'M15.5 15.5L20 20'],
++  import: ['M12 4v10', 'M7.5 9.5L12 14l4.5-4.5', 'M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3'],
++  appearance: ['M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16', 'M12 4v16'],
++  behaviour: ['M5 7h14', 'M5 12h14', 'M5 17h14', 'M9 5v4', 'M15 10v4', 'M11 15v4'],
++  default: ['M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
++            'M4 9h16', 'M8.5 14.5l2.5 2.5l4.5-5'],
++  keys: ['M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
++         'M7 9h.01', 'M11 9h.01', 'M15 9h.01', 'M7 13h.01', 'M17 13h.01', 'M9 16h6'],
++};
++
++function stepIcon(step: Step): HTMLSpanElement {
++  const wrap = el('span', 'step-icon');
++  wrap.setAttribute('aria-hidden', 'true');
++  const ns = 'http://www.w3.org/2000/svg';
++  const svg = document.createElementNS(ns, 'svg');
++  svg.setAttribute('viewBox', '0 0 24 24');
++  for (const d of STEP_GLYPHS[step]) {
++    const path = document.createElementNS(ns, 'path');
++    path.setAttribute('d', d);
++    svg.append(path);
++  }
++  wrap.append(svg);
++  return wrap;
++}
++
+ function renderStep(main: HTMLElement) {
+   main.replaceChildren();
+   const heading = (title: string, lead: string) => {
+-    main.append(el('h1', undefined, title), el('p', 'lead', lead));
++    const row = el('div', 'heading');
++    row.append(stepIcon(state.step), el('h1', undefined, title));
++    main.append(row, el('p', 'lead', lead));
+   };
+   switch (state.step) {
+     case 'search': {
+@@ -273,7 +303,7 @@ function renderStep(main: HTMLElement) {
        heading('Bring your bookmarks and history',
                'From another browser on this ' + (isMac ? 'Mac' : 'computer') +
                '. Nothing leaves the machine; it is copied into your profile.');
@@ -124,7 +253,7 @@ index debd2903cb537..e5ef697e18a2e 100644
        if (state.arc && state.arc.found) {
          const arc = el('div', 'arc-import');
          arc.append(el('div', 'name', 'Everything from Arc'),
-@@ -283,8 +283,11 @@ function renderStep(main: HTMLElement) {
+@@ -283,8 +313,11 @@ function renderStep(main: HTMLElement) {
          }
          // import I21: one click moves the sidebar, the history and the
          // passwords; each is a checkbox for whoever wants less.
@@ -138,7 +267,7 @@ index debd2903cb537..e5ef697e18a2e 100644
          const choices = el('div', 'import-row');
          choices.append(
              checkbox('Spaces', state.arcSpaces, 'arc-spaces', v => state.arcSpaces = v),
-@@ -397,7 +400,7 @@ function renderStep(main: HTMLElement) {
+@@ -397,7 +430,7 @@ function renderStep(main: HTMLElement) {
          }));
        }
        main.append(list);
@@ -147,6 +276,44 @@ index debd2903cb537..e5ef697e18a2e 100644
        if (state.spaceColors.length > 0) {
          const swatches = el('div', 'swatches');
          swatches.setAttribute('role', 'radiogroup');
+@@ -469,18 +502,28 @@ function renderStep(main: HTMLElement) {
+       break;
+     }
+     case 'default': {
++      // welcome W5: the one step that asks for something; its button is the
++      // step's own call, the largest on any step, and says what it does.
+       heading('Make Stedding your default browser',
+-              'Links from other apps open here. ' +
+-              (isMac ? 'macOS asks once to confirm.'
+-                     : 'Windows opens its Default apps settings; choose Stedding there.'));
+-      const row = el('div', 'import-row');
+-      const button = el('button', 'secondary',
+-          state.defaultState === 'default' ? 'Stedding is the default' : 'Set as default');
++              'Then the links you click in mail, chat and other apps open in ' +
++              'Stedding, with your Spaces and essentials.');
++      const isDefault = state.defaultState === 'default';
++      const ask = el('div', 'default-ask' + (isDefault ? ' done' : ''));
++      const button = el('button', 'cta',
++          isDefault ? 'Stedding is your default browser'
++                    : 'Make Stedding my default browser');
+       button.dataset['focus'] = 'default';
+-      button.disabled = state.defaultState === 'default';
++      button.disabled = isDefault;
+       button.addEventListener('click', () => chrome.send('setDefaultBrowser'));
+-      row.append(button);
+-      main.append(row);
++      ask.append(button);
++      ask.append(el('p', 'hint',
++          isDefault ? 'Change it back any time in ' +
++                          (isMac ? 'System Settings.' : 'Windows\u2019 Default apps.')
++                    : (isMac ? 'macOS asks once to confirm. '
++                             : 'Windows opens its Default apps settings; ' +
++                               'choose Stedding there. ') +
++                          'You can change it back any time.'));
++      main.append(ask);
+       break;
+     }
+     case 'keys': {
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 index 20d11f6e7be29..030592426b008 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
@@ -940,3 +1107,63 @@ index 5e9d7ad357996..e6f93a5396a29 100644
 +}
 +
  }  // namespace
+diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
+index 4d6a0f54cae13..e37dbc9da4bc8 100644
+--- a/chrome/test/stedding/welcome_browsertest.cc
++++ b/chrome/test/stedding/welcome_browsertest.cc
+@@ -315,6 +315,55 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+   }
+ }
+ 
++// welcome W5, W13: the default step asks with one large button that says
++// what it does, and once Stedding is the default the button says so and
++// takes no press. It was a small "Set as default" button on an empty step
++// (the owner, 2026-10-24: "make sure we ask people to make our browser
++// default browser"). Every step carries its own glyph beside its title.
++IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, TheDefaultStepAsksWithOneLargeButton) {
++  content::WebContents* const page = OpenWelcome(*browser());
++  ASSERT_TRUE(page);
++  ASSERT_EQ("", GoTo(page, "[data-focus='default']"));
++  EXPECT_EQ("cta|Make Stedding my default browser|enabled",
++            content::EvalJs(page, R"(
++        (() => {
++          cr.webUIListenerCallback('default-browser-changed', 'not-default');
++          const b = document.querySelector('[data-focus="default"]');
++          return b.className + '|' + b.textContent + '|' +
++                 (b.disabled ? 'disabled' : 'enabled');
++        })())"));
++  EXPECT_EQ("true", content::EvalJs(page, R"(
++        (() => {
++          const b = document.querySelector('[data-focus="default"]');
++          const next = document.querySelector('footer button.primary');
++          return String(b.getBoundingClientRect().height >
++                        next.getBoundingClientRect().height);
++        })())"))
++      << "the ask is no larger than the footer's Next";
++  EXPECT_EQ("Stedding is your default browser|disabled",
++            content::EvalJs(page, R"(
++        (() => {
++          cr.webUIListenerCallback('default-browser-changed', 'default');
++          const b = document.querySelector('[data-focus="default"]');
++          return b.textContent + '|' + (b.disabled ? 'disabled' : 'enabled');
++        })())"));
++  EXPECT_EQ("6 glyphs", content::EvalJs(page, R"(
++        (() => {
++          let glyphs = 0;
++          const back = () => document.querySelector('footer button.secondary');
++          while (!back().disabled) back().click();
++          for (let i = 0; i < 6; ++i) {
++            if (document.querySelector('main .heading .step-icon svg path')) {
++              ++glyphs;
++            }
++            const next = document.querySelector('footer button.primary');
++            if (next.textContent === 'Finish') break;
++            next.click();
++          }
++          return glyphs + ' glyphs';
++        })())"));
++}
++
+ // welcome, import: the "Bookmarks HTML File" row asks for the file, in a file
+ // dialog of the welcome window. Sent as a browser's import it read no file
+ // and said it had imported; sent as Settings sends it, the page's handler
