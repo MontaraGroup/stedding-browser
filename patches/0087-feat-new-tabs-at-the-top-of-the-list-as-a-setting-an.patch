@@ -32,7 +32,7 @@ Removable when: never; it is product behaviour.
  .../stedding_page/stedding_page.html.ts       |   7 +
  .../resources/stedding_welcome/app.css        |  10 +-
  .../browser/resources/stedding_welcome/app.ts |  11 +-
- .../browser/ui/spaces/arc_sidebar_importer.cc |  73 +++++-
+ .../browser/ui/spaces/arc_sidebar_importer.cc |  79 +++++-
  .../spaces/arc_sidebar_importer_unittest.cc   |   9 +-
  chrome/browser/ui/spaces/space_colors.h       |  49 +++-
  chrome/browser/ui/spaces/space_model.cc       |  36 ++-
@@ -45,7 +45,7 @@ Removable when: never; it is product behaviour.
  .../browser/ui/webui/settings/settings_ui.cc  |   8 +
  .../stedding_welcome_handler_unittest.cc      |   2 +-
  .../test/stedding/pinned_run_browsertest.cc   | 242 ++++++++++++++++++
- 17 files changed, 461 insertions(+), 34 deletions(-)
+ 17 files changed, 464 insertions(+), 37 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -148,7 +148,7 @@ index debd2903cb537..e5ef697e18a2e 100644
          const swatches = el('div', 'swatches');
          swatches.setAttribute('role', 'radiogroup');
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
-index 20d11f6e7be29..8aa0af769319d 100644
+index 20d11f6e7be29..030592426b008 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 +++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 @@ -5,6 +5,7 @@
@@ -274,6 +274,19 @@ index 20d11f6e7be29..8aa0af769319d 100644
      if (best < 0 || distance < best) {
        best = distance;
        nearest = choice.color;
+@@ -1064,9 +1111,9 @@ void ImportFromArcAsync(BrowserWindowInterface* browser,
+   }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+-      base::BindOnce(
+-          [](const base::FilePath& path) { return ReadArcSidebar(path); },
+-          ArcSidebarPath()),
++      // I27: where Arc is is found on the pool too: on Windows that lists
++      // the Store's packages, which the UI thread may not wait for.
++      base::BindOnce([] { return ReadArcSidebar(ArcSidebarPath()); }),
+       base::BindOnce(&ApplyRead, browser->GetWeakPtr(), options,
+                      std::move(done)));
+ }
 @@ -1097,7 +1144,11 @@ std::u16string DescribeArcImportResult(const ArcImportResult& result) {
                            u" already here"});
    }

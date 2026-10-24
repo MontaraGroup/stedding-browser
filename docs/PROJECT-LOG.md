@@ -32,7 +32,11 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
   unsealed with Local State's DPAPI key and AES-256-GCM; its four Windows-only tests pass on the PC
   (1039 unit tests green). Not yet run against a real install.
 
-`tooling/fold-fix` now folds a new file into a patch. Mac: 1042 unit tests, 522 and 150 browser
+Beta 13's release passes found two faults in `S-81` that the release build's suites had
+passed: `ArcImportTest` placed its Arc in the Mac's folder on every platform, and on the PC's
+build with DCHECKs the import looked for Arc's Store package on the UI thread, which may not
+block (`ImportFromArcAsync` bound the path when it posted the read). Both fixed; the lookup is
+the pool's. `tooling/fold-fix` now folds a new file into a patch. Mac: 1042 unit tests, 522 and 150 browser
 tests green; PC: 1035 unit tests, 484 and 155 browser tests green, before `S-81`.
 
 

@@ -99,7 +99,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/browser/ui/browser_tabrestore.cc       |   7 +
  .../public/browser_window_features.h          |   3 +-
  .../session_service_browser_helper.cc         |  25 +
- chrome/browser/ui/spaces/arc_data_importer.cc | 151 ++-
+ chrome/browser/ui/spaces/arc_data_importer.cc | 156 ++-
  chrome/browser/ui/spaces/arc_data_importer.h  |  39 +-
  .../browser/ui/spaces/arc_sidebar_importer.cc |  97 ++
  chrome/browser/ui/spaces/folder_commands.cc   |   4 +-
@@ -190,7 +190,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../test/stedding/command_bar_browsertest.cc  | 572 +++++++++-
  chrome/test/stedding/defaults_browsertest.cc  |  45 +-
  chrome/test/stedding/downloads_browsertest.cc | 368 +++++++
- chrome/test/stedding/import_browsertest.cc    | 409 +++++++
+ chrome/test/stedding/import_browsertest.cc    | 421 ++++++++
  .../test/stedding/pinned_run_browsertest.cc   | 160 +++
  .../stedding/privacy_defaults_browsertest.cc  | 199 ++++
  .../test/stedding/private_coat_browsertest.cc |  12 +-
@@ -212,7 +212,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 128 files changed, 11324 insertions(+), 776 deletions(-)
+ 128 files changed, 11340 insertions(+), 777 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -1189,7 +1189,7 @@ index 52c296c55d521..bfa59a1a033ad 100644
      }
      case TabStripModelChange::kSelectionOnly:
 diff --git a/chrome/browser/ui/spaces/arc_data_importer.cc b/chrome/browser/ui/spaces/arc_data_importer.cc
-index 757abb28414c7..94daf8980912a 100644
+index 757abb28414c7..51a51dfc0293a 100644
 --- a/chrome/browser/ui/spaces/arc_data_importer.cc
 +++ b/chrome/browser/ui/spaces/arc_data_importer.cc
 @@ -9,10 +9,12 @@
@@ -1254,15 +1254,18 @@ index 757abb28414c7..94daf8980912a 100644
  
  base::Time FromChromiumMicroseconds(int64_t value) {
    return base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(value));
-@@ -94,24 +114,39 @@ ReadOutcome::ReadOutcome() = default;
+@@ -94,24 +114,42 @@ ReadOutcome::ReadOutcome() = default;
  ReadOutcome::ReadOutcome(ReadOutcome&&) = default;
  ReadOutcome::~ReadOutcome() = default;
  
 -ReadOutcome ReadOnPool(ArcDataPaths paths, bool history, bool passwords) {
-+ReadOutcome ReadOnPool(ArcDataPaths paths,
++ReadOutcome ReadOnPool(std::optional<ArcDataPaths> given,
 +                       bool history,
 +                       bool passwords,
 +                       base::Time history_after) {
++  // I27: the default paths are found here, on the pool: on Windows that
++  // lists the Store's packages, which the UI thread may not wait for.
++  const ArcDataPaths paths = given ? *given : DefaultArcDataPaths();
    ReadOutcome out;
    base::ScopedTempDir temp;
    if (!temp.CreateUniqueTempDir()) {
@@ -1296,7 +1299,7 @@ index 757abb28414c7..94daf8980912a 100644
      }
    }
    return out;
-@@ -132,6 +167,16 @@ void WriteOnUi(base::WeakPtr<Profile> profile,
+@@ -132,6 +170,16 @@ void WriteOnUi(base::WeakPtr<Profile> profile,
                  profile.get(), ServiceAccessType::EXPLICIT_ACCESS)) {
        service->AddPagesWithDetails(read.history, history::SOURCE_BROWSED);
        result.history = read.history.size();
@@ -1313,7 +1316,7 @@ index 757abb28414c7..94daf8980912a 100644
      }
    }
    if (!read.logins.empty()) {
-@@ -157,18 +202,17 @@ ArcDataPaths ArcDataPathsFor(const base::FilePath& user_data_dir) {
+@@ -157,18 +205,17 @@ ArcDataPaths ArcDataPathsFor(const base::FilePath& user_data_dir) {
    const base::FilePath profile = user_data_dir.Append(FILE_PATH_LITERAL("Default"));
    paths.history = profile.Append(FILE_PATH_LITERAL("History"));
    paths.logins = profile.Append(FILE_PATH_LITERAL("Login Data"));
@@ -1339,7 +1342,7 @@ index 757abb28414c7..94daf8980912a 100644
  }
  
  bool ArcDataPresent(const ArcDataPaths& paths) {
-@@ -256,8 +300,75 @@ std::optional<std::string> ReadArcKeychainPassword() {
+@@ -256,8 +303,75 @@ std::optional<std::string> ReadArcKeychainPassword() {
  #endif
  }
  
@@ -1416,7 +1419,7 @@ index 757abb28414c7..94daf8980912a 100644
    history::URLRows rows;
    if (history_copy.empty() || !base::PathExists(history_copy)) {
      return rows;
-@@ -272,9 +383,12 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+@@ -272,9 +386,12 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
    // read to its end (BACKLOG S-183).
    sql::Statement statement(db.GetUniqueStatement(
        "SELECT url, title, visit_count, typed_count, last_visit_time FROM urls "
@@ -1431,7 +1434,7 @@ index 757abb28414c7..94daf8980912a 100644
    while (rows.size() < cap && statement.Step()) {
      const GURL url(statement.ColumnString(0));
      if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
-@@ -299,7 +413,8 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+@@ -299,7 +416,8 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
  std::vector<password_manager::PasswordForm> ReadArcLogins(
      const base::FilePath& logins_copy,
      base::span<const uint8_t> key,
@@ -1441,7 +1444,7 @@ index 757abb28414c7..94daf8980912a 100644
    std::vector<password_manager::PasswordForm> forms;
    if (logins_copy.empty() || !base::PathExists(logins_copy)) {
      return forms;
-@@ -349,7 +464,9 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
+@@ -349,7 +467,9 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
        form.password_element.clear();
      } else {
        std::optional<std::u16string> password =
@@ -1452,7 +1455,7 @@ index 757abb28414c7..94daf8980912a 100644
        if (!password || password->empty()) {
          continue;
        }
-@@ -371,10 +488,12 @@ void ImportArcDataAsync(Profile* profile,
+@@ -371,10 +491,12 @@ void ImportArcDataAsync(Profile* profile,
      std::move(done).Run(ArcDataResult());
      return;
    }
@@ -1460,14 +1463,15 @@ index 757abb28414c7..94daf8980912a 100644
 +      profile->GetPrefs()->GetTime(stedding::prefs::kArcImportedHistoryThrough);
    base::ThreadPool::PostTaskAndReplyWithResult(
        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-       base::BindOnce(&ReadOnPool, paths ? *paths : DefaultArcDataPaths(),
+-      base::BindOnce(&ReadOnPool, paths ? *paths : DefaultArcDataPaths(),
 -                     history, passwords),
-+                     history, passwords, history_after),
++      base::BindOnce(&ReadOnPool, std::move(paths), history, passwords,
++                     history_after),
        base::BindOnce(&WriteOnUi, profile->GetWeakPtr(), std::move(done)));
  }
  
 diff --git a/chrome/browser/ui/spaces/arc_data_importer.h b/chrome/browser/ui/spaces/arc_data_importer.h
-index 4a66cb59f811c..ea99780a2ad44 100644
+index 1614d00b1a31a..8bccf7a9889ee 100644
 --- a/chrome/browser/ui/spaces/arc_data_importer.h
 +++ b/chrome/browser/ui/spaces/arc_data_importer.h
 @@ -15,6 +15,7 @@
@@ -8675,10 +8679,10 @@ index 0000000000000..2f9c2add9f39e
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/import_browsertest.cc b/chrome/test/stedding/import_browsertest.cc
-index 0f65eb30b0153..c6c45ba2ba1e2 100644
+index 0f65eb30b0153..ac2224cc68df4 100644
 --- a/chrome/test/stedding/import_browsertest.cc
 +++ b/chrome/test/stedding/import_browsertest.cc
-@@ -6,30 +6,59 @@
+@@ -6,30 +6,60 @@
  // sidebar file -- Arc's, or a Stedding backup in the same shape -- that pins
  // a bookmarklet and a local file brings in no pin whose home is not a web
  // page, and resetting every pin afterwards runs no script.
@@ -8700,6 +8704,7 @@ index 0f65eb30b0153..c6c45ba2ba1e2 100644
  #include "base/files/file_path.h"
  #include "base/files/file_util.h"
  #include "base/files/scoped_temp_dir.h"
++#include "build/build_config.h"
  #include "base/functional/bind.h"
 +#include "base/functional/callback_helpers.h"
 +#include "base/strings/strcat.h"
@@ -8738,7 +8743,7 @@ index 0f65eb30b0153..c6c45ba2ba1e2 100644
  #include "components/tabs/public/tab_interface.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/test/browser_test.h"
-@@ -39,6 +68,8 @@
+@@ -39,6 +69,8 @@
  #include "net/test/embedded_test_server/embedded_test_server.h"
  #include "net/test/embedded_test_server/http_request.h"
  #include "net/test/embedded_test_server/http_response.h"
@@ -8747,7 +8752,7 @@ index 0f65eb30b0153..c6c45ba2ba1e2 100644
  #include "url/gurl.h"
  #include "url/url_constants.h"
  
-@@ -327,4 +358,382 @@ IN_PROC_BROWSER_TEST_F(SidebarImportTest, TheFirstLoadSettlesARedirectedHome) {
+@@ -327,4 +359,393 @@ IN_PROC_BROWSER_TEST_F(SidebarImportTest, TheFirstLoadSettlesARedirectedHome) {
    }
  }
  
@@ -8905,18 +8910,29 @@ index 0f65eb30b0153..c6c45ba2ba1e2 100644
 +)";
 +
 +// An Arc of the test's own: its folder under a home directory the test owns,
-+// so no test reads the Arc of whoever runs it.
++// so no test reads the Arc of whoever runs it. Where the platform's Arc keeps
++// it (import I27): on Windows the Arc folder of its Store package.
 +class ArcImportTest : public InProcessBrowserTest {
 + protected:
 +  void SetUpOnMainThread() override {
 +    InProcessBrowserTest::SetUpOnMainThread();
 +    base::ScopedAllowBlockingForTesting allow_blocking;
 +    ASSERT_TRUE(home_.CreateUniqueTempDir());
++#if BUILDFLAG(IS_WIN)
++    home_override_.emplace(base::DIR_LOCAL_APP_DATA, home_.GetPath());
++    arc_ = home_.GetPath()
++               .Append(FILE_PATH_LITERAL("Packages"))
++               .Append(FILE_PATH_LITERAL("TheBrowserCompany.Arc_ttt1ap7aakyb4"))
++               .Append(FILE_PATH_LITERAL("LocalCache"))
++               .Append(FILE_PATH_LITERAL("Local"))
++               .Append(FILE_PATH_LITERAL("Arc"));
++#else
 +    home_override_.emplace(base::DIR_HOME, home_.GetPath());
 +    arc_ = home_.GetPath()
 +               .Append(FILE_PATH_LITERAL("Library"))
 +               .Append(FILE_PATH_LITERAL("Application Support"))
 +               .Append(FILE_PATH_LITERAL("Arc"));
++#endif
 +    ASSERT_TRUE(base::CreateDirectory(ArcProfile()));
 +  }
 +
