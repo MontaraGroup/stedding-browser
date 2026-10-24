@@ -1967,11 +1967,29 @@ beta 19), so a newer Stedding over an older one is an ordinary upgrade on the sa
 number; only an installer of the very version installed still repairs and needs Stedding
 closed (trap 62). The PC builds and tests its own image; driving it from the Mac
 over SSH (beta 12) put the browser suite in session 0, where it fails (traps 67, 68).
-After `publish-release`, nothing is needed on the site: its scheduled rebuild
-(every six hours) reads the release list, pre-releases included. To see the new
-version at once, `gh workflow run rebuild.yml -R ysalitrynskyi/stedding.dev`
-(the deploy hook; working since 2026-09-18) or push to the site's `main`, which
-Cloudflare builds on its own.
+**After a release.** Every place that names the release, and what keeps it current:
+
+| Where | What follows the release | By hand |
+|---|---|---|
+| GitHub Releases | `tooling/publish-release` | |
+| README's Download section ("The newest release is ...") | written by hand in the release commit; `publish-release` refuses a README that does not name the release | |
+| The update feeds (`updates/appcast.xml`, `appcast-windows.xml`) | `tooling/publish-appcast --push`, `tooling\win\publish-appcast.ps1 -Push`, each on the operator's yes | |
+| stedding.dev (download section, press kit facts, structured data) | its Rebuild workflow reads the release list, pre-releases included; `publish-release` starts it, and it runs every six hours anyway | `gh workflow run rebuild.yml -R ysalitrynskyi/stedding.dev` |
+| The Homebrew cask (`ysalitrynskyi/homebrew-stedding`, `Casks/stedding.rb`) | its Bump workflow reads the release marked latest and the DMG's `.sha256`; `publish-release` starts it once the Mac image is in, and it runs every six hours anyway. A release with no Mac image yet changes nothing | `gh workflow run bump.yml -R ysalitrynskyi/homebrew-stedding` |
+
+Check the last two within the hour: the home page's download section names the release, and
+`gh api repos/ysalitrynskyi/homebrew-stedding/contents/Casks/stedding.rb --jq .content | base64 -d`
+carries its version. The cask depends on the image's name (`Stedding-<version>-arm64.dmg`)
+and its `.sha256` beside it: a change to either is a change to `Casks/stedding.rb` in the
+same round.
+
+When what a user installs changes (a new platform, a requirement, a file name, an install
+step), change every place that tells them, together: `README.md` (Download), `docs/INSTALL.md`,
+`docs/FAQ.md`, the cask (`depends_on`, `url`, `zap`), and on stedding.dev the download
+section (`src/pages/index.astro`), `content/copy.md`, `public/llms.txt`, the press kit's
+Platforms line and `/arc/`. Homebrew installs with
+`brew install --cask ysalitrynskyi/stedding/stedding`; the README, `docs/INSTALL.md` and the
+site's download notes say so.
 
 **Release at least every five weeks, each time on a newer pin.** Chromium uses its built-in
 list of sites that must load only over HTTPS (the HSTS preload list) only while the build is

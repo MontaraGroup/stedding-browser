@@ -139,7 +139,9 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
 - The work order: `BACKLOG.md`, in priority order; its first "Checks still owed" row is the
   core-loop gate that new features wait for (`PLAN.md`).
 - What is released: `docs/release-notes/` has the current release's notes and `archive.md`
-  with every earlier one; `gh release list` is the truth. The site (`stedding.dev`) reads the same list.
+  with every earlier one; `gh release list` is the truth. The site (`stedding.dev`) and the
+  Homebrew tap (`ysalitrynskyi/homebrew-stedding`) read the same list; `docs/HANDOFF.md`
+  ("After a release") lists every place a release must reach.
 - What is open: `BACKLOG.md`, by id.
 
 ## Map of the docs

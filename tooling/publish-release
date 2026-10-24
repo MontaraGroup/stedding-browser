@@ -38,6 +38,28 @@
 # shellcheck source=./lib.sh
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
+# After a release, the two copies of the release list kept elsewhere are told at once
+# instead of at their next scheduled run (each runs every six hours): the website's
+# download section (<owner>/stedding.dev, its Rebuild workflow) and, once the Mac image
+# is in, the Homebrew cask (<owner>/homebrew-stedding, its Bump workflow). The owner is
+# the release repository's, so a fork tells its own copies or none. The release is out
+# by now, so a failure here only warns; docs/HANDOFF.md ("After a release") has the
+# commands to run by hand.
+follow_up() {
+    local owner="${repo%%/*}"
+    if gh workflow run rebuild.yml --repo "$owner/stedding.dev" >/dev/null 2>&1; then
+      log "website: rebuild started ($owner/stedding.dev)"
+    else
+      warn "website: could not start its rebuild; gh workflow run rebuild.yml -R $owner/stedding.dev"
+    fi
+    [ "$ext" = dmg ] || return 0
+    if gh workflow run bump.yml --repo "$owner/homebrew-stedding" >/dev/null 2>&1; then
+      log "Homebrew: cask update started ($owner/homebrew-stedding)"
+    else
+      warn "Homebrew: could not start the cask update; gh workflow run bump.yml -R $owner/homebrew-stedding"
+    fi
+}
+
 sha256_of() {
     if command -v shasum >/dev/null 2>&1; then
       shasum -a 256 "$1" | cut -d' ' -f1
@@ -210,6 +232,7 @@ main() {
       gh release edit "$tag" --repo "$repo" --notes-file "$notes" \
         || die "gh release edit failed"
       log "added: $(gh release view "$tag" --repo "$repo" --json url -q .url)"
+      follow_up
       return
     fi
     log "publishing $tag: $title"
@@ -228,6 +251,7 @@ main() {
     git -C "$STEDDING_ROOT" fetch --quiet origin "refs/tags/$tag:refs/tags/$tag" \
       || warn "could not fetch the tag gh created; git fetch --tags when convenient"
     log "published: $(gh release view "$tag" --repo "$repo" --json url -q .url)"
+    follow_up
 }
 
 main "$@"
