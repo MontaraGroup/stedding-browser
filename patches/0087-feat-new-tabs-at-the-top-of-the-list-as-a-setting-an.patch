@@ -1,0 +1,507 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Fri, 23 Oct 2026 20:27:52 -0400
+Subject: feat: new tabs at the top of the list, as a setting, and twelve Space
+ colours
+
+Tabs R62, settings T30 (GitHub issue 22): with "Open new tabs at the top
+of the list" on, a new tab that Chromium would put at the end of the
+strip -- Cmd-T, + New Tab, a bookmark or an address in a new tab -- opens
+under + New Tab instead: below the Space's pins, above its older tabs, and
+above a folder that heads the list rather than in it. TabStripModel asks
+SpaceModel::NewTabIndexAtTop through SetNewTabIndexCallback when a tab is
+added with no place asked for; a link's tab keeps its place by its page.
+Off by default (stedding.tabs.new_at_top), so the list is as it was.
+
+Spaces B40: twelve Space colours in place of five, designers' colours
+rather than ours: Radix Colors' solid steps (step 10 of the light scale
+where step 9 is too pale on a light sidebar) and Tailwind's slate-500,
+both MIT, none of them amber. The first five keep the old ones' hues and
+order; a Space saved with one of the old five takes its new neighbour
+when it is read back (UpdatedSpaceColor). The welcome flow's swatches
+wrap to a second row.
+
+Tests: PinnedRunTest.NewTabsOpenAtTheTopWhenAsked.
+
+Why: people coming from Arc keep their pinned tabs in view by opening new
+tabs at the top (GitHub issue 22); the five muted Space colours were too
+few and too alike (the owner, 2026-10-23).
+Removable when: never; it is product behaviour.
+---
+ .../api/settings_private/prefs_util.cc        |  3 +
+ .../stedding_page/stedding_page.html.ts       |  7 +++
+ .../resources/stedding_welcome/app.css        | 10 ++-
+ .../browser/resources/stedding_welcome/app.ts |  2 +-
+ chrome/browser/ui/spaces/space_colors.h       | 49 ++++++++++++---
+ chrome/browser/ui/spaces/space_model.cc       | 34 +++++++++-
+ chrome/browser/ui/spaces/space_model.h        |  5 ++
+ chrome/browser/ui/spaces/space_registry.cc    |  5 +-
+ chrome/browser/ui/stedding/stedding_prefs.cc  |  2 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |  4 ++
+ chrome/browser/ui/tabs/tab_strip_model.cc     | 13 +++-
+ chrome/browser/ui/tabs/tab_strip_model.h      |  8 +++
+ .../browser/ui/webui/settings/settings_ui.cc  |  8 +++
+ .../test/stedding/pinned_run_browsertest.cc   | 63 +++++++++++++++++++
+ 14 files changed, 196 insertions(+), 17 deletions(-)
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index a5cd8dafdde14..5c842c1336c14 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -382,6 +382,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+   // tabs R56, settings T26.
+   (*s_allowlist)[stedding::prefs::kNestChildTabs] =
+       settings_api::PrefType::kBoolean;
++  // tabs R62, settings T30.
++  (*s_allowlist)[stedding::prefs::kNewTabsAtTop] =
++      settings_api::PrefType::kBoolean;
+   // import I14, settings T27.
+   (*s_allowlist)[stedding::prefs::kBookmarksConverted] =
+       settings_api::PrefType::kBoolean;
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 39e05d4572407..bc6ebcee8a883 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -148,6 +148,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingNestChildTabsLabel}"
+       sub-label="$i18n{steddingNestChildTabsSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="newTabsAtTop"
++      class="hr"
++      pref-key="stedding.tabs.new_at_top"
++      label="$i18n{steddingNewTabsAtTopLabel}"
++      sub-label="$i18n{steddingNewTabsAtTopSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="bookmarksShown"
+       class="hr"
+diff --git a/chrome/browser/resources/stedding_welcome/app.css b/chrome/browser/resources/stedding_welcome/app.css
+index 5ee34e22a3fcf..a78b29211d070 100644
+--- a/chrome/browser/resources/stedding_welcome/app.css
++++ b/chrome/browser/resources/stedding_welcome/app.css
+@@ -271,10 +271,14 @@ button:disabled {
+ }
+ 
+ /* The Space colour swatches on the appearance step (welcome W7). */
++/* Twelve of them since 2026-10-23 (spaces B40): they wrap to a second row
++ * rather than run out of the card on a narrow window. */
+ .swatches {
+   display: flex;
+-  gap: 12px;
++  flex-wrap: wrap;
++  gap: 10px;
+   margin-top: 8px;
++  max-width: 480px;
+ }
+ 
+ .swatch {
+@@ -282,9 +286,9 @@ button:disabled {
+   border-radius: 50%;
+   box-shadow: inset 0 0 0 2px var(--card);
+   cursor: pointer;
+-  height: 34px;
++  height: 30px;
+   padding: 0;
+-  width: 34px;
++  width: 30px;
+ }
+ 
+ .swatch[aria-checked='true'] {
+diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
+index debd2903cb537..c4e75fdf54023 100644
+--- a/chrome/browser/resources/stedding_welcome/app.ts
++++ b/chrome/browser/resources/stedding_welcome/app.ts
+@@ -397,7 +397,7 @@ function renderStep(main: HTMLElement) {
+         }));
+       }
+       main.append(list);
+-      // The first Space's colour (W7): the switcher's five swatches.
++      // The first Space's colour (W7): the switcher's twelve swatches.
+       if (state.spaceColors.length > 0) {
+         const swatches = el('div', 'swatches');
+         swatches.setAttribute('role', 'radiogroup');
+diff --git a/chrome/browser/ui/spaces/space_colors.h b/chrome/browser/ui/spaces/space_colors.h
+index e0afc51c8b8fc..d37e786a4a853 100644
+--- a/chrome/browser/ui/spaces/space_colors.h
++++ b/chrome/browser/ui/spaces/space_colors.h
+@@ -11,22 +11,55 @@
+ 
+ namespace spaces {
+ 
+-// The five colours a Space can take: the switcher's menu offers them, a new
+-// Space cycles through them, and the welcome flow shows them as swatches
+-// (docs/features/welcome.md W7). One table, so every surface agrees.
++// The twelve colours a Space can take: the switcher's menu offers them, a new
++// Space cycles through them in this order, and the welcome flow shows them as
++// swatches (docs/features/welcome.md W7, spaces B40). One table, so every
++// surface agrees. They are designers' colours, not ours: Radix Colors' solid
++// steps (MIT; step 10 of its light scale where step 9 is too pale on a light
++// sidebar) and Tailwind's slate-500 (MIT). Each reads as a chip and a dot on
++// the sidebar's dark and light grounds, and as its tint (B11); no amber, the
++// owner's choice (2026-10-23). The first five keep the hues of the five there
++// were (UpdatedSpaceColor), in their order.
+ struct SpaceColorChoice {
+   SkColor color;
+   const char16_t* name;
+ };
+ 
+ inline constexpr auto kSpaceColors = std::to_array<SpaceColorChoice>({
+-    {SkColorSetRGB(0x5B, 0x6B, 0x8C), u"Slate"},
+-    {SkColorSetRGB(0x7A, 0x5B, 0x8C), u"Plum"},
+-    {SkColorSetRGB(0x5B, 0x8C, 0x74), u"Moss"},
+-    {SkColorSetRGB(0x8C, 0x6B, 0x5B), u"Clay"},
+-    {SkColorSetRGB(0x8C, 0x5B, 0x63), u"Rose"},
++    {SkColorSetRGB(0x64, 0x74, 0x8B), u"Slate"},   // Tailwind slate-500
++    {SkColorSetRGB(0xAB, 0x4A, 0xBA), u"Plum"},    // Radix plum 9
++    {SkColorSetRGB(0x3E, 0x9B, 0x4F), u"Green"},   // Radix grass 10
++    {SkColorSetRGB(0x95, 0x74, 0x68), u"Clay"},    // Radix bronze 10
++    {SkColorSetRGB(0xDC, 0x3B, 0x5D), u"Rose"},    // Radix ruby 10
++    {SkColorSetRGB(0x05, 0x88, 0xF0), u"Blue"},    // Radix blue 10
++    {SkColorSetRGB(0x6E, 0x56, 0xCF), u"Violet"},  // Radix violet 9
++    {SkColorSetRGB(0x0D, 0x9B, 0x8A), u"Teal"},    // Radix teal 10
++    {SkColorSetRGB(0xDD, 0x44, 0x25), u"Coral"},   // Radix tomato 10
++    {SkColorSetRGB(0x3E, 0x63, 0xDD), u"Indigo"},  // Radix indigo 9
++    {SkColorSetRGB(0xCF, 0x38, 0x97), u"Pink"},    // Radix pink 10
++    {SkColorSetRGB(0x07, 0x97, 0xB9), u"Cyan"},    // Radix cyan 10
+ });
+ 
++// spaces B40: a Space saved with one of the five colours there were before
++// 2026-10-23 takes its new neighbour of the same hue and name; any other
++// colour (Arc's, from an import) is kept as it is.
++constexpr SkColor UpdatedSpaceColor(SkColor color) {
++  switch (color) {
++    case SkColorSetRGB(0x5B, 0x6B, 0x8C):  // Slate
++      return kSpaceColors[0].color;
++    case SkColorSetRGB(0x7A, 0x5B, 0x8C):  // Plum
++      return kSpaceColors[1].color;
++    case SkColorSetRGB(0x5B, 0x8C, 0x74):  // Moss
++      return kSpaceColors[2].color;
++    case SkColorSetRGB(0x8C, 0x6B, 0x5B):  // Clay
++      return kSpaceColors[3].color;
++    case SkColorSetRGB(0x8C, 0x5B, 0x63):  // Rose
++      return kSpaceColors[4].color;
++    default:
++      return color;
++  }
++}
++
+ }  // namespace spaces
+ 
+ #endif  // CHROME_BROWSER_UI_SPACES_SPACE_COLORS_H_
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index b3fad7709536c..324dc1c7fb9f5 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/spaces/space_model.h"
+ 
++#include "chrome/browser/ui/spaces/space_colors.h"
++
+ #include <algorithm>
+ #include <map>
+ #include <optional>
+@@ -153,7 +155,7 @@ namespace {
+ // caller has to handle. It is deliberately unnamed: a single unnamed Space is
+ // indistinguishable from an ordinary window, which is what a user who has never
+ // heard of Spaces should see.
+-constexpr SkColor kDefaultSpaceColor = SkColorSetRGB(0x5B, 0x6B, 0x8C);
++constexpr SkColor kDefaultSpaceColor = kSpaceColors[0].color;
+ 
+ // The registry's entry for `space`, kept by its id.
+ RegistryEntry RegistryEntryFor(const Space& space) {
+@@ -187,8 +189,8 @@ std::vector<std::unique_ptr<Space>> SpacesFromSessionList(
+     const std::string* const icon = entry.FindString("icon");
+     auto space = std::make_unique<Space>(
+         id, name ? *name : std::string(),
+-        static_cast<SkColor>(entry.FindInt("color").value_or(
+-            static_cast<int>(kDefaultSpaceColor))));
++        UpdatedSpaceColor(static_cast<SkColor>(entry.FindInt("color").value_or(
++            static_cast<int>(kDefaultSpaceColor)))));
+     if (icon) {
+       space->SetIcon(*icon);
+     }
+@@ -349,6 +351,10 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+   tab_strip_model_->SetBeforeDetachTabsCallback(
+       base::BindRepeating(&SpaceModel::KeepAVisibleTabAsTabsLeave,
+                           base::Unretained(this), /*closing=*/false));
++  // tabs R62 (GitHub issue 22): with the setting on, a new tab opens at the
++  // top of the active Space's list. Unretained for the same reason.
++  tab_strip_model_->SetNewTabIndexCallback(base::BindRepeating(
++      &SpaceModel::NewTabIndexAtTop, base::Unretained(this)));
+   // tabs R5, R33 (BACKLOG S-112): Sleep Tab on the row on screen shows the
+   // row a close would. The strip asks TabToShowAsTabsLeave() itself.
+   stedding::SetRowAfterSleep(&RowAfterSleepIn);
+@@ -412,6 +418,8 @@ SpaceModel::~SpaceModel() {
+     // strip after this model would call into freed memory.
+     tab_strip_model_->SetBeforeDetachTabsCallback(
+         TabStripModel::BeforeCloseTabsCallback());
++    tab_strip_model_->SetNewTabIndexCallback(
++        TabStripModel::NewTabIndexCallback());
+     tab_strip_model_->RemoveObserver(this);
+     tab_strip_model_ = nullptr;
+   }
+@@ -1146,6 +1154,26 @@ void SpaceModel::KeepAVisibleTabAsTabsLeave(
+   }
+ }
+ 
++std::optional<int> SpaceModel::NewTabIndexAtTop() const {
++  if (!tab_strip_model_ || !profile_ ||
++      !profile_->GetPrefs()->GetBoolean(stedding::prefs::kNewTabsAtTop)) {
++    return std::nullopt;
++  }
++  // The top of the list is its first row below the Space's pins: the first
++  // tab of the active Space that is neither an essential nor a Space pin. A
++  // folder's first tab counts as its folder's place, so the tab opens above
++  // the folder, not in it. With no such row the end is the list's top too.
++  for (int i = 0; i < tab_strip_model_->count(); ++i) {
++    tabs::TabInterface* const tab = tab_strip_model_->GetTabAtIndex(i);
++    if (!tab || tab->IsPinned() || IsSpacePinned(tab) ||
++        !IsTabInActiveSpace(tab)) {
++      continue;
++    }
++    return i;
++  }
++  return std::nullopt;
++}
++
+ void SpaceModel::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
+index da93531fea4fd..5357ccf1ff5e8 100644
+--- a/chrome/browser/ui/spaces/space_model.h
++++ b/chrome/browser/ui/spaces/space_model.h
+@@ -552,6 +552,11 @@ class SpaceModel : public TabStripModelObserver,
+   bool HidesTab(const tabs::TabInterface* tab) const;
+ 
+   // TabStripModelObserver:
++  // tabs R62 (GitHub issue 22): where a new tab opens with the "new tabs at
++  // the top" setting on: the active Space's first loose row's place; nullopt
++  // with it off, or with no loose row, for Chromium's end of the strip.
++  std::optional<int> NewTabIndexAtTop() const;
++
+   void OnTabStripModelChanged(
+       TabStripModel* tab_strip_model,
+       const TabStripModelChange& change,
+diff --git a/chrome/browser/ui/spaces/space_registry.cc b/chrome/browser/ui/spaces/space_registry.cc
+index ce296cf0c8c07..dc6f41eb29021 100644
+--- a/chrome/browser/ui/spaces/space_registry.cc
++++ b/chrome/browser/ui/spaces/space_registry.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/spaces/space_registry.h"
+ 
++#include "chrome/browser/ui/spaces/space_colors.h"
++
+ #include <algorithm>
+ #include <utility>
+ 
+@@ -221,7 +223,8 @@ std::vector<RegistryEntry> SpaceRegistry::FromValue(
+     const std::string* const name = dict->FindString("name");
+     RegistryEntry entry(
+         SpaceId::FromRawToken(*token), name ? *name : std::string(),
+-        static_cast<SkColor>(dict->FindInt("color").value_or(0)));
++        spaces::UpdatedSpaceColor(
++            static_cast<SkColor>(dict->FindInt("color").value_or(0))));
+     if (const std::string* const icon = dict->FindString("icon")) {
+       entry.icon = *icon;
+     }
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 707528a19d9f3..6f8ccfbecc491 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -60,6 +60,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // 2026-10-22: on by default since 2026-10-21, it read as a move to the
+   // right).
+   registry->RegisterBooleanPref(kNestChildTabs, false);
++  // tabs R62, settings T30 (GitHub issue 22).
++  registry->RegisterBooleanPref(kNewTabsAtTop, false);
+   // tabs R30, routing D4, toolbar T45: hints are off until the user asks for
+   // them (the owner, 2026-10-21). A profile that never wrote
+   // the undo toast's setting takes the new default; only the Settings switch
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index c016a1d803476..53a6b425fb996 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -140,6 +140,10 @@ inline constexpr char kUndoToast[] = "stedding.tabs.undo_toast";
+ // under the tab it came from. Off by default since 2026-10-22 (the owner): a
+ // link's tab opens just below its page, at the same depth.
+ inline constexpr char kNestChildTabs[] = "stedding.tabs.nest_children";
++// tabs R62, settings T30 (GitHub issue 22): a new tab -- Cmd-T, + New Tab --
++// opens at the top of the Space's list, under + New Tab, instead of at its
++// end. Off by default (the list as it always was).
++inline constexpr char kNewTabsAtTop[] = "stedding.tabs.new_at_top";
+ // routing D4, settings T23: "Opened in <Space>", with Undo, after a routed
+ // open. Off by default (the owner, 2026-10-21).
+ inline constexpr char kSpaceNotices[] = "stedding.spaces.notices";
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index 97499408a2c04..ad393c9caca9f 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -1500,6 +1500,10 @@ void TabStripModel::SetHiddenTabPredicate(HiddenTabPredicate predicate) {
+   hidden_tab_predicate_ = std::move(predicate);
+ }
+ 
++void TabStripModel::SetNewTabIndexCallback(NewTabIndexCallback callback) {
++  new_tab_index_callback_ = std::move(callback);
++}
++
+ void TabStripModel::SetBeforeCloseTabsCallback(
+     BeforeCloseTabsCallback callback) {
+   before_close_tabs_callback_ = std::move(callback);
+@@ -1854,7 +1858,14 @@ void TabStripModel::AddTab(std::unique_ptr<tabs::TabModel> tab,
+     }
+   } else {
+     // For all other types, respect what was passed to us, normalizing -1s and
+-    // values that are too large.
++    // values that are too large. Stedding (tabs R62): a -1, a tab with no
++    // place asked for -- Cmd-T, + New Tab -- goes where the embedder puts a
++    // new tab, if it names a place.
++    if (index < 0 && new_tab_index_callback_) {
++      if (const std::optional<int> place = new_tab_index_callback_.Run()) {
++        index = *place;
++      }
++    }
+     if (index < 0 || index > count()) {
+       index = count();
+     }
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
+index 45564668955ff..2123516abed75 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.h
++++ b/chrome/browser/ui/tabs/tab_strip_model.h
+@@ -549,6 +549,12 @@ class TabStripModel {
+   // strip -- a drag out of the window, Move Tab to New Window -- with the
+   // tabs about to leave, never when every tab leaves.
+   void SetBeforeDetachTabsCallback(BeforeCloseTabsCallback callback);
++  // Stedding (tabs R62, GitHub issue 22): where a new tab that would open at
++  // the end of the strip -- Cmd-T, + New Tab, a bookmark in a new tab -- goes
++  // instead, when the embedder names a place (the top of the active Space's
++  // list, under + New Tab). A link's tab keeps Chromium's place by its page.
++  using NewTabIndexCallback = base::RepeatingCallback<std::optional<int>()>;
++  void SetNewTabIndexCallback(NewTabIndexCallback callback);
+ 
+   bool IsGroupCollapsed(const tab_groups::TabGroupId& group) const;
+ 
+@@ -1624,6 +1630,8 @@ class TabStripModel {
+   HiddenTabPredicate hidden_tab_predicate_;
+   // Set by the embedder; see SetBeforeCloseTabsCallback().
+   BeforeCloseTabsCallback before_close_tabs_callback_;
++  // Set by the embedder; see SetNewTabIndexCallback().
++  NewTabIndexCallback new_tab_index_callback_;
+   // Set by the embedder; see SetBeforeDetachTabsCallback().
+   BeforeCloseTabsCallback before_detach_tabs_callback_;
+ 
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index e955a23d09ccd..984e9ca752295 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -1137,6 +1137,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingNestChildTabsSubLabel",
+       "A link opened in a new tab sits indented under its page in the "
+       "sidebar. Off, every tab sits at the left.");
++  // tabs R62, settings T30 (GitHub issue 22).
++  html_source->AddString("steddingNewTabsAtTopLabel",
++                         "Open new tabs at the top of the list");
++  html_source->AddString(
++      "steddingNewTabsAtTopSubLabel",
++      "A new tab opens right under + New Tab, above the older tabs, so "
++      "your pinned tabs stay in view. Off, it opens at the end of the "
++      "list.");
+   // import I14, settings T27 (WIN-15; decided 2026-10-22, the owner away
+   // and asking for a decision): the way back from Turn Bookmarks into Pinned
+   // Tabs.
+diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
+index 5e9d7ad357996..d6192dbdc78b6 100644
+--- a/chrome/test/stedding/pinned_run_browsertest.cc
++++ b/chrome/test/stedding/pinned_run_browsertest.cc
+@@ -22,6 +22,7 @@
+ #include "base/test/run_until.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+@@ -29,6 +30,7 @@
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_id.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/tabs/tab_model.h"
+@@ -44,6 +46,7 @@
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/prefs/pref_service.h"
+ #include "components/split_tabs/split_tab_visual_data.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -1279,4 +1282,64 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADragTakesATabIntoTheEssentialsAndOut) {
+   }
+ }
+ 
++
++// tabs R62, settings T30 (GitHub issue 22): with "Open new tabs at the top of
++// the list" on, a new tab opens under + New Tab -- below the Space's pins and
++// above its older tabs, and above a folder that heads the list rather than in
++// it; off, as shipped, it opens at the end of the list.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, NewTabsOpenAtTheTopWhenAsked) {
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  ASSERT_FALSE(prefs->GetBoolean(stedding::prefs::kNewTabsAtTop))
++      << "the setting is off as shipped";
++  tabs::TabInterface* const first = tabs().GetActiveTab();
++  tabs::TabInterface* const pin = AddBlankTab();
++  model().SetSpacePinned(pin, true);
++  ASSERT_TRUE(model().IsSpacePinned(pin));
++  tabs::TabInterface* const older = AddBlankTab();
++  {
++    SCOPED_TRACE("off: at the end");
++    tabs::TabInterface* const added = AddBlankTab();
++    EXPECT_EQ(tabs().count() - 1, Index(added));
++    EXPECT_EQ(added, tabs().GetActiveTab());
++  }
++  prefs->SetBoolean(stedding::prefs::kNewTabsAtTop, true);
++  {
++    SCOPED_TRACE("on: under the pins, above the older tabs");
++    const int top = Index(first) < Index(older) ? Index(first) : Index(older);
++    tabs::TabInterface* const added = AddBlankTab();
++    EXPECT_EQ(added, tabs().GetActiveTab());
++    EXPECT_GT(Index(added), Index(pin)) << "above the Space's pins";
++    EXPECT_EQ(top, Index(added)) << "not the list's first row";
++    EXPECT_FALSE(model().IsSpacePinned(added));
++    EXPECT_FALSE(added->IsPinned());
++  }
++  {
++    SCOPED_TRACE("on, a folder heading the list: above it, not in it");
++    // The list's rows below the pins, in order; the first two make a folder.
++    std::vector<int> loose;
++    for (int i = 0; i < tabs().count(); ++i) {
++      tabs::TabInterface* const tab = tabs().GetTabAtIndex(i);
++      if (!tab->IsPinned() && !model().IsSpacePinned(tab)) {
++        loose.push_back(i);
++      }
++    }
++    ASSERT_GE(loose.size(), 2u);
++    tabs::FolderTabCollection* const folder =
++        tabs().AddToNewFolder({loose[0], loose[1]});
++    ASSERT_TRUE(folder);
++    const int folder_top = loose[0];
++    tabs::TabInterface* const added = AddBlankTab();
++    EXPECT_EQ(folder_top, Index(added)) << "not above the folder";
++    EXPECT_FALSE(added->GetParentCollection() &&
++                 added->GetParentCollection() == folder)
++        << "the new tab joined the folder";
++  }
++  prefs->SetBoolean(stedding::prefs::kNewTabsAtTop, false);
++  {
++    SCOPED_TRACE("off again: at the end");
++    tabs::TabInterface* const added = AddBlankTab();
++    EXPECT_EQ(tabs().count() - 1, Index(added));
++  }
++}
++
+ }  // namespace

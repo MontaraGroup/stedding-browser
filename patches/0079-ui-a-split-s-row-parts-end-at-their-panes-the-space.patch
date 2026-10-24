@@ -43,18 +43,18 @@ the split row, the Space row and the folder header.
 ---
  chrome/browser/ui/stedding_ui_metrics.cc      |  6 ++
  chrome/browser/ui/stedding_ui_metrics.h       |  5 +
- .../views/frame/stedding_window_background.cc | 82 +++--------------
- .../ui/views/spaces/space_switcher_rules.cc   | 48 ++++++++--
- .../ui/views/spaces/space_switcher_rules.h    | 47 ++++++++--
- .../spaces/space_switcher_rules_unittest.cc   | 88 +++++++++++++-----
- .../ui/views/spaces/space_switcher_view.cc    | 53 ++++++++---
+ .../views/frame/stedding_window_background.cc | 82 +++-------------
+ .../ui/views/spaces/space_switcher_rules.cc   | 48 +++++++--
+ .../ui/views/spaces/space_switcher_rules.h    | 47 +++++++--
+ .../spaces/space_switcher_rules_unittest.cc   | 88 +++++++++++++----
+ .../ui/views/spaces/space_switcher_view.cc    | 53 +++++++---
  .../spaces/space_tab_visibility_controller.cc | 25 +++--
  .../ui/views/tabs/common/folder_view.cc       | 56 +----------
  .../ui/views/tabs/common/folder_view.h        | 25 ++---
- .../views/tabs/common/folder_view_unittest.cc | 92 ++++++++-----------
- .../test/stedding/address_band_browsertest.cc | 49 ++++------
- .../test/stedding/folder_tabs_browsertest.cc  | 31 ++++---
- 13 files changed, 315 insertions(+), 292 deletions(-)
+ .../views/tabs/common/folder_view_unittest.cc | 92 ++++++++----------
+ .../test/stedding/address_band_browsertest.cc | 97 +++++++++++++------
+ .../test/stedding/folder_tabs_browsertest.cc  | 31 +++---
+ 13 files changed, 363 insertions(+), 292 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
 index 335120c25fb1d..2d48bc74f9f51 100644
@@ -927,7 +927,7 @@ index e63be5ff05a2d..ce82e5a1a3bce 100644
  
  }  // namespace
 diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
-index cd60572674933..6369dc0b78ba0 100644
+index cd60572674933..9aebec6ce0646 100644
 --- a/chrome/test/stedding/address_band_browsertest.cc
 +++ b/chrome/test/stedding/address_band_browsertest.cc
 @@ -1022,8 +1022,8 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest,
@@ -1047,6 +1047,59 @@ index cd60572674933..6369dc0b78ba0 100644
    views::test::RunScheduledLayout(view());
  
    // The address's own margin in the field, above and below.
+@@ -1865,4 +1856,52 @@ IN_PROC_BROWSER_TEST_F(PageColourRowTest, TheRowsButtonsShowAHoverAndAPress) {
+   }
+ }
+ 
++
++// toolbar T18 (GitHub issue 14, BACKLOG S-275): the address keeps its place
++// when the field takes focus and while it is edited, as long as it fits; an
++// address that fills the field takes Chromium's place at the field's left
++// edge, and a short one is gathered on the middle again. It had jumped to
++// the field's left edge as soon as the field took focus.
++IN_PROC_BROWSER_TEST_F(AddressBandTest, TheAddressKeepsItsPlaceWhenEdited) {
++  OmniboxViewViews* const omnibox = bar()->omnibox_view();
++  views::test::RunScheduledLayout(view());
++  const int at_rest = omnibox->bounds().CenterPoint().x();
++  const int rest_x = omnibox->x();
++  int focused_x = 0;
++  {
++    SCOPED_TRACE("the field takes focus");
++    chrome::FocusLocationBar(browser());
++    ASSERT_TRUE(base::test::RunUntil([&]() { return omnibox->HasFocus(); }));
++    views::test::RunScheduledLayout(view());
++    // The chip beside it may change with the focus, a few DIP either way;
++    // the left edge it had jumped to is hundreds of DIP away.
++    EXPECT_NEAR(at_rest, omnibox->bounds().CenterPoint().x(), 12)
++        << "the address moved when the field took focus";
++    focused_x = omnibox->x();
++  }
++  int filled_x = 0;
++  {
++    SCOPED_TRACE("an address that fills the field");
++    omnibox->SetUserText(std::u16string(400, u'w'), /*update_popup=*/false);
++    views::test::RunScheduledLayout(view());
++    filled_x = omnibox->x();
++    EXPECT_LT(filled_x, rest_x) << "a full field's address is not at its left";
++    EXPECT_GT(focused_x - filled_x, 40)
++        << "the focused address sat at the field's left edge";
++  }
++  {
++    SCOPED_TRACE("a short address while editing");
++    omnibox->SetUserText(u"a.test", /*update_popup=*/false);
++    views::test::RunScheduledLayout(view());
++    EXPECT_GT(omnibox->x(), filled_x)
++        << "a short address is not gathered on the middle while edited";
++    EXPECT_FALSE(bar()->stedding_band_for_testing().has_value())
++        << "editing keeps Chromium's whole field (T34)";
++  }
++  omnibox->RevertAll();
++  view()->GetFocusManager()->ClearFocus();
++  views::test::RunScheduledLayout(view());
++  EXPECT_NEAR(at_rest, omnibox->bounds().CenterPoint().x(), 12);
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
 index ab2a2ade39c7e..291f9f1a8a074 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc

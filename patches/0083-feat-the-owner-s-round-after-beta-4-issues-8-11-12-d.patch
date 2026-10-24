@@ -135,7 +135,7 @@ the hover card).
  .../ui/views/tabs/common/tab_strip_view.h     |   1 +
  .../tabs/common/tab_strip_view_layout.cc      |  14 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |  28 +-
- .../browser/ui/views/tabs/common/tab_view.h   |   6 -
+ .../browser/ui/views/tabs/common/tab_view.h   |  14 +-
  .../common/unpinned_tab_container_view.cc     |   8 +
  .../tabs/common/unpinned_tab_container_view.h |  29 +
  .../unpinned_tab_container_view_layout.cc     |  75 ++-
@@ -158,15 +158,15 @@ the hover card).
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
  .../test/stedding/pinned_run_browsertest.cc   | 194 ++++++
  .../stedding/settings_spaces_browsertest.cc   |  19 +-
- .../stedding/sidebar_click_browsertest.cc     | 208 ++++++-
+ .../stedding/sidebar_click_browsertest.cc     | 252 +++++++-
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
- chrome/test/stedding/tab_drop_browsertest.cc  | 472 ++++++++++++++-
+ chrome/test/stedding/tab_drop_browsertest.cc  | 539 ++++++++++++++++-
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 87 files changed, 5618 insertions(+), 727 deletions(-)
+ 87 files changed, 5737 insertions(+), 727 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -4388,7 +4388,7 @@ index b2fe54f849e0c..08de8d7512665 100644
    EXPECT_TRUE(ShowsClearLine(/*pinned_rows_shown=*/2,
                               /*pinned_run_collapsed=*/false,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
-index bb5aa4aecd3f5..7ef0fb7a695ee 100644
+index e53bb14537161..850a75f2c9ae8 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 @@ -7,11 +7,16 @@
@@ -4450,7 +4450,7 @@ index bb5aa4aecd3f5..7ef0fb7a695ee 100644
  // Stedding: the strip range of a folder's tabs. They sit together in the
  // strip, and an emptied folder leaves the tree, so there is a first tab.
  gfx::Range GetFolderRange(const TabCollectionNode& folder_node,
-@@ -396,12 +429,49 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+@@ -413,12 +446,49 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
      return;
    }
  
@@ -4697,10 +4697,10 @@ index f05f0c4ea2670..f2c571254771e 100644
      unpinned_container_height = heights.unpinned;
    }
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 8260c396e1b12..f8fc1749ae186 100644
+index ca88e9eba8c1e..b0e0cf072dac2 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -1525,14 +1525,6 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1609,14 +1609,6 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    }
  }
  
@@ -4715,7 +4715,7 @@ index 8260c396e1b12..f8fc1749ae186 100644
  std::u16string TabView::PinLineForHoverCard() const {
    tabs::TabInterface* const tab =
        const_cast<tabs::TabInterface*>(GetTabInterface());
-@@ -1726,24 +1718,8 @@ void TabView::UpdateColors() {
+@@ -1810,24 +1802,8 @@ void TabView::UpdateColors() {
    // whenever it is not loading: at its next SetData(), which follows this at
    // once in UpdateTabData(), and at a resize (PLAN.md TAB-28, BACKLOG S-143).
    icon_->SetDimmedOpacity(slept ? stedding::kSleptIconOpacity : 1.0f);
@@ -4743,7 +4743,7 @@ index 8260c396e1b12..f8fc1749ae186 100644
      // pins H12: muted, as Arc draws it.
      drift_slash_->SetEnabledColor(SkColorSetA(colors.foreground_color, 0x99));
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.h b/chrome/browser/ui/views/tabs/common/tab_view.h
-index 5d67ac6a1b0d8..037fb2aa0fc20 100644
+index 5d67ac6a1b0d8..484672a9accbf 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.h
 @@ -241,9 +241,6 @@ class TabView : public views::View,
@@ -4756,7 +4756,18 @@ index 5d67ac6a1b0d8..037fb2aa0fc20 100644
    // pins H10: the reset control on a drifted essentials card, while the
    // pointer rests on it.
    void UpdateResetBadge();
-@@ -343,9 +340,6 @@ class TabView : public views::View,
+@@ -340,12 +337,17 @@ class TabView : public views::View,
+   // Stedding (tabs R14): the left press now held is a double click's second
+   // whose first this row took too, so its release may rename (OnMousePressed).
+   bool rename_on_release_ = false;
++  // Stedding (tabs R61, BACKLOG S-285): a plain left press on a row whose tab
++  // is not on screen selects nothing; its release selects, as a click, and a
++  // drag selects the tab only once it starts, holding the page that was on
++  // screen until the drag is over (`StartPressDrag`, `EndPressDrag`).
++  struct PressDrag;
++  std::unique_ptr<PressDrag> press_drag_;
++  void StartPressDrag(const ui::MouseEvent& event);
++  void EndPressDrag();
    // tabs R57: the indent under the tab that opened this one, in DIP.
    int stedding_nest_indent_ = 0;
    bool should_fill_background_tab_color_ = false;
@@ -7863,7 +7874,7 @@ index c1e809a950931..36e41584c77de 100644
    }
    {
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index d71a0fcdc8b7e..8973bd7fbbf98 100644
+index d71a0fcdc8b7e..feba61720e771 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
 @@ -28,6 +28,7 @@
@@ -8099,7 +8110,7 @@ index d71a0fcdc8b7e..8973bd7fbbf98 100644
  // pins H3, tabs R4 (the owner, 2026-10-21): a pin closed while it plays
  // sound -- a Space pin at its home with Cmd-W, a drifted essential with the
  // tab menu's Close -- is unloaded, and at once its row or card shows no
-@@ -2732,4 +2896,46 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
+@@ -2732,4 +2896,90 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
    }
  }
  
@@ -8143,6 +8154,50 @@ index d71a0fcdc8b7e..8973bd7fbbf98 100644
 +  row->OnMouseCaptureLost();
 +  row->OnMouseExited(mouse(ui::EventType::kMouseExited, ui::EF_NONE));
 +  EXPECT_FALSE(fill()) << "the fill stayed once the pointer left";
++}
++
++
++// sidebar Y29, BACKLOG S-287 (GitHub issue 23): an essential's card takes its
++// own press wherever it is drawn, beside the address row included, with one
++// card and with a row of them: no point of a card, from its top edge to its
++// bottom, is the window's title bar, and a click on each selects it. Since
++// the essentials became one row (0.3.0 beta 7) a press on a card moved the
++// window and never reached the card.
++IN_PROC_BROWSER_TEST_F(SidebarClickTest, EveryEssentialTakesItsPress) {
++  for (int i = 0; i < 5; ++i) {
++    AppendTab();
++  }
++  ASSERT_GE(tab_strip_model()->count(), 6);
++  for (const int essentials : {1, 4}) {
++    SCOPED_TRACE(testing::Message() << essentials << " essentials");
++    while (tab_strip_model()->IndexOfFirstNonPinnedTab() < essentials) {
++      tab_strip_model()->SetTabPinned(
++          tab_strip_model()->IndexOfFirstNonPinnedTab(), true);
++    }
++    tab_strip_model()->ActivateTabAt(tab_strip_model()->count() - 1);
++    ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++    for (int index = 0; index < essentials; ++index) {
++      SCOPED_TRACE(testing::Message() << "card " << index);
++      TabView* const card = RowFor(index);
++      ASSERT_TRUE(card);
++      const gfx::Rect bounds = card->GetBoundsInScreen();
++      ASSERT_FALSE(bounds.IsEmpty());
++      for (const gfx::Point& point :
++           {gfx::Point(bounds.CenterPoint().x(), bounds.y() + 2),
++            gfx::Point(bounds.x() + 4, bounds.y() + 4),
++            gfx::Point(bounds.right() - 4, bounds.y() + 4),
++            bounds.CenterPoint(),
++            gfx::Point(bounds.CenterPoint().x(), bounds.bottom() - 3)}) {
++        EXPECT_EQ(HTCLIENT, NonClientComponentAt(point))
++            << point.ToString() << " in " << bounds.ToString() << ": "
++            << DescribeTargetAt(point);
++      }
++      ClickAt(gfx::Point(bounds.CenterPoint().x(), bounds.y() + 4));
++      EXPECT_EQ(index, tab_strip_model()->active_index())
++          << "a click near the card's top did not select it";
++      tab_strip_model()->ActivateTabAt(tab_strip_model()->count() - 1);
++    }
++  }
 +}
 +
  }  // namespace
@@ -8263,7 +8318,7 @@ index 737209a88e1f5..326c29e639aa7 100644
    EXPECT_TRUE(base::test::RunUntil(
        [&]() { return model_->CountPagesAJarChangeReloads(work_) == 2; }))
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index b753c79753a26..1e7ee5424708a 100644
+index b753c79753a26..dfb4cf8c8e730 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -10,7 +10,9 @@
@@ -8831,6 +8886,78 @@ index b753c79753a26..1e7ee5424708a 100644
  // BACKLOG S-139 (folders F20, F7): a row dropped where another Space's
  // folder sits in the list joins no folder. The drop target looks only at the
  // folders this Space draws, and the other Space's folder draws no header.
+@@ -2105,4 +2551,71 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, OverThePageTheListShowsNoReorder) {
+   }
+ }
+ 
++
++// tabs R61 (BACKLOG S-285): a press on a row whose page is not on screen
++// selects nothing, and its release selects it, as a click. A drag from such
++// a row keeps the page that was on screen there throughout: in the list,
++// where a drop leaves that page on screen with the row moved, and on the way
++// to the page, where the drop still makes the split. The press had put the
++// dragged row's page on screen at once (splits J10).
++IN_PROC_BROWSER_TEST_F(TabDropTest, APressWaitsAndADragKeepsThePage) {
++  tabs::TabInterface* const pressed = Open("pressed.test");
++  tabs::TabInterface* const middle = Open("middle.test");
++  tabs::TabInterface* const shown = Open("kept-on-screen.test");
++  ASSERT_TRUE(ShownWhole({pressed, middle, shown}))
++      << "the window is too short for the test's rows";
++  const auto on_screen = [&]() {
++    return browser_view()->GetActiveContentsWebView()->web_contents();
++  };
++  {
++    SCOPED_TRACE("a press, then its release");
++    tab_strip_model()->ActivateTabAt(Index(shown));
++    ASSERT_EQ(shown->GetContents(), on_screen());
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed,
++                                  RowCentre(pressed));
++    base::RunLoop().RunUntilIdle();
++    EXPECT_EQ(shown, tab_strip_model()->GetActiveTab())
++        << "the press selected the row";
++    EXPECT_EQ(shown->GetContents(), on_screen());
++    Release(RowCentre(pressed));
++    EXPECT_EQ(pressed, tab_strip_model()->GetActiveTab())
++        << "the click did not select the row";
++    EXPECT_EQ(pressed->GetContents(), on_screen());
++  }
++  {
++    SCOPED_TRACE("a drag in the list");
++    tab_strip_model()->ActivateTabAt(Index(shown));
++    const gfx::Point below_middle(RowCentre(middle).x(),
++                                  RowCentre(middle).y() + 6);
++    PressAndMove(RowCentre(pressed), below_middle);
++    EXPECT_EQ(shown->GetContents(), on_screen())
++        << "the dragged row's page came on screen";
++    Release(below_middle);
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return !browser_view()->stedding_page_held(); }));
++    EXPECT_EQ(shown, tab_strip_model()->GetActiveTab())
++        << "the drop left the dragged row selected";
++    EXPECT_EQ(shown->GetContents(), on_screen());
++    EXPECT_FALSE(pressed->IsSplit());
++    EXPECT_EQ(1u, WindowCount()) << "a window tore off";
++  }
++  {
++    SCOPED_TRACE("a drag onto the page");
++    tab_strip_model()->ActivateTabAt(Index(shown));
++    const gfx::Point left = HalvesOf(browser_view()).left;
++    PressAndMove(RowCentre(pressed), left);
++    EXPECT_EQ(shown->GetContents(), on_screen())
++        << "the dragged row's page came on screen";
++    Release(left);
++    ASSERT_TRUE(base::test::RunUntil([&]() { return pressed->IsSplit(); }))
++        << "the drop made no split";
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return !browser_view()->stedding_page_held(); }));
++    EXPECT_TRUE(shown->IsSplit());
++    EXPECT_EQ(pressed, tab_strip_model()->GetActiveTab())
++        << "the dropped page is the active pane";
++    EXPECT_EQ(1u, WindowCount());
++  }
++}
++
+ }  // namespace
 diff --git a/components/tabs/impl/tab_strip_collection.cc b/components/tabs/impl/tab_strip_collection.cc
 index a60eb5d2ec55f..64ad0a2981a22 100644
 --- a/components/tabs/impl/tab_strip_collection.cc

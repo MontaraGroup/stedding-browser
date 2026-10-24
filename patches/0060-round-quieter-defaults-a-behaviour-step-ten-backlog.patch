@@ -105,7 +105,7 @@ Removable when: never; these are Stedding's own behaviours.
  .../layout/stedding_browser_view_layout.cc    |  16 +-
  .../frame/vertical_tab_strip_region_view.cc   | 182 +++++-
  .../frame/vertical_tab_strip_region_view.h    |  45 +-
- .../views/location_bar/location_bar_view.cc   |  35 +-
+ .../views/location_bar/location_bar_view.cc   |  46 +-
  .../ui/views/location_bar/location_bar_view.h |  11 +
  .../spaces/space_tab_visibility_controller.cc |   8 +
  chrome/browser/ui/views/stedding/BUILD.gn     |  30 +-
@@ -144,7 +144,7 @@ Removable when: never; these are Stedding's own behaviours.
  components/tabs/impl/tab_strip_collection.cc  |  22 +
  .../tabs/public/tab_context_menu_command.h    |   4 +-
  components/tabs/public/tab_strip_collection.h |   7 +
- 114 files changed, 8596 insertions(+), 146 deletions(-)
+ 114 files changed, 8603 insertions(+), 150 deletions(-)
  create mode 100644 chrome/browser/ui/archive/closed_tabs_undo.cc
  create mode 100644 chrome/browser/ui/archive/closed_tabs_undo.h
  create mode 100644 chrome/browser/ui/archive/closed_tabs_undo_unittest.cc
@@ -7249,10 +7249,20 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    // Stedding: names the Space title row after the active Space and relays
    // out the Space boundary.
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-index 2a0261a92f771..1e1b7b7a2893b 100644
+index 2a0261a92f771..d6ad8950a0ed3 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-@@ -773,6 +773,12 @@ void LocationBarView::CentreSteddingCluster() {
+@@ -767,15 +767,22 @@ void LocationBarView::CentreSteddingCluster() {
+   // toolbar T18: the chip, the address and the page actions read as one
+   // cluster on the field's centre, as Safari's compact bar draws them,
+   // instead of the address hugging the field's left edge and the actions its
+-  // right. Chromium's own layout stands while the address is being edited
+-  // or the popup is open, and whenever the address fills the field. Works
++  // right. The address keeps its place when the field takes focus and while
++  // it is edited, until it no longer fits (GitHub issue 14, BACKLOG S-275:
++  // it had jumped to the field's left edge on focus); Chromium's own layout
++  // stands whenever the address fills the field. Works
+   // from the laid-out bounds: a field sized to a predicted content width
    // elided "github.com" to "githu..." (2026-09-05). With the field the whole
    // row (T29) the middle it gathers on is the page's (`SetSteddingCentre`),
    // as far as the field's own edges allow.
@@ -7263,20 +7273,26 @@ index 2a0261a92f771..1e1b7b7a2893b 100644
 +  // background again whenever the band changes.
 +  stedding_band_.reset();
    if (!base::FeatureList::IsEnabled(stedding::kArcStyleWindow) ||
-       !IsInitialized() || omnibox_view_->HasFocus() ||
-       omnibox_controller_->IsPopupOpen() || ShouldShowKeywordBubble() ||
-@@ -830,6 +836,10 @@ void LocationBarView::CentreSteddingCluster() {
+-      !IsInitialized() || omnibox_view_->HasFocus() ||
+-      omnibox_controller_->IsPopupOpen() || ShouldShowKeywordBubble() ||
++      !IsInitialized() || ShouldShowKeywordBubble() ||
+       ime_inline_autocomplete_view_->GetVisible() ||
+       omnibox_additional_text_view_->GetVisible()) {
+     return;
+@@ -830,6 +837,12 @@ void LocationBarView::CentreSteddingCluster() {
      view->SetX(view->x() + shift);
    }
    omnibox_view_->SetBounds(box.x() + shift, box.y(), text_width, box.height());
-+  if (shift > 0) {
++  // The band is the hover's and an unfocused field's: while the address is
++  // edited the whole field is painted, as Chromium paints it (T34).
++  if (shift > 0 && !omnibox_view_->HasFocus()) {
 +    const int band_x = std::max(0, lead_x + shift - padding);
 +    stedding_band_ = gfx::Rect(band_x, 0, width() - band_x, height());
 +  }
  }
  
  void LocationBarView::SteddingClusterMayHaveChanged() {
-@@ -1128,7 +1138,11 @@ void LocationBarView::Layout(PassKey) {
+@@ -1128,7 +1141,11 @@ void LocationBarView::Layout(PassKey) {
    }
  
    LayoutSuperclass<View>(this);
@@ -7288,7 +7304,7 @@ index 2a0261a92f771..1e1b7b7a2893b 100644
  }
  
  void LocationBarView::OnThemeChanged() {
-@@ -1533,6 +1547,15 @@ void LocationBarView::RefreshBackground() {
+@@ -1533,6 +1550,15 @@ void LocationBarView::RefreshBackground() {
  
    if (is_popup_mode_) {
      SetBackground(views::CreateSolidBackground(background_color_));
@@ -7304,7 +7320,7 @@ index 2a0261a92f771..1e1b7b7a2893b 100644
    } else {
      SetBackground(CreateRoundRectBackground(
          background_color_, border_color, size(),
-@@ -1541,8 +1564,16 @@ void LocationBarView::RefreshBackground() {
+@@ -1541,8 +1567,16 @@ void LocationBarView::RefreshBackground() {
    }
  
    // Keep the views::Textfield in sync. It needs an opaque background to

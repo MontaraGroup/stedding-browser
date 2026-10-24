@@ -83,7 +83,8 @@ of its own (patches/README.md).
  .../ui/views/commandbar/command_bar_view.h    |  51 +-
  .../commandbar/command_bar_view_unittest.cc   | 301 +++++++-
  .../extensions/extensions_toolbar_desktop.cc  |  23 +
- chrome/browser/ui/views/frame/browser_view.cc |   8 +
+ chrome/browser/ui/views/frame/browser_view.cc |  69 ++
+ chrome/browser/ui/views/frame/browser_view.h  |  18 +
  .../ui/views/frame/top_container_view.cc      |  25 +
  .../ui/views/frame/top_container_view.h       |   1 +
  .../frame/vertical_tab_strip_region_view.cc   |   5 +
@@ -94,7 +95,8 @@ of its own (patches/README.md).
  .../ui/views/spaces/split_drop_rules.cc       |  25 +
  .../ui/views/spaces/split_drop_rules.h        |  58 ++
  .../views/spaces/split_drop_rules_unittest.cc |  75 ++
- .../browser/ui/views/tabs/common/tab_view.cc  |  36 +-
+ .../ui/views/tabs/common/tab_drag_handler.cc  |  22 +
+ .../browser/ui/views/tabs/common/tab_view.cc  | 122 ++-
  .../browser/ui/views/tabs/common/tab_view.h   |   3 +
  .../views/tabs/dragging/drag_session_data.h   |   6 +
  .../tabs/dragging/tab_drag_controller.cc      |  20 +-
@@ -117,7 +119,7 @@ of its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |  25 +
  .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
  chrome/test/stedding/tab_drop_browsertest.cc  | 307 ++++++++
- 77 files changed, 6401 insertions(+), 84 deletions(-)
+ 79 files changed, 6587 insertions(+), 85 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -4072,18 +4074,55 @@ index db2447a0dbd07..901cc7e10fa2e 100644
  }
  
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index cc05ccc30cb1a..8276d55b88edc 100644
+index cc05ccc30cb1a..e3110e451c30d 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -219,6 +219,7 @@
+@@ -219,6 +219,8 @@
  #include "chrome/browser/ui/views/side_panel/side_panel.h"
  #include "chrome/browser/ui/views/side_panel/side_panel_animation_content_view.h"
  #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
++#include "chrome/browser/ui/spaces/space_model.h"
 +#include "chrome/browser/ui/views/spaces/page_split_drag_target.h"
  #include "chrome/browser/ui/views/status_bubble_views.h"
  #include "chrome/browser/ui/views/stedding_welcome/welcome_dialog_view.h"
  #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.h"
-@@ -2548,6 +2549,13 @@ TabDragTarget* BrowserView::GetTabDragTarget(
+@@ -2010,6 +2012,12 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
+                                      int reason) {
+   DCHECK(new_contents);
+   TRACE_EVENT0("ui", "BrowserView::OnActiveTabChanged");
++  // Stedding (tabs R61): a drag of a row that was not on screen keeps the
++  // page there; the release brings the window up to date.
++  if (stedding_page_hold_) {
++    stedding_active_changed_while_held_ = true;
++    return;
++  }
+   views::WebView* active_contents_view = GetActiveContentsWebView();
+   bool tab_change_in_split_view =
+       IsTabChangeInSplitView(old_contents, new_contents);
+@@ -2157,6 +2165,11 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
+ void BrowserView::OnTabDetached(content::WebContents* contents,
+                                 bool was_active) {
+   DCHECK(contents);
++  // Stedding (tabs R61): while a page is held on screen, what matters is
++  // whether the page leaving is the one shown, not the active one.
++  if (stedding_page_hold_) {
++    was_active = GetActiveContentsWebView()->web_contents() == contents;
++  }
+   if (!was_active) {
+     return;
+   }
+@@ -2413,6 +2426,10 @@ void BrowserView::UpdateReloadStopState(bool is_loading, bool force) {
+ }
+ 
+ void BrowserView::UpdateToolbar(content::WebContents* contents) {
++  // Stedding (tabs R61): the address row stays the held page's.
++  if (stedding_page_hold_) {
++    return;
++  }
+   // We may end up here during destruction.
+   if (toolbar_) {
+     toolbar_->Update(contents);
+@@ -2548,6 +2565,13 @@ TabDragTarget* BrowserView::GetTabDragTarget(
        return target;
      }
    }
@@ -4097,6 +4136,101 @@ index cc05ccc30cb1a..8276d55b88edc 100644
    if (multi_contents_view_->IsInSplitView() ||
        !multi_contents_view_->IsDragAndDropEnabled()) {
      return nullptr;
+@@ -2558,6 +2582,51 @@ TabDragTarget* BrowserView::GetTabDragTarget(
+   return &multi_contents_view_->drop_target_controller();
+ }
+ 
++void BrowserView::HoldPageForSteddingDrag() {
++  if (stedding_page_hold_) {
++    return;
++  }
++  stedding_page_hold_ = true;
++  stedding_active_changed_while_held_ = false;
++  tabs::TabInterface* const page = browser()->GetTabStripModel()->GetActiveTab();
++  stedding_held_page_ = page ? page->GetHandle() : tabs::TabHandle();
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  stedding_held_space_ =
++      model ? std::optional<spaces::SpaceId>(model->active_id()) : std::nullopt;
++}
++
++void BrowserView::ReleaseSteddingPageHold() {
++  if (!stedding_page_hold_) {
++    return;
++  }
++  TabStripModel* const strip = browser()->GetTabStripModel();
++  tabs::TabInterface* const page = stedding_held_page_.Get();
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  const bool same_space =
++      !model || !stedding_held_space_ || model->active_id() == *stedding_held_space_;
++  if (page && same_space && !strip->empty()) {
++    const int index = strip->GetIndexOfTab(page);
++    if (index != TabStripModel::kNoTab && strip->active_index() != index) {
++      strip->ActivateTabAt(index);
++    }
++  }
++  stedding_page_hold_ = false;
++  stedding_held_page_ = tabs::TabHandle();
++  stedding_held_space_.reset();
++  if (!std::exchange(stedding_active_changed_while_held_, false) ||
++      strip->empty()) {
++    return;
++  }
++  content::WebContents* const active = strip->GetActiveWebContents();
++  if (!active) {
++    return;
++  }
++  OnActiveTabChanged(GetActiveContentsWebView()->web_contents(), active,
++                     strip->active_index(),
++                     TabStripModelObserver::CHANGE_REASON_NONE);
++  UpdateToolbar(active);
++}
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ 
+ void BrowserView::OnLockedForOnTaskUpdated(bool locked_for_on_task) {
+diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
+index 5ea1abded5a37..007905a1c8c46 100644
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -33,6 +33,8 @@
+ #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
+ #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "chrome/browser/ui/views/frame/contents_container_view.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
+ #include "chrome/browser/ui/views/frame/shadow_overlay_view.h"
+@@ -822,6 +824,16 @@ class BrowserView : public BrowserWindow,
+   TabDragTarget* GetTabDragTargetInsideTabStrip(
+       const gfx::Point& point_in_screen);
+ 
++  // Stedding (tabs R61, BACKLOG S-285): while a row that was not on screen is
++  // dragged, the page on screen stays, though the drag has selected the row's
++  // tab (Chromium drags the selected tabs). The page and the address row
++  // follow the active tab again on release; a drag that left the Space
++  // unchanged, and did not end on the page on screen (a split) or in another
++  // Space, gives the page back its place on screen, as Arc leaves it.
++  void HoldPageForSteddingDrag();
++  void ReleaseSteddingPageHold();
++  bool stedding_page_held() const { return stedding_page_hold_; }
++
+ #if BUILDFLAG(IS_CHROMEOS)
+   // This is used only for SWA/PWA scenario.
+   void OnLockedForOnTaskUpdated(bool locked_for_on_task);
+@@ -1274,6 +1286,12 @@ class BrowserView : public BrowserWindow,
+   // True if we have already been initialized.
+   bool initialized_ = false;
+ 
++  // Stedding (tabs R61): the hold above, the page it keeps and its Space.
++  bool stedding_page_hold_ = false;
++  bool stedding_active_changed_while_held_ = false;
++  tabs::TabHandle stedding_held_page_;
++  std::optional<spaces::SpaceId> stedding_held_space_;
++
+   // True if layout should be suppressed (used during teardown).
+   bool suppress_layout_for_teardown_ = false;
+ 
 diff --git a/chrome/browser/ui/views/frame/top_container_view.cc b/chrome/browser/ui/views/frame/top_container_view.cc
 index 067596e00d174..35aaca242c412 100644
 --- a/chrome/browser/ui/views/frame/top_container_view.cc
@@ -4914,8 +5048,57 @@ index 0000000000000..28449d84f8681
 +
 +}  // namespace
 +}  // namespace stedding
+diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+index 2c5aaf12f4b65..7a13c5c35d1d6 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+@@ -194,6 +194,23 @@ int GetInsertionIndexForNode(const TabCollectionNode& node,
+ 
+ }  // namespace
+ 
++namespace stedding_press_drag {
++// Stedding (tabs R61, BACKLOG S-285): the drag is over, however it ended, so a
++// page held on screen for it (BrowserView::HoldPageForSteddingDrag) follows
++// the active tab again.
++void ReleaseHeldPage(views::View* in_window) {
++  views::Widget* const widget = in_window ? in_window->GetWidget() : nullptr;
++  if (!widget) {
++    return;
++  }
++  if (BrowserView* const browser_view =
++          BrowserView::GetBrowserViewForNativeWindow(
++              widget->GetNativeWindow())) {
++    browser_view->ReleaseSteddingPageHold();
++  }
++}
++}  // namespace stedding_press_drag
++
+ TabDragHandlerImpl::TabDragHandlerImpl(
+     TabStripModel& tab_strip_model,
+     TabCollectionNode& root_node,
+@@ -737,6 +754,7 @@ std::unique_ptr<TabDragController> TabDragHandlerImpl::ReleaseDragController() {
+ 
+ void TabDragHandlerImpl::DestroyDragController() {
+   drag_controller_.reset();
++  stedding_press_drag::ReleaseHeldPage(&tab_strip_region_view_.get());
+ }
+ 
+ void TabDragHandlerImpl::StartedDragging(
+@@ -951,8 +969,12 @@ void TabDragHandlerImpl::OnNodeWillDestroy(TabCollectionNode& node) {
+ }
+ 
+ void TabDragHandlerImpl::ResetDragState() {
++  const bool had_drag = !!drag_controller_;
+   drag_controller_.reset();
+   scroll_synchronizers_.clear();
++  if (had_drag) {
++    stedding_press_drag::ReleaseHeldPage(&tab_strip_region_view_.get());
++  }
+ }
+ 
+ bool TabDragHandlerImpl::HandleDraggedTabsIntoPosition(
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index fd83d18334b54..853317b0156b9 100644
+index fd83d18334b54..50ad9876acf7a 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -17,6 +17,7 @@
@@ -4926,7 +5109,145 @@ index fd83d18334b54..853317b0156b9 100644
  #include "base/time/time.h"
  #include "cc/paint/paint_flags.h"
  #include "cc/paint/path_effect.h"
-@@ -1499,6 +1500,27 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -50,6 +51,7 @@
+ #include "chrome/browser/ui/views/event_utils.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/themed_background.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/stedding/rename_field_watcher.h"
+@@ -359,6 +361,14 @@ class TabStyleViewDelegateImpl : public TabStyleViewDelegate {
+   const raw_ptr<const TabView> tab_view_;
+ };
+ 
++// Stedding (tabs R61): the press a drag may still start from, and whether it
++// has started one.
++struct TabView::PressDrag {
++  std::unique_ptr<ui::MouseEvent> press;
++  ui::ListSelectionModel selection;
++  bool started = false;
++};
++
+ TabView::TabView(TabCollectionNode* collection_node)
+     : HoverCardAnchorTarget(this),
+       collection_node_(collection_node),
+@@ -522,7 +532,11 @@ TabView::TabView(TabCollectionNode* collection_node)
+   close_button_observation_.Observe(close_button_);
+ }
+ 
+-TabView::~TabView() = default;
++TabView::~TabView() {
++  if (press_drag_ && press_drag_->started) {
++    EndPressDrag();
++  }
++}
+ 
+ void TabView::LayoutManager::OnInstalled(views::View* host) {
+   CHECK(IsViewClass<class TabView>(host));
+@@ -766,6 +780,7 @@ bool TabView::OnMousePressed(const ui::MouseEvent& event) {
+   CHECK(collection_node_);
+ 
+   auto* controller = collection_node_->GetController();
++  press_drag_.reset();
+   shift_pressed_on_mouse_down_ = event.IsShiftDown();
+   RecordMousePressedInTab();
+   UpdateHoverCard(nullptr, TabSlotController::HoverCardUpdateType::kEvent);
+@@ -792,6 +807,19 @@ bool TabView::OnMousePressed(const ui::MouseEvent& event) {
+         return false;
+       }
+     } else if (!selected_) {
++      // Stedding (tabs R61, BACKLOG S-285): a press on a row not on screen
++      // waits to see whether it is a click or a drag. The release selects,
++      // as a click; a drag starts once the pointer moves past the drag
++      // threshold, from this press, with the page on screen held there
++      // (StartPressDrag). Selecting here put the row's page on screen for as
++      // long as the drag took to reach the page it was to split with (J10).
++      if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
++          event.IsOnlyLeftMouseButton()) {
++        press_drag_ = std::make_unique<PressDrag>();
++        press_drag_->press = std::make_unique<ui::MouseEvent>(event);
++        press_drag_->selection = original_selection_model;
++        return true;
++      }
+       controller->SelectTab(GetTabInterface(), GetGestureDetail(event));
+       base::RecordAction(base::UserMetricsAction("SwitchTab_Click"));
+     }
+@@ -818,6 +846,15 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
+   if (!self) {
+     return;
+   }
++  // Stedding (tabs R61): a press that became a drag selects nothing more on
++  // its release; the drag decided what is on screen. One that did not is a
++  // click, below.
++  if (press_drag_ && press_drag_->started) {
++    EndPressDrag();
++    press_drag_.reset();
++    return;
++  }
++  press_drag_.reset();
+   if (event.IsOnlyMiddleMouseButton()) {
+     if (HitTestPoint(event.location())) {
+       // Stedding (pins H16): a middle click sends a pin of either tier home,
+@@ -924,9 +961,57 @@ bool TabView::OnMouseDragged(const ui::MouseEvent& event) {
+ 
+   auto* controller = collection_node_->GetController();
+   CHECK(controller);
++  if (press_drag_ && !press_drag_->started) {
++    if (!ExceededDragThreshold(event.location() -
++                               press_drag_->press->location())) {
++      return true;
++    }
++    base::WeakPtr<TabView> self = weak_ptr_factory_.GetWeakPtr();
++    StartPressDrag(event);
++    if (!self || !collection_node_) {
++      return false;
++    }
++    controller = collection_node_->GetController();
++  }
+   return controller->GetDragHandler().ContinueDrag(*this, event);
+ }
+ 
++void TabView::StartPressDrag(const ui::MouseEvent& event) {
++  press_drag_->started = true;
++  auto* controller = collection_node_->GetController();
++  // The drag moves the selected tabs, so the row's tab is selected now; the
++  // window keeps the page that was on screen until the drag is over
++  // (BrowserView::HoldPageForSteddingDrag, released when the drag handler's
++  // drag ends).
++  if (views::Widget* const widget = GetWidget()) {
++    if (BrowserView* const browser_view =
++            BrowserView::GetBrowserViewForNativeWindow(
++                widget->GetNativeWindow())) {
++      browser_view->HoldPageForSteddingDrag();
++    }
++  }
++  base::WeakPtr<TabView> self = weak_ptr_factory_.GetWeakPtr();
++  controller->SelectTab(GetTabInterface(),
++                        GetGestureDetail(*press_drag_->press));
++  if (!self || !collection_node_) {
++    return;
++  }
++  collection_node_->GetController()->GetDragHandler().InitializeDrag(
++      *collection_node_, press_drag_->selection, *press_drag_->press);
++}
++
++void TabView::EndPressDrag() {
++  views::Widget* const widget = GetWidget();
++  if (!widget) {
++    return;
++  }
++  if (BrowserView* const browser_view =
++          BrowserView::GetBrowserViewForNativeWindow(
++              widget->GetNativeWindow())) {
++    browser_view->ReleaseSteddingPageHold();
++  }
++}
++
+ void TabView::OnGestureEvent(ui::GestureEvent* event) {
+   CHECK(collection_node_);
+   UpdateHoverCard(nullptr, TabSlotController::HoverCardUpdateType::kEvent);
+@@ -1499,6 +1584,27 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    tabs::TabData hover_data = tab_data_;
    hover_data.stedding_pin_line = PinLineForHoverCard();
    SetHoverCardDataFrom(hover_data);
@@ -4954,7 +5275,7 @@ index fd83d18334b54..853317b0156b9 100644
  }
  
  std::u16string TabView::PinLineForHoverCard() const {
-@@ -1695,11 +1717,15 @@ void TabView::UpdateColors() {
+@@ -1695,11 +1801,15 @@ void TabView::UpdateColors() {
    // (FolderView).
    if (slept != slept_look_) {
      slept_look_ = slept;
