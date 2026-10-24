@@ -158,7 +158,7 @@ the hover card).
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
  .../test/stedding/pinned_run_browsertest.cc   | 194 ++++++
  .../stedding/settings_spaces_browsertest.cc   |  19 +-
- .../stedding/sidebar_click_browsertest.cc     | 252 +++++++-
+ .../stedding/sidebar_click_browsertest.cc     | 266 ++++++++-
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
@@ -166,7 +166,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 ++++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 87 files changed, 5737 insertions(+), 727 deletions(-)
+ 87 files changed, 5751 insertions(+), 727 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -7874,7 +7874,7 @@ index c1e809a950931..36e41584c77de 100644
    }
    {
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index d71a0fcdc8b7e..feba61720e771 100644
+index d71a0fcdc8b7e..1c0f9dfc77668 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
 @@ -28,6 +28,7 @@
@@ -8110,7 +8110,7 @@ index d71a0fcdc8b7e..feba61720e771 100644
  // pins H3, tabs R4 (the owner, 2026-10-21): a pin closed while it plays
  // sound -- a Space pin at its home with Cmd-W, a drifted essential with the
  // tab menu's Close -- is unloaded, and at once its row or card shows no
-@@ -2732,4 +2896,90 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
+@@ -2732,4 +2896,104 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
    }
  }
  
@@ -8168,34 +8168,48 @@ index d71a0fcdc8b7e..feba61720e771 100644
 +    AppendTab();
 +  }
 +  ASSERT_GE(tab_strip_model()->count(), 6);
-+  for (const int essentials : {1, 4}) {
-+    SCOPED_TRACE(testing::Message() << essentials << " essentials");
-+    while (tab_strip_model()->IndexOfFirstNonPinnedTab() < essentials) {
-+      tab_strip_model()->SetTabPinned(
-+          tab_strip_model()->IndexOfFirstNonPinnedTab(), true);
-+    }
-+    tab_strip_model()->ActivateTabAt(tab_strip_model()->count() - 1);
-+    ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
-+    for (int index = 0; index < essentials; ++index) {
-+      SCOPED_TRACE(testing::Message() << "card " << index);
-+      TabView* const card = RowFor(index);
-+      ASSERT_TRUE(card);
-+      const gfx::Rect bounds = card->GetBoundsInScreen();
-+      ASSERT_FALSE(bounds.IsEmpty());
-+      for (const gfx::Point& point :
-+           {gfx::Point(bounds.CenterPoint().x(), bounds.y() + 2),
-+            gfx::Point(bounds.x() + 4, bounds.y() + 4),
-+            gfx::Point(bounds.right() - 4, bounds.y() + 4),
-+            bounds.CenterPoint(),
-+            gfx::Point(bounds.CenterPoint().x(), bounds.bottom() - 3)}) {
-+        EXPECT_EQ(HTCLIENT, NonClientComponentAt(point))
-+            << point.ToString() << " in " << bounds.ToString() << ": "
-+            << DescribeTargetAt(point);
++  VerticalTabStripRegionView* const region =
++      browser_view()->vertical_tab_strip_region_view_for_testing();
++  // The open sidebar's cards sit below the band; the slid-out sidebar's
++  // reach into it (SidebarFormsTest.TheSlidOutSidebarsEssentialsTakeTheir
++  // Press). Both take their presses.
++  {
++    for (const int essentials : {1, 4}) {
++      SCOPED_TRACE(testing::Message() << essentials << " essentials");
++      while (tab_strip_model()->IndexOfFirstNonPinnedTab() < essentials) {
++        tab_strip_model()->SetTabPinned(
++            tab_strip_model()->IndexOfFirstNonPinnedTab(), true);
 +      }
-+      ClickAt(gfx::Point(bounds.CenterPoint().x(), bounds.y() + 4));
-+      EXPECT_EQ(index, tab_strip_model()->active_index())
-+          << "a click near the card's top did not select it";
 +      tab_strip_model()->ActivateTabAt(tab_strip_model()->count() - 1);
++      ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++      views::test::RunScheduledLayout(browser_view()->GetWidget());
++      const int band =
++          views::View::ConvertRectToTarget(
++              browser_view()->contents_container(), region,
++              browser_view()->contents_container()->GetLocalBounds())
++              .y();
++      for (int index = 0; index < essentials; ++index) {
++        SCOPED_TRACE(testing::Message() << "card " << index);
++        TabView* const card = RowFor(index);
++        ASSERT_TRUE(card);
++        const gfx::Rect bounds = card->GetBoundsInScreen();
++        ASSERT_FALSE(bounds.IsEmpty());
++        for (const gfx::Point& point :
++             {gfx::Point(bounds.CenterPoint().x(), bounds.y() + 2),
++              gfx::Point(bounds.x() + 4, bounds.y() + 4),
++              gfx::Point(bounds.right() - 4, bounds.y() + 4),
++              bounds.CenterPoint(),
++              gfx::Point(bounds.CenterPoint().x(), bounds.bottom() - 3)}) {
++          EXPECT_EQ(HTCLIENT, NonClientComponentAt(point))
++              << point.ToString() << " in " << bounds.ToString()
++              << ", the band ending " << band << " below the strip's top: "
++              << DescribeTargetAt(point);
++        }
++        ClickAt(gfx::Point(bounds.CenterPoint().x(), bounds.y() + 4));
++        EXPECT_EQ(index, tab_strip_model()->active_index())
++            << "a click near the card's top did not select it";
++        tab_strip_model()->ActivateTabAt(tab_strip_model()->count() - 1);
++      }
 +    }
 +  }
 +}
@@ -8318,7 +8332,7 @@ index 737209a88e1f5..326c29e639aa7 100644
    EXPECT_TRUE(base::test::RunUntil(
        [&]() { return model_->CountPagesAJarChangeReloads(work_) == 2; }))
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index b753c79753a26..dfb4cf8c8e730 100644
+index 5b2968364e017..132563ebbcd55 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -10,7 +10,9 @@
@@ -8506,7 +8520,7 @@ index b753c79753a26..dfb4cf8c8e730 100644
  };
  
  // A drop on a folder header joins the folder as the tab is (PLAN.md TAB-9).
-@@ -767,6 +840,379 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ChipDropsMoveLightAndSurviveARebuild) {
+@@ -764,6 +837,379 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ChipDropsMoveLightAndSurviveARebuild) {
    ASSERT_NO_FATAL_FAILURE(TabsDroppedOnAChipMove());
  }
  
@@ -8886,7 +8900,7 @@ index b753c79753a26..dfb4cf8c8e730 100644
  // BACKLOG S-139 (folders F20, F7): a row dropped where another Space's
  // folder sits in the list joins no folder. The drop target looks only at the
  // folders this Space draws, and the other Space's folder draws no header.
-@@ -2105,4 +2551,71 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, OverThePageTheListShowsNoReorder) {
+@@ -2102,4 +2548,71 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, OverThePageTheListShowsNoReorder) {
    }
  }
  

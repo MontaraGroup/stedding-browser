@@ -33,8 +33,8 @@ Removable when: never; it is product behaviour.
  .../resources/stedding_welcome/app.css        | 10 ++-
  .../browser/resources/stedding_welcome/app.ts |  2 +-
  chrome/browser/ui/spaces/space_colors.h       | 49 ++++++++++++---
- chrome/browser/ui/spaces/space_model.cc       | 34 +++++++++-
- chrome/browser/ui/spaces/space_model.h        |  5 ++
+ chrome/browser/ui/spaces/space_model.cc       | 36 +++++++++--
+ chrome/browser/ui/spaces/space_model.h        | 13 ++++
  chrome/browser/ui/spaces/space_registry.cc    |  5 +-
  chrome/browser/ui/stedding/stedding_prefs.cc  |  2 +
  chrome/browser/ui/stedding/stedding_prefs.h   |  4 ++
@@ -42,7 +42,7 @@ Removable when: never; it is product behaviour.
  chrome/browser/ui/tabs/tab_strip_model.h      |  8 +++
  .../browser/ui/webui/settings/settings_ui.cc  |  8 +++
  .../test/stedding/pinned_run_browsertest.cc   | 63 +++++++++++++++++++
- 14 files changed, 196 insertions(+), 17 deletions(-)
+ 14 files changed, 205 insertions(+), 18 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -190,7 +190,7 @@ index e0afc51c8b8fc..d37e786a4a853 100644
  
  #endif  // CHROME_BROWSER_UI_SPACES_SPACE_COLORS_H_
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index b3fad7709536c..324dc1c7fb9f5 100644
+index b3fad7709536c..1cc8e2f6467ec 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -4,6 +4,8 @@
@@ -269,11 +269,20 @@ index b3fad7709536c..324dc1c7fb9f5 100644
  void SpaceModel::OnTabStripModelChanged(
      TabStripModel* tab_strip_model,
      const TabStripModelChange& change,
+@@ -1185,7 +1213,7 @@ void SpaceModel::OnTabStripModelChanged(
+   // Remember where the user is in the active Space, but only a tab that is
+   // really in it: an essentials tab is in every Space and remembering it would
+   // make every Space reopen on the same tab.
+-  if (selection.active_tab_changed()) {
++  if (selection.active_tab_changed() && !hold_recency_) {
+     RecordActivation(tab_strip_model->GetActiveTab());
+     if (tabs::TabInterface* const active = tab_strip_model->GetActiveTab();
+         active && !active->IsPinned()) {
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index da93531fea4fd..5357ccf1ff5e8 100644
+index da93531fea4fd..7d68672493f9e 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
-@@ -552,6 +552,11 @@ class SpaceModel : public TabStripModelObserver,
+@@ -552,6 +552,17 @@ class SpaceModel : public TabStripModelObserver,
    bool HidesTab(const tabs::TabInterface* tab) const;
  
    // TabStripModelObserver:
@@ -282,9 +291,24 @@ index da93531fea4fd..5357ccf1ff5e8 100644
 +  // with it off, or with no loose row, for Chromium's end of the strip.
 +  std::optional<int> NewTabIndexAtTop() const;
 +
++  // tabs R61: while a dragged row's page is held off screen
++  // (BrowserView::HoldPageForSteddingDrag), the drag's brief selection of it
++  // is not a visit: Ctrl-Tab's order and the Space's last tab stay as they
++  // were.
++  void HoldRecency(bool hold) { hold_recency_ = hold; }
++
    void OnTabStripModelChanged(
        TabStripModel* tab_strip_model,
        const TabStripModelChange& change,
+@@ -764,6 +775,8 @@ class SpaceModel : public TabStripModelObserver,
+   PrefChangeRegistrar pref_registrar_;
+   raw_ptr<TabStripModel> tab_strip_model_ = nullptr;
+   bool wrote_window_state_ = false;
++  // tabs R61: see HoldRecency().
++  bool hold_recency_ = false;
+   // The profile outlives a SessionService that ShutdownForProfile destroys
+   // while the window is still up. The service is fetched at each write.
+   raw_ptr<Profile> profile_ = nullptr;
 diff --git a/chrome/browser/ui/spaces/space_registry.cc b/chrome/browser/ui/spaces/space_registry.cc
 index ce296cf0c8c07..dc6f41eb29021 100644
 --- a/chrome/browser/ui/spaces/space_registry.cc

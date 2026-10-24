@@ -83,7 +83,7 @@ of its own (patches/README.md).
  .../ui/views/commandbar/command_bar_view.h    |  51 +-
  .../commandbar/command_bar_view_unittest.cc   | 301 +++++++-
  .../extensions/extensions_toolbar_desktop.cc  |  23 +
- chrome/browser/ui/views/frame/browser_view.cc |  69 ++
+ chrome/browser/ui/views/frame/browser_view.cc |  75 ++
  chrome/browser/ui/views/frame/browser_view.h  |  18 +
  .../ui/views/frame/top_container_view.cc      |  25 +
  .../ui/views/frame/top_container_view.h       |   1 +
@@ -118,8 +118,8 @@ of its own (patches/README.md).
  .../test/stedding/space_keys_browsertest.mm   |  62 ++
  .../test/stedding/space_switch_browsertest.cc |  25 +
  .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
- chrome/test/stedding/tab_drop_browsertest.cc  | 307 ++++++++
- 79 files changed, 6587 insertions(+), 85 deletions(-)
+ chrome/test/stedding/tab_drop_browsertest.cc  | 322 +++++++-
+ 79 files changed, 6599 insertions(+), 94 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -4074,7 +4074,7 @@ index db2447a0dbd07..901cc7e10fa2e 100644
  }
  
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index cc05ccc30cb1a..e3110e451c30d 100644
+index cc05ccc30cb1a..2abe467e7e8d1 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -219,6 +219,8 @@
@@ -4136,7 +4136,7 @@ index cc05ccc30cb1a..e3110e451c30d 100644
    if (multi_contents_view_->IsInSplitView() ||
        !multi_contents_view_->IsDragAndDropEnabled()) {
      return nullptr;
-@@ -2558,6 +2582,51 @@ TabDragTarget* BrowserView::GetTabDragTarget(
+@@ -2558,6 +2582,57 @@ TabDragTarget* BrowserView::GetTabDragTarget(
    return &multi_contents_view_->drop_target_controller();
  }
  
@@ -4151,6 +4151,9 @@ index cc05ccc30cb1a..e3110e451c30d 100644
 +  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
 +  stedding_held_space_ =
 +      model ? std::optional<spaces::SpaceId>(model->active_id()) : std::nullopt;
++  if (model) {
++    model->HoldRecency(true);
++  }
 +}
 +
 +void BrowserView::ReleaseSteddingPageHold() {
@@ -4171,6 +4174,9 @@ index cc05ccc30cb1a..e3110e451c30d 100644
 +  stedding_page_hold_ = false;
 +  stedding_held_page_ = tabs::TabHandle();
 +  stedding_held_space_.reset();
++  if (model) {
++    model->HoldRecency(false);
++  }
 +  if (!std::exchange(stedding_active_changed_while_held_, false) ||
 +      strip->empty()) {
 +    return;
@@ -8225,7 +8231,7 @@ index 0000000000000..ef81e9870337d
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index 742aed68a7ea1..8ee33529a3c97 100644
+index 742aed68a7ea1..8db759d30d51e 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -12,6 +12,7 @@
@@ -8269,7 +8275,36 @@ index 742aed68a7ea1..8ee33529a3c97 100644
  #include "ui/base/window_open_disposition.h"
  #include "ui/color/color_id.h"
  #include "ui/color/color_provider.h"
-@@ -1266,4 +1275,302 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AFolderHeaderRefusesATabGroup) {
+@@ -562,12 +571,9 @@ IN_PROC_BROWSER_TEST_F(TabDropTest,
+       EXPECT_TRUE(m->IsSpacePinned(pin));
+       EXPECT_EQ(Url("pin.test"), m->HomeUrl(pin).value_or(GURL()));
+       EXPECT_EQ(home, m->SpaceForTab(pin));
+-      // The press made the pin the tab on screen; the rest keep their order.
+-      std::vector<tabs::TabInterface*> expected_recent = recent;
+-      std::erase(expected_recent, pin);
+-      expected_recent.insert(expected_recent.begin(), pin);
+-      EXPECT_EQ(expected_recent, m->RecentTabs(home, 20))
+-          << "Ctrl-Tab's order";
++      // The drag kept the page on screen (tabs R61), so Ctrl-Tab's order is
++      // as it was: the pin's brief selection for the drag is no visit.
++      EXPECT_EQ(recent, m->RecentTabs(home, 20)) << "Ctrl-Tab's order";
+     }
+ 
+     {
+@@ -643,9 +649,9 @@ IN_PROC_BROWSER_TEST_F(TabDropTest,
+     tab_strip_model()->ActivateTabAt(Index(red));
+     Drag(from, header);
+     ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
+-    // The press made the dragged tab the one on screen.
+-    EXPECT_EQ(dragged, tab_strip_model()->GetActiveTab());
+-    EXPECT_EQ(dragged->GetContents(), browser_view()->GetActiveWebContents());
++    // The drag kept the page that was on screen there (tabs R61).
++    EXPECT_EQ(red, tab_strip_model()->GetActiveTab());
++    EXPECT_EQ(red->GetContents(), browser_view()->GetActiveWebContents());
+     EXPECT_EQ(3, tab_strip_model()->count());
+     EXPECT_EQ(1u, WindowCount());
+   }
+@@ -1266,4 +1272,302 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AFolderHeaderRefusesATabGroup) {
    EXPECT_EQ(1u, WindowCount()) << "a window tore off";
  }
  

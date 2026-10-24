@@ -185,6 +185,7 @@ its own (patches/README.md).
  chrome/test/stedding/scroll_events_mac.h      |   43 +
  chrome/test/stedding/scroll_events_mac.mm     |   73 +
  .../stedding/sidebar_click_browsertest.cc     |  554 +++++-
+ .../stedding/sidebar_forms_browsertest.cc     |   95 ++
  .../test/stedding/sidebar_rail_browsertest.cc |  437 ++++-
  chrome/test/stedding/sidebar_test_util.cc     |   43 +
  chrome/test/stedding/sidebar_test_util.h      |   35 +
@@ -201,7 +202,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 130 files changed, 11153 insertions(+), 396 deletions(-)
+ 131 files changed, 11248 insertions(+), 396 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -3652,7 +3653,7 @@ index 7316905cfc8e7..139d5b1821819 100644
    if (auto* const glass_frame_service = GlassFrameService::GetInstance()) {
      glass_frame_service_subscription_ =
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index e3110e451c30d..5b24cf4c882bf 100644
+index 2abe467e7e8d1..ef6171ee162aa 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -121,6 +121,7 @@
@@ -3663,7 +3664,7 @@ index e3110e451c30d..5b24cf4c882bf 100644
  #include "chrome/browser/ui/stedding/private_window.h"
  #include "chrome/browser/ui/stedding/thanks_pages.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
-@@ -4845,6 +4846,21 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+@@ -4851,6 +4852,21 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
      }
    }
  
@@ -3685,7 +3686,7 @@ index e3110e451c30d..5b24cf4c882bf 100644
    if (vertical_tab_strip_region_view_ &&
        vertical_tab_strip_region_view_->GetVisible()) {
      // See if the mouse pointer is within the bounds of the
-@@ -4861,10 +4877,22 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+@@ -4867,10 +4883,22 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
        return HTCLIENT;
      } else {
        gfx::Point test_point2(point);
@@ -12903,6 +12904,117 @@ index 49ddc2b32f256..d71a0fcdc8b7e 100644
  // PLAN.md TST-8 (tabs R20, R21): a selection never holds a row the user
  // cannot see. Rows are chosen as a person chooses them -- a click, then a
  // click with the platform's add-to-selection key -- and a folder collapses at
+diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
+index ef2e6822dc1ff..03d4871a22cc0 100644
+--- a/chrome/test/stedding/sidebar_forms_browsertest.cc
++++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
+@@ -90,6 +90,7 @@
+ #include "ui/compositor/layer.h"
+ #include "ui/display/display.h"
+ #include "ui/display/screen.h"
++#include "ui/base/hit_test.h"
+ #include "ui/events/event.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/events/types/event_type.h"
+@@ -1310,4 +1311,98 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsRtlTest, TheRightHandEdge) {
+   }
+ }
+ 
++
++// sidebar Y19, Y29, BACKLOG S-287 (GitHub issue 23): the hidden sidebar slid
++// out at the window's edge has no top row of its own, so its essentials'
++// first row sits in the band above the page, which the window reads as its
++// title bar; every card there takes its own press, with one row of cards and
++// with two. A press on a card moved the window and never reached the card,
++// and with one row none of them worked (the reporter's recording, beta 10).
++IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheSlidOutSidebarsEssentialsTakeTheirPress) {
++  for (int i = 0; i < 7; ++i) {
++    AppendTab();
++  }
++  TabStripModel* const strip = browser()->tab_strip_model();
++  views::Widget* const widget = browser_view()->GetWidget();
++  // The band ends at the page's top. In a test window that is the address
++  // row's foot, above the cards; an infobar over the page brings it down
++  // over them, as one did in the reporter's window (the session-restore bar
++  // here, as AddressBandTest shows it).
++  views::View* const bars = browser_view()->infobar_container();
++  ASSERT_TRUE(bars);
++  bool reached_the_band = false;
++  std::string seen;
++  for (const int essentials : {3, 6}) {
++    SCOPED_TRACE(testing::Message() << essentials << " essentials");
++    ASSERT_NO_FATAL_FAILURE(OpenTheSidebar());
++    while (strip->IndexOfFirstNonPinnedTab() < essentials) {
++      strip->SetTabPinned(strip->IndexOfFirstNonPinnedTab(), true);
++    }
++    strip->ActivateTabAt(strip->count() - 1);
++    if (!bars->GetVisible() || bars->height() == 0) {
++      ASSERT_TRUE(session_restore_infobar::SessionRestoreInfoBarDelegate::Show(
++          infobars::ContentInfoBarManager::FromWebContents(
++              strip->GetActiveWebContents()),
++          *browser()->GetProfile(), base::DoNothing(),
++          session_restore_infobar::InfobarMessageType::kTurnOffFromRestart));
++      ASSERT_TRUE(base::test::RunUntil([&]() {
++        views::test::RunScheduledLayout(widget);
++        return bars->GetVisible() && bars->height() > 0;
++      })) << "the infobar did not show";
++    }
++    ASSERT_NO_FATAL_FAILURE(CloseTo(stedding::prefs::kSidebarClosedHidden));
++    views::test::RunScheduledLayout(widget);
++    region()->SetHoveredForTesting(false);
++    region()->OnPointerAtForTesting(LeadingEdge());
++    ASSERT_TRUE(region()->is_expanded_on_hover()) << HoverState();
++    region()->SetHoveredForTesting(true);
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return region()->is_expanded_on_hover() && !Animating(); }))
++        << HoverState();
++    views::test::RunScheduledLayout(widget);
++    // The band ends where the page's container starts, as the strip reads it
++    // (VerticalTabStripRegionView::TitleBarBottom), or below the strip's own
++    // top row where that is lower; the slid-out strip shows no top row.
++    const int band = InRoot(browser_view()->contents_container()).y() -
++                     Strip().y();
++    for (int index = 0; index < essentials; ++index) {
++      SCOPED_TRACE(testing::Message() << "card " << index);
++      TabView* const card =
++          stedding::test::FindDrawnRow(root(), strip->GetTabAtIndex(index));
++      ASSERT_TRUE(card);
++      const gfx::Rect bounds = InRoot(card);
++      ASSERT_FALSE(bounds.IsEmpty());
++      if (bounds.y() - Strip().y() < band) {
++        reached_the_band = true;
++      }
++      seen += base::StrCat({"card ", bounds.ToString(), " strip ",
++                            Strip().ToString(), " band ",
++                            base::NumberToString(band), " page ",
++                            InRoot(browser_view()->contents_container())
++                                .ToString(),
++                            " row ", Row().ToString(), "; "});
++      for (const gfx::Point& point :
++           {gfx::Point(bounds.CenterPoint().x(), bounds.y() + 2),
++            bounds.CenterPoint(),
++            gfx::Point(bounds.CenterPoint().x(), bounds.bottom() - 3)}) {
++        EXPECT_EQ(HTCLIENT, widget->GetNonClientComponent(point))
++            << point.ToString() << " in " << bounds.ToString()
++            << ", the band ending " << band << " below the strip's top at "
++            << Strip().y();
++      }
++    }
++    region()->SetHoveredForTesting(false);
++    region()->OnMouseExited(ui::MouseEvent(
++        ui::EventType::kMouseExited, gfx::Point(), gfx::Point(),
++        base::TimeTicks::Now(), ui::EF_NONE, ui::EF_NONE));
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return !region()->is_expanded_on_hover() && !Animating(); }))
++        << HoverState();
++    region()->SetHoveredForTesting(std::nullopt);
++  }
++  EXPECT_TRUE(reached_the_band)
++      << "no card reached the title bar's band, so this checked nothing: "
++      << seen;
++}
++
+ }  // namespace
 diff --git a/chrome/test/stedding/sidebar_rail_browsertest.cc b/chrome/test/stedding/sidebar_rail_browsertest.cc
 index a14c5772a7192..da7d730d617a2 100644
 --- a/chrome/test/stedding/sidebar_rail_browsertest.cc
@@ -14794,7 +14906,7 @@ index ef81e9870337d..e2c316cb5c34d 100644
 +
  }  // namespace
 diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
-index 8ee33529a3c97..1bead2060c36a 100644
+index 8db759d30d51e..dd91bd6c4670f 100644
 --- a/chrome/test/stedding/tab_drop_browsertest.cc
 +++ b/chrome/test/stedding/tab_drop_browsertest.cc
 @@ -19,8 +19,16 @@
@@ -14849,7 +14961,7 @@ index 8ee33529a3c97..1bead2060c36a 100644
  #include "ui/views/background.h"
  #include "ui/views/test/views_test_utils.h"
  #include "ui/views/view.h"
-@@ -1291,6 +1309,14 @@ PageHalves HalvesOf(BrowserView* browser_view) {
+@@ -1288,6 +1306,14 @@ PageHalves HalvesOf(BrowserView* browser_view) {
            gfx::Point(page.x() + 3 * page.width() / 4, page.CenterPoint().y())};
  }
  
@@ -14864,7 +14976,7 @@ index 8ee33529a3c97..1bead2060c36a 100644
  // The pointer, its button down, moves from `from` to `to` in twelve steps.
  void MoveWithTheButtonDown(views::Widget* widget,
                             const gfx::Point& from,
-@@ -1395,6 +1421,69 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowOverThePageLightsTheHalfUnderIt) {
+@@ -1392,6 +1418,69 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowOverThePageLightsTheHalfUnderIt) {
                                                            halves.left));
  }
  
@@ -14934,7 +15046,7 @@ index 8ee33529a3c97..1bead2060c36a 100644
  // splits J11: a row dropped on a half makes one split of it and the page
  // that was on screen, the dropped page on that side and active, in the
  // page's place, with nothing detached: the same tab and page, in its Space,
-@@ -1425,6 +1514,10 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1422,6 +1511,10 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
          << "the drop made no split";
      EXPECT_EQ((std::vector<tabs::TabInterface*>{dragged, shown}),
                panes(shown));
@@ -14945,7 +15057,7 @@ index 8ee33529a3c97..1bead2060c36a 100644
      EXPECT_EQ(dragged, tab_strip_model()->GetActiveTab());
      EXPECT_LT(Index(above), Index(dragged)) << "not in the page's place";
      EXPECT_LT(Index(shown), Index(below));
-@@ -1441,6 +1534,13 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1438,6 +1531,13 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
          << "the drop made no split";
      EXPECT_EQ((std::vector<tabs::TabInterface*>{shown, dragged}),
                panes(shown));
@@ -14959,7 +15071,7 @@ index 8ee33529a3c97..1bead2060c36a 100644
      EXPECT_EQ(dragged, tab_strip_model()->GetActiveTab());
      ExpectKept(dragged, kept);
      EXPECT_EQ(1u, WindowCount());
-@@ -1474,6 +1574,167 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
+@@ -1471,6 +1571,167 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, ARowDroppedOnThePageMakesASplitInItsPlace) {
    }
  }
  
@@ -15127,7 +15239,7 @@ index 8ee33529a3c97..1bead2060c36a 100644
  // splits J12, J14: while the pointer is over the page the rows hold still,
  // whatever height it is at, and no window opens; a release where the page
  // takes no drop leaves no split and every row where it was.
-@@ -1573,4 +1834,269 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AHorizontalTabDroppedOnThePageMakesASplit) {
+@@ -1570,4 +1831,269 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, AHorizontalTabDroppedOnThePageMakesASplit) {
    EnterVerticalTabsMode();
  }
  
