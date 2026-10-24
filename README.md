@@ -84,7 +84,8 @@ with 0.2.0 beta 20 on the Mac.
 - **Local development tabs** marked with Arc's dashed tape, with host and port.
 - **Copy the link** clean of trackers (⇧⌘C) or as Markdown, **screenshots** by key, mute and
   picture in picture by key.
-- **Arc in one click** (Mac): Spaces, essentials, pins, folders, tabs, history and passwords.
+- **Arc in one click**: Spaces, essentials, pins, folders, tabs, history and passwords, on the
+  Mac and on Windows.
 - **Arc's keyboard** on both platforms, and **updates** in the sidebar: signed, looked for at
   launch and every six hours, with a switch to turn them off.
 
@@ -99,14 +100,13 @@ Each feature has a specification naming the test behind every behaviour:
 - **The Library panel and Live Folders**: later (`S-61`).
 - **Sync and sharing**: there is no account, by design. A Space moves between machines as a file.
 - **AI (Arc Max)**: never, by choice ([ADR 0020](docs/decisions/0020-no-bundled-model.md)).
-- **On Windows**: import from Arc.
 - **Phones** (Arc Search): not planned.
 
 ## Download
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.3.0 beta 12**, for macOS and Windows, on Chromium 156.0.8078.48.
+is **0.3.0 beta 13**, for macOS and Windows, on Chromium 156.0.8078.48.
 
 | Platform | File | |
 |---|---|---|
@@ -148,11 +148,12 @@ Settings → Stedding → Shortcuts in the browser.
 
 ## Moving from Arc
 
-On a Mac with Arc installed, the first start offers **Move everything from Arc**: Spaces with
+With Arc installed, the first start offers **Move everything from Arc**: Spaces with
 their colours and icons, essentials, pinned tabs, nested folders, open tabs, history and
-passwords. It reads Arc's files on your disk and sends nothing anywhere; passwords need one
-keychain prompt, and running it again never duplicates anything. From Safari or Firefox,
-Chromium's own importer runs in the same step. Arc's files on Windows are not read yet (`S-81`).
+passwords. It reads Arc's files on your disk and sends nothing anywhere; on a Mac the passwords
+need one keychain prompt, on Windows none, and running it again never duplicates anything. From
+Safari or Firefox, Chromium's own importer runs in the same step. On Windows it is new in 0.3.0
+beta 13 and not yet tried against a real Arc install (`S-81`).
 
 ## Privacy
 

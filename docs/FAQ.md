@@ -64,10 +64,11 @@ Yes: in the welcome flow, or Settings → Default browser.
 ## Using it
 
 **How do I move from Arc?**
-On a Mac, the welcome flow's **Move everything from Arc** brings over Spaces, essentials, pinned
-tabs, folders, tabs, history and passwords from Arc's files on your disk (one keychain prompt
-for the passwords). Run it again from Settings → Stedding → Spaces; nothing is duplicated. On
-Windows, Arc's files are not read yet (`S-81`).
+The welcome flow's **Move everything from Arc** brings over Spaces, essentials, pinned tabs,
+folders, tabs, history and passwords from Arc's files on your disk (on a Mac one keychain prompt
+for the passwords; on Windows none). Run it again from Settings → Stedding → Spaces; nothing is
+duplicated. On Windows it is new in 0.3.0 beta 13 and not yet tried against a real Arc install
+(`S-81`).
 
 **Can the sidebar get out of the way completely?**
 Yes. Settings → Stedding → Sidebar → **When the sidebar closes: Hide it completely**; then ⌘S

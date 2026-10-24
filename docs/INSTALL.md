@@ -125,8 +125,8 @@ Uninstall from **Settings → Apps**, as with any app.
 The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctrl and
 Alt, the name and icon, and a per-user installer. Still open: signing (`S-56`); a two-finger Space swipe whose
 list follows the fingers, as on the Mac (a touchpad's sideways scroll changes one Space
-instead, `docs/history/plan-2026-09-26.md` TAB-31); and importing from Arc, whose Windows files
-Stedding does not read yet (`S-81`).
+instead, `docs/history/plan-2026-09-26.md` TAB-31). Importing from Arc is new on Windows in
+0.3.0 beta 13 and not yet tried against a real Arc install (`S-81`).
 
 ## First start
 
@@ -134,7 +134,7 @@ The first window opens the welcome flow, six steps, each one skippable (five bef
 14, which added step 4):
 
 1. Choose a search engine.
-2. Import from Arc (on a Mac), or through Chromium's importer from Safari (bookmarks) or
+2. Import from Arc, or through Chromium's importer from Safari (bookmarks) or
    Firefox (bookmarks and history) on macOS, and from Firefox, Internet Explorer or the old
    Edge on Windows. Chrome, Brave and the new Edge cannot be imported yet.
 3. Pick the colour scheme (system, light or dark) and a Space colour.
