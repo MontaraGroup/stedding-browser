@@ -1,0 +1,45 @@
+# A pull request says whether an AI tool helped, and its commits agree
+# (CONTRIBUTING.md, "AI tools"; tooling/check-disclosure).
+#
+# pull_request_target, so the check runs the base branch's copy of the script and a
+# pull request cannot change the rule it is held to. The pull request's commits are
+# fetched as data; nothing from them is checked out or run, and its description reaches
+# the script through a file, never through the shell.
+
+name: disclosure
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: disclosure-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-assistance:
+    name: AI assistance disclosed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch the pull request's commits
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "pull/${PR_NUMBER}/head"
+
+      - name: Check the description and the commits
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/body.md"
+          python3 tooling/check-disclosure --body-file "$RUNNER_TEMP/body.md" --commits "$BASE..$HEAD"

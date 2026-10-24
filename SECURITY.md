@@ -14,6 +14,9 @@ A good report includes:
 - What is affected (file, document, or component and version).
 - Steps to reproduce, or a clear explanation of the flaw.
 - Impact as you understand it.
+- Whether an AI tool found the issue or wrote the report. Reproduce it on a released
+  build before you send it; a report nobody has reproduced is closed
+  (`CONTRIBUTING.md`, "AI tools").
 
 ## Response expectations
 

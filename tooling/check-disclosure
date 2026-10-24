@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Holds a pull request to CONTRIBUTING.md's "AI tools" rules.
+
+The description must answer the pull request form's "AI assistance" section: exactly
+one of its two boxes ticked, and with "An AI tool helped" ticked, the tool, the model
+and what it did written after it. With that box ticked every commit ends with an
+`Assisted-by:` trailer; with "No AI tool" ticked none carries one. No commit names a
+tool as a co-author or carries a "Generated with" footer.
+
+Run: tooling/check-disclosure --body-file <file> --commits <base>..<head>
+     tooling/check-disclosure --self-test
+.github/workflows/disclosure.yml runs the first on every pull request, from the base
+branch's copy of this file; .github/workflows/checks.yml runs the second.
+Exit status: 0 when the pull request follows the rules, 1 when it does not (each
+problem printed), 2 for a usage error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+
+SECTION = re.compile(r"^#{2,3}\s*AI assistance\s*$", re.I | re.M)
+HEADING = re.compile(r"^#{1,3}\s", re.M)
+COMMENT = re.compile(r"<!--.*?-->", re.S)
+BOX = re.compile(r"^\s*[-*]\s*\[([ xX])\]\s*(.*)$")
+NO_TOOL = re.compile(r"^No AI tool", re.I)
+HELPED = re.compile(r"^An AI tool helped\.?\s*(?:Tool, model, and what it did:)?\s*", re.I)
+ASSISTED = re.compile(r"^Assisted-by:\s*\S", re.I | re.M)
+# Names that mark a co-author line or a footer as a tool's, not a person's.
+TOOLS = re.compile(
+    r"claude|anthropic|copilot|cursor|openai|chatgpt|codex|gemini|devin|aider|"
+    r"sourcegraph|cody|tabnine|windsurf|codeium|amazon q|kiro|jules|grok|deepseek|"
+    r"qwen|mistral|llama|\bai\b|\bllm\b|\bbot\b",
+    re.I,
+)
+CO_AUTHOR = re.compile(r"^Co-authored-by:(.*)$", re.I | re.M)
+# A footer line such as "Generated with <tool>", not a sentence about generated files.
+FOOTER = re.compile(r"^\W*generated (?:with|by)\b.*$", re.I | re.M)
+
+
+def check(body: str, commits: list[tuple[str, str]]) -> list[str]:
+    """Problems with a pull request, given its description and (sha, message) pairs."""
+    problems: list[str] = []
+    found = SECTION.search(body or "")
+    if not found:
+        return ['the description has no "AI assistance" section; use the pull request '
+                "form (.github/pull_request_template.md)"]
+    rest = body[found.end():]
+    end = HEADING.search(rest)
+    section = COMMENT.sub("", rest[: end.start()] if end else rest)
+
+    ticked: list[str] = []
+    extra: list[str] = []
+    for line in section.splitlines():
+        box = BOX.match(line)
+        if box:
+            if box.group(1) != " ":
+                ticked.append(box.group(2).strip())
+        elif line.strip():
+            extra.append(line.strip())
+    no_tool = [t for t in ticked if NO_TOOL.match(t)]
+    helped = [t for t in ticked if HELPED.match(t)]
+    if len(no_tool) + len(helped) != 1 or len(ticked) != 1:
+        problems.append('tick exactly one box in "AI assistance"')
+        return problems
+
+    if helped:
+        said = " ".join([HELPED.sub("", helped[0], count=1)] + extra).strip()
+        if len(re.sub(r"\W", "", said)) < 10:
+            problems.append('"An AI tool helped" is ticked: name the tool and the model '
+                            "and say what it did")
+
+    for sha, message in commits:
+        short = sha[:10]
+        has_trailer = bool(ASSISTED.search(message))
+        if helped and not has_trailer:
+            problems.append(f"commit {short} has no Assisted-by: trailer, and the "
+                            "description says a tool helped")
+        if no_tool and has_trailer:
+            problems.append(f"commit {short} has an Assisted-by: trailer, and the "
+                            'description says no tool helped')
+        for who in CO_AUTHOR.findall(message):
+            if TOOLS.search(who):
+                problems.append(f"commit {short} names a tool as a co-author "
+                                f"({who.strip()}); use an Assisted-by: trailer")
+        for line in FOOTER.findall(message):
+            problems.append(f'commit {short} has a footer "{line.strip()}"; use an '
+                            "Assisted-by: trailer")
+    return problems
+
+
+def commits_in(span: str) -> list[tuple[str, str]]:
+    out = subprocess.run(
+        ["git", "log", "--no-merges", "--format=%H%x00%B%x1e", span],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    pairs = []
+    for record in out.split("\x1e"):
+        record = record.strip("\n")
+        if record:
+            sha, _, message = record.partition("\x00")
+            pairs.append((sha, message))
+    return pairs
+
+
+FORM = """## What and why
+
+Fix the thing.
+
+## AI assistance
+
+<!-- Required: tick exactly one box. -->
+
+- [{no}] No AI tool helped with this pull request.
+- [{yes}] An AI tool helped. Tool, model, and what it did:{said}
+"""
+
+
+def self_test() -> int:
+    plain = ("a" * 40, "fix: a thing\n\nWhy it was wrong.\n")
+    marked = ("b" * 40, "fix: a thing\n\nAssisted-by: SomeAgent:some-model-1\n")
+    cases = [
+        ("no section", "Just a fix.", [plain], False),
+        ("no box ticked", FORM.format(no=" ", yes=" ", said=""), [plain], False),
+        ("both ticked", FORM.format(no="x", yes="x", said=" SomeAgent wrote the test"),
+         [marked], False),
+        ("no tool, plain commit", FORM.format(no="x", yes=" ", said=""), [plain], True),
+        ("no tool, but a trailer", FORM.format(no="x", yes=" ", said=""), [marked], False),
+        ("helped, nothing said", FORM.format(no=" ", yes="x", said=""), [marked], False),
+        ("helped, said, marked",
+         FORM.format(no=" ", yes="X", said=" SomeAgent (some-model-1) wrote the test"),
+         [marked], True),
+        ("helped, said on the next line",
+         FORM.format(no=" ", yes="x", said="\nSomeAgent with some-model-1 drafted the fix"),
+         [marked], True),
+        ("helped, a commit unmarked",
+         FORM.format(no=" ", yes="x", said=" SomeAgent (some-model-1) wrote the test"),
+         [marked, plain], False),
+        ("tool as co-author", FORM.format(no="x", yes=" ", said=""),
+         [("c" * 40, "fix: x\n\nCo-authored-by: Claude <noreply@anthropic.com>\n")], False),
+        ("person as co-author", FORM.format(no="x", yes=" ", said=""),
+         [("d" * 40, "fix: x\n\nCo-authored-by: Jane Doe <jane@example.com>\n")], True),
+        ("generated footer", FORM.format(no="x", yes=" ", said=""),
+         [("e" * 40, "fix: x\n\nGenerated with SomeAgent\n")], False),
+        ("generated files", FORM.format(no="x", yes=" ", said=""),
+         [("f" * 40, "build: x\n\nThe headers generated by gn moved.\n")], True),
+    ]
+    failed = 0
+    for name, body, commits, ok in cases:
+        problems = check(body, commits)
+        if (not problems) != ok:
+            failed += 1
+            print(f"  FAIL {name}: expected {'pass' if ok else 'a problem'}, got {problems}")
+        else:
+            print(f"  ok   {name}")
+    print("self-test passed" if not failed else f"{failed} self-test case(s) failed")
+    return 1 if failed else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--body-file")
+    parser.add_argument("--commits", help="a git range, <base>..<head>")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        return self_test()
+    if not args.body_file or not args.commits:
+        parser.print_usage(sys.stderr)
+        return 2
+    with open(args.body_file, encoding="utf-8") as f:
+        body = f.read()
+    problems = check(body, commits_in(args.commits))
+    if problems:
+        print("This pull request does not yet follow CONTRIBUTING.md, \"AI tools\":")
+        for p in problems:
+            print(f"  - {p}")
+        return 1
+    print("AI assistance disclosed, and the commits agree")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

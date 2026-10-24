@@ -192,8 +192,10 @@ series. Prerequisites and build times: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 The most useful thing now is a report from real use: install the latest beta, use it for a
 day, and open an issue for each thing that is worse than what you use today. See
 [CONTRIBUTING.md](CONTRIBUTING.md); security issues go through private reporting
-([SECURITY.md](SECURITY.md)). New contributors and agents start at [AGENTS.md](AGENTS.md); the
-index of every document is [docs/README.md](docs/README.md).
+([SECURITY.md](SECURITY.md)). A pull request made with an AI tool's help says so, and each of
+its commits carries an `Assisted-by:` trailer ([CONTRIBUTING.md, "AI tools"](CONTRIBUTING.md#ai-tools)).
+New contributors and agents start at [AGENTS.md](AGENTS.md); the index of every document is
+[docs/README.md](docs/README.md).
 
 ## License
 

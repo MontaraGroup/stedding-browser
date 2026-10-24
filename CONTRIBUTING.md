@@ -29,8 +29,9 @@ what kinds of contributions are useful right now.
 - **Build tooling.** `tooling/` runs on macOS arm64 and, through `tooling/win/`, on
   Windows x64. Fixes to the scripts, and reports of what breaks on a machine unlike
   the reference one, are useful now. Run `tooling/check-repo` and `tooling/check-shell`
-  before opening a PR. CI (`.github/workflows/`) runs those two and
-  `tooling/check-pin --self-test` on every change, `tooling/apply-patches --check` when
+  before opening a PR. CI (`.github/workflows/`) runs those two,
+  `tooling/check-pin --self-test` and `tooling/check-disclosure --self-test` on every change,
+  `tooling/check-disclosure` on every pull request ("AI tools" below), `tooling/apply-patches --check` when
   `patches/` or the pin changes and weekly, and `tooling/check-pin` daily against
   Chromium stable. Note that macOS ships bash 3.2, so the scripts must work there.
 
@@ -70,12 +71,51 @@ carries the dev parameters and the traps already paid for.
   In practice: read other browsers for product and architectural decisions, write our
   own implementation, and say in the commit message where an idea came from.
 
+## AI tools
+
+You may use an AI tool (a coding agent, a chat assistant, completion of more than a line) to
+help with a pull request, an issue or a security report. These rules cover every such
+contribution from outside the project, and `tooling/check-disclosure` holds pull requests to
+the first two:
+
+1. **Say so in the pull request.** Its form has an **AI assistance** section: tick one box.
+   If a tool helped, name the tool and the model and say what it did (wrote the fix, wrote
+   the tests, drafted the description, reviewed the change). A pull request with the section
+   unanswered fails the `disclosure` check and is not reviewed.
+2. **Mark every commit.** If a tool helped with the pull request, each of its commits ends
+   with a trailer naming it, in the form the Linux kernel uses:
+
+   ```
+   Assisted-by: AGENT_NAME:MODEL_VERSION [OTHER_TOOLS]
+   ```
+
+   Not `Co-authored-by:`: a tool is not an author and cannot agree to the licence below. No
+   "Generated with" footers or links either. Compilers, editors, formatters and spell
+   checkers are not listed.
+3. **A person answers for it.** You have read every line, can explain what it does and why
+   without the tool, ran the checks and tests the change needs (`docs/AGENT-LOOP.md`), and
+   answer review questions yourself. Write the description yourself, briefly: what changed,
+   why, and how you tested it.
+4. **No agent acts alone.** No pull request, issue, comment or review is posted by an agent
+   without a person reading it first. An agent never signs anything for you.
+5. **The copying rule above applies to what a tool writes.** No code from another project,
+   whether you or a tool reproduced it.
+6. **No generated images.** Screenshots and recordings come from a real build
+   (`tooling/capture-windows`, `tooling/record-window`); no generated artwork, icons or video.
+7. **Security reports**: say whether a tool found the issue or wrote the report, and
+   reproduce it on a released build before sending it (`SECURITY.md`).
+
+A contribution whose tool use was not disclosed, or that its author cannot explain, is
+closed. These rules follow the practice of projects such as the Linux kernel, LLVM, Fedora
+and Ghostty.
+
 ## Commit style
 
 - Conventional, imperative subject line: `docs: clarify M0 acceptance criteria`,
   `fix: correct link to PRIVACY.md`.
 - Keep the subject under about 72 characters.
 - Add a body when the *why* is not obvious from the diff.
+- End a commit an AI tool helped with in an `Assisted-by:` trailer ("AI tools" above).
 
 ## License and CLA
 

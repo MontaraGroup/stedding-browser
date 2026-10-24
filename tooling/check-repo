@@ -16,9 +16,9 @@ into something a machine can fail on:
            BACKLOG cites is in a tooling/dev filter
   wiring   every source the series adds is in a GN sources list, so it compiles
   args     every build configuration keeps the settings every Stedding build shares
-  truth    docs carry no known-stale phrases, feature specs are well formed, and
-           every backlog id cited anywhere exists in BACKLOG.md or, closed, in
-           docs/history/archive.md
+  truth    docs carry no known-stale phrases, feature specs are well formed, the
+           README names the release whose notes are current, and every backlog id
+           cited anywhere exists in BACKLOG.md or, closed, in docs/history/archive.md
 
 Run: tooling/check-repo [check ...]     (no arguments: run everything)
 Exit status is the number of failures, capped at 125.
@@ -361,6 +361,31 @@ def check_truth() -> None:
             # A cut behaviour has no test; naming one reads as proof of it.
             if state == "withdrawn" and not test.strip().lower().startswith("none"):
                 fail(f"{spec.relative_to(ROOT)}:{n}", f"{bid} is 'withdrawn' but names a test")
+
+    # The README names the newest release, the one whose notes are the current file
+    # in docs/release-notes/. A release renames that file, so a README left on the
+    # release before fails here (the owner, 2026-10-23).
+    current = sorted(p for p in (ROOT / "docs" / "release-notes").glob("v*.md"))
+    if len(current) != 1:
+        fail("docs/release-notes", "holds the current release's notes as one v<version>.md "
+             f"beside archive.md; found {len(current)}")
+    else:
+        m = re.match(r"v(\d+\.\d+\.\d+)(?:-(beta|alpha|rc)\.(\d+))?\.md$", current[0].name)
+        if not m:
+            fail(current[0].relative_to(ROOT).as_posix(), "name is not v<x.y.z>[-beta.<n>].md")
+        else:
+            label = m.group(1) + (f" {m.group(2)} {m.group(3)}" if m.group(2) else "")
+            readme = (ROOT / "README.md").read_text(encoding="utf-8")
+            named = re.search(r"newest release\s+is \*\*([^*]+)\*\*", readme)
+            if not named:
+                fail("README.md", "no \"The newest release is **<version>**\" line")
+            elif named.group(1) != label:
+                fail("README.md", f"names {named.group(1)!r} as the newest release; "
+                     f"the current notes are {current[0].name} ({label!r})")
+            heading = current[0].read_text(encoding="utf-8").splitlines()[0]
+            if heading != f"# Stedding {label}":
+                fail(current[0].relative_to(ROOT).as_posix(),
+                     f"first line is {heading!r}, not '# Stedding {label}'")
 
     # Backlog ids cited anywhere must exist: open in BACKLOG.md, or closed in the
     # history archive's "Closed backlog items", where a closed row moves.
