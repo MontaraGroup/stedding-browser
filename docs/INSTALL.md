@@ -23,6 +23,16 @@ Macs are not supported yet.
 2. Open the DMG and drag **Stedding** into **Applications**.
 3. Open Stedding. macOS checks Apple's notarization once and opens it.
 
+Or with Homebrew, from the project's own tap
+([homebrew-stedding](https://github.com/ysalitrynskyi/homebrew-stedding)), which follows each
+release:
+
+```bash
+brew install --cask ysalitrynskyi/stedding/stedding
+```
+
+Stedding then updates itself as below; `brew upgrade` is not needed.
+
 ### Verifying the download
 
 The release notes list a SHA-256 for each file. In Terminal:

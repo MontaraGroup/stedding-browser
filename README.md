@@ -113,6 +113,12 @@ is **0.3.0 beta 11**, for macOS and Windows, on Chromium 156.0.8078.48.
 | macOS 13 or later, Apple silicon | `Stedding-<version>-arm64.dmg` | Signed and notarized: drag it to Applications and open it |
 | Windows 10 / 11, x64 | `Stedding-<version>-win-x64.exe` | Installs for the current user, no administrator prompt. Not signed yet: SmartScreen → **More info** → **Run anyway**, once |
 
+On a Mac, Homebrew installs it too:
+
+```bash
+brew install --cask ysalitrynskyi/stedding/stedding
+```
+
 After that it updates itself (the Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19; an older
 Windows copy needs one install by hand). Checksums are in each release's notes;
 [docs/INSTALL.md](docs/INSTALL.md) covers verifying, updating and uninstalling. Intel Macs and Linux are not supported yet.
