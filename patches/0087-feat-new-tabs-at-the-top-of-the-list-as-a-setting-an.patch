@@ -28,24 +28,24 @@ tabs at the top (GitHub issue 22); the five muted Space colours were too
 few and too alike (the owner, 2026-10-23).
 Removable when: never; it is product behaviour.
 ---
- .../api/settings_private/prefs_util.cc        |  3 +
- .../stedding_page/stedding_page.html.ts       |  7 +++
- .../resources/stedding_welcome/app.css        | 10 ++-
- .../browser/resources/stedding_welcome/app.ts |  2 +-
- .../browser/ui/spaces/arc_sidebar_importer.cc | 26 +++++---
- .../spaces/arc_sidebar_importer_unittest.cc   |  9 ++-
- chrome/browser/ui/spaces/space_colors.h       | 49 ++++++++++++---
- chrome/browser/ui/spaces/space_model.cc       | 36 +++++++++--
- chrome/browser/ui/spaces/space_model.h        | 13 ++++
- chrome/browser/ui/spaces/space_registry.cc    |  5 +-
- chrome/browser/ui/stedding/stedding_prefs.cc  |  2 +
- chrome/browser/ui/stedding/stedding_prefs.h   |  4 ++
- chrome/browser/ui/tabs/tab_strip_model.cc     | 13 +++-
- chrome/browser/ui/tabs/tab_strip_model.h      |  8 +++
- .../browser/ui/webui/settings/settings_ui.cc  |  8 +++
- .../stedding_welcome_handler_unittest.cc      |  2 +-
- .../test/stedding/pinned_run_browsertest.cc   | 63 +++++++++++++++++++
- 17 files changed, 232 insertions(+), 28 deletions(-)
+ .../api/settings_private/prefs_util.cc        |   3 +
+ .../stedding_page/stedding_page.html.ts       |   7 +
+ .../resources/stedding_welcome/app.css        |  10 +-
+ .../browser/resources/stedding_welcome/app.ts |  11 +-
+ .../browser/ui/spaces/arc_sidebar_importer.cc |  73 +++++-
+ .../spaces/arc_sidebar_importer_unittest.cc   |   9 +-
+ chrome/browser/ui/spaces/space_colors.h       |  49 +++-
+ chrome/browser/ui/spaces/space_model.cc       |  36 ++-
+ chrome/browser/ui/spaces/space_model.h        |  13 +
+ chrome/browser/ui/spaces/space_registry.cc    |   5 +-
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   4 +
+ chrome/browser/ui/tabs/tab_strip_model.cc     |  13 +-
+ chrome/browser/ui/tabs/tab_strip_model.h      |   8 +
+ .../browser/ui/webui/settings/settings_ui.cc  |   8 +
+ .../stedding_welcome_handler_unittest.cc      |   2 +-
+ .../test/stedding/pinned_run_browsertest.cc   | 242 ++++++++++++++++++
+ 17 files changed, 461 insertions(+), 34 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -112,10 +112,33 @@ index 5ee34e22a3fcf..a78b29211d070 100644
  
  .swatch[aria-checked='true'] {
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index debd2903cb537..c4e75fdf54023 100644
+index debd2903cb537..e5ef697e18a2e 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
-@@ -397,7 +397,7 @@ function renderStep(main: HTMLElement) {
+@@ -273,7 +273,7 @@ function renderStep(main: HTMLElement) {
+       heading('Bring your bookmarks and history',
+               'From another browser on this ' + (isMac ? 'Mac' : 'computer') +
+               '. Nothing leaves the machine; it is copied into your profile.');
+-      // import I4: Arc's sidebar, when this Mac has one.
++      // import I4, I27: Arc's sidebar, when this computer has one.
+       if (state.arc && state.arc.found) {
+         const arc = el('div', 'arc-import');
+         arc.append(el('div', 'name', 'Everything from Arc'),
+@@ -283,8 +283,11 @@ function renderStep(main: HTMLElement) {
+         }
+         // import I21: one click moves the sidebar, the history and the
+         // passwords; each is a checkbox for whoever wants less.
+-        arc.append(el('div', 'hint',
+-            'Everything stays on this Mac. For the passwords, macOS asks once whether Stedding may read Arc\u2019s keychain item.'));
++        // import I27: on Windows Arc's key is the Windows account's own, and
++        // nothing asks.
++        arc.append(el('div', 'hint', isMac ?
++            'Everything stays on this Mac. For the passwords, macOS asks once whether Stedding may read Arc\u2019s keychain item.' :
++            'Everything stays on this computer. Arc\u2019s passwords are read with your Windows account\u2019s own key, so nothing asks.'));
+         const choices = el('div', 'import-row');
+         choices.append(
+             checkbox('Spaces', state.arcSpaces, 'arc-spaces', v => state.arcSpaces = v),
+@@ -397,7 +400,7 @@ function renderStep(main: HTMLElement) {
          }));
        }
        main.append(list);
@@ -125,7 +148,7 @@ index debd2903cb537..c4e75fdf54023 100644
          const swatches = el('div', 'swatches');
          swatches.setAttribute('role', 'radiogroup');
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
-index 20d11f6e7be29..1bdf2502e8cd0 100644
+index 20d11f6e7be29..8aa0af769319d 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 +++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 @@ -5,6 +5,7 @@
@@ -136,7 +159,24 @@ index 20d11f6e7be29..1bdf2502e8cd0 100644
  #include <map>
  #include <memory>
  #include <optional>
-@@ -47,6 +48,7 @@
+@@ -12,6 +13,8 @@
+ #include <utility>
+ #include <variant>
+ 
++#include "base/base_paths.h"
++#include "base/files/file_enumerator.h"
+ #include "base/files/file_util.h"
+ #include "base/files/scoped_temp_dir.h"
+ #include "base/functional/bind.h"
+@@ -25,6 +28,7 @@
+ #include "base/task/thread_pool.h"
+ #include "base/token.h"
+ #include "base/values.h"
++#include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/arc_data_importer.h"
+@@ -47,6 +51,7 @@
  #include "content/public/browser/web_contents.h"
  #include "content/public/common/referrer.h"
  #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -144,7 +184,64 @@ index 20d11f6e7be29..1bdf2502e8cd0 100644
  #include "ui/base/page_transition_types.h"
  #include "url/url_constants.h"
  
-@@ -820,16 +822,24 @@ bool IsArcRunning() {
+@@ -779,15 +784,45 @@ std::u16string SummariseArcImport(const ArcImportPlan& plan) {
+   return text;
+ }
+ 
+-base::FilePath ArcSidebarPath() {
++base::FilePath ArcFolder() {
++#if BUILDFLAG(IS_WIN)
++  // I27: Arc for Windows is a Store package; its own files are in the
++  // package's LocalCache, under a publisher id after the package's name.
++  base::FilePath local;
++  if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local)) {
++    return base::FilePath();
++  }
++  base::FileEnumerator packages(local.Append(FILE_PATH_LITERAL("Packages")),
++                                /*recursive=*/false,
++                                base::FileEnumerator::DIRECTORIES,
++                                FILE_PATH_LITERAL("TheBrowserCompany.Arc_*"));
++  for (base::FilePath package = packages.Next(); !package.empty();
++       package = packages.Next()) {
++    const base::FilePath arc = package.Append(FILE_PATH_LITERAL("LocalCache"))
++                                   .Append(FILE_PATH_LITERAL("Local"))
++                                   .Append(FILE_PATH_LITERAL("Arc"));
++    if (base::DirectoryExists(arc)) {
++      return arc;
++    }
++  }
++  return base::FilePath();
++#elif BUILDFLAG(IS_MAC)
+   base::FilePath home;
+   if (!base::PathService::Get(base::DIR_HOME, &home)) {
+     return base::FilePath();
+   }
+   return home.Append(FILE_PATH_LITERAL("Library"))
+       .Append(FILE_PATH_LITERAL("Application Support"))
+-      .Append(FILE_PATH_LITERAL("Arc"))
+-      .Append(FILE_PATH_LITERAL("StorableSidebar.json"));
++      .Append(FILE_PATH_LITERAL("Arc"));
++#else
++  return base::FilePath();
++#endif
++}
++
++base::FilePath ArcSidebarPath() {
++  const base::FilePath arc = ArcFolder();
++  return arc.empty() ? base::FilePath()
++                     : arc.Append(FILE_PATH_LITERAL("StorableSidebar.json"));
+ }
+ 
+ std::optional<std::string> ReadArcSidebar(const base::FilePath& path,
+@@ -816,20 +851,32 @@ std::optional<std::string> ReadArcSidebar(const base::FilePath& path,
+ }
+ 
+ bool IsArcRunning() {
++#if BUILDFLAG(IS_WIN)
++  return base::GetProcessCount(FILE_PATH_LITERAL("Arc.exe"), nullptr) > 0;
++#else
+   return base::GetProcessCount(FILE_PATH_LITERAL("Arc"), nullptr) > 0;
++#endif
  }
  
  SkColor NearestSpaceColor(SkColor arc_color) {
@@ -177,6 +274,18 @@ index 20d11f6e7be29..1bdf2502e8cd0 100644
      if (best < 0 || distance < best) {
        best = distance;
        nearest = choice.color;
+@@ -1097,7 +1144,11 @@ std::u16string DescribeArcImportResult(const ArcImportResult& result) {
+                           u" already here"});
+   }
+   if (result.keychain_denied) {
++#if BUILDFLAG(IS_WIN)
++    text += u" \u00B7 passwords skipped: Arc's key could not be read";
++#else
+     text += u" \u00B7 passwords skipped: the keychain said no";
++#endif
+   }
+   return text;
+ }
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
 index 7e938ddbc36dc..4db4fdfde19aa 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
@@ -532,18 +641,19 @@ index f946739260551..32d1eac6018ab 100644
  
  // welcome W12: the behaviour step reads the profile. A fresh one answers
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
-index 5e9d7ad357996..d6192dbdc78b6 100644
+index 5e9d7ad357996..e6f93a5396a29 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc
 +++ b/chrome/test/stedding/pinned_run_browsertest.cc
-@@ -22,6 +22,7 @@
+@@ -22,13 +22,16 @@
  #include "base/test/run_until.h"
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/browser/prefs/session_startup_pref.h"
 +#include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/browser_commands.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/layout_constants.h"
  #include "chrome/browser/ui/navigator/browser_navigator.h"
-@@ -29,6 +30,7 @@
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
  #include "chrome/browser/ui/spaces/space.h"
  #include "chrome/browser/ui/spaces/space_id.h"
  #include "chrome/browser/ui/spaces/space_model.h"
@@ -551,7 +661,17 @@ index 5e9d7ad357996..d6192dbdc78b6 100644
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "chrome/browser/ui/tabs/tab_model.h"
-@@ -44,6 +46,7 @@
+@@ -36,7 +39,9 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
+ #include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
++#include "chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
++#include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+@@ -44,6 +49,7 @@
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "chrome/test/stedding/sidebar_test_util.h"
@@ -559,10 +679,193 @@ index 5e9d7ad357996..d6192dbdc78b6 100644
  #include "components/split_tabs/split_tab_visual_data.h"
  #include "components/tabs/public/folder_tab_collection.h"
  #include "components/tabs/public/tab_interface.h"
-@@ -1279,4 +1282,64 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADragTakesATabIntoTheEssentialsAndOut) {
+@@ -55,6 +61,7 @@
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
++#include "ui/compositor/layer.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/menus/simple_menu_model.h"
+@@ -1279,4 +1286,239 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADragTakesATabIntoTheEssentialsAndOut) {
    }
  }
  
++// pins H27 (BACKLOG S-289, GitHub issue 16): as in Arc, a tab's row dragged
++// over the essentials turns into a card under the pointer, the grid making
++// room for it where it would land and the list closing up over the row;
++// released, it settles into that room as an essential. An essential's card
++// dragged over the list turns into a row, and the rows part for it where it
++// would land, in place of the bar between them; released, it lands there.
++// Dragged back, the copy ends and the row or card is drawn again.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADraggedTabTurnsIntoACardAndBack) {
++  tabs::TabInterface* const essential = tabs().GetActiveTab();
++  tabs::TabInterface* const loose = AddBlankTab();
++  tabs::TabInterface* const tail = AddBlankTab();
++  tabs::TabInterface* const last = AddBlankTab();
++  tabs().SetTabPinned(tabs().GetIndexOfTab(essential), true);
++  ASSERT_TRUE(essential->IsPinned());
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  views::View* const root = widget()->GetRootView();
++  const auto drawn = [&](const tabs::TabInterface* tab) {
++    views::test::RunScheduledLayout(widget());
++    return stedding::test::FindDrawnRow(root, tab);
++  };
++  const auto ghost = [&]() {
++    return stedding::test::FindView<EssentialsDragGhost>(root);
++  };
++  // The copy's shape in screen coordinates, once it has finished turning.
++  const auto ghost_shape = [&]() {
++    EssentialsDragGhost* const copy = ghost();
++    EXPECT_TRUE(copy) << "no floating copy";
++    if (!copy) {
++      return gfx::Rect();
++    }
++    EXPECT_TRUE(base::test::RunUntil([&]() { return !copy->IsAnimating(); }));
++    gfx::Rect bounds = copy->shape_bounds();
++    views::View::ConvertRectToScreen(copy->parent(), &bounds);
++    return bounds;
++  };
++  const auto opacity = [](const views::View* view) {
++    return view->layer() ? view->layer()->opacity() : 1.0f;
++  };
++  // A press on `from` and a drag in steps to `to`, the window laying out
++  // between two; the button is held.
++  const auto press_and_drag = [&](const gfx::Point& from,
++                                  const gfx::Point& to) {
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed, from);
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++  };
++  const auto drag_on = [&](const gfx::Point& from, const gfx::Point& to) {
++    constexpr int kSteps = 10;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++  };
++  const auto release = [&](const gfx::Point& at) {
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, at);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    EXPECT_TRUE(base::test::RunUntil([&]() { return !ghost(); }))
++        << "the floating copy stayed";
++  };
++
++  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  {
++    SCOPED_TRACE("a row over the essentials");
++    const TabView* const card = drawn(essential);
++    const TabView* const row = drawn(loose);
++    ASSERT_TRUE(card && row);
++    const gfx::Rect card_before = card->GetBoundsInScreen();
++    const gfx::Rect row_before = row->GetBoundsInScreen();
++    // The essential's card's first quarter: the room goes before it.
++    const gfx::Point over(card_before.x() + card_before.width() / 4,
++                          card_before.CenterPoint().y());
++    press_and_drag(row_before.CenterPoint(), over);
++
++    const gfx::Rect shape = ghost_shape();
++    ASSERT_TRUE(ghost());
++    EXPECT_TRUE(ghost()->as_card());
++    EXPECT_EQ(1.0, ghost()->card_amount());
++    EXPECT_NEAR(over.x(), shape.CenterPoint().x(), 2)
++        << "not under the pointer";
++    EXPECT_NEAR(over.y(), shape.CenterPoint().y(), 2)
++        << "not under the pointer";
++    EXPECT_EQ(GetLayoutConstant(LayoutConstant::kVerticalTabPinnedHeight),
++              shape.height())
++        << "not a card's height";
++    const gfx::Rect card_now = drawn(essential)->GetBoundsInScreen();
++    EXPECT_LT(card_now.width(), card_before.width()) << "the grid made no room";
++    EXPECT_GT(card_now.x(), card_before.x()) << "the room is not before it";
++    EXPECT_EQ(card_now.width(), shape.width())
++        << "the copy is not the size of the place made for it";
++    EXPECT_EQ(0.0f, opacity(drawn(loose))) << "the row is still drawn";
++    EXPECT_NEAR(row_before.y(), drawn(tail)->GetBoundsInScreen().y(), 1)
++        << "the list did not close up over the row";
++
++    release(over);
++    ASSERT_TRUE(base::test::RunUntil([&]() { return loose->IsPinned(); }))
++        << "the tab did not become an essential";
++    EXPECT_EQ(Index(loose) + 1, Index(essential)) << "not where the room was";
++    ASSERT_TRUE(drawn(loose));
++    EXPECT_EQ(1.0f, opacity(drawn(loose))) << "its card is not shown";
++    EXPECT_EQ(1.0f, opacity(drawn(tail)));
++  }
++  {
++    SCOPED_TRACE("an essential over the list");
++    const TabView* const card = drawn(loose);
++    const TabView* const above = drawn(tail);
++    const TabView* const below = drawn(last);
++    ASSERT_TRUE(card && above && below);
++    const gfx::Rect above_before = above->GetBoundsInScreen();
++    const gfx::Rect below_before = below->GetBoundsInScreen();
++    // Between the two rows: the room goes before the second.
++    const gfx::Point between(above_before.CenterPoint().x(),
++                             (above_before.bottom() + below_before.y()) / 2);
++    press_and_drag(card->GetBoundsInScreen().CenterPoint(), between);
++
++    const gfx::Rect shape = ghost_shape();
++    ASSERT_TRUE(ghost());
++    EXPECT_FALSE(ghost()->as_card());
++    EXPECT_EQ(0.0, ghost()->card_amount());
++    EXPECT_NEAR(between.y(), shape.CenterPoint().y(), 2)
++        << "not under the pointer";
++    EXPECT_EQ(above_before.x(), shape.x()) << "not in line with the rows";
++    EXPECT_EQ(above_before.width(), shape.width());
++    EXPECT_EQ(above_before.height(), shape.height()) << "not a row's height";
++    EXPECT_EQ(0.0f, opacity(drawn(loose))) << "the card is still drawn";
++    EXPECT_NEAR(above_before.y(), drawn(tail)->GetBoundsInScreen().y(), 1);
++    EXPECT_GE(drawn(last)->GetBoundsInScreen().y(),
++              below_before.y() + above_before.height())
++        << "the rows did not part for it";
++    UnpinnedTabContainerView* const list =
++        stedding::test::FindView<UnpinnedTabContainerView>(root);
++    ASSERT_TRUE(list);
++    EXPECT_FALSE(list->GetRowDropIndicatorBoundsInScreenForTesting())
++        << "the bar is still drawn";
++
++    release(between);
++    ASSERT_TRUE(base::test::RunUntil([&]() { return !loose->IsPinned(); }))
++        << "it stayed an essential";
++    EXPECT_EQ(Index(tail) + 1, Index(loose));
++    EXPECT_EQ(Index(loose) + 1, Index(last)) << "not where the rows parted";
++    ASSERT_TRUE(drawn(loose));
++    EXPECT_EQ(1.0f, opacity(drawn(loose))) << "its row is not shown";
++  }
++  {
++    SCOPED_TRACE("a row taken over the essentials and back");
++    const TabView* const card = drawn(essential);
++    const TabView* const row = drawn(tail);
++    ASSERT_TRUE(card && row);
++    const gfx::Point home = row->GetBoundsInScreen().CenterPoint();
++    const gfx::Point over = card->GetBoundsInScreen().CenterPoint();
++    press_and_drag(home, over);
++    ASSERT_TRUE(ghost());
++    drag_on(over, home);
++    EXPECT_TRUE(base::test::RunUntil([&]() { return !ghost(); }))
++        << "the copy stayed over the list";
++    ASSERT_TRUE(drawn(tail));
++    EXPECT_EQ(1.0f, opacity(drawn(tail))) << "the row is not drawn again";
++    PinnedTabContainerView* const grid =
++        stedding::test::FindView<PinnedTabContainerView>(root);
++    ASSERT_TRUE(grid);
++    EXPECT_FALSE(grid->essentials_drop_room_index()) << "the room stayed";
++    release(home);
++    EXPECT_FALSE(tail->IsPinned()) << "it became an essential";
++  }
++}
 +
 +// tabs R62, settings T30 (GitHub issue 22): with "Open new tabs at the top of
 +// the list" on, a new tab opens under + New Tab -- below the Space's pins and

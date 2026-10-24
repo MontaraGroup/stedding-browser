@@ -3,46 +3,447 @@ From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
 Date: Thu, 22 Oct 2026 22:53:27 -0400
 Subject: feat: a drag takes a tab into the essentials and out (issue 16)
 
-As in Arc (pins H27; BACKLOG S-277, GitHub issue 16): a tab's row
+As in Arc (pins H27; BACKLOG S-277, S-289, GitHub issue 16): a tab's row
 dragged over the essentials, or the room above the Space's title down to
-the list, lights the essentials, and released there it becomes an
-essential, before the card it was dropped on or after the last. An
-essential's card dragged onto the list shows the bar between the rows
-where it will land, and released there it stops being an essential, at
-that place: under the Clear line a tab, over it a pin of the Space. It had
-taken the tab's menu. The drop decides, as a drop across the Clear line
-does (pins H14): TabDragHandlerImpl keeps the pointer's last place,
-PinnedTabContainerView lights for it, and UnpinnedTabContainerView says
-where a row brought into the list would go.
+the list from the sidebar's top row, turns into a card under the pointer,
+the size of the place it would take, while the cards part to make that
+place and the list closes up over the row; released there it settles into
+the place and becomes an essential, before the card after it or after the
+last. An essential's card dragged onto the list turns into a row under the
+pointer, in line with the rows, while the rows part where it would land
+and the grid keeps its height; released there it settles into the room
+and stops being an essential, at that place: under the Clear line a tab,
+over it a pin of the Space. Dragged back, the copy turns back into the row
+or card and fades over it. It had taken the tab's menu.
 
-Tests: PinnedRunTest.ADragTakesATabIntoTheEssentialsAndOut.
+The drop decides, as a drop across the Clear line does (pins H14), and
+nothing is pinned or unpinned during the drag: a pin change remakes the
+tab's view in the other container, which the drag still holds.
+TabDragHandlerImpl keeps the pointer's last place and shows the floating
+copy (EssentialsDragGhost, on the sidebar region, over both scroll views);
+the row or card it stands in for keeps its bounds and the drag's events,
+drawn at no opacity (kHiddenForEssentialsDrag, which the animating layout
+manager keeps), and its container closes up over it.
+PinnedTabContainerView makes room for cards at an index and says which
+place a pointer is nearest; UnpinnedTabContainerView makes room for rows
+before a row, over or under the Clear line, and reads a drop's place from
+the rows as they would stand without the room. The copy turns, settles
+and fades only while Stedding animates (motion O1).
+
+Tests: PinnedRunTest.ADragTakesATabIntoTheEssentialsAndOut,
+PinnedRunTest.ADraggedTabTurnsIntoACardAndBack.
 
 Why: Arc users move tabs into and out of their Favorites by dragging, and
-asked for it (GitHub issue 16).
+asked for it, then for Arc's way of showing it (GitHub issue 16).
 Removable when: never; it is product behaviour.
 ---
- .../tabs/common/pinned_tab_container_view.cc  |  27 ++-
- .../tabs/common/pinned_tab_container_view.h   |   8 +
- .../ui/views/tabs/common/tab_drag_handler.cc  | 194 +++++++++++++++++-
- .../ui/views/tabs/common/tab_drag_handler.h   |  10 +
- .../common/unpinned_tab_container_view.cc     |  71 +++++++
- .../tabs/common/unpinned_tab_container_view.h |  22 ++
- .../test/stedding/pinned_run_browsertest.cc   |  83 ++++++++
- 7 files changed, 410 insertions(+), 5 deletions(-)
+ chrome/browser/ui/views/tabs/common/BUILD.gn  |   2 +
+ .../tabs/common/essentials_drag_ghost.cc      | 252 ++++++++++
+ .../views/tabs/common/essentials_drag_ghost.h |  96 ++++
+ .../tabs/common/pinned_tab_container_view.cc  | 280 +++++++++---
+ .../tabs/common/pinned_tab_container_view.h   |  49 ++
+ ...tab_collection_animating_layout_manager.cc |  24 +-
+ .../tab_collection_animating_layout_manager.h |   7 +
+ .../ui/views/tabs/common/tab_drag_handler.cc  | 431 +++++++++++++++++-
+ .../ui/views/tabs/common/tab_drag_handler.h   |  34 ++
+ .../common/unpinned_tab_container_view.cc     | 144 ++++++
+ .../tabs/common/unpinned_tab_container_view.h |  46 ++
+ .../unpinned_tab_container_view_layout.cc     |  53 ++-
+ .../test/stedding/pinned_run_browsertest.cc   |  83 ++++
+ 13 files changed, 1436 insertions(+), 65 deletions(-)
+ create mode 100644 chrome/browser/ui/views/tabs/common/essentials_drag_ghost.cc
+ create mode 100644 chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h
 
+diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
+index df236ed0f4e3c..dbfabef76e043 100644
+--- a/chrome/browser/ui/views/tabs/common/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
+@@ -51,6 +51,8 @@ source_set("common") {
+ source_set("impl") {
+   sources = [
+     "dragged_tabs_container.cc",
++    "essentials_drag_ghost.cc",
++    "essentials_drag_ghost.h",
+     "horizontal_tab_style_views.cc",
+     "horizontal_tab_style_views.h",
+     "pinned_tab_container_view.cc",
+diff --git a/chrome/browser/ui/views/tabs/common/essentials_drag_ghost.cc b/chrome/browser/ui/views/tabs/common/essentials_drag_ghost.cc
+new file mode 100644
+index 0000000000000..ebaeaec5ecc26
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/common/essentials_drag_ghost.cc
+@@ -0,0 +1,252 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "base/strings/string_number_conversions.h"
++#include "base/task/sequenced_task_runner.h"
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/tabs/tab_style.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/compositor/layer.h"
++#include "ui/gfx/animation/tween.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/favicon_size.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/rect_f.h"
++#include "ui/gfx/image/image_skia.h"
++#include "ui/gfx/scoped_canvas.h"
++#include "ui/gfx/shadow_value.h"
++#include "ui/gfx/skia_paint_util.h"
++#include "ui/gfx/text_elider.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/view_class_properties.h"
++
++namespace {
++
++// Room around the shape for its shadow, which lifts it off the sidebar.
++constexpr int kShadowRoom = 10;
++constexpr SkAlpha kShadowAlpha = 0x40;
++constexpr int kShadowBlur = 12;
++constexpr int kShadowOffset = 3;
++// The gap between the favicon and the title, as a row has it.
++constexpr int kTitleGap = 8;
++
++constexpr base::TimeDelta kShapeDuration = base::Milliseconds(160);
++constexpr base::TimeDelta kSettleDuration = base::Milliseconds(200);
++constexpr base::TimeDelta kLeaveDuration = base::Milliseconds(140);
++// A settling copy holds its opacity over the first part of the move, so it
++// is seen arriving, then fades as the real card or row fades in under it.
++constexpr double kSettleFadeFrom = 0.5;
++
++}  // namespace
++
++EssentialsDragGhost::EssentialsDragGhost(ui::ImageModel favicon,
++                                         std::u16string title,
++                                         int count,
++                                         bool animate)
++    : views::AnimationDelegateViews(this),
++      favicon_(std::move(favicon)),
++      title_(std::move(title)),
++      count_(count),
++      animate_(animate) {
++  SetPaintToLayer();
++  layer()->SetFillsBoundsOpaquely(false);
++  SetCanProcessEventsWithinSubtree(false);
++  SetProperty(views::kViewIgnoredByLayoutKey, true);
++  GetViewAccessibility().SetIsIgnored(true);
++  shape_.SetSlideDuration(animate_ ? kShapeDuration : base::TimeDelta());
++  shape_.SetTweenType(gfx::Tween::EASE_OUT);
++  finish_.SetTweenType(gfx::Tween::EASE_OUT);
++}
++
++EssentialsDragGhost::~EssentialsDragGhost() = default;
++
++void EssentialsDragGhost::Follow(const gfx::Rect& row,
++                                 const gfx::Rect& card,
++                                 bool as_card) {
++  if (finishing_) {
++    return;
++  }
++  const bool first = row_.IsEmpty() && card_.IsEmpty();
++  row_ = row;
++  card_ = card;
++  if (first) {
++    // The copy appears as the shape it leaves, then turns.
++    shape_.Reset(as_card ? 0.0 : 1.0);
++  }
++  if (as_card != as_card_ || first) {
++    as_card_ = as_card;
++    if (as_card) {
++      shape_.Show();
++    } else {
++      shape_.Hide();
++    }
++  }
++  UpdateBounds();
++}
++
++void EssentialsDragGhost::Finish(const gfx::Rect& target,
++                                 bool as_card,
++                                 bool settles,
++                                 base::OnceClosure done) {
++  finishing_ = true;
++  settles_ = settles;
++  done_ = std::move(done);
++  finish_from_ = shape_bounds_;
++  finish_to_ = target;
++  if (as_card != as_card_) {
++    as_card_ = as_card;
++    if (as_card) {
++      shape_.Show();
++    } else {
++      shape_.Hide();
++    }
++  }
++  if (!animate_) {
++    shape_.Reset(as_card ? 1.0 : 0.0);
++    finish_.Reset(1.0);
++    UpdateBounds();
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
++                                                             std::move(done_));
++    return;
++  }
++  finish_.SetSlideDuration(settles ? kSettleDuration : kLeaveDuration);
++  finish_.Reset(0.0);
++  finish_.Show();
++}
++
++void EssentialsDragGhost::UpdateBounds() {
++  const double finish = finish_.GetCurrentValue();
++  if (finishing_) {
++    shape_bounds_ =
++        gfx::Tween::RectValueBetween(finish, finish_from_, finish_to_);
++    const double fade =
++        settles_
++            ? std::clamp((finish - kSettleFadeFrom) / (1 - kSettleFadeFrom),
++                         0.0, 1.0)
++            : finish;
++    layer()->SetOpacity(static_cast<float>(1.0 - fade));
++  } else {
++    shape_bounds_ =
++        gfx::Tween::RectValueBetween(shape_.GetCurrentValue(), row_, card_);
++  }
++  gfx::Rect bounds = shape_bounds_;
++  bounds.Outset(kShadowRoom);
++  SetBoundsRect(bounds);
++  SchedulePaint();
++}
++
++void EssentialsDragGhost::OnPaint(gfx::Canvas* canvas) {
++  const ui::ColorProvider* const provider = GetColorProvider();
++  if (!provider) {
++    return;
++  }
++  const double card = shape_.GetCurrentValue();
++  gfx::RectF shape(GetLocalBounds());
++  shape.Inset(kShadowRoom);
++  // The active row's fill, which may let the ground through, over the
++  // sidebar's ground, so the rows the copy passes over do not show through.
++  const SkColor ground = provider->GetColor(ui::kColorFrameActive);
++  const SkColor fill = TabStyle::Get()->GetCurrentTabBackgroundColor(
++      TabStyle::TabSelectionState::kActive, /*hovered=*/false,
++      /*hover_animation_value=*/0, /*frame_active=*/true,
++      /*frame_glass=*/false, provider);
++  const SkColor text = provider->GetColor(kColorTabForegroundActiveFrameActive);
++  const float radius =
++      GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius);
++
++  // The card or row, lifted: the active row's look and a soft shadow.
++  {
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(SkColorSetA(ground, SK_AlphaOPAQUE));
++    flags.setLooper(gfx::CreateShadowDrawLooper(
++        {gfx::ShadowValue(gfx::Vector2d(0, kShadowOffset), kShadowBlur,
++                          SkColorSetA(SK_ColorBLACK, kShadowAlpha))}));
++    canvas->DrawRoundRect(shape, radius, flags);
++    flags.setLooper(nullptr);
++    flags.setColor(fill);
++    canvas->DrawRoundRect(shape, radius, flags);
++  }
++
++  // The favicon: at the row's start, as a row has it, moving to the card's
++  // middle as the copy turns into one.
++  const int icon = gfx::kFaviconSize;
++  const float row_icon_x =
++      shape.x() + std::max(0.0f, (shape.height() - icon) / 2);
++  const float card_icon_x = shape.CenterPoint().x() - icon / 2.0f;
++  const int icon_x = static_cast<int>(
++      gfx::Tween::FloatValueBetween(card, row_icon_x, card_icon_x));
++  const int icon_y = static_cast<int>(shape.CenterPoint().y() - icon / 2.0f);
++  if (!favicon_.IsEmpty()) {
++    const gfx::ImageSkia image = favicon_.Rasterize(provider);
++    if (!image.isNull()) {
++      canvas->DrawImageInt(image, 0, 0, image.width(), image.height(), icon_x,
++                           icon_y, icon, icon, /*filter=*/true);
++    }
++  }
++
++  // The title, a row's alone: it fades over the first half of the turn.
++  const double title_alpha = std::clamp(1.0 - 2.0 * card, 0.0, 1.0);
++  if (title_alpha > 0 && !title_.empty()) {
++    const gfx::FontList font_list;
++    const int title_x = icon_x + icon + kTitleGap;
++    const int title_width =
++        static_cast<int>(shape.right()) - kTitleGap - title_x;
++    if (title_width > 0) {
++      const gfx::Rect title_bounds(title_x, static_cast<int>(shape.y()),
++                                   title_width,
++                                   static_cast<int>(shape.height()));
++      canvas->DrawStringRect(
++          gfx::ElideText(title_, font_list, title_width, gfx::ELIDE_TAIL),
++          font_list,
++          SkColorSetA(text,
++                      static_cast<SkAlpha>(title_alpha * SkColorGetA(text))),
++          title_bounds);
++    }
++  }
++
++  // Several tabs dragged together: their number, on the copy's corner.
++  if (count_ > 1) {
++    const std::u16string number = base::NumberToString16(count_);
++    const gfx::FontList font_list = gfx::FontList().DeriveWithSizeDelta(-2);
++    const int side = std::max(16, font_list.GetHeight() + 2);
++    const int width = std::max(
++        side, gfx::Canvas::GetStringWidth(number, font_list) + side / 2);
++    const gfx::Rect badge(static_cast<int>(shape.right()) - width + 4,
++                          static_cast<int>(shape.y()) - 4, width, side);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(text);
++    canvas->DrawRoundRect(badge, side / 2, flags);
++    canvas->DrawStringRectWithFlags(number, font_list,
++                                    SkColorSetA(ground, SK_AlphaOPAQUE), badge,
++                                    gfx::Canvas::TEXT_ALIGN_CENTER);
++  }
++}
++
++void EssentialsDragGhost::AnimationProgressed(const gfx::Animation* animation) {
++  UpdateBounds();
++}
++
++void EssentialsDragGhost::AnimationEnded(const gfx::Animation* animation) {
++  UpdateBounds();
++  if (animation == &finish_ && done_) {
++    // `done` may delete this: run it after the animation's own call.
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
++                                                             std::move(done_));
++  }
++}
++
++BEGIN_METADATA(EssentialsDragGhost)
++END_METADATA
+diff --git a/chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h b/chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h
+new file mode 100644
+index 0000000000000..b83157d19ae40
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h
+@@ -0,0 +1,96 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_TABS_COMMON_ESSENTIALS_DRAG_GHOST_H_
++#define CHROME_BROWSER_UI_VIEWS_TABS_COMMON_ESSENTIALS_DRAG_GHOST_H_
++
++#include <string>
++
++#include "base/functional/callback.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/image_model.h"
++#include "ui/gfx/animation/slide_animation.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/views/animation/animation_delegate_views.h"
++#include "ui/views/view.h"
++
++// Stedding pins H27 (BACKLOG S-289, GitHub issue 16): the floating copy of a
++// tab dragged across the essentials' edge, as Arc draws it. Over the
++// essentials it is a card, over the list a row, and it turns from one into
++// the other as it crosses, under the pointer the whole way. At the release
++// it settles into the place the drop made and fades as the real card or row
++// appears under it. It lies on the strip, over both scroll views, and takes
++// no events; the row or card it stands for is kept at no opacity
++// (kHiddenForEssentialsDrag) while it is shown.
++class EssentialsDragGhost : public views::View,
++                            public views::AnimationDelegateViews {
++  METADATA_HEADER(EssentialsDragGhost, views::View)
++
++ public:
++  // `count` tabs are dragged; the copy is the first's, with their number.
++  EssentialsDragGhost(ui::ImageModel favicon,
++                      std::u16string title,
++                      int count,
++                      bool animate);
++  EssentialsDragGhost(const EssentialsDragGhost&) = delete;
++  EssentialsDragGhost& operator=(const EssentialsDragGhost&) = delete;
++  ~EssentialsDragGhost() override;
++
++  // Follows the pointer. `row` and `card` are its two shapes there, in the
++  // parent's coordinates; it turns into the card while `as_card`, into the
++  // row otherwise.
++  void Follow(const gfx::Rect& row, const gfx::Rect& card, bool as_card);
++
++  // Ends the copy: it moves to `target`, in the parent's coordinates, in the
++  // shape `as_card` says, and fades -- over the end of the move when it
++  // `settles` into the place a drop made, over the whole of it when it
++  // leaves -- then runs `done`, which may delete it.
++  void Finish(const gfx::Rect& target,
++              bool as_card,
++              bool settles,
++              base::OnceClosure done);
++
++  // The shape it is turning into, and whether it is ending.
++  bool as_card() const { return as_card_; }
++  bool finishing() const { return finishing_; }
++  // How far it has turned into a card: 0 a row, 1 a card.
++  double card_amount() const { return shape_.GetCurrentValue(); }
++  // Its shape's bounds, in the parent's coordinates, without the shadow's
++  // room around them.
++  gfx::Rect shape_bounds() const { return shape_bounds_; }
++  bool IsAnimating() const {
++    return shape_.is_animating() || finish_.is_animating();
++  }
++
++  // views::View:
++  void OnPaint(gfx::Canvas* canvas) override;
++
++  // views::AnimationDelegateViews:
++  void AnimationProgressed(const gfx::Animation* animation) override;
++  void AnimationEnded(const gfx::Animation* animation) override;
++
++ private:
++  void UpdateBounds();
++
++  const ui::ImageModel favicon_;
++  const std::u16string title_;
++  const int count_;
++  const bool animate_;
++
++  // 0 a row, 1 a card.
++  gfx::SlideAnimation shape_{this};
++  // 0 following the pointer, 1 at `finish_to_`.
++  gfx::SlideAnimation finish_{this};
++  bool as_card_ = false;
++  bool finishing_ = false;
++  bool settles_ = false;
++  gfx::Rect row_;
++  gfx::Rect card_;
++  gfx::Rect finish_from_;
++  gfx::Rect finish_to_;
++  gfx::Rect shape_bounds_;
++  base::OnceClosure done_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_ESSENTIALS_DRAG_GHOST_H_
 diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-index a4fe56648df6f..cd59312799fbd 100644
+index a4fe56648df6f..2bef3952081c8 100644
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-@@ -7,13 +7,13 @@
+@@ -5,15 +5,17 @@
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ 
  #include <algorithm>
++#include <cstdint>
++#include <limits>
++#include <vector>
  
  #include "base/feature_list.h"
 -#include "chrome/browser/ui/stedding_ui_metrics.h"
 -#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 -
  #include "base/i18n/rtl.h"
-+#include "chrome/browser/ui/color/chrome_color_id.h"
  #include "chrome/browser/ui/layout_constants.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/features.h"
@@ -51,72 +452,502 @@ index a4fe56648df6f..cd59312799fbd 100644
  #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
  #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
-@@ -23,7 +23,9 @@
+@@ -21,6 +23,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_drag_handler.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
  #include "chrome/browser/ui/views/tabs/common/tab_view.h"
++#include "components/tabs/public/tab_collection.h"
  #include "content/public/browser/navigation_controller.h"
  #include "ui/base/metadata/metadata_impl_macros.h"
-+#include "ui/color/color_provider.h"
  #include "ui/gfx/geometry/rect.h"
-+#include "ui/views/background.h"
- #include "ui/views/controls/scroll_view.h"
- #include "ui/views/layout/delegating_layout_manager.h"
- #include "ui/views/layout/layout_types.h"
-@@ -557,5 +559,24 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+@@ -377,40 +380,20 @@ views::ProposedLayout PinnedTabContainerView::CalculateHorizontalLayout(
    return layouts;
  }
  
-+void PinnedTabContainerView::SetEssentialsDropHighlight(bool highlighted) {
-+  if (essentials_drop_highlighted_ == highlighted) {
+-views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+-    const views::SizeBounds& size_bounds) const {
+-  views::ProposedLayout layouts;
+-  const auto children = collection_node_ ? collection_node_->GetDirectChildren()
+-                                         : TabCollectionNode::ChildViews();
+-
+-  int total_width = 0;
+-  int total_height = 0;
+-
+-  int x = 0;
+-  int y = 0;
+-  // Stedding (spaces B6): the cards the active Space shows. A Space with its
+-  // own session shows its own essentials alone, and the others are hidden;
+-  // counted, they left holes in the grid and its rows.
+-  const int shown = static_cast<int>(std::ranges::count_if(
+-      children,
+-      [this](const views::View* child) {
+-        return layout_manager_->CanBeVisible(child);
+-      }));
++PinnedTabContainerView::GridMeasures
++PinnedTabContainerView::MeasureVerticalGrid(
++    const views::SizeBounds& size_bounds,
++    int shown) const {
++  GridMeasures measures;
+   int children_on_row = shown;
+ 
+-  if (children_on_row == 0) {
+-    for (auto* child : children) {
+-      layouts.child_layouts.emplace_back(child, false, gfx::Rect());
+-    }
+-    layouts.host_size = gfx::Size(0, 0);
+-    return layouts;
+-  }
+-
+   // Child width will be uniform and match the largest child's width.
+   bool contains_split = false;
+-  for (const auto& i : collection_node_->children()) {
+-    if (i->type() == TabCollectionNode::Type::SPLIT) {
+-      contains_split = true;
++  if (collection_node_) {
++    for (const auto& i : collection_node_->children()) {
++      if (i->type() == TabCollectionNode::Type::SPLIT) {
++        contains_split = true;
++      }
+     }
+   }
+   int child_width = GetLayoutConstant(LayoutConstant::kVerticalTabMinWidth) *
+@@ -482,7 +465,7 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+       child_width =
+           (available_width - kTabPadding * (cards_per_row - 1)) / cards_per_row;
+       children_on_row = cards_per_row;
+-    } else {
++    } else if (children_on_row > 0) {
+       // Allocate extra space to the tabs.
+       available_width -= (children_on_row * child_width) +
+                          (kTabPadding * (children_on_row - 1));
+@@ -497,14 +480,120 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+       size_bounds.width().is_bounded() &&
+       size_bounds.width().value() + stedding::kRailRowPadding <=
+           VerticalTabStripRegionView::kCollapsedWidth;
+-  const int card_inset = rail_cards ? stedding::RailRowInset() : 0;
+-  const int row_gap = rail_cards ? stedding::RailCardGap() : kTabPadding;
++  measures.inset = rail_cards ? stedding::RailRowInset() : 0;
++  measures.row_gap = rail_cards ? stedding::RailCardGap() : kTabPadding;
+   if (rail_cards) {
+-    child_width = std::max(child_width - 2 * card_inset, 0);
+-    x = card_inset;
++    child_width = std::max(child_width - 2 * measures.inset, 0);
++  }
++  measures.cards_per_row = std::max(children_on_row, 1);
++  measures.card_width = child_width;
++  return measures;
++}
++
++std::vector<views::View*> PinnedTabContainerView::CardsInPlaces() const {
++  std::vector<views::View*> cards;
++  if (!collection_node_) {
++    return cards;
++  }
++  for (views::View* const child : collection_node_->GetDirectChildren()) {
++    if (!layout_manager_->CanBeVisible(child) ||
++        child->GetProperty(kHiddenForEssentialsDrag)) {
++      continue;
++    }
++    if (const auto drag_data = GetVisualDataForDraggedView(*child);
++        drag_data && drag_data->should_hide) {
++      continue;
++    }
++    cards.push_back(child);
+   }
++  return cards;
++}
++
++gfx::Rect PinnedTabContainerView::VerticalPlaceBounds(int index,
++                                                      int places) const {
++  const GridMeasures measures =
++      MeasureVerticalGrid(views::SizeBounds(width(), {}), places);
++  const int height =
++      GetLayoutConstant(LayoutConstant::kVerticalTabPinnedHeight);
++  const int column = index % measures.cards_per_row;
++  const int row = index / measures.cards_per_row;
++  return gfx::Rect(
++      measures.inset + column * (measures.card_width + kTabPadding),
++      row * (height + measures.row_gap), measures.card_width, height);
++}
++
++views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
++    const views::SizeBounds& size_bounds) const {
++  views::ProposedLayout layouts;
++  const auto children = collection_node_ ? collection_node_->GetDirectChildren()
++                                         : TabCollectionNode::ChildViews();
++
++  int total_width = 0;
++  int total_height = 0;
++
++  int x = 0;
++  int y = 0;
++  // Stedding (spaces B6): the cards the active Space shows. A Space with its
++  // own session shows its own essentials alone, and the others are hidden;
++  // counted, they left holes in the grid and its rows.
++  //
++  // pins H27 (BACKLOG S-289): a card a drag has taken out onto the list
++  // takes no place, and the room a drag from the list has made takes its
++  // places, so the cards are measured for both.
++  const int in_places = static_cast<int>(CardsInPlaces().size());
++  const int room = drop_room_index_ ? drop_room_count_ : 0;
++  const int shown = in_places + room;
++  const int taken_out_cards = static_cast<int>(
++      std::ranges::count_if(children, [this](const views::View* child) {
++        return layout_manager_->CanBeVisible(child) &&
++               child->GetProperty(kHiddenForEssentialsDrag);
++      }));
++
++  if (shown == 0 && taken_out_cards == 0) {
++    for (auto* child : children) {
++      layouts.child_layouts.emplace_back(child, false, gfx::Rect());
++    }
++    layouts.host_size = gfx::Size(0, 0);
++    return layouts;
++  }
++
++  const GridMeasures measures =
++      MeasureVerticalGrid(size_bounds, std::max(shown, 1));
++  const int children_on_row = measures.cards_per_row;
++  const int child_width = measures.card_width;
++  const int card_inset = measures.inset;
++  const int row_gap = measures.row_gap;
++  x = card_inset;
+ 
+   int row_index = 0;
++  // A place of the grid taken, by a card or by the room.
++  const auto take_place = [&](int height) {
++    if (row_index != 0) {
++      x += kTabPadding;
++    }
++    x += child_width;
++    total_width = std::max(total_width, x);
++    total_height = std::max(total_height, y + height);
++    row_index++;
++    if (row_index >= children_on_row) {
++      y = total_height + row_gap;
++      row_index = 0;
++      x = card_inset;
++    }
++  };
++  const int room_height =
++      GetLayoutConstant(LayoutConstant::kVerticalTabPinnedHeight);
++  int placed = 0;
++  bool room_made = false;
++  const auto make_room = [&] {
++    if (room_made || !drop_room_index_ || placed < *drop_room_index_) {
++      return;
++    }
++    room_made = true;
++    for (int i = 0; i < room; ++i) {
++      take_place(room_height);
++    }
++  };
+   for (auto* child : children) {
+     if (!layout_manager_->CanBeVisible(child)) {
+       layouts.child_layouts.emplace_back(child, false, gfx::Rect());
+@@ -521,31 +610,42 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+       continue;
+     }
+ 
++    // pins H27: the floating copy stands in for a card taken out onto the
++    // list. It keeps its bounds, drawn at no opacity (the layout manager
++    // keeps it so), and the cards after it close up over its place.
++    const bool taken_out = child->GetProperty(kHiddenForEssentialsDrag);
++    if (!taken_out) {
++      make_room();
++    }
++
+     bounds.set_y(drag_data ? drag_data->offset.y() : y);
+     bounds.set_x(drag_data ? drag_data->offset.x() : x);
+ 
+-    if (row_index != 0) {
++    if (row_index != 0 && !taken_out) {
+       bounds.set_x(bounds.x() + kTabPadding);
+     }
+ 
+-    if (!drag_data || !drag_data->should_float) {
+-      if (row_index != 0) {
+-        x += kTabPadding;
+-      }
+-      x += bounds.width();
+-      total_width = std::max(total_width, x);
+-      total_height = std::max(total_height, (y + bounds.height()));
+-
+-      row_index++;
+-      if (row_index >= children_on_row) {
+-        y = total_height + row_gap;
+-        row_index = 0;
+-        x = card_inset;
+-      }
++    if (!taken_out && (!drag_data || !drag_data->should_float)) {
++      take_place(bounds.height());
++      ++placed;
+     }
+ 
+     layouts.child_layouts.emplace_back(child, true, bounds);
+   }
++  make_room();
++
++  // pins H27: until the drop, a card taken out onto the list keeps its row
++  // in the grid's height. The grid closing up moved the list up under the
++  // pointer, the room with it, and the last essential dragged out took the
++  // essentials' whole height away from under the drag.
++  if (taken_out_cards > 0) {
++    const int held = shown + taken_out_cards;
++    const GridMeasures measures_held = MeasureVerticalGrid(size_bounds, held);
++    const int rows =
++        (held + measures_held.cards_per_row - 1) / measures_held.cards_per_row;
++    total_height = std::max(
++        total_height, rows * room_height + (rows - 1) * measures_held.row_gap);
++  }
+ 
+   // Make sure we snap to bounded width if defined. This is necessary as the
+   // `child_width` calculation above rounds width down and this can result in
+@@ -557,5 +657,79 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+   return layouts;
+ }
+ 
++void PinnedTabContainerView::SetEssentialsDropRoom(std::optional<int> index,
++                                                   int count) {
++  if (!index) {
++    count = 0;
++  }
++  if (drop_room_index_ == index && drop_room_count_ == count) {
 +    return;
 +  }
-+  essentials_drop_highlighted_ = highlighted;
-+  // The sidebar's own text colour, faint, as a folder's header is lit for a
-+  // drop (folders F7).
-+  const ui::ColorProvider* const provider = GetColorProvider();
-+  if (!highlighted || !provider) {
-+    SetBackground(nullptr);
-+    return;
++  drop_room_index_ = index;
++  drop_room_count_ = count;
++  InvalidateLayout();
++}
++
++int PinnedTabContainerView::EssentialsDropIndexAt(
++    const gfx::Point& screen_point,
++    int count) const {
++  const int cards = static_cast<int>(CardsInPlaces().size());
++  const int places = cards + count;
++  gfx::Point point = screen_point;
++  views::View::ConvertPointFromScreen(this, &point);
++  int nearest = 0;
++  int64_t nearest_distance = std::numeric_limits<int64_t>::max();
++  for (int i = 0; i < places; ++i) {
++    const gfx::Point centre = VerticalPlaceBounds(i, places).CenterPoint();
++    const int64_t dx = point.x() - centre.x();
++    const int64_t dy = point.y() - centre.y();
++    if (dx * dx + dy * dy < nearest_distance) {
++      nearest_distance = dx * dx + dy * dy;
++      nearest = i;
++    }
 +  }
-+  constexpr SkAlpha kDropHighlightAlpha = 0x2E;
-+  SetBackground(views::CreateRoundedRectBackground(
-+      SkColorSetA(provider->GetColor(kColorTabForegroundActiveFrameActive),
-+                  kDropHighlightAlpha),
-+      GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)));
++  // Over the room already made, the room stays; past it, the places after
++  // it are the cards' that moved on.
++  int index = nearest;
++  if (drop_room_index_ && drop_room_count_ == count) {
++    const int room = *drop_room_index_;
++    if (nearest >= room && nearest < room + count) {
++      index = room;
++    } else if (nearest >= room + count) {
++      index = nearest - count + 1;
++    }
++  }
++  return std::clamp(index, 0, cards);
++}
++
++gfx::Rect PinnedTabContainerView::EssentialsPlaceBoundsInScreen(
++    int index,
++    int count) const {
++  gfx::Rect bounds = VerticalPlaceBounds(
++      index, static_cast<int>(CardsInPlaces().size()) + count);
++  views::View::ConvertRectToScreen(this, &bounds);
++  return bounds;
++}
++
++const tabs::TabInterface* PinnedTabContainerView::ShownEssentialAt(
++    int index) const {
++  const std::vector<views::View*> cards = CardsInPlaces();
++  if (index < 0 || index >= static_cast<int>(cards.size())) {
++    return nullptr;
++  }
++  if (const auto* const tab = views::AsViewClass<TabView>(cards[index])) {
++    return tab->GetTabInterface();
++  }
++  if (const auto* const split = views::AsViewClass<SplitTabView>(cards[index]);
++      split && split->collection_node()) {
++    const tabs::ConstChildPtr data = split->collection_node()->GetNodeData();
++    if (const auto* const collection =
++            std::get_if<tabs::ConstDanglingUntriagedTabCollection>(&data)) {
++      return (*collection)->GetTabAtIndexRecursive(0);
++    }
++  }
++  return nullptr;
 +}
 +
  BEGIN_METADATA(PinnedTabContainerView)
  END_METADATA
 diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h
-index 0c0aa68e467c0..765f5b39c5e67 100644
+index 0c0aa68e467c0..ab13f5d2c5aa7 100644
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h
-@@ -39,6 +39,13 @@ class PinnedTabContainerView
+@@ -5,6 +5,9 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_TABS_COMMON_PINNED_TAB_CONTAINER_VIEW_H_
+ #define CHROME_BROWSER_UI_VIEWS_TABS_COMMON_PINNED_TAB_CONTAINER_VIEW_H_
+ 
++#include <optional>
++#include <vector>
++
+ #include "base/callback_list.h"
+ #include "chrome/browser/ui/views/frame/browser_root_view.h"
+ #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
+@@ -16,6 +19,10 @@
+ 
+ class TabCollectionNode;
+ 
++namespace tabs {
++class TabInterface;
++}  // namespace tabs
++
+ // The view class that represents the pinned tab region for the
+ // tab strip. It manages the layout of all the pinned tabs and serves
+ // as the drag target for pinned tabs.
+@@ -39,6 +46,26 @@ class PinnedTabContainerView
    // views::View:
    gfx::Size GetMinimumSize() const override;
  
-+  // Stedding pins H27 (BACKLOG S-277, GitHub issue 16): lit while a tab
-+  // dragged over the essentials would become one at the release.
-+  void SetEssentialsDropHighlight(bool highlighted);
-+  bool essentials_drop_highlighted() const {
-+    return essentials_drop_highlighted_;
++  // Stedding pins H27 (BACKLOG S-289, GitHub issue 16): while tabs dragged
++  // from the list are over the essentials, the grid makes room for them as
++  // the cards they would become: `count` empty places from the `index`th card
++  // shown, the cards after it moving on to give them, as Arc's favourites
++  // part for a tab. Nothing closes the room.
++  void SetEssentialsDropRoom(std::optional<int> index, int count);
++  std::optional<int> essentials_drop_room_index() const {
++    return drop_room_index_;
 +  }
++  // Where the room goes for a pointer at `screen_point`: the place of a grid
++  // of `count` more cards nearest the pointer, as an index among the cards
++  // shown, held where the room already is while the pointer is on it.
++  int EssentialsDropIndexAt(const gfx::Point& screen_point, int count) const;
++  // The bounds the `index`th place of a grid of `count` more cards has, in
++  // screen coordinates: where a card dropped there settles.
++  gfx::Rect EssentialsPlaceBoundsInScreen(int index, int count) const;
++  // The tab of the `index`th card shown, or null past the last: what a card
++  // dropped at that place goes before.
++  const tabs::TabInterface* ShownEssentialAt(int index) const;
 +
    // TabCollectionAnimatingLayoutManager::Delegate:
    bool IsDragging() const override;
    bool IsViewDragging(const views::View& child_view) const override;
-@@ -82,6 +89,7 @@ class PinnedTabContainerView
+@@ -63,6 +90,24 @@ class PinnedTabContainerView
+   views::ProposedLayout CalculateVerticalLayout(
+       const views::SizeBounds& size_bounds) const;
+ 
++  // Stedding: the vertical grid's measures for `shown` cards in the width
++  // `size_bounds` gives: how many share a row, a card's width, the inset of
++  // the first and the gap between rows.
++  struct GridMeasures {
++    int cards_per_row = 1;
++    int card_width = 0;
++    int inset = 0;
++    int row_gap = 0;
++  };
++  GridMeasures MeasureVerticalGrid(const views::SizeBounds& size_bounds,
++                                   int shown) const;
++  // The cards the vertical grid lays out in their places: shown, and not
++  // taken out by a drag across the essentials' edge.
++  std::vector<views::View*> CardsInPlaces() const;
++  // The bounds of the `index`th place of a vertical grid of `places`, in
++  // this view's coordinates.
++  gfx::Rect VerticalPlaceBounds(int index, int places) const;
++
+   // While in horizontal orientation, the x-coordinate of the single row is
+   // used to determine the drop index.
+   std::optional<BrowserRootView::DropIndex> GetLinkDropIndexForHorizontal(
+@@ -82,6 +127,10 @@ class PinnedTabContainerView
  
    raw_ptr<TabCollectionNode> collection_node_;
    const raw_ref<TabCollectionAnimatingLayoutManager> layout_manager_;
-+  bool essentials_drop_highlighted_ = false;
++  // pins H27: the room a drag from the list has made, at the
++  // `drop_room_index_`th card shown, `drop_room_count_` places wide.
++  std::optional<int> drop_room_index_;
++  int drop_room_count_ = 0;
  
    base::CallbackListSubscription node_destroyed_subscription_;
    base::CallbackListSubscription collapsed_state_changed_subscription_;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+index 581907fc94a13..ec79f24b1afa2 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+@@ -29,6 +29,7 @@ DEFINE_UI_CLASS_PROPERTY_TYPE(
+     TabCollectionAnimatingLayoutManager::SourceLayoutInfo*)
+ 
+ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kHasAnimatingLayoutManagerKey, false)
++DEFINE_UI_CLASS_PROPERTY_KEY(bool, kHiddenForEssentialsDrag, false)
+ 
+ namespace {
+ 
+@@ -605,8 +606,11 @@ views::ProposedLayout TabCollectionAnimatingLayoutManager::InterpolateLayout(
+         // should handle layout and animations as needed.
+         // In the case a drag starts on a view mid-animation ensure it snaps to
+         // being opaque.
+-        if (child_view->layer() && (child_view->layer()->opacity() != 1.0f)) {
+-          child_view->layer()->SetOpacity(1.0f);
++        // Stedding pins H27: unless a floating copy stands in for it.
++        const float opacity =
++            child_view->GetProperty(kHiddenForEssentialsDrag) ? 0.0f : 1.0f;
++        if (child_view->layer() && child_view->layer()->opacity() != opacity) {
++          child_view->layer()->SetOpacity(opacity);
+         }
+       } else if (auto start_it = start_view_layout_map_.find(child_view);
+                  start_it != start_view_layout_map_.end()) {
+@@ -618,9 +622,12 @@ views::ProposedLayout TabCollectionAnimatingLayoutManager::InterpolateLayout(
+         interpolated_child.visible = target_it->second.visible;
+         // In the case layouts are updated mid-animation, ensure any previously
+         // added views that are now treated as moved views are snapped to being
+-        // opaque.
+-        if (child_view->layer() && (child_view->layer()->opacity() != 1.0f)) {
+-          child_view->layer()->SetOpacity(1.0f);
++        // opaque. Stedding pins H27: unless a floating copy stands in for
++        // it, as for a row whose drop is settling.
++        const float opacity =
++            child_view->GetProperty(kHiddenForEssentialsDrag) ? 0.0f : 1.0f;
++        if (child_view->layer() && child_view->layer()->opacity() != opacity) {
++          child_view->layer()->SetOpacity(opacity);
+         }
+       } else if (!delegate_->ShouldSnapToTarget(*child_view)) {
+         // Added child.
+@@ -694,7 +701,12 @@ views::ProposedLayout TabCollectionAnimatingLayoutManager::InterpolateLayout(
+       interpolated_child.bounds = gfx::Tween::RectValueBetween(
+           value, start_it->second.bounds, target_bounds);
+       if (child_view->layer()) {
+-        child_view->layer()->SetOpacity(static_cast<float>(1.0 - value));
++        // Stedding pins H27: a row or card the drop took into the other
++        // container leaves unseen, its floating copy already where it went.
++        child_view->layer()->SetOpacity(
++            child_view->GetProperty(kHiddenForEssentialsDrag)
++                ? 0.0f
++                : static_cast<float>(1.0 - value));
+       }
+ 
+       if (!interpolated_child.bounds.IsEmpty()) {
+diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
+index a453a62966e77..8a2b41eddb21d 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
+@@ -261,4 +261,11 @@ class TabCollectionAnimatingLayoutManager
+ 
+ extern const ui::ClassProperty<bool>* const kHasAnimatingLayoutManagerKey;
+ 
++// Stedding pins H27 (BACKLOG S-289): a row or card a drag across the
++// essentials' edge has taken out of its container, while a floating copy
++// that follows the pointer stands in for it. Its container closes up over
++// its place, and every layout pass keeps it at no opacity: it stays in the
++// view tree and keeps its bounds, the drag's events still reaching it.
++extern const ui::ClassProperty<bool>* const kHiddenForEssentialsDrag;
++
+ #endif  // CHROME_BROWSER_UI_VIEWS_TABS_COMMON_TAB_COLLECTION_ANIMATING_LAYOUT_MANAGER_H_
 diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
-index 850a75f2c9ae8..cb0c4170593ac 100644
+index 850a75f2c9ae8..4f519dacb81de 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
-@@ -10,6 +10,7 @@
+@@ -10,23 +10,33 @@
  #include <vector>
  
  #include "base/check_deref.h"
@@ -124,18 +955,24 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
  #include "base/functional/bind.h"
  #include "base/location.h"
  #include "base/notreached.h"
-@@ -17,16 +18,19 @@
+ #include "base/task/sequenced_task_runner.h"
  #include "base/types/to_address.h"
++#include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
  #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/motion.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/tab_ui_helper.h"
  #include "chrome/browser/ui/tabs/tab_group_model.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/ui_features.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
  #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/tabs/common/essentials_drag_ghost.h"
 +#include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
++#include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_link_drop_handler.h"
  #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
@@ -144,7 +981,7 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
  #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/dragging/drag_session_data.h"
  #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
-@@ -52,6 +56,7 @@
+@@ -52,6 +62,7 @@
  #include "ui/events/event_target.h"
  #include "ui/gfx/geometry/point.h"
  #include "ui/gfx/geometry/vector2d.h"
@@ -152,13 +989,15 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/interaction/element_tracker_views.h"
  #include "ui/views/view_targeter.h"
-@@ -155,6 +160,107 @@ void SettleDroppedPins(const std::vector<tabs::TabHandle>& dropped,
+@@ -155,6 +166,139 @@ void SettleDroppedPins(const std::vector<tabs::TabHandle>& dropped,
    }
  }
  
-+// Stedding pins H27 (BACKLOG S-277, GitHub issue 16): where a tab dropped
-+// becomes an essential, as in Arc: over the essentials, and the room above the
-+// Space's title row, down to the list. Nothing outside the open sidebar.
++// Stedding pins H27 (BACKLOG S-277, S-289, GitHub issue 16): where a tab
++// dropped becomes an essential, as in Arc: over the essentials, and the room
++// above the Space's title row, down to the list, from the sidebar's top row
++// down. With no essentials the grid has no height, and the top row is where
++// a drag makes the first one. Nothing outside the open sidebar.
 +std::optional<gfx::Rect> EssentialsDropZone(TabStripView* strip) {
 +  if (!strip || !base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
 +    return std::nullopt;
@@ -173,10 +1012,17 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
 +    bottom = std::min(bottom, title->GetBoundsInScreen().y());
 +  }
 +  const gfx::Rect bounds = strip->GetBoundsInScreen();
-+  if (bottom <= bounds.y()) {
++  int top = bounds.y();
++  for (const views::View* view = strip; view; view = view->parent()) {
++    if (views::IsViewClass<VerticalTabStripRegionView>(view)) {
++      top = std::min(top, view->GetBoundsInScreen().y());
++      break;
++    }
++  }
++  if (bottom <= top) {
 +    return std::nullopt;
 +  }
-+  return gfx::Rect(bounds.x(), bounds.y(), bounds.width(), bottom - bounds.y());
++  return gfx::Rect(bounds.x(), top, bounds.width(), bottom - top);
 +}
 +
 +// Whether `point` is on the list's own rows, in its scroll view: a Space's
@@ -187,25 +1033,48 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
 +  return list && list->IsDrawn() && list->GetBoundsInScreen().Contains(point);
 +}
 +
-+// The essential whose card is under `point`, if one is.
-+const tabs::TabInterface* EssentialAt(const PinnedTabContainerView* grid,
-+                                      const gfx::Point& point) {
-+  if (!grid) {
-+    return nullptr;
++// pins H27 (BACKLOG S-289): the tab a dragged row or card shows first, a
++// split's first pane.
++tabs::TabInterface* FirstTabOfView(const views::View* view) {
++  if (const auto* const tab = views::AsViewClass<TabView>(view)) {
++    return tab->GetTabInterface() ? tab->GetTabInterface()->GetHandle().Get()
++                                  : nullptr;
 +  }
-+  for (const views::View* const child : grid->children()) {
-+    const auto* const card = views::AsViewClass<TabView>(child);
-+    if (card && card->IsDrawn() && card->GetBoundsInScreen().Contains(point)) {
-+      return card->GetTabInterface();
++  if (const auto* const split = views::AsViewClass<SplitTabView>(view);
++      split && split->collection_node()) {
++    const tabs::ConstChildPtr data = split->collection_node()->GetNodeData();
++    if (const auto* const collection =
++            std::get_if<tabs::ConstDanglingUntriagedTabCollection>(&data)) {
++      return (*collection)->GetTabAtIndexRecursive(0);
 +    }
 +  }
 +  return nullptr;
 +}
 +
++// pins H27 (BACKLOG S-289): where the floating copy lies, the sidebar as a
++// whole, so it is drawn over the essentials, the list and the sidebar's top
++// row alike; on the strip it was cut off at the strip's top edge.
++views::View* GhostParent(views::View* strip) {
++  for (views::View* view = strip; view; view = view->parent()) {
++    if (views::IsViewClass<VerticalTabStripRegionView>(view)) {
++      return view;
++    }
++  }
++  return strip;
++}
++
++// `bounds`, in screen coordinates, in `view`'s.
++gfx::Rect RectFromScreen(const views::View* view, const gfx::Rect& bounds) {
++  gfx::Point origin = bounds.origin();
++  views::View::ConvertPointFromScreen(view, &origin);
++  return gfx::Rect(origin, bounds.size());
++}
++
 +// Pins H27: dropped over the essentials, the dragged tabs become essentials,
-+// before the card they were dropped on or after the last; dropped on the
-+// list, dragged essentials leave the essentials for the place the bar showed,
-+// and over the Clear line they are the Space's pins there.
++// at the place the grid made room for them, before the card after it or
++// after the last; dropped on the list, dragged essentials leave the
++// essentials for the place the list made room for, and over the Clear line
++// they are the Space's pins there.
 +struct EssentialsMove {
 +  bool into = false;
 +  std::vector<tabs::TabHandle> tabs;
@@ -260,7 +1129,7 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
  // Stedding: the strip range of a folder's tabs. They sit together in the
  // strip, and an emptied folder leaves the tree, so there is a first tab.
  gfx::Range GetFolderRange(const TabCollectionNode& folder_node,
-@@ -431,9 +537,43 @@ bool TabDragHandlerImpl::ContinueDrag(views::View& event_source_view,
+@@ -431,9 +575,208 @@ bool TabDragHandlerImpl::ContinueDrag(views::View& event_source_view,
      ResetDragState();
      return false;
    }
@@ -270,41 +1139,206 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
  }
  
 +void TabDragHandlerImpl::UpdateEssentialsDropFeedback() {
++  if (essentials_settling_) {
++    return;
++  }
 +  auto* const strip = views::AsViewClass<TabStripView>(
 +      tab_strip_region_view_->GetTabStripView());
 +  PinnedTabContainerView* const grid =
 +      strip ? strip->GetPinnedTabsContainer() : nullptr;
 +  UnpinnedTabContainerView* const list =
 +      strip ? strip->GetUnpinnedTabsContainer() : nullptr;
-+  bool lit = false;
-+  std::optional<int> bar;
-+  if (drag_controller_ && last_drag_point_in_screen_ &&
-+      drag_controller_->GetSessionData().dragging_groups.empty() &&
-+      drag_controller_->GetSessionData().source_view_drag_data()) {
-+    if (!drag_controller_->GetSessionData().source_view_drag_data()->pinned) {
-+      const std::optional<gfx::Rect> zone = EssentialsDropZone(strip);
-+      lit = zone && zone->Contains(*last_drag_point_in_screen_);
-+    } else if (list && EssentialsDropZone(strip) &&
-+               OnTheList(strip, *last_drag_point_in_screen_)) {
-+      if (const std::optional<UnpinnedTabContainerView::RowDropPlace> place =
-+              list->RowDropPlaceAt(*last_drag_point_in_screen_)) {
-+        bar = place->indicator_y;
++  if (!strip || !grid || !list || !drag_controller_ ||
++      !last_drag_point_in_screen_ ||
++      !drag_controller_->GetSessionData().dragging_groups.empty() ||
++      !drag_controller_->GetSessionData().source_view_drag_data()) {
++    EndEssentialsDrag();
++    return;
++  }
++  const DragSessionData& session = drag_controller_->GetSessionData();
++  const bool from_essentials = session.source_view_drag_data()->pinned;
++  // The rows or cards dragged, each once: a split's two panes are one. A
++  // row in a folder or a group is dragged too, but its folder lays it out:
++  // the copy stands in only for the list's own rows and the grid's cards.
++  std::vector<views::View*> dragged;
++  for (TabSlotView* const slot : session.attached_views()) {
++    views::View* const view = ViewFromTabSlot(slot);
++    if (view && !std::ranges::contains(dragged, view)) {
++      dragged.push_back(view);
++    }
++  }
++  const gfx::Point point = *last_drag_point_in_screen_;
++  const std::optional<gfx::Rect> zone = EssentialsDropZone(strip);
++  std::optional<int> grid_room;
++  std::optional<UnpinnedTabContainerView::RowDropPlace> row_room;
++  gfx::Rect row;
++  gfx::Rect card;
++  const int count = static_cast<int>(dragged.size());
++  if (!dragged.empty() && zone) {
++    if (!from_essentials && zone->Contains(point)) {
++      // A row over the essentials: a card under the pointer, the size of
++      // the place made for it, turning from the row where it is drawn.
++      grid_room = grid->EssentialsDropIndexAt(point, count);
++      card = grid->EssentialsPlaceBoundsInScreen(*grid_room, count);
++      card.set_origin(point -
++                      gfx::Vector2d(card.width() / 2, card.height() / 2));
++      row = dragged.front()->GetBoundsInScreen();
++    } else if (from_essentials && OnTheList(strip, point)) {
++      // An essential over the list: a row under the pointer, turning from
++      // the card where it is drawn.
++      row_room = list->RowDropPlaceAt(point);
++      if (row_room) {
++        row = list->RowBoundsInScreenAt(point.y());
++        card = dragged.front()->GetBoundsInScreen();
 +      }
 +    }
 +  }
-+  if (grid) {
-+    grid->SetEssentialsDropHighlight(lit);
++  if (!grid_room && !row_room) {
++    EndEssentialsDrag();
++    return;
 +  }
-+  if (list && (bar || essentials_bar_shown_)) {
-+    list->SetRowDropIndicator(bar);
++
++  // The rows or cards dragged are taken out of their container, the copy
++  // standing in for them; a drag of other ones since shows those again.
++  if (!stood_in_.empty() && stood_in_were_essentials_ != from_essentials) {
++    for (const auto& tracker : stood_in_) {
++      SetStoodIn(tracker->view(), false);
++    }
++    stood_in_.clear();
 +  }
-+  essentials_bar_shown_ = bar.has_value();
++  stood_in_were_essentials_ = from_essentials;
++  essentials_count_ = count;
++  for (views::View* const view : dragged) {
++    if (view->parent() != grid && view->parent() != list) {
++      continue;
++    }
++    if (!std::ranges::any_of(stood_in_, [view](const auto& tracker) {
++          return tracker->view() == view;
++        })) {
++      stood_in_.push_back(std::make_unique<views::ViewTracker>(view));
++    }
++    SetStoodIn(view, true);
++  }
++  grid->SetEssentialsDropRoom(grid_room, count);
++  list->SetEssentialsRowRoom(row_room, count);
++  essentials_rooms_open_ = true;
++
++  EssentialsDragGhost* ghost = essentials_ghost();
++  if (ghost && ghost->finishing()) {
++    essentials_ghost_.SetView(nullptr);
++    ghost->parent()->RemoveChildViewT(ghost);
++    ghost = nullptr;
++  }
++  if (!ghost) {
++    tabs::TabInterface* const tab = FirstTabOfView(dragged.front());
++    TabUIHelper* const helper = tab ? TabUIHelper::From(tab) : nullptr;
++    const Profile* const profile = tab_strip_model_->profile();
++    ghost =
++        GhostParent(strip)->AddChildView(std::make_unique<EssentialsDragGhost>(
++            helper ? helper->GetFavicon() : ui::ImageModel(),
++            helper ? helper->GetTitle() : std::u16string(), count,
++            stedding::ShouldAnimate(profile ? profile->GetPrefs() : nullptr)));
++    essentials_ghost_.SetView(ghost);
++  }
++  ghost->Follow(RectFromScreen(ghost->parent(), row),
++                RectFromScreen(ghost->parent(), card),
++                /*as_card=*/grid_room.has_value());
++}
++
++EssentialsDragGhost* TabDragHandlerImpl::essentials_ghost() {
++  return views::AsViewClass<EssentialsDragGhost>(essentials_ghost_.view());
++}
++
++void TabDragHandlerImpl::SetStoodIn(views::View* view, bool stood_in) {
++  if (!view || view->GetProperty(kHiddenForEssentialsDrag) == stood_in) {
++    return;
++  }
++  view->SetProperty(kHiddenForEssentialsDrag, stood_in);
++  if (!view->layer()) {
++    view->SetPaintToLayer();
++    view->layer()->SetFillsBoundsOpaquely(false);
++  }
++  view->layer()->SetOpacity(stood_in ? 0.0f : 1.0f);
++  if (view->parent()) {
++    view->parent()->InvalidateLayout();
++  }
++}
++
++void TabDragHandlerImpl::EndEssentialsDrag() {
++  if (essentials_settling_) {
++    return;
++  }
++  auto* const strip = views::AsViewClass<TabStripView>(
++      tab_strip_region_view_->GetTabStripView());
++  if (EssentialsDragGhost* const ghost = essentials_ghost();
++      ghost && !ghost->finishing()) {
++    // The copy turns back into the row or card it stood in for, where that
++    // is drawn again, and fades over it.
++    views::View* const shown =
++        stood_in_.empty() ? nullptr : stood_in_.front()->view();
++    const gfx::Rect target =
++        shown ? RectFromScreen(ghost->parent(), shown->GetBoundsInScreen())
++              : ghost->shape_bounds();
++    ghost->Finish(
++        target, /*as_card=*/stood_in_were_essentials_,
++        /*settles=*/false,
++        base::BindOnce(&TabDragHandlerImpl::RemoveFinishedEssentialsGhost,
++                       weak_factory_.GetWeakPtr()));
++  }
++  for (const auto& tracker : stood_in_) {
++    SetStoodIn(tracker->view(), false);
++  }
++  stood_in_.clear();
++  if (essentials_rooms_open_ && strip) {
++    if (PinnedTabContainerView* const grid = strip->GetPinnedTabsContainer()) {
++      grid->SetEssentialsDropRoom(std::nullopt, 0);
++    }
++    if (UnpinnedTabContainerView* const list =
++            strip->GetUnpinnedTabsContainer()) {
++      list->SetEssentialsRowRoom(std::nullopt, 0);
++    }
++  }
++  essentials_rooms_open_ = false;
++}
++
++void TabDragHandlerImpl::RemoveFinishedEssentialsGhost() {
++  EssentialsDragGhost* const ghost = essentials_ghost();
++  if (ghost && ghost->finishing() && ghost->parent()) {
++    essentials_ghost_.SetView(nullptr);
++    ghost->parent()->RemoveChildViewT(ghost);
++  }
++}
++
++void TabDragHandlerImpl::OnEssentialsDropSettled() {
++  essentials_settling_ = false;
++  // What the copy stood in for left with the drop, as a row or card the
++  // other container drew anew; one the drop did not move is shown again.
++  for (const auto& tracker : stood_in_) {
++    views::View* const view = tracker->view();
++    const tabs::TabInterface* const tab = view ? FirstTabOfView(view) : nullptr;
++    if (view && (!tab || tab->IsPinned() == stood_in_were_essentials_)) {
++      SetStoodIn(view, false);
++    }
++  }
++  stood_in_.clear();
++  auto* const strip = views::AsViewClass<TabStripView>(
++      tab_strip_region_view_->GetTabStripView());
++  if (essentials_rooms_open_ && strip) {
++    if (PinnedTabContainerView* const grid = strip->GetPinnedTabsContainer()) {
++      grid->SetEssentialsDropRoom(std::nullopt, 0);
++    }
++    if (UnpinnedTabContainerView* const list =
++            strip->GetUnpinnedTabsContainer()) {
++      list->SetEssentialsRowRoom(std::nullopt, 0);
++    }
++  }
++  essentials_rooms_open_ = false;
 +}
 +
  void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
    // Note: we avoid ending the SystemDnD if the `EndDragReason` is "capture
    // lost" because some window managers on Wayland don't send exit events to tab
-@@ -451,10 +591,55 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+@@ -451,10 +794,78 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
    // on, the side the line was drawn on during the drag
    // (UnpinnedTabContainerView::dragged_rows_pinned()). Read before the drag
    // ends, which clears its state; set once the release is done.
@@ -319,26 +1353,41 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
 +    const DragSessionData& session = drag_controller_->GetSessionData();
 +    auto* const strip = views::AsViewClass<TabStripView>(
 +        tab_strip_region_view_->GetTabStripView());
-+    const std::optional<gfx::Rect> zone = EssentialsDropZone(strip);
 +    const bool essential = session.source_view_drag_data()->pinned;
++    // pins H27 (BACKLOG S-289): where the floating copy is shown, a room is
++    // open for the drop: the drop goes there, and the copy settles into it.
++    EssentialsDragGhost* const ghost = essentials_ghost();
++    PinnedTabContainerView* const grid =
++        strip ? strip->GetPinnedTabsContainer() : nullptr;
++    UnpinnedTabContainerView* const list =
++        strip ? strip->GetUnpinnedTabsContainer() : nullptr;
 +    EssentialsMove move;
-+    if (!essential && zone && zone->Contains(*last_drag_point_in_screen_)) {
-+      move.into = true;
-+      if (const tabs::TabInterface* const card = EssentialAt(
-+              strip->GetPinnedTabsContainer(), *last_drag_point_in_screen_)) {
-+        move.before = card->GetHandle();
-+      }
-+      essentials_move = move;
-+    } else if (essential && zone && strip->GetUnpinnedTabsContainer() &&
-+               OnTheList(strip, *last_drag_point_in_screen_)) {
-+      if (const std::optional<UnpinnedTabContainerView::RowDropPlace> place =
-+              strip->GetUnpinnedTabsContainer()->RowDropPlaceAt(
-+                  *last_drag_point_in_screen_)) {
-+        if (place->before) {
-+          move.before = place->before->GetHandle();
++    std::optional<gfx::Rect> settle_to;
++    if (ghost && !ghost->finishing() && grid && list) {
++      if (!essential && grid->essentials_drop_room_index()) {
++        move.into = true;
++        const int index = *grid->essentials_drop_room_index();
++        if (const tabs::TabInterface* const card =
++                grid->ShownEssentialAt(index)) {
++          move.before = card->GetHandle();
 +        }
-+        move.over_line = place->over_line;
++        settle_to =
++            grid->EssentialsPlaceBoundsInScreen(index, essentials_count_);
 +        essentials_move = move;
++      } else if (essential && OnTheList(strip, *last_drag_point_in_screen_)) {
++        if (const std::optional<UnpinnedTabContainerView::RowDropPlace> place =
++                list->RowDropPlaceAt(*last_drag_point_in_screen_)) {
++          if (place->before) {
++            move.before = place->before->GetHandle();
++          }
++          move.over_line = place->over_line;
++          settle_to = list->GetEssentialsRowRoomBoundsInScreen();
++          if (!settle_to) {
++            settle_to =
++                list->RowBoundsInScreenAt(last_drag_point_in_screen_->y());
++          }
++          essentials_move = move;
++        }
 +      }
 +    }
 +    if (essentials_move) {
@@ -350,6 +1399,14 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
 +          }
 +        }
 +      }
++      // The copy settles into the room; the rooms, and the rows or cards it
++      // stood in for, stay as they are until the drop has moved the tabs.
++      essentials_settling_ = true;
++      ghost->Finish(
++          RectFromScreen(ghost->parent(), *settle_to),
++          /*as_card=*/essentials_move->into, /*settles=*/true,
++          base::BindOnce(&TabDragHandlerImpl::RemoveFinishedEssentialsGhost,
++                         weak_factory_.GetWeakPtr()));
 +    }
 +  }
 +  last_drag_point_in_screen_.reset();
@@ -362,67 +1419,124 @@ index 850a75f2c9ae8..cb0c4170593ac 100644
        drag_controller_->GetSessionData().dragging_groups.empty()) {
      const DragSessionData& session = drag_controller_->GetSessionData();
      for (TabSlotView* const slot : session.attached_views()) {
-@@ -489,6 +674,11 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+@@ -489,6 +900,19 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
          FROM_HERE,
          base::BindOnce(&SettleDroppedPins, std::move(dropped), *pinned));
    }
-+  if (essentials_move && !essentials_move->tabs.empty()) {
++  if (essentials_move) {
 +    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
 +        FROM_HERE,
-+        base::BindOnce(&MoveAcrossTheEssentials, std::move(*essentials_move)));
++        base::BindOnce(
++            [](base::WeakPtr<TabDragHandlerImpl> handler,
++               const EssentialsMove& move) {
++              MoveAcrossTheEssentials(move);
++              if (handler) {
++                handler->OnEssentialsDropSettled();
++              }
++            },
++            weak_factory_.GetWeakPtr(), std::move(*essentials_move)));
 +  }
  }
  
  void TabDragHandlerImpl::HandleDraggedTabsIntoNode(
+@@ -1053,6 +1477,9 @@ void TabDragHandlerImpl::ResetDragState() {
+   if (had_drag) {
+     stedding_press_drag::ReleaseHeldPage(&tab_strip_region_view_.get());
+   }
++  // pins H27: a drag gone without its release ends the floating copy.
++  last_drag_point_in_screen_.reset();
++  UpdateEssentialsDropFeedback();
+ }
+ 
+ bool TabDragHandlerImpl::HandleDraggedTabsIntoPosition(
 diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.h b/chrome/browser/ui/views/tabs/common/tab_drag_handler.h
-index c576d9b3ed3d3..66d86308dd28e 100644
+index c576d9b3ed3d3..7c44669a74efa 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.h
-@@ -224,6 +224,11 @@ class TabDragHandlerImpl : public TabDragHandler,
+@@ -27,11 +27,13 @@
+ #include "ui/gfx/geometry/vector2d.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/view_targeter_delegate.h"
++#include "ui/views/view_tracker.h"
+ 
+ class TabCollectionNode;
+ class TabStripModel;
+ class TabLinkDropHandler;
+ class TabStripRegionView;
++class EssentialsDragGhost;
+ class ExpandOnHoverLock;
+ 
+ enum class DragPositionHint {
+@@ -224,6 +226,25 @@ class TabDragHandlerImpl : public TabDragHandler,
    // Resets member variables that track a drag being managed by this handler.
    void ResetDragState();
  
-+  // Stedding pins H27 (BACKLOG S-277): lights the essentials while a tab
-+  // dragged over them would become one, and shows the list's bar where an
-+  // essential dragged out of them would land; clears both otherwise.
++  // Stedding pins H27 (BACKLOG S-277, S-289): while a tab's row is dragged
++  // over the essentials, or an essential's card over the list, a floating
++  // copy shaped as the other container's (EssentialsDragGhost) follows the
++  // pointer in its place, and the other container makes room where the
++  // release would put it; both end when the drag comes back. While a drop's
++  // copy settles, nothing changes.
 +  void UpdateEssentialsDropFeedback();
++  // Ends the copy where the dragged row or card is shown again, closes the
++  // rooms and shows what the copy stood in for.
++  void EndEssentialsDrag();
++  // The drop's copy has settled: the rooms close and the rows or cards it
++  // stood in for are shown again unless they left with the drop.
++  void OnEssentialsDropSettled();
++  // Removes the copy once it has finished.
++  void RemoveFinishedEssentialsGhost();
++  // Marks `view` as stood in for by the copy, or shows it again.
++  void SetStoodIn(views::View* view, bool stood_in);
++  EssentialsDragGhost* essentials_ghost();
 +
    // Cleans up state tracked by this handler for a given node.
    void OnNodeWillDestroy(TabCollectionNode& node);
  
-@@ -242,6 +247,11 @@ class TabDragHandlerImpl : public TabDragHandler,
+@@ -242,6 +263,19 @@ class TabDragHandlerImpl : public TabDragHandler,
  
    std::unique_ptr<ExpandOnHoverLock> expand_on_hover_lock_;
  
-+  // Stedding pins H27: the pointer's last place in the drag, and whether
-+  // the list's bar is this handler's to clear.
++  // Stedding pins H27: the pointer's last place in the drag; the floating
++  // copy while one is shown, on the strip; the rows or cards it stands in
++  // for, and whether they were essentials; whether rooms are open; and
++  // whether a drop's copy is settling.
 +  std::optional<gfx::Point> last_drag_point_in_screen_;
-+  bool essentials_bar_shown_ = false;
++  views::ViewTracker essentials_ghost_;
++  std::vector<std::unique_ptr<views::ViewTracker>> stood_in_;
++  bool stood_in_were_essentials_ = false;
++  // How many rows or cards the copy is for: the room's size.
++  int essentials_count_ = 0;
++  bool essentials_rooms_open_ = false;
++  bool essentials_settling_ = false;
 +
    std::vector<std::unique_ptr<views::ScrollView::ScopedScrollSynchronizer>>
        scroll_synchronizers_;
  
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index 09d239c9886d9..6245978c04ea5 100644
+index 09d239c9886d9..b345506ea6e9c 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-@@ -6,6 +6,7 @@
+@@ -6,13 +6,18 @@
  
  #include <algorithm>
  #include <optional>
 +#include <variant>
  #include <vector>
  
++#include "base/feature_list.h"
  #include "cc/paint/paint_flags.h"
-@@ -13,6 +14,7 @@
+ #include "chrome/browser/ui/color/chrome_color_id.h"
  #include "chrome/browser/ui/layout_constants.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/tab_style.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
  #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
 +#include "chrome/browser/ui/views/tabs/common/folder_view.h"
  #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
-@@ -21,12 +23,16 @@
+@@ -21,12 +26,16 @@
  #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
  #include "chrome/browser/ui/views/tabs/common/tab_view.h"
  #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.h"
@@ -439,7 +1553,7 @@ index 09d239c9886d9..6245978c04ea5 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/layout/layout_types.h"
-@@ -156,6 +162,71 @@ gfx::Rect RowDropIndicatorBounds(const views::View& container, int y) {
+@@ -156,6 +165,130 @@ gfx::Rect RowDropIndicatorBounds(const views::View& container, int y) {
  }
  }  // namespace
  
@@ -484,35 +1598,112 @@ index 09d239c9886d9..6245978c04ea5 100644
 +  if (point.x() < 0 || point.x() >= width() || point.y() < 0) {
 +    return std::nullopt;
 +  }
++  // Where `view` will stand once the rows have moved, less the room: the
++  // target layout, so a row still moving is read where it is going.
++  const views::ProposedLayout& target = layout_manager_->target_layout();
++  const auto bounds_without_room =
++      [&](const views::View* view) -> std::optional<gfx::Rect> {
++    const views::ChildLayout* const layout = target.GetLayoutFor(view);
++    if (!layout || !layout->visible || layout->bounds.IsEmpty()) {
++      return std::nullopt;
++    }
++    gfx::Rect bounds = layout->bounds;
++    if (row_room_bounds_ && bounds.y() >= row_room_bounds_->y()) {
++      bounds.Offset(0, -row_room_height_);
++    }
++    return bounds;
++  };
 +  RowDropPlace place;
-+  const views::View* previous = nullptr;
 +  for (views::View* const child : collection_node_->GetDirectChildren()) {
 +    // Another Space's rows are not on screen, and take no drop.
-+    if (!child->GetVisible() || child->bounds().IsEmpty()) {
++    if (!child->GetVisible() || child->GetProperty(kHiddenForEssentialsDrag)) {
 +      continue;
 +    }
-+    if (point.y() < child->bounds().CenterPoint().y()) {
++    const std::optional<gfx::Rect> bounds = bounds_without_room(child);
++    if (!bounds) {
++      continue;
++    }
++    if (point.y() < bounds->CenterPoint().y()) {
++      place.before_row = child;
 +      place.before = FirstTabOfRow(*child);
-+      place.indicator_y = child->bounds().y() - 1;
 +      break;
 +    }
-+    previous = child;
-+  }
-+  if (!place.before) {
-+    place.indicator_y = previous ? previous->bounds().bottom() + 1 : 0;
 +  }
 +  if (boundary_clear_line_ && boundary_clear_line_->GetVisible()) {
-+    place.over_line =
-+        point.y() < boundary_clear_line_->bounds().CenterPoint().y();
++    if (const std::optional<gfx::Rect> line =
++            bounds_without_room(boundary_clear_line_)) {
++      place.over_line = point.y() < line->CenterPoint().y();
++    }
 +  }
 +  return place;
++}
++
++void UnpinnedTabContainerView::SetEssentialsRowRoom(
++    std::optional<RowDropPlace> place,
++    int count) {
++  if (!place) {
++    count = 0;
++  }
++  const bool same = row_room_.has_value() == place.has_value() &&
++                    row_room_count_ == count &&
++                    (!place || (row_room_->before_row == place->before_row &&
++                                row_room_->over_line == place->over_line));
++  if (same) {
++    return;
++  }
++  row_room_ = place;
++  row_room_count_ = count;
++  InvalidateLayout();
++}
++
++std::optional<gfx::Rect>
++UnpinnedTabContainerView::GetEssentialsRowRoomBoundsInScreen() const {
++  if (!row_room_ || !row_room_bounds_) {
++    return std::nullopt;
++  }
++  gfx::Rect bounds = *row_room_bounds_;
++  views::View::ConvertRectToScreen(this, &bounds);
++  return bounds;
++}
++
++gfx::Rect UnpinnedTabContainerView::RowBoundsInScreenAt(int screen_y) const {
++  // As the vertical layout insets a row (sidebar Y8).
++  const bool rail = base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
++                    width() <= VerticalTabStripRegionView::kCollapsedWidth;
++  const int inset =
++      rail ? stedding::kRailRowPadding + stedding::RailRowInset()
++           : GetLayoutConstant(
++                 LayoutConstant::kVerticalTabStripHorizontalPadding);
++  const int height = GetLayoutConstant(LayoutConstant::kVerticalTabHeight);
++  gfx::Rect bounds(inset, 0, std::max(width() - 2 * inset, 0), height);
++  views::View::ConvertRectToScreen(this, &bounds);
++  bounds.set_y(screen_y - height / 2);
++  return bounds;
 +}
 +
  void UnpinnedTabContainerView::SetRowDropIndicator(std::optional<int> y) {
    if (row_drop_indicator_y_ == y) {
      return;
+@@ -182,6 +315,17 @@ void UnpinnedTabContainerView::SetListRoom(int list_room) {
+   InvalidateLayout();
+ }
+ 
++void UnpinnedTabContainerView::ViewHierarchyChanged(
++    const views::ViewHierarchyChangedDetails& details) {
++  TabCollectionZOrderManager::ViewHierarchyChanged(details);
++  if (!details.is_add && details.parent == this && row_room_ &&
++      row_room_->before_row == details.child) {
++    row_room_->before_row = nullptr;
++    row_room_->before = nullptr;
++    InvalidateLayout();
++  }
++}
++
+ void UnpinnedTabContainerView::PaintChildren(const views::PaintInfo& info) {
+   TabCollectionZOrderManager::PaintChildren(info);
+   if (!row_drop_indicator_y_) {
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 52f218e554a65..b56c2f8f69b5f 100644
+index 52f218e554a65..ad3fd6793a151 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 @@ -18,6 +18,14 @@
@@ -530,27 +1721,169 @@ index 52f218e554a65..b56c2f8f69b5f 100644
  class TabCollectionNode;
  class TabGroupView;
  class UnpinnedTabContainerViewLayout;
-@@ -78,6 +86,20 @@ class UnpinnedTabContainerView
+@@ -78,6 +86,33 @@ class UnpinnedTabContainerView
        std::unique_ptr<views::View> new_tab_row,
        base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
    views::View* space_boundary_clear_line() { return boundary_clear_line_; }
-+  // Stedding pins H27 (BACKLOG S-277, GitHub issue 16): where a release at
-+  // `screen_point` would put a row brought into this list from outside it,
-+  // an essential dragged out of the grid: before `before`'s row (null, after
-+  // the last row), with the bar at `indicator_y` in this view's coordinates,
-+  // and whether that is over the Clear line, in the Space's pinned run.
-+  // Nothing when the point is off the list.
++  // Stedding pins H27 (BACKLOG S-277, S-289, GitHub issue 16): where a
++  // release at `screen_point` would put a row brought into this list from
++  // outside it, an essential dragged out of the grid: before `before_row`,
++  // whose first tab is `before` (both null: after the last row), and whether
++  // that is over the Clear line, in the Space's pinned run. Read from the
++  // rows as they would stand without the room below, so the room does not
++  // move the place it was made for. Nothing when the point is off the list.
 +  struct RowDropPlace {
++    raw_ptr<const views::View> before_row = nullptr;
 +    raw_ptr<const tabs::TabInterface> before = nullptr;
-+    int indicator_y = 0;
 +    bool over_line = false;
 +  };
 +  std::optional<RowDropPlace> RowDropPlaceAt(
 +      const gfx::Point& screen_point) const;
++  // pins H27 (BACKLOG S-289): while essentials dragged out of the grid are
++  // over this list, it makes room for them as the rows they would become, at
++  // `place`, `count` rows tall, the rows after it moving down to give it, as
++  // Arc's list parts for a favourite. Nothing closes the room.
++  void SetEssentialsRowRoom(std::optional<RowDropPlace> place, int count);
++  // The bounds of the room's first row, in screen coordinates, as the rows
++  // will stand once they have moved: where a row dropped there settles.
++  // Nothing while there is no room.
++  std::optional<gfx::Rect> GetEssentialsRowRoomBoundsInScreen() const;
++  // A row of this list's width and height, its middle at `screen_y`, in
++  // screen coordinates: the floating copy's shape over the list.
++  gfx::Rect RowBoundsInScreenAt(int screen_y) const;
 +
    // Stedding (pins H14, BACKLOG S-271): while rows of this container are
    // dragged, whether a release here puts them in the Space's pinned run, over
    // the Clear line, or under it; nothing while no row of it is dragged. The
+@@ -126,6 +161,10 @@ class UnpinnedTabContainerView
+ 
+   // views::View:
+   void PaintChildren(const views::PaintInfo& info) override;
++  // pins H27 (BACKLOG S-289): a row leaving the list takes the room made
++  // before it to the end.
++  void ViewHierarchyChanged(
++      const views::ViewHierarchyChangedDetails& details) override;
+ 
+  private:
+   // DraggedTabsContainer:
+@@ -160,6 +199,13 @@ class UnpinnedTabContainerView
+ 
+   // Written by the layout, which is const; see dragged_rows_pinned().
+   mutable std::optional<bool> dragged_rows_pinned_;
++  // pins H27 (BACKLOG S-289): the room an essential's drag has made, and,
++  // as the last vertical layout placed it, its first row's bounds and the
++  // height it takes, by which the rows after it moved down.
++  std::optional<RowDropPlace> row_room_;
++  int row_room_count_ = 0;
++  mutable std::optional<gfx::Rect> row_room_bounds_;
++  mutable int row_room_height_ = 0;
+ 
+   // folders F38: where the drop indicator's bar is centred, if shown.
+   std::optional<int> row_drop_indicator_y_;
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+index e1dde5823b09d..49c67bc9fa609 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
++#include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+@@ -299,8 +300,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+     int dragged_height = 0;
+     bool dragged_group = false;
+     for (auto* child : children) {
++      // pins H27 (BACKLOG S-289): a row taken over the essentials is no row
++      // of the list until it comes back.
+       if (!IsChildVisibleInContainer(tab_container_view, focused_group_id,
+-                                     child)) {
++                                     child) ||
++          child->GetProperty(kHiddenForEssentialsDrag)) {
+         continue;
+       }
+       if (tab_container_view->GetVisualDataForDraggedView(*child)) {
+@@ -354,7 +358,8 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+     bool past_boundary = false;
+     for (auto* child : children) {
+       if (!IsChildVisibleInContainer(tab_container_view, focused_group_id,
+-                                     child)) {
++                                     child) ||
++          child->GetProperty(kHiddenForEssentialsDrag)) {
+         continue;
+       }
+       if (!is_space_pinned(child)) {
+@@ -406,12 +411,43 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+     }
+   };
+ 
++  // pins H27 (BACKLOG S-289): the room an essential dragged over the list
++  // has made, as many rows as it brings, before the row the drop would go
++  // before -- over the Clear line, before the line, when the drop would make
++  // it a pin of the Space -- or after the last row.
++  const std::optional<UnpinnedTabContainerView::RowDropPlace>& room =
++      tab_container_view->row_room_;
++  tab_container_view->row_room_bounds_.reset();
++  tab_container_view->row_room_height_ = 0;
++  bool room_made = false;
++  const auto make_room = [&] {
++    if (!room || room_made) {
++      return;
++    }
++    room_made = true;
++    const int row_height =
++        GetLayoutConstant(LayoutConstant::kVerticalTabHeight);
++    tab_container_view->row_room_bounds_ =
++        gfx::Rect(horizontal_padding, height, boundary_width, row_height);
++    tab_container_view->row_room_height_ =
++        tab_container_view->row_room_count_ * (row_height + vertical_padding);
++    height += tab_container_view->row_room_height_;
++  };
+   for (auto* child : children) {
++    const bool room_before =
++        room && child == room->before_row &&
++        IsChildVisibleInContainer(tab_container_view, focused_group_id, child);
++    if (room_before && (room->over_line || is_space_pinned(child))) {
++      make_room();
++    }
+     if (!is_space_pinned(child) &&
+         IsChildVisibleInContainer(tab_container_view, focused_group_id,
+                                   child)) {
+       place_boundary();
+     }
++    if (room_before) {
++      make_room();
++    }
+     int x =
+         views::AsViewClass<TabGroupView>(child) &&
+                 collapse_state != tabs::VerticalTabStripCollapseState::kExpanded
+@@ -454,13 +490,22 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+                        horizontal_padding);
+     }
+     layouts.child_layouts.emplace_back(child, true, bounds);
+-    height += bounds.height() + vertical_padding;
++    // pins H27: a row taken over the essentials keeps its bounds, drawn at no
++    // opacity, and the rows after it close up over its place.
++    if (!child->GetProperty(kHiddenForEssentialsDrag)) {
++      height += bounds.height() + vertical_padding;
++    }
+     width = std::max(width, bounds.width() + bounds.x());
+   }
+ 
+   // All children were Space-pinned (or there are none): the boundary goes
+-  // last, so the row is still there to press.
++  // last, so the row is still there to press. The room after the last row
++  // goes over it when the drop would join the Space's pinned run.
++  if (room && room->over_line) {
++    make_room();
++  }
+   place_boundary();
++  make_room();
+ 
+   if (height > 0) {
+     height -= vertical_padding;
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
 index aea87f5e1c66d..5e9d7ad357996 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc

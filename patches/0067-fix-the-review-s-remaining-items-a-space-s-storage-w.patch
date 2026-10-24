@@ -28,7 +28,10 @@ own, a rule for app and guest partitions, and the new test met it. The window
 a Space's service worker opens is made in the worker's jar and filed in that
 jar's Space; a persistent notification's id names a Space's jar, so a click on
 it and its close are dispatched into that jar, not the default one its origin
-maps to (sessions S30).
+maps to (sessions S30). A page in a Space with cookies of its own is offered
+no payment app: a payment app's service worker, and the window it opens to
+pay, live in the profile's jar, so Google Pay started in such a Space offered
+the Google accounts signed in outside it (sessions S36, GitHub issue 25).
 
 The rest. A restored tab's saved Space is read once, by the first window that
 files it (spaces B2); a Space-pinned split is a row of the pinned run (pins
@@ -93,12 +96,14 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/BUILD.gn                          |   1 +
  chrome/test/data/stedding/space_worker.html   |  26 +++
  chrome/test/data/stedding/space_worker.js     |  29 +++
- chrome/test/stedding/BUILD.gn                 |   8 +
+ chrome/test/stedding/BUILD.gn                 |  11 ++
  .../test/stedding/pinned_run_browsertest.cc   |  41 ++++
  chrome/test/stedding/restore_browsertest.cc   | 177 ++++++++++++++++++
  .../test/stedding/sleep_in_use_browsertest.cc |  74 +++++++-
+ .../stedding/space_payments_browsertest.cc    |  71 +++++++
  .../test/stedding/space_worker_browsertest.cc | 148 +++++++++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  44 +++++
+ .../service_worker_payment_app_factory.cc     |  19 ++
  components/permissions/permission_util.cc     |  13 ++
  .../content_platform_specific_tab_data.cc     |  14 +-
  content/browser/BUILD.gn                      |   3 +
@@ -109,13 +114,14 @@ that owns its code (patches/README.md, the round-patch exception).
  .../stedding_notification_partition.h         |  40 ++++
  content/public/browser/BUILD.gn               |   1 +
  .../public/browser/stedding_session_storage.h |  37 ++++
- 61 files changed, 2165 insertions(+), 133 deletions(-)
+ 63 files changed, 2258 insertions(+), 133 deletions(-)
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.cc
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords.h
  create mode 100644 chrome/browser/ui/views/stedding/altgr_chords_unittest.cc
  create mode 100644 chrome/browser/ui/webui/stedding_archive/stedding_archive_handler_unittest.cc
  create mode 100644 chrome/test/data/stedding/space_worker.html
  create mode 100644 chrome/test/data/stedding/space_worker.js
+ create mode 100644 chrome/test/stedding/space_payments_browsertest.cc
  create mode 100644 chrome/test/stedding/space_worker_browsertest.cc
  create mode 100644 content/browser/dom_storage/stedding_session_storage.cc
  create mode 100644 content/browser/notifications/stedding_notification_partition.cc
@@ -954,10 +960,10 @@ index b484a18a4d52f..4a66cb59f811c 100644
  struct ArcDataResult {
    size_t history = 0;
 diff --git a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
-index 7be5877a7ed03..3beefa6730c33 100644
+index 8350b1df0c49c..65a569719330d 100644
 --- a/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
 +++ b/chrome/browser/ui/spaces/arc_data_importer_unittest.cc
-@@ -180,6 +180,8 @@ TEST(ArcDataImporterTest, ReadsLoginsAndUnsealsPasswords) {
+@@ -304,6 +304,8 @@ TEST(ArcDataImporterTest, ReadsLoginsAndUnsealsPasswords) {
    }
    const std::vector<password_manager::PasswordForm> forms =
        ReadArcLogins(path, key);
@@ -2673,18 +2679,20 @@ index 0000000000000..3eba08d8106cc
 +  })());
 +});
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
-index 28b07e4337cba..b38dab09efd06 100644
+index 28b07e4337cba..601240a5e8fc6 100644
 --- a/chrome/test/stedding/BUILD.gn
 +++ b/chrome/test/stedding/BUILD.gn
-@@ -48,6 +48,7 @@ test("stedding_browser_tests") {
+@@ -47,7 +47,9 @@ test("stedding_browser_tests") {
+     "sleep_in_use_browsertest.cc",
      "space_jar_browsertest.cc",
      "space_jar_restart_browsertest.cc",
++    "space_payments_browsertest.cc",
      "space_switch_browsertest.cc",
 +    "space_worker_browsertest.cc",
      "tab_drop_browsertest.cc",
      "welcome_browsertest.cc",
    ]
-@@ -57,7 +58,9 @@ test("stedding_browser_tests") {
+@@ -57,7 +59,9 @@ test("stedding_browser_tests") {
      "//base/test:test_support",
      "//chrome/browser",
      "//chrome/browser/extensions",
@@ -2694,7 +2702,13 @@ index 28b07e4337cba..b38dab09efd06 100644
      "//chrome/browser/gcm",
      "//chrome/browser/history",
      "//chrome/browser/interstitials:test_support",
-@@ -111,6 +114,8 @@ test("stedding_browser_tests") {
+@@ -107,10 +111,14 @@ test("stedding_browser_tests") {
+     "//chrome/browser/web_applications",
+     "//chrome/common/stedding:space_partitions",
+     "//chrome/test:test_support",
++    # sessions S31 (BACKLOG S-296): a payment app installed for a test.
++    "//chrome/test/payments:test_support",
+     "//chrome/test:test_support_ui",
      "//chrome/test/base:browser_tests_runner",
      "//chrome/test/base:ui_test_utils",
      "//components/history/core/browser",
@@ -2703,7 +2717,7 @@ index 28b07e4337cba..b38dab09efd06 100644
      "//components/gcm_driver",
      "//components/gcm_driver/instance_id",
      "//components/history/core/test",
-@@ -118,6 +123,7 @@ test("stedding_browser_tests") {
+@@ -118,6 +126,7 @@ test("stedding_browser_tests") {
      "//components/invalidation",
      "//components/javascript_dialogs",
      "//components/keyed_service/core",
@@ -2711,7 +2725,7 @@ index 28b07e4337cba..b38dab09efd06 100644
      "//components/policy/core/common:common_constants",
      "//components/prefs",
      "//components/regional_capabilities",
-@@ -144,7 +150,9 @@ test("stedding_browser_tests") {
+@@ -144,7 +153,9 @@ test("stedding_browser_tests") {
      "//ui/compositor",
      "//ui/display",
      "//ui/events:test_support",
@@ -3129,6 +3143,83 @@ index 7b92735d45e3d..db5b6164181ca 100644
    EXPECT_TRUE(content::ExecJs(pip->GetContents(), "exitPictureInPicture()"));
    call_stream.reset();
    EXPECT_TRUE(content::ExecJs(sound->GetContents(), "window.context.close()"));
+diff --git a/chrome/test/stedding/space_payments_browsertest.cc b/chrome/test/stedding/space_payments_browsertest.cc
+new file mode 100644
+index 0000000000000..3bf57172936a3
+--- /dev/null
++++ b/chrome/test/stedding/space_payments_browsertest.cc
+@@ -0,0 +1,71 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// A Space with its own session is offered no payment app (docs/features/
++// sessions.md S36, BACKLOG S-296, GitHub issue 25). A payment app's service
++// worker, and the window it opens to pay, live in the profile's jar: Google
++// Pay started in such a Space offered the Google accounts signed in outside
++// it. The shared jar still is offered the app installed there.
++
++#include <string>
++
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "chrome/test/payments/payment_request_platform_browsertest_base.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/window_open_disposition.h"
++#include "url/gurl.h"
++
++namespace {
++
++class SpacePaymentsTest
++    : public payments::PaymentRequestPlatformBrowserTestBase {
++ protected:
++  bool HasEnrolledInstrument(content::WebContents* page,
++                             const std::string& method) {
++    return content::EvalJs(page, content::JsReplace(
++                                     "hasEnrolledInstrument({}, $1)", method))
++        .ExtractBool();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(SpacePaymentsTest, ASpaceWithItsOwnJarIsOfferedNoApp) {
++  std::string method;
++  InstallPaymentApp("nickpay.test", "/nickpay.test/app.js", &method);
++  ASSERT_FALSE(method.empty());
++  NavigateTo("/has_enrolled_instrument.html");
++  {
++    SCOPED_TRACE("the shared jar, where the app was installed");
++    EXPECT_TRUE(HasEnrolledInstrument(GetActiveWebContents(), method));
++  }
++
++  const GURL page_url = GetActiveWebContents()->GetLastCommittedURL();
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  const spaces::SpaceId work = model->AddSpace("Work", SK_ColorBLUE)->id();
++  model->SetSpaceIsolated(work, true);
++  ASSERT_TRUE(model->SetActiveSpace(work));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), page_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  content::WebContents* const page =
++      browser()->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(
++      spaces::StoragePartitionConfigForWebContents(page)));
++  {
++    SCOPED_TRACE("a Space with its own session");
++    EXPECT_FALSE(HasEnrolledInstrument(page, method))
++        << "the Space was offered the shared jar's payment app";
++  }
++}
++
++}  // namespace
 diff --git a/chrome/test/stedding/space_worker_browsertest.cc b/chrome/test/stedding/space_worker_browsertest.cc
 new file mode 100644
 index 0000000000000..a4d1fafd00f16
@@ -3359,6 +3450,50 @@ index 61d726c9eb197..f5d339abd62c0 100644
  // welcome W2 (S-77) in two regions: France's list of eight engines and the
  // United States' list of five.
  class WelcomeEnginesTest : public InProcessBrowserTest,
+diff --git a/components/payments/content/service_worker_payment_app_factory.cc b/components/payments/content/service_worker_payment_app_factory.cc
+index 81f6e27c6d7d8..1a2dd5382cd24 100644
+--- a/components/payments/content/service_worker_payment_app_factory.cc
++++ b/components/payments/content/service_worker_payment_app_factory.cc
+@@ -12,6 +12,7 @@
+ #include "base/functional/bind.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "components/payments/content/developer_console_logger.h"
+ #include "components/payments/content/service_worker_payment_app.h"
+ #include "components/payments/content/service_worker_payment_app_finder.h"
+@@ -20,6 +21,8 @@
+ #include "components/payments/core/features.h"
+ #include "components/payments/core/method_strings.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/stored_payment_app.h"
+ #include "content/public/browser/supported_delegations.h"
+ #include "content/public/browser/web_contents.h"
+@@ -184,6 +187,22 @@ void ServiceWorkerPaymentAppFactory::Create(base::WeakPtr<Delegate> delegate) {
+     return;
+   }
+ 
++  // Stedding (sessions S36, BACKLOG S-296, GitHub issue 25): a Space with its
++  // own session keeps its cookies in a jar of its own, the partition domain
++  // "spaces" (chrome/browser/ui/spaces/space_storage_partition.h, ADR 0019).
++  // A payment app's service worker and the window it opens live in the
++  // profile's default jar, so Google Pay started from such a Space offered
++  // the accounts signed in outside it. Its pages are offered no payment app:
++  // a site falls back to its own checkout, as in a browser without payment
++  // apps, and a payment page it opens in a window of its own stays in the
++  // Space's jar.
++  if (rfh->GetStoragePartition()->GetConfig().partition_domain() == "spaces") {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&Delegate::OnDoneCreatingPaymentApps, delegate));
++    return;
++  }
++
+   creator_ = std::make_unique<ServiceWorkerPaymentAppCreator>(delegate);
+ 
+   ServiceWorkerPaymentAppFinder::GetOrCreateForCurrentDocument(rfh)
 diff --git a/components/permissions/permission_util.cc b/components/permissions/permission_util.cc
 index 867fc205aaa78..f629847f8917f 100644
 --- a/components/permissions/permission_util.cc

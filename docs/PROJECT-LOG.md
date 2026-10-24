@@ -10,6 +10,32 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-24 -- after beta 12: the drag into the essentials animated, Google Pay in a Space, Arc import on Windows
+
+0.3.0 beta 11 and beta 12 went out on 2026-10-23 and 2026-10-24; what they changed is in
+`docs/release-notes/`. After beta 12, in the owner's order:
+
+- `S-289` (GitHub issue 16, pins H27): a tab dragged across the essentials' edge is a floating
+  copy under the pointer, a card over the essentials and a row over the list, and the other
+  container parts where the drop would land; nothing is pinned until the drop, because a pin
+  change remakes the tab's view while the drag still holds it. Two traps on the way: the copy
+  on the strip was cut off at the strip's top edge (it now lies on the sidebar region), and the
+  last essential dragged out collapsed the grid, which moved the list under the pointer and
+  ended the drop zone (the grid now keeps its height until the drop). Seen with the real
+  pointer on the Mac's release build: a first essential made from the sidebar's top row, a row
+  dropped before a card, an essential dropped between two rows, a row taken up and brought back.
+- `S-296` (GitHub issue 25, sessions S36): a payment app's service worker and its window live in
+  the profile's jar, so Google Pay in a Space with its own session offered the shared session's
+  accounts. Such a Space is now offered no payment app; `SpacePaymentsTest` failed with the fix
+  turned off and passes with it.
+- `S-81` (import I27): Arc for Windows' files are read from its Store package, and its passwords
+  unsealed with Local State's DPAPI key and AES-256-GCM; its four Windows-only tests pass on the PC
+  (1039 unit tests green). Not yet run against a real install.
+
+`tooling/fold-fix` now folds a new file into a patch. Mac: 1042 unit tests, 522 and 150 browser
+tests green; PC: 1035 unit tests, 484 and 155 browser tests green, before `S-81`.
+
+
 ## 2026-10-23, before dawn -- the Windows update that never came, 0.3.0 beta 9 and beta 10
 
 After beta 8 the owner asked for `S-279` to be fixed and shipped, then went to sleep until 6 a.m.

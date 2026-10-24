@@ -99,8 +99,8 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/browser/ui/browser_tabrestore.cc       |   7 +
  .../public/browser_window_features.h          |   3 +-
  .../session_service_browser_helper.cc         |  25 +
- chrome/browser/ui/spaces/arc_data_importer.cc |  34 +-
- chrome/browser/ui/spaces/arc_data_importer.h  |  15 +-
+ chrome/browser/ui/spaces/arc_data_importer.cc | 151 ++-
+ chrome/browser/ui/spaces/arc_data_importer.h  |  39 +-
  .../browser/ui/spaces/arc_sidebar_importer.cc |  97 ++
  chrome/browser/ui/spaces/folder_commands.cc   |   4 +-
  chrome/browser/ui/spaces/sidebar_backup.cc    |   9 +-
@@ -212,7 +212,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   | 313 +++++-
  .../stedding/window_buttons_browsertest.mm    | 436 +++++++-
  .../immersive_mode_controller_cocoa.mm        |  42 +
- 128 files changed, 11194 insertions(+), 765 deletions(-)
+ 128 files changed, 11324 insertions(+), 776 deletions(-)
  create mode 100644 chrome/test/stedding/branding_browsertest.cc
  create mode 100644 chrome/test/stedding/downloads_browsertest.cc
  create mode 100644 chrome/test/stedding/privacy_defaults_browsertest.cc
@@ -1189,13 +1189,32 @@ index 52c296c55d521..bfa59a1a033ad 100644
      }
      case TabStripModelChange::kSelectionOnly:
 diff --git a/chrome/browser/ui/spaces/arc_data_importer.cc b/chrome/browser/ui/spaces/arc_data_importer.cc
-index 757abb28414c7..e8e8e9a740777 100644
+index 757abb28414c7..94daf8980912a 100644
 --- a/chrome/browser/ui/spaces/arc_data_importer.cc
 +++ b/chrome/browser/ui/spaces/arc_data_importer.cc
-@@ -25,12 +25,14 @@
+@@ -9,10 +9,12 @@
+ #include <iterator>
+ #include <utility>
+ 
++#include "base/base64.h"
+ #include "base/base_paths.h"
+ #include "base/containers/span.h"
+ #include "base/files/file_util.h"
+ #include "base/files/scoped_temp_dir.h"
++#include "base/json/json_reader.h"
+ #include "base/functional/bind.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -21,16 +23,21 @@
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/thread_pool.h"
+ #include "base/time/time.h"
++#include "base/values.h"
+ #include "build/build_config.h"
  #include "chrome/browser/history/history_service_factory.h"
  #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
  #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/spaces/arc_sidebar_importer.h"
 +#include "chrome/browser/ui/stedding/stedding_prefs.h"
  #include "components/history/core/browser/history_service.h"
  #include "components/history/core/browser/history_types.h"
@@ -1204,10 +1223,38 @@ index 757abb28414c7..e8e8e9a740777 100644
  #include "components/password_manager/core/browser/password_store/password_store_interface.h"
  #include "components/password_manager/core/browser/password_string.h"
 +#include "components/prefs/pref_service.h"
++#include "crypto/aead.h"
  #include "crypto/aes_cbc.h"
  #include "crypto/hash.h"
  #include "crypto/hmac.h"
-@@ -94,14 +96,18 @@ ReadOutcome::ReadOutcome() = default;
+@@ -38,6 +45,15 @@
+ #include "sql/statement.h"
+ #include "url/gurl.h"
+ 
++#if BUILDFLAG(IS_WIN)
++#include <windows.h>
++
++#include <wincrypt.h>
++
++#include "base/compiler_specific.h"
++#include "base/win/scoped_localalloc.h"
++#endif
++
+ #if BUILDFLAG(IS_MAC)
+ #include <Security/Security.h>
+ 
+@@ -54,6 +70,10 @@ constexpr std::string_view kArcSalt = "saltysalt";
+ constexpr int kArcRounds = 1003;
+ constexpr size_t kArcKeyBytes = 16;
+ constexpr std::string_view kSealedPrefix = "v10";
++#if BUILDFLAG(IS_WIN)
++// I27: Local State's key on Windows starts with this, before DPAPI's blob.
++constexpr std::string_view kDpapiKeyPrefix = "DPAPI";
++#endif
+ 
+ base::Time FromChromiumMicroseconds(int64_t value) {
+   return base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(value));
+@@ -94,24 +114,39 @@ ReadOutcome::ReadOutcome() = default;
  ReadOutcome::ReadOutcome(ReadOutcome&&) = default;
  ReadOutcome::~ReadOutcome() = default;
  
@@ -1228,7 +1275,28 @@ index 757abb28414c7..e8e8e9a740777 100644
    }
    if (passwords) {
      const base::FilePath logins = CopyForReading(paths.logins, temp.GetPath());
-@@ -132,6 +138,16 @@ void WriteOnUi(base::WeakPtr<Profile> profile,
+     if (!logins.empty()) {
++#if BUILDFLAG(IS_WIN)
++      const std::optional<std::vector<uint8_t>> key =
++          ReadArcWindowsKey(paths.local_state);
++      if (!key) {
++        out.keychain_denied = true;
++      } else {
++        out.logins = ReadArcLogins(logins, *key, /*cap=*/10000,
++                                   ArcSeal::kWindowsLocalState);
++      }
++#else
+       const std::optional<std::string> password = ReadArcKeychainPassword();
+       if (!password) {
+         out.keychain_denied = true;
+       } else {
+         out.logins = ReadArcLogins(logins, DeriveArcKey(*password));
+       }
++#endif
+     }
+   }
+   return out;
+@@ -132,6 +167,16 @@ void WriteOnUi(base::WeakPtr<Profile> profile,
                  profile.get(), ServiceAccessType::EXPLICIT_ACCESS)) {
        service->AddPagesWithDetails(read.history, history::SOURCE_BROWSED);
        result.history = read.history.size();
@@ -1245,9 +1313,102 @@ index 757abb28414c7..e8e8e9a740777 100644
      }
    }
    if (!read.logins.empty()) {
-@@ -257,7 +273,8 @@ std::optional<std::string> ReadArcKeychainPassword() {
+@@ -157,18 +202,17 @@ ArcDataPaths ArcDataPathsFor(const base::FilePath& user_data_dir) {
+   const base::FilePath profile = user_data_dir.Append(FILE_PATH_LITERAL("Default"));
+   paths.history = profile.Append(FILE_PATH_LITERAL("History"));
+   paths.logins = profile.Append(FILE_PATH_LITERAL("Login Data"));
++  paths.local_state = user_data_dir.Append(FILE_PATH_LITERAL("Local State"));
+   return paths;
  }
  
+ ArcDataPaths DefaultArcDataPaths() {
+-  base::FilePath home;
+-  if (!base::PathService::Get(base::DIR_HOME, &home)) {
+-    return ArcDataPaths();
+-  }
+-  return ArcDataPathsFor(home.Append(FILE_PATH_LITERAL("Library"))
+-                             .Append(FILE_PATH_LITERAL("Application Support"))
+-                             .Append(FILE_PATH_LITERAL("Arc"))
+-                             .Append(FILE_PATH_LITERAL("User Data")));
++  // I22, I27: Arc's Chromium data is in "User Data" beside its sidebar, on
++  // the Mac and in its Windows package alike.
++  const base::FilePath arc = ArcFolder();
++  return arc.empty()
++             ? ArcDataPaths()
++             : ArcDataPathsFor(arc.Append(FILE_PATH_LITERAL("User Data")));
+ }
+ 
+ bool ArcDataPresent(const ArcDataPaths& paths) {
+@@ -256,8 +300,75 @@ std::optional<std::string> ReadArcKeychainPassword() {
+ #endif
+ }
+ 
++std::optional<std::vector<uint8_t>> ReadArcWindowsKey(
++    const base::FilePath& local_state) {
++#if BUILDFLAG(IS_WIN)
++  std::string json;
++  if (local_state.empty() || !base::ReadFileToString(local_state, &json)) {
++    return std::nullopt;
++  }
++  const std::optional<base::DictValue> state =
++      base::JSONReader::ReadDict(json, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
++  const std::string* const encoded =
++      state ? state->FindStringByDottedPath("os_crypt.encrypted_key")
++            : nullptr;
++  if (!encoded) {
++    return std::nullopt;
++  }
++  const std::optional<std::vector<uint8_t>> sealed =
++      base::Base64Decode(*encoded);
++  if (!sealed || sealed->size() <= kDpapiKeyPrefix.size() ||
++      base::as_string_view(base::span(*sealed).first(kDpapiKeyPrefix.size())) !=
++          kDpapiKeyPrefix) {
++    return std::nullopt;
++  }
++  const base::span<const uint8_t> blob =
++      base::span(*sealed).subspan(kDpapiKeyPrefix.size());
++  DATA_BLOB input = {};
++  input.pbData = const_cast<BYTE*>(blob.data());
++  input.cbData = static_cast<DWORD>(blob.size());
++  DATA_BLOB output = {};
++  if (!::CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr, 0,
++                            &output)) {
++    return std::nullopt;
++  }
++  auto local_alloc = base::win::TakeLocalAlloc(output.pbData);
++  // SAFETY: CryptUnprotectData returns `output.cbData` bytes at `pbData`.
++  std::vector<uint8_t> key(
++      local_alloc.get(), UNSAFE_BUFFERS(local_alloc.get() + output.cbData));
++  if (key.size() != crypto::aead::KeySizeFor(crypto::aead::AES_256_GCM)) {
++    return std::nullopt;
++  }
++  return key;
++#else
++  return std::nullopt;
++#endif
++}
++
++std::optional<std::u16string> DecryptArcWindowsValue(
++    base::span<const uint8_t> sealed,
++    base::span<const uint8_t> key) {
++  const size_t nonce_size =
++      crypto::aead::NonceSizeFor(crypto::aead::AES_256_GCM);
++  if (key.size() != crypto::aead::KeySizeFor(crypto::aead::AES_256_GCM) ||
++      sealed.size() <= kSealedPrefix.size() + nonce_size ||
++      base::as_string_view(sealed.first(kSealedPrefix.size())) !=
++          kSealedPrefix) {
++    return std::nullopt;
++  }
++  const base::span<const uint8_t> rest = sealed.subspan(kSealedPrefix.size());
++  const std::optional<std::vector<uint8_t>> plain = crypto::aead::Open(
++      crypto::aead::AES_256_GCM, key, rest.subspan(nonce_size),
++      rest.first(nonce_size), base::span<const uint8_t>());
++  if (!plain) {
++    return std::nullopt;
++  }
++  return base::UTF8ToUTF16(base::as_string_view(*plain));
++}
++
  history::URLRows ReadArcHistory(const base::FilePath& history_copy,
 -                                size_t cap) {
 +                                size_t cap,
@@ -1255,7 +1416,7 @@ index 757abb28414c7..e8e8e9a740777 100644
    history::URLRows rows;
    if (history_copy.empty() || !base::PathExists(history_copy)) {
      return rows;
-@@ -272,9 +289,12 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+@@ -272,9 +383,12 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
    // read to its end (BACKLOG S-183).
    sql::Statement statement(db.GetUniqueStatement(
        "SELECT url, title, visit_count, typed_count, last_visit_time FROM urls "
@@ -1270,7 +1431,28 @@ index 757abb28414c7..e8e8e9a740777 100644
    while (rows.size() < cap && statement.Step()) {
      const GURL url(statement.ColumnString(0));
      if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
-@@ -371,10 +391,12 @@ void ImportArcDataAsync(Profile* profile,
+@@ -299,7 +413,8 @@ history::URLRows ReadArcHistory(const base::FilePath& history_copy,
+ std::vector<password_manager::PasswordForm> ReadArcLogins(
+     const base::FilePath& logins_copy,
+     base::span<const uint8_t> key,
+-    size_t cap) {
++    size_t cap,
++    ArcSeal seal) {
+   std::vector<password_manager::PasswordForm> forms;
+   if (logins_copy.empty() || !base::PathExists(logins_copy)) {
+     return forms;
+@@ -349,7 +464,9 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
+       form.password_element.clear();
+     } else {
+       std::optional<std::u16string> password =
+-          DecryptArcValue(statement.ColumnBlob(5), key);
++          seal == ArcSeal::kWindowsLocalState
++              ? DecryptArcWindowsValue(statement.ColumnBlob(5), key)
++              : DecryptArcValue(statement.ColumnBlob(5), key);
+       if (!password || password->empty()) {
+         continue;
+       }
+@@ -371,10 +488,12 @@ void ImportArcDataAsync(Profile* profile,
      std::move(done).Run(ArcDataResult());
      return;
    }
@@ -1285,7 +1467,7 @@ index 757abb28414c7..e8e8e9a740777 100644
  }
  
 diff --git a/chrome/browser/ui/spaces/arc_data_importer.h b/chrome/browser/ui/spaces/arc_data_importer.h
-index 4a66cb59f811c..8fd3103471509 100644
+index 4a66cb59f811c..ea99780a2ad44 100644
 --- a/chrome/browser/ui/spaces/arc_data_importer.h
 +++ b/chrome/browser/ui/spaces/arc_data_importer.h
 @@ -15,6 +15,7 @@
@@ -1296,12 +1478,40 @@ index 4a66cb59f811c..8fd3103471509 100644
  #include "components/history/core/browser/url_row.h"
  #include "components/password_manager/core/browser/password_form.h"
  
-@@ -62,10 +63,14 @@ std::optional<std::u16string> DecryptArcValue(base::span<const uint8_t> sealed,
+@@ -34,6 +35,8 @@ namespace spaces {
+ struct ArcDataPaths {
+   base::FilePath history;
+   base::FilePath logins;
++  // import I27: Arc's Local State, which holds its password key on Windows.
++  base::FilePath local_state;
+ };
+ 
+ // <user data dir>/Default/History and Login Data.
+@@ -62,17 +65,41 @@ std::optional<std::u16string> DecryptArcValue(base::span<const uint8_t> sealed,
  // such item.
  std::optional<std::string> ReadArcKeychainPassword();
  
 -// The urls table of a History copy: http(s) rows that are not hidden, most
 -// recent first, at most `cap`.
++// import I27: how Arc sealed its passwords. On the Mac, "v10" and AES-128-CBC
++// under a key derived from its keychain item (I23); on Windows, as Chromium
++// seals them there: "v10", a 12-byte nonce, then AES-256-GCM's ciphertext and
++// tag, under the key in Local State.
++enum class ArcSeal { kMacKeychain, kWindowsLocalState };
++
++// I27: the AES-256 key in Arc's Local State on Windows, os_crypt.encrypted_key:
++// base64 of "DPAPI" and the key sealed to the Windows user with DPAPI.
++// Nullopt when the file, the entry or the unsealing fails, and always on other
++// platforms. Blocking.
++std::optional<std::vector<uint8_t>> ReadArcWindowsKey(
++    const base::FilePath& local_state);
++
++// I27: one value sealed on Windows. A value sealed "v20", bound to the
++// application that sealed it, cannot be read by another and is nullopt.
++std::optional<std::u16string> DecryptArcWindowsValue(
++    base::span<const uint8_t> sealed,
++    base::span<const uint8_t> key);
++
 +// At most this many of Arc's history rows come across (I22).
 +inline constexpr size_t kMaxArcHistoryRows = 100000;
 +
@@ -1314,7 +1524,16 @@ index 4a66cb59f811c..8fd3103471509 100644
  // The logins table of a Login Data copy, passwords unsealed with `key`, at
  // most `cap` rows. A row whose value will not unseal is left out; a blocked
  // site comes across as blocked.
-@@ -85,7 +90,9 @@ using ArcDataDoneCallback = base::OnceCallback<void(ArcDataResult)>;
+ std::vector<password_manager::PasswordForm> ReadArcLogins(
+     const base::FilePath& logins_copy,
+     base::span<const uint8_t> key,
+-    size_t cap = 10000);
++    size_t cap = 10000,
++    ArcSeal seal = ArcSeal::kMacKeychain);
+ 
+ struct ArcDataResult {
+   size_t history = 0;
+@@ -85,7 +112,9 @@ using ArcDataDoneCallback = base::OnceCallback<void(ArcDataResult)>;
  // Copies the files to a temporary directory on the thread pool, reads them
  // there, asks the keychain for Arc's password when `passwords` is set, and
  // writes into `profile` back on the caller's sequence. `paths` defaults to
@@ -6016,7 +6235,7 @@ index cff9a66c6241b..f7af84530d391 100644
  // isolation is on now or not, in registry order and without repeats.
  std::vector<std::string> SpacePartitionNames(const base::ListValue& registry);
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
-index 939708dc3917a..204af319e74da 100644
+index bc73f8b1b2f70..efc0d814819ba 100644
 --- a/chrome/test/stedding/BUILD.gn
 +++ b/chrome/test/stedding/BUILD.gn
 @@ -18,10 +18,12 @@ test("stedding_browser_tests") {
@@ -6040,7 +6259,7 @@ index 939708dc3917a..204af319e74da 100644
      "private_coat_browsertest.cc",
      "quiet_start_browsertest.cc",
      "restore_browsertest.cc",
-@@ -57,10 +60,13 @@ test("stedding_browser_tests") {
+@@ -58,10 +61,13 @@ test("stedding_browser_tests") {
    deps = [
      "//base",
      "//base/test:test_support",
@@ -6054,7 +6273,7 @@ index 939708dc3917a..204af319e74da 100644
      "//chrome/browser/notifications:test_support",
      "//chrome/browser/gcm",
      "//chrome/browser/history",
-@@ -77,13 +83,18 @@ test("stedding_browser_tests") {
+@@ -78,13 +84,18 @@ test("stedding_browser_tests") {
      "//chrome/browser/ssl",
      "//chrome/browser/ui",
      "//chrome/browser/ui:ui_features",
@@ -6073,7 +6292,7 @@ index 939708dc3917a..204af319e74da 100644
      "//chrome/browser/ui/stedding/theme",
      "//chrome/browser/ui/spaces",
      "//chrome/browser/ui/stedding:address_row",
-@@ -99,6 +110,7 @@ test("stedding_browser_tests") {
+@@ -100,6 +111,7 @@ test("stedding_browser_tests") {
      "//chrome/browser/ui/stedding:tab_numbers",
      "//chrome/browser/ui/stedding:thanks_pages",
      "//chrome/browser/ui/stedding:version",
@@ -6081,7 +6300,7 @@ index 939708dc3917a..204af319e74da 100644
      "//chrome/browser/ui/views/stedding:update_pill",
      "//chrome/browser/ui/stedding/screenshot",
      "//chrome/browser/ui/tabs",
-@@ -107,7 +119,9 @@ test("stedding_browser_tests") {
+@@ -108,7 +120,9 @@ test("stedding_browser_tests") {
      "//chrome/browser/ui/toasts/api:toasts",
      "//chrome/browser/ui/views/animations",
      "//chrome/browser/ui/views/commandbar",
@@ -6091,7 +6310,7 @@ index 939708dc3917a..204af319e74da 100644
      "//chrome/browser/ui/views/session_restore_infobar",
      "//chrome/browser/ui/views/spaces",
      "//chrome/browser/ui/views/tabs:tab_strip",
-@@ -121,13 +135,17 @@ test("stedding_browser_tests") {
+@@ -124,13 +138,17 @@ test("stedding_browser_tests") {
      "//chrome/test:test_support_ui",
      "//chrome/test/base:browser_tests_runner",
      "//chrome/test/base:ui_test_utils",
@@ -6109,7 +6328,7 @@ index 939708dc3917a..204af319e74da 100644
      "//components/invalidation",
      "//components/javascript_dialogs",
      "//components/keyed_service/core",
-@@ -139,8 +157,11 @@ test("stedding_browser_tests") {
+@@ -142,8 +160,11 @@ test("stedding_browser_tests") {
      "//components/signin/public/identity_manager",
      "//components/sessions",
      "//components/split_tabs",
@@ -6121,7 +6340,7 @@ index 939708dc3917a..204af319e74da 100644
      "//components/webui/chrome_urls",
      "//content/test:test_support",
      "//extensions:test_support",
-@@ -151,8 +172,10 @@ test("stedding_browser_tests") {
+@@ -154,8 +175,10 @@ test("stedding_browser_tests") {
      "//net:test_support",
      "//services/network/public/cpp",
      "//skia",
@@ -6132,7 +6351,7 @@ index 939708dc3917a..204af319e74da 100644
      "//ui/base",
      "//ui/base/clipboard",
      "//ui/base/clipboard:clipboard_test_support",
-@@ -195,7 +218,12 @@ test("stedding_browser_tests") {
+@@ -198,7 +221,12 @@ test("stedding_browser_tests") {
        "//chrome:chrome_framework",
      ]
    } else {
