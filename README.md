@@ -153,7 +153,7 @@ their colours and icons, essentials, pinned tabs, nested folders, open tabs, his
 passwords. It reads Arc's files on your disk and sends nothing anywhere; on a Mac the passwords
 need one keychain prompt, on Windows none, and running it again never duplicates anything. From
 Safari or Firefox, Chromium's own importer runs in the same step. On Windows it is new in 0.3.0
-beta 13 and not yet tried against a real Arc install (`S-81`).
+beta 13; its history and passwords are not yet tried against a real Arc's (`S-81`).
 
 ## Privacy
 

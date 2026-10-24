@@ -126,7 +126,7 @@ The Windows build is a preview: the full interface, Arc's keyboard mapped to Ctr
 Alt, the name and icon, and a per-user installer. Still open: signing (`S-56`); a two-finger Space swipe whose
 list follows the fingers, as on the Mac (a touchpad's sideways scroll changes one Space
 instead, `docs/history/plan-2026-09-26.md` TAB-31). Importing from Arc is new on Windows in
-0.3.0 beta 13 and not yet tried against a real Arc install (`S-81`).
+0.3.0 beta 13; its history and passwords are not yet tried against a real Arc's (`S-81`).
 
 ## First start
 
