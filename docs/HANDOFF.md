@@ -1183,7 +1183,12 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     open behind the agent's own window, which covers the screen; the drag then finds that
     window and drops nothing. A screen capture every three seconds during the run showed it.
     Drag fixtures call `stedding::test::KeepAboveOtherWindows` on their widget (z-order needs
-    no foreground right). A new fixture that drags, hovers, types or needs its window in
+    no foreground right). Raising is not enough on its own: the finder also passes over a
+    window the native occlusion tracker counts as covered, and with another application's
+    window maximized over the screen the tracker went on counting the raised test window
+    covered, so the drag tore the tab off and cancelled (2026-10-23, `S-281`; it passed
+    whenever logging slowed it, which hid the cause). The helper now also takes the window
+    out of the tracker's count. A new fixture that drags, hovers, types or needs its window in
     front goes on the serial list. The leg prints two counts that overlap: "N tests for
     all" (or "for browser") is every test, and "M tests for serial" the ones among them it
     runs one at a time at the end, so the leg runs N tests, not N + M. Betas 15 to 17 were
