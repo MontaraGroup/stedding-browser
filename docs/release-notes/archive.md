@@ -2,6 +2,69 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 16
+
+Peek you can tune, History and Downloads in the sidebar, the sidebar on the right, links
+without trackers, and shortcuts you can change. On Chromium 156.0.8078.48.
+
+### New
+
+- **Peek, your way.** Settings › Stedding › **Open a peek with**: a click, or a press held for
+  0.3 s or 0.5 s, so a plain click opens the link in the pinned tab. Or turn Peek off. The
+  first start asks too.
+- **History and Downloads in the sidebar**, searchable, where the tab list is (⌘Y, ⌥⌘L on the
+  Mac; Ctrl+H, Ctrl+J on Windows).
+- **The sidebar on the right**, from Settings, the sidebar's menu or the command bar.
+- **Links without trackers.** `utm_` and similar tracking parameters come off the links you
+  open; sites you name keep theirs.
+- **Shortcuts you can change** in Settings › Stedding › Shortcuts.
+- **Site controls in the page's info panel**: copy the link or title, mute, camera and
+  microphone, clear the site's data.
+- **Import from Dia and from Safari's export file**, and **Export all Spaces** in one file.
+- **Sync the sidebar through a folder you pick** (iCloud Drive, OneDrive, a network share),
+  with no account and no server.
+- **Ad and tracker blocking**, off until you turn it on in Settings › Stedding › Privacy.
+- The sidebar's text is 14 unless you choose another size; the first start offers the sizes.
+
+### Fixed
+
+- The sidebar width slider no longer jumps while you drag it (#34).
+- Pinned tabs stay above the Clear line while you drag a tab over a folder (#33).
+- In macOS full screen, a hidden address row no longer leaves an empty grey band at the top.
+- Tabs brought in by an import or a sync are kept when you quit straight after.
+
+### Install
+
+- **macOS** (Apple silicon, macOS 13 or later): `Stedding-0.3.0-beta.16-arm64.dmg`, signed and
+  notarized. Open it and drag Stedding to Applications.
+- **Windows** (10 and 11, x64): `Stedding-0.3.0-beta.16-win-x64.exe`, installs for you alone.
+  It is not signed yet: in SmartScreen click **More info**, then **Run anyway**, once.
+
+Installed copies update themselves (Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19).
+
+### Checksums (SHA-256)
+
+```
+680382034385734511d4efb539585e73755d9ecd9fd5c4aa92e54b146843bed8  Stedding-0.3.0-beta.16-arm64.dmg
+d899db904f44ac08ffb0c079e75788c49d27fb00fdf0547c94b74ca131cf13b3  Stedding-0.3.0-beta.16-win-x64.exe
+```
+
+### Known limits
+
+- The Windows installer is unsigned (`S-56`).
+- Netflix, Disney+ and Spotify's web player do not play yet (`S-270`).
+- Chromium 156's built-in list of sites that must load over HTTPS lapses on 13 December 2026;
+  a release on a newer base comes before then.
+
+### How it was checked
+
+Every unit and browser test on the Mac (1238; 661, and 185 one at a time) and on Windows, in
+the release build and the build with DCHECKs (1233; 622, and 192 one at a time). Apple's
+distribution check passed the signed app, and Gatekeeper accepted it from the downloaded image.
+On Windows the installer went over an installed 0.3.0 beta 15, was uninstalled keeping the
+profile and installed again; an installed beta 15 then found this version in the published
+feed and was on it after a restart.
+
 ## Stedding 0.3.0 beta 15
 
 Any emoji and any colour for your Spaces, a friendlier first start, and four sidebar fixes.
