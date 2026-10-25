@@ -10,6 +10,20 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-25, after midnight -- 0.3.0 beta 15 released
+
+Released on the owner's word: Edit Space, the welcome flow's new look, and GitHub issues 26,
+27, 29 and 30 (`docs/release-notes/v0.3.0-beta.15.md`, the first notes in the shorter shape the
+owner asked for). Its passes found two faults the release build's suites had passed, both
+fixed before the release: Edit Space's pair set the window's colour inside the theme's walk
+down the views (the DCHECK build stopped, 32 tests), and the new test's helper read the dialog's
+widget after Windows had freed it (AddressSanitizer, three reports). `S-302` is new: an
+address-row test that times out now and then under AddressSanitizer. From the next release
+`tooling/package-dmg` signs, notarizes and staples the disk image too (tried on a copy of this
+one). Both platforms updated from beta 14, through a local feed and the real one; the site and
+the Homebrew cask name beta 15.
+
+
 ## 2026-10-24, late -- Edit Space: any emoji, any colour, one for each look
 
 The owner asked for people to choose their own emoji and colour for a Space, one colour or one
