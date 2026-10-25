@@ -590,7 +590,10 @@ macOS distribution for real users requires an Apple Developer ID, **code signing
 notarization** — without them, Gatekeeper blocks the app. Signing landed for the Mac
 with beta 10 (2026-10-01): every macOS image since is signed with the Developer ID,
 notarized and stapled, then put through `tooling/package-dmg` and
-`tooling/publish-release`. The macOS images of betas 1 to 8 shipped unsigned, with the
+`tooling/publish-release`. From 0.3.0 beta 16 the disk image itself is signed, notarized and
+stapled too (`package-dmg`, with the same two variables `sign-release` takes); the app inside
+was always what Gatekeeper checks, and the image's own signature is for whatever inspects the
+download before it is opened. The macOS images of betas 1 to 8 shipped unsigned, with the
 Gatekeeper bypass in their notes (beta 9 had no macOS image). Windows is not code-signed yet
 (`BACKLOG.md` S-56).
 

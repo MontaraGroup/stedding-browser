@@ -48,7 +48,7 @@ PowerShell.
 | `publish-release` | GitHub pre-release from `dist/`: tag `v<VERSION>`, notes from `docs/release-notes/<tag>.md`; the platform that publishes second adds its image to the same release; `--check` first. Only with the operator's word in chat (`AGENTS.md`, red lines) |
 | `publish-appcast` | **(macOS)** Offers the release to installed copies (ADR 0022): checks that `dist/`'s image is the release's and its app carries the updater, signs it with Sparkle's `sign_update`, writes `updates/appcast.xml` through `appcast.py`, signs and verifies the feed, commits it; `--push` publishes it. `--check` changes nothing. |
 | `appcast.py` | Writes and reads the update feed: newest release first, five kept. `selftest` checks it. |
-| `package-dmg` | **(macOS)** Packages a built app into an installable `.dmg`. |
+| `package-dmg` | **(macOS)** Packages a built app into an installable `.dmg`; with a notarized app and `STEDDING_SIGN_IDENTITY` and `STEDDING_NOTARY_ARGS` set, signs, notarizes and staples the image too. |
 | `brand/` | `generate.py` regenerates the brand system from `mark.py`, the mark's one geometry file; `win_icons.py` makes the Windows icons from the same mark; `product_name.py` rewrites the product name in Chromium's string tables (`apply-branding` runs it). |
 | `verify/` | The probe page and the media clips `verify-build` serves to the built app. |
 | `shellcheck-version` | The shellcheck version `check-shell` and CI pin. |

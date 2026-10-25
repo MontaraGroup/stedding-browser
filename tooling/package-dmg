@@ -14,6 +14,14 @@
 # tooling/sign-release (M7). Gatekeeper calls a downloaded copy damaged; the
 # documented step past it is printed at the end and belongs in the release notes
 # of every build before M7.
+#
+# With a signed and notarised app and sign-release's two variables set
+# (STEDDING_SIGN_IDENTITY, STEDDING_NOTARY_ARGS), the image is signed with the
+# same Developer ID, notarised and stapled too, so the disk image itself passes
+# Gatekeeper and carries its ticket offline (the owner, 2026-10-24). The app
+# inside was already what macOS checks; the image's signature is for whatever
+# inspects the download before it is opened. The checksum is of the image as
+# signed. STEDDING_DMG_UNSIGNED=1 leaves the image unsigned.
 
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=./lib.sh
@@ -103,13 +111,37 @@ main() {
       -quiet \
       "$dmg" || die "hdiutil failed"
 
+    app_notarised=0
+    if codesign --verify --deep --strict "$APP" >/dev/null 2>&1 &&
+       spctl --assess --type execute "$APP" >/dev/null 2>&1; then
+      app_notarised=1
+    fi
+
+    # The image itself: signed, notarised and stapled, after the app it holds.
+    identity="${STEDDING_SIGN_IDENTITY:-}"
+    notary_args="${STEDDING_NOTARY_ARGS:-}"
+    if [ "$app_notarised" = 1 ] && [ -n "$identity" ] && [ -n "$notary_args" ] &&
+       [ "${STEDDING_DMG_UNSIGNED:-0}" != 1 ]; then
+      log "signing the image"
+      codesign --sign "$identity" --timestamp "$dmg" || die "codesign of the image failed"
+      log "notarising the image (a few minutes)"
+      # shellcheck disable=SC2086  # the arguments are words, as sign-release takes them
+      xcrun notarytool submit "$dmg" $notary_args --wait ||
+        die "notarisation of the image failed"
+      xcrun stapler staple "$dmg" || die "stapling the image failed"
+      spctl --assess --type open --context context:primary-signature "$dmg" ||
+        die "Gatekeeper refuses the signed image"
+      log "the image is signed, notarised and stapled"
+    elif [ "$app_notarised" = 1 ]; then
+      warn "the image is unsigned (STEDDING_SIGN_IDENTITY and STEDDING_NOTARY_ARGS sign it)"
+    fi
+
     ( cd "$DIST" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256" )
 
     log "done: $dmg ($(du -sh "$dmg" | cut -f1))"
     log "sha256: $(cut -d' ' -f1 < "$dmg.sha256")"
 
-    if codesign --verify --deep --strict "$APP" >/dev/null 2>&1 &&
-       spctl --assess --type execute "$APP" >/dev/null 2>&1; then
+    if [ "$app_notarised" = 1 ]; then
       log "the app is signed and notarised; no Gatekeeper note needed"
       return 0
     fi
