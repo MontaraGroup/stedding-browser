@@ -10,6 +10,47 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-25, night -- Peek rebuilt on the little window
+
+The owner's next big feature, overnight and not released (`S-93`). Peek had been switched off
+since the 2026-09-26 review: its overlay laid the page out 0 px tall, and a peek loaded links
+as if typed, in the shared jar. It is now a little window over the pinned tab's window, its
+one tab the link's page: a whole tab, so dialogs, file choosers, permissions, the popup blocker
+and the address row with the site's security state work as in any tab (peek P6). The page is
+made in the pin's own jar and loaded with the link's initiator, referrer and gesture (P11), and
+only the user's click from the pin on screen peeks. Its row has Open as Tab (⌘O) and Open in
+Split View (⇧⌘O, beside the pin; an essential's peek offers the tab alone), which move the page
+without a reload (P7, P9). Escape or a click on the window closes it, and a click that lands on
+the very link does not open it again (P14). Redirect links are judged by where they lead and
+sign-in pages stay in the pin (P15, P16). The old overlay and its keys are gone; the setting is
+back in Settings › Stedding, still off by default (`PLAN.md` decision 2). `tooling/drive` gained
+`shots`, every window of the browser captured on its own.
+
+Using it found what the suites had passed: the peek window came up at the main window's size,
+22 DIP down and right, because the window sizer sets a popup's requested bounds aside on the
+Mac. Little windows had the same fault from the start, never at most 1000 × 700, and both now
+set their bounds once the window is made. The peek also showed with its address field focused,
+which kept Escape; it now shows with its page focused. On Windows the window can take the
+activation back while a peek appears (the browser is not the foreground process there under
+test), which closed the peek at once, so the first 750 ms are not a click. Peek's own tests now
+click by script with the user's activation, since a synthetic mouse event never reached a page
+Windows' occlusion tracker counted as covered. Ctrl+Shift+O on Windows is the bookmark
+manager's chord, which a little window, and so a peek, takes for the split.
+
+Checked: on the Mac, every unit test (1045) and every browser test (539, and 150 one at a time)
+on the release build, twice; Peek's browser tests again after each fix, all eight twice in a row
+at the end; and, driven through the pointer and keyboard by `tooling/drive` on a copy with its
+own data folder, a peek's opening, its dialog, both buttons, ⌘O, ⇧⌘O, a click on the window,
+Escape, ⌘W and full screen, and with Peek off a pin that followed its link
+(`docs/features/acceptance.md`, "Peek"). On Windows, the release, checks and AddressSanitizer
+builds: every unit test (1040) and every browser test (501, and 157 one at a time), but for
+`S-291`'s flake once on the release build; then Peek's and the little window's ten browser tests
+three times on the release and checks builds. Not tried: Windows by hand, a real site's redirect
+and sign-in links (P15 and P16 have unit tests only), an essential's peek by hand. The owner's
+questions: whether Peek is on by default (`PLAN.md` decision 2), and whether a Space pin that
+joins a split keeps its place in the pinned run (splits J5, `S-102`), which Open in Split View
+from a peek now meets.
+
 ## 2026-10-25, after midnight -- 0.3.0 beta 15 released
 
 Released on the owner's word: Edit Space, the welcome flow's new look, and GitHub issues 26,

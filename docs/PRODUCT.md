@@ -231,12 +231,14 @@ yet, `docs/features/library.md`) and a `+`.
 
 ## 5. Transient windows
 
-- **Peek** **[1.0]** — a link from a pinned tab or an essential opens in an overlay
-  instead of navigating the pinned tab away; `⌘O` makes it a real tab, it can become a
-  split, and a click outside dismisses it. **Peek is what makes pinned tabs behave like
-  apps.** It was built and is switched off until it is rebuilt (`PLAN.md` decision 2;
-  `features/peek.md`); the rebuild shares one primitive with the little window, a page
-  that is a full tab in all but its place (**[M10]**, `S-93`).
+- **Peek** **[1.0]** — a link from a pinned tab or an essential that leaves its site
+  opens in a peek, a little window over the window, nearly its size, instead of
+  navigating the pinned tab away. "Open as Tab" (`⌘O`) and "Open in Split View" (`⇧⌘O`,
+  beside the pinned tab) move the very page into the window; Escape or a click on the
+  window closes it. **Peek is what makes pinned tabs behave like apps.** Rebuilt on the
+  little window (2026-10-25, `S-93`), so the page is a whole tab; off by default until the
+  owner turns it on (`PLAN.md` decision 2), with its switch in Settings › Stedding
+  (`features/peek.md`).
 - **Little Arc** **[1.0]** — the little window: a link from another application opens in
   a small window of its own, to read and dismiss. Its top is one row, the main window's
   address row on the page's colour with the traffic lights inline, light or dark as the

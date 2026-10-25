@@ -1,0 +1,2610 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 02:21:25 -0400
+Subject: feat: Peek, rebuilt on the little window
+
+Peek P1-P16 (BACKLOG S-93): a link from a pinned tab that leaves its site
+opens in a peek, a little window over the pinned tab's window, nearly its
+size (72 DIP at the sides, 48 at the top and bottom), and the pinned tab
+stays where it was. The old overlay laid its page out 0 px tall and loaded
+links as if typed, in the shared jar (PLAN.md CMD-9, CMD-10); it is gone,
+with its keys.
+
+The peek's page is a whole tab of a popup marked little, so dialogs, file
+choosers, permissions, the popup blocker and the address row with the
+site's security state work as in any tab. stedding::OpenPeek makes the page
+in the pin's own jar (a pin in a Space with its own session peeks with that
+session) and loads the link with its initiator, referrer, source site and
+gesture; a page the source made itself (target=_blank, window.open) is
+adopted as it is. A PeekPage on the page names the pin it came from and
+watches the pin's window: a click on that window closes the peek, and when
+the click lands on the very link the peek shows, the link does not open it
+again. One peek over a window; the next link replaces it. The window's
+bounds are set once it is made: the bounds a popup is made with were set
+aside on the Mac. It shows with its page focused, so Escape closes it.
+
+Only the user's click from the pin on screen peeks: the throttle and the
+new-tab hook ask for a gesture and an active source tab. A redirect link is
+judged by the http(s) address in its u=, q= or url=; a sign-in page (a
+host such as login., accounts., sso.; a path step such as /login, /oauth,
+/authorize, /saml) stays in the pin.
+
+The peek's row has Open in Split View (Shift-Cmd-O, shown when the pin can
+take a pair: not an essential, not a tab in a split) and Open as Tab
+(Cmd-O); PromoteLittleWindow sends the page back to the pin's window and
+Space, the mark taken off first. The page menu's first row says Open as
+Tab in a peek. Settings > Stedding has the switch again, still off by
+default (PLAN.md decision 2), and the shortcut list names the peek.
+CreateLittleWindow is the little window without its page, shared by both,
+and it sets the window's bounds once the window is made: the window sizer
+had set the requested ones aside, so a little window opened at the last
+window's size, 22 DIP down and right, never at most 1000 x 700 (little E1).
+
+Why: Peek is what makes pinned tabs behave like apps, and it had been off
+since its overlay showed no page and loaded links unsafely (PLAN.md
+decision 2; the owner asked for the next big feature, 2026-10-24).
+Removable when: never; it is product behaviour.
+---
+ chrome/app/stedding_strings.grdp              |  11 +
+ .../render_view_context_menu.cc               |   3 +-
+ .../stedding_page/stedding_page.html.ts       |   7 +
+ chrome/browser/ui/stedding/BUILD.gn           |  13 +-
+ chrome/browser/ui/stedding/little_window.cc   |  67 ++-
+ chrome/browser/ui/stedding/little_window.h    |  18 +-
+ chrome/browser/ui/stedding/peek.cc            | 324 +++++++++++++
+ chrome/browser/ui/stedding/peek.h             |  97 ++++
+ .../ui/views/commandbar/command_bar_view.cc   |   9 +-
+ chrome/browser/ui/views/peek/BUILD.gn         |  21 +-
+ .../browser/ui/views/peek/peek_accelerators.h |  31 --
+ .../ui/views/peek/peek_navigation_throttle.cc | 135 +++++-
+ .../ui/views/peek/peek_navigation_throttle.h  |  22 +-
+ chrome/browser/ui/views/peek/peek_unittest.cc |  88 ++--
+ chrome/browser/ui/views/peek/peek_view.cc     | 426 ------------------
+ chrome/browser/ui/views/peek/peek_view.h      | 149 ------
+ .../toolbar/stedding_little_promote_button.cc |  59 ++-
+ .../toolbar/stedding_little_promote_button.h  |  10 +-
+ .../browser/ui/views/toolbar/toolbar_view.cc  |   5 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  12 +
+ .../settings/stedding_shortcuts_handler.cc    |   8 +-
+ .../stedding_shortcuts_handler_unittest.cc    |  18 +-
+ chrome/test/stedding/BUILD.gn                 |   4 +
+ .../stedding/little_window_browsertest.cc     |   6 +
+ chrome/test/stedding/peek_browsertest.cc      | 420 +++++++++++++++++
+ 25 files changed, 1209 insertions(+), 754 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/peek.cc
+ create mode 100644 chrome/browser/ui/stedding/peek.h
+ delete mode 100644 chrome/browser/ui/views/peek/peek_accelerators.h
+ delete mode 100644 chrome/browser/ui/views/peek/peek_view.cc
+ delete mode 100644 chrome/browser/ui/views/peek/peek_view.h
+ create mode 100644 chrome/test/stedding/peek_browsertest.cc
+
+diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
+index c5f3b939a9de3..bc9a21d00ed77 100644
+--- a/chrome/app/stedding_strings.grdp
++++ b/chrome/app/stedding_strings.grdp
+@@ -172,6 +172,17 @@
+     Move this page into a tab of the main window
+   </message>
+ 
++  <!-- Peek's ways into the window (docs/features/peek.md P7, P9). -->
++  <message name="IDS_STEDDING_PEEK_OPEN_AS_TAB" desc="In Title Case: In a peek (a small window over the browser window that shows a link opened from a pinned tab), the button on its bar and the item of its page's context menu that move the page into a tab of the window it came from, as it is, without loading it again.">
++    Open as Tab
++  </message>
++  <message name="IDS_STEDDING_PEEK_OPEN_AS_TAB_TOOLTIP" desc="Tooltip of the Open as Tab button of a peek (a small window over the browser window that shows a link opened from a pinned tab). The button's keyboard shortcut follows in parentheses.">
++    Keep this page as a tab of its own
++  </message>
++  <message name="IDS_STEDDING_PEEK_OPEN_IN_SPLIT_TOOLTIP" desc="Tooltip of the Open in Split View button of a peek (a small window over the browser window that shows a link opened from a pinned tab): the page moves into a split view beside the pinned tab it came from. The button's keyboard shortcut follows in parentheses.">
++    Show this page beside the pinned tab it came from
++  </message>
++
+   <!-- Dark pages in the macOS menu bar (docs/features/dark-pages.md Dk24). -->
+   <message name="IDS_STEDDING_DARK_PAGES_MAC" desc="In Title Case: The Mac View menu item that turns dark pages on or off for the profile: every website drawn dark by the browser. Checked while dark pages is on.">
+     Dark Pages
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+index 2ad018ee82359..39f7a5d4568cf 100644
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -2601,7 +2601,8 @@ void RenderViewContextMenu::AppendPageItems() {
+       }
+     };
+     // Cmd-O is Open File's chord, which moves the page in a little window.
+-    add_row(IDC_STEDDING_LITTLE_PROMOTE, stedding::OpenInMainWindowLabel(),
++    // A peek's is Open as Tab (peek P7).
++    add_row(IDC_STEDDING_LITTLE_PROMOTE, stedding::PromoteLabel(browser),
+             IDC_OPEN_FILE);
+     add_row(IDC_STEDDING_LITTLE_PROMOTE_SPLIT,
+             l10n_util::GetStringUTF16(IDS_STEDDING_LITTLE_OPEN_IN_SPLIT),
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 15f07b2e9309b..12c49c2293421 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -352,6 +352,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingLittleLabel}"
+       sub-label="$i18n{steddingLittleSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="peek"
++      class="hr"
++      pref-key="stedding.peek.enabled"
++      label="$i18n{steddingPeekLabel}"
++      sub-label="$i18n{steddingPeekSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="newTabHint"
+       class="hr"
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index c8f9dfd969422..919e440a5c66f 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -401,11 +401,20 @@ source_set("little_mark") {
+ 
+ # docs/features/little.md: links from other apps open small.
+ source_set("little_window") {
+-  public = [ "little_window.h" ]
+-  sources = [ "little_window.cc" ]
++  public = [
++    "little_window.h",
++    "peek.h",
++  ]
++  sources = [
++    "little_window.cc",
++    "peek.cc",
++  ]
+   public_deps = [
+     "//base",
+     "//chrome/browser/ui/spaces",
++    "//content/public/common",
++    "//third_party/blink/public/common:headers",
++    "//url",
+   ]
+   deps = [
+     ":little_mark",
+diff --git a/chrome/browser/ui/stedding/little_window.cc b/chrome/browser/ui/stedding/little_window.cc
+index f75f230d4db0c..c8fef7cecd3cf 100644
+--- a/chrome/browser/ui/stedding/little_window.cc
++++ b/chrome/browser/ui/stedding/little_window.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/spaces/space_router.h"
+ #include "chrome/browser/ui/stedding/little_mark.h"
++#include "chrome/browser/ui/stedding/peek.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/grit/branded_strings.h"
+@@ -81,10 +82,8 @@ BrowserWindowInterface* LastActiveNormalWindow(Profile* profile) {
+   return found;
+ }
+ 
+-BrowserWindowInterface* OpenLittleWindow(Profile* profile,
+-                                         const GURL& url,
+-                                         BrowserWindowInterface* anchor,
+-                                         bool untrusted_launch) {
++BrowserWindowInterface* CreateLittleWindow(Profile* profile,
++                                           const gfx::Rect& bounds) {
+   // CreateBrowserWindow CHECKs a profile that may not open a window
+   // (PLAN.md CMD-7): with private windows forced by policy, the profile Mail
+   // hands a link to is one of those.
+@@ -92,11 +91,34 @@ BrowserWindowInterface* OpenLittleWindow(Profile* profile,
+                       BrowserWindowInterface::CreationStatus::kOk) {
+     return nullptr;
+   }
+-  if (!anchor) {
+-    anchor = LastActiveNormalWindow(profile);
+-  }
+   BrowserWindowCreateParams params(BrowserWindowInterface::Type::TYPE_POPUP,
+                                    *profile, /*from_user_gesture=*/true);
++  params.initial_bounds = bounds;
++  // E8: marked as it is made, so its title bar and its row are a little
++  // window's from its first frame; marked again after, for the code that
++  // reads the mark from the window alone.
++  SetNextWindowLittle(true);
++  BrowserWindowInterface* const window = CreateBrowserWindow(std::move(params));
++  SetNextWindowLittle(false);
++  if (!window) {
++    return nullptr;
++  }
++  MarkLittleWindow(window);
++  // E1: the bounds a popup is made with are a request the window sizer may
++  // set aside: on the Mac it took the last window's place and size, 22 DIP
++  // down and right, so a little window was never little. Set once it is
++  // made, they hold.
++  window->GetWindow()->SetBounds(bounds);
++  return window;
++}
++
++BrowserWindowInterface* OpenLittleWindow(Profile* profile,
++                                         const GURL& url,
++                                         BrowserWindowInterface* anchor,
++                                         bool untrusted_launch) {
++  if (!anchor && profile) {
++    anchor = LastActiveNormalWindow(profile);
++  }
+   gfx::Rect bounds(kLittleWidth, kLittleHeight);
+   if (anchor && anchor->GetWindow()) {
+     const gfx::Rect over = anchor->GetWindow()->GetBounds();
+@@ -107,17 +129,10 @@ BrowserWindowInterface* OpenLittleWindow(Profile* profile,
+         gfx::Point(over.x() + (over.width() - bounds.width()) / 2,
+                    over.y() + (over.height() - bounds.height()) / 2));
+   }
+-  params.initial_bounds = bounds;
+-  // E8: marked as it is made, so its title bar and its row are a little
+-  // window's from its first frame; marked again after, for the code that
+-  // reads the mark from the window alone.
+-  SetNextWindowLittle(true);
+-  BrowserWindowInterface* const window = CreateBrowserWindow(std::move(params));
+-  SetNextWindowLittle(false);
++  BrowserWindowInterface* const window = CreateLittleWindow(profile, bounds);
+   if (!window) {
+     return nullptr;
+   }
+-  MarkLittleWindow(window);
+   NavigateParams navigate(window, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+   navigate.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+   if (untrusted_launch) {
+@@ -140,6 +155,12 @@ bool PromoteLittleWindow(BrowserWindowInterface* little,
+   if (!from || from->empty()) {
+     return false;
+   }
++  // peek P7, P9: a peek's page goes back to the pinned tab it came from, in
++  // that tab's window and Space.
++  tabs::TabInterface* const peek_source = PeekSourceOf(little);
++  if (!target && peek_source) {
++    target = peek_source->GetBrowserWindowInterface();
++  }
+   if (!target) {
+     target = LastActiveNormalWindow(little->GetProfile());
+   }
+@@ -163,8 +184,15 @@ bool PromoteLittleWindow(BrowserWindowInterface* little,
+   // A window without Spaces (the Arc-style window off) takes the page as a
+   // plain tab.
+   spaces::SpaceModel* const model = spaces::SpaceModel::From(target);
+-  const std::optional<spaces::SpaceId> destination =
++  std::optional<spaces::SpaceId> destination =
+       model ? std::optional<spaces::SpaceId>(model->active_id()) : std::nullopt;
++  if (model && peek_source &&
++      peek_source->GetBrowserWindowInterface() == target) {
++    if (std::optional<spaces::SpaceId> source_space =
++            model->FindSpaceForTab(peek_source)) {
++      destination = source_space;
++    }
++  }
+   // A split pairs the page with the active tab. A tab already in a split
+   // cannot take a second pair (TabStripModel CHECKs), a pinned one would pin
+   // the page, and one outside the active Space would split the pair across
+@@ -179,6 +207,9 @@ bool PromoteLittleWindow(BrowserWindowInterface* little,
+   if (!contents) {
+     return false;
+   }
++  // The page stops being a peek's before the window it goes to activates:
++  // that would close the window the page is in by then.
++  ForgetPeek(contents.get());
+   const GURL url = contents->GetLastCommittedURL().is_empty()
+                        ? contents->GetVisibleURL()
+                        : contents->GetLastCommittedURL();
+@@ -209,4 +240,8 @@ std::u16string OpenInMainWindowLabel() {
+       IDS_STEDDING_LITTLE_OPEN_IN, l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+ }
+ 
++std::u16string PromoteLabel(const BrowserWindowInterface* window) {
++  return IsPeekWindow(window) ? PeekOpenAsTabLabel() : OpenInMainWindowLabel();
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/little_window.h b/chrome/browser/ui/stedding/little_window.h
+index 136e11473359e..c5d619b736cb5 100644
+--- a/chrome/browser/ui/stedding/little_window.h
++++ b/chrome/browser/ui/stedding/little_window.h
+@@ -12,6 +12,10 @@ class GURL;
+ class PrefService;
+ class Profile;
+ 
++namespace gfx {
++class Rect;
++}  // namespace gfx
++
+ namespace stedding {
+ 
+ // docs/features/little.md: a link from another application opens small, in
+@@ -37,6 +41,12 @@ BrowserWindowInterface* OpenLittleWindow(Profile* profile,
+                                          BrowserWindowInterface* anchor,
+                                          bool untrusted_launch);
+ 
++// A little window of `profile` at `bounds`, marked, with no tab yet and not
++// shown: the caller gives it its page and shows it (a peek, peek P6). Null
++// when `profile` may not open a window now.
++BrowserWindowInterface* CreateLittleWindow(Profile* profile,
++                                           const gfx::Rect& bounds);
++
+ // Marks `window` as little (a popup opened this way), and asks. Mark it
+ // before its first tab: the window's commands re-read the mark when its tabs
+ // change.
+@@ -50,7 +60,9 @@ BrowserWindowInterface* LastActiveNormalWindow(Profile* profile);
+ // E2: moves the little window's page into the active Space of `target` (the
+ // last-active normal window when null), as a tab or, with `split`, into a
+ // split with the active tab, and closes the little window. A split needs a
+-// tab it can pair with; otherwise the page gets a tab of its own. E7: with no
++// tab it can pair with; otherwise the page gets a tab of its own. A peek's
++// page goes back to the window and the Space of the pinned tab it came from
++// (peek P7, P9). E7: with no
+ // normal window of the little window's profile, a new one opens and takes the
+ // page, in the Space a new window shows. The page moves as it is: the same
+ // WebContents, its history, no reload. False when nothing moved.
+@@ -62,6 +74,10 @@ bool PromoteLittleWindow(BrowserWindowInterface* little,
+ // window's button, in its page menu and on the File menu's row.
+ std::u16string OpenInMainWindowLabel();
+ 
++// The name of the move into a tab for `window`: a peek's is Open as Tab
++// (peek P7), any other little window's Open in Stedding.
++std::u16string PromoteLabel(const BrowserWindowInterface* window);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_STEDDING_LITTLE_WINDOW_H_
+diff --git a/chrome/browser/ui/stedding/peek.cc b/chrome/browser/ui/stedding/peek.cc
+new file mode 100644
+index 0000000000000..a3a8327dfa501
+--- /dev/null
++++ b/chrome/browser/ui/stedding/peek.cc
+@@ -0,0 +1,324 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/peek.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "base/callback_list.h"
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
++#include "ui/base/base_window.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/page_transition_types.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/gfx/geometry/rect.h"
++
++namespace stedding {
++
++namespace {
++
++// P12: a peek leaves this much of its window showing around it, so the page
++// it came from frames it.
++constexpr int kSideMargin = 72;
++constexpr int kTopMargin = 48;
++
++// P14: the source's window may take the activation back while the peek's
++// window appears -- Windows does when the browser is not the foreground
++// process -- and that is not the user's click on it.
++constexpr base::TimeDelta kOpeningGrace = base::Milliseconds(750);
++
++// P14: a click on the source's window that closes a peek is the press of a
++// click; when it lands on the very link the peek showed, the link's release
++// follows within this, and closes rather than opens it again.
++constexpr base::TimeDelta kSameLinkWindow = base::Seconds(2);
++
++// The peek a click on its source's window last closed.
++struct Dismissal {
++  tabs::TabHandle source;
++  GURL url;
++  base::TimeTicks when;
++};
++
++std::optional<Dismissal>& LastDismissal() {
++  static base::NoDestructor<std::optional<Dismissal>> dismissal;
++  return *dismissal;
++}
++
++// True, once, when `url` from `source` is the link whose peek a click on the
++// source's window has just closed.
++bool TakeDismissal(tabs::TabInterface* source, const GURL& url) {
++  std::optional<Dismissal>& last = LastDismissal();
++  const bool same = last && last->source == source->GetHandle() &&
++                    last->url == url &&
++                    base::TimeTicks::Now() - last->when < kSameLinkWindow;
++  last.reset();
++  return same;
++}
++
++// The window a page is a tab of now; null while it is not in one.
++BrowserWindowInterface* WindowOf(content::WebContents* contents) {
++  tabs::TabInterface* const tab =
++      contents ? tabs::TabInterface::MaybeGetFromContents(contents) : nullptr;
++  return tab ? tab->GetBrowserWindowInterface() : nullptr;
++}
++
++// What makes a page a peek's: the pinned tab it came from, and the watch on
++// that tab's window, whose activation closes the peek (P14).
++class PeekPage : public content::WebContentsUserData<PeekPage> {
++ public:
++  PeekPage(const PeekPage&) = delete;
++  PeekPage& operator=(const PeekPage&) = delete;
++  ~PeekPage() override = default;
++
++  tabs::TabInterface* source() const { return source_.get(); }
++  BrowserWindowInterface* source_window() const {
++    return source_ ? source_->GetBrowserWindowInterface() : nullptr;
++  }
++
++ private:
++  friend class content::WebContentsUserData<PeekPage>;
++
++  PeekPage(content::WebContents* contents,
++           tabs::TabInterface* source,
++           const GURL& url)
++      : content::WebContentsUserData<PeekPage>(*contents),
++        source_(source->GetWeakPtr()),
++        source_handle_(source->GetHandle()),
++        url_(url),
++        opened_(base::TimeTicks::Now()) {
++    if (BrowserWindowInterface* const window =
++            source->GetBrowserWindowInterface()) {
++      activated_ = window->RegisterDidBecomeActive(base::BindRepeating(
++          &PeekPage::SourceWindowBecameActive, base::Unretained(this)));
++    }
++  }
++
++  // P14: a click on the window the peek came from closes it, as a click
++  // outside a sheet does. Not from inside the activation: the window that
++  // closes may be the one taking the activation from.
++  void SourceWindowBecameActive(BrowserWindowInterface*) {
++    if (base::TimeTicks::Now() - opened_ < kOpeningGrace) {
++      return;
++    }
++    LastDismissal() =
++        Dismissal{source_handle_, url_, base::TimeTicks::Now()};
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(
++            [](base::WeakPtr<content::WebContents> contents) {
++              // Still a peek's page, in its little window: a promotion took
++              // the mark off the page before it moved.
++              if (!contents || !FromWebContents(contents.get())) {
++                return;
++              }
++              BrowserWindowInterface* const window = WindowOf(contents.get());
++              if (window && IsLittleWindow(window) && window->GetWindow()) {
++                window->GetWindow()->Close();
++              }
++            },
++            GetWebContents().GetWeakPtr()));
++  }
++
++  base::WeakPtr<tabs::TabInterface> source_;
++  const tabs::TabHandle source_handle_;
++  const GURL url_;
++  const base::TimeTicks opened_;
++  base::CallbackListSubscription activated_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(PeekPage);
++
++const PeekPage* PageOf(const BrowserWindowInterface* window) {
++  if (!window || !IsLittleWindow(window)) {
++    return nullptr;
++  }
++  // A little window is not const in its tab strip's eyes; nothing changes.
++  TabStripModel* const tabs =
++      const_cast<BrowserWindowInterface*>(window)->GetTabStripModel();
++  content::WebContents* const contents =
++      tabs ? tabs->GetActiveWebContents() : nullptr;
++  return contents ? PeekPage::FromWebContents(contents) : nullptr;
++}
++
++// P12: the peek's bounds over the window it came from, nearly all of it.
++gfx::Rect BoundsOver(BrowserWindowInterface* window) {
++  const gfx::Rect over = window->GetWindow()->GetBounds();
++  gfx::Rect bounds = over;
++  bounds.Inset(gfx::Insets::VH(kTopMargin, kSideMargin));
++  bounds.set_width(std::max(400, bounds.width()));
++  bounds.set_height(std::max(300, bounds.height()));
++  bounds.set_x(over.x() + (over.width() - bounds.width()) / 2);
++  bounds.set_y(over.y() + (over.height() - bounds.height()) / 2);
++  return bounds;
++}
++
++// The peek's window, `contents` its one tab, over the source's window; not
++// shown yet.
++BrowserWindowInterface* MakePeek(tabs::TabInterface* source,
++                                 std::unique_ptr<content::WebContents> contents,
++                                 const GURL& url) {
++  BrowserWindowInterface* const over = source->GetBrowserWindowInterface();
++  if (!over || !over->GetWindow()) {
++    return nullptr;
++  }
++  // P13: one peek over a window; the next link replaces it.
++  if (BrowserWindowInterface* const open = PeekOver(over);
++      open && open->GetWindow()) {
++    open->GetWindow()->Close();
++  }
++  BrowserWindowInterface* const window =
++      CreateLittleWindow(over->GetProfile(), BoundsOver(over));
++  if (!window) {
++    return nullptr;
++  }
++  PeekPage::CreateForWebContents(contents.get(), source, url);
++  chrome::AddWebContents(window, nullptr, std::move(contents), url,
++                         WindowOpenDisposition::NEW_FOREGROUND_TAB,
++                         blink::mojom::WindowFeatures());
++  return window;
++}
++
++// P14: the peek shows with its page focused, not its address: shown on a
++// blank tab, the window gave the field the focus, and the field kept the
++// Escape that closes the peek.
++void ShowPeek(BrowserWindowInterface* window, content::WebContents* page) {
++  window->GetWindow()->Show();
++  page->Focus();
++}
++
++}  // namespace
++
++PeekLink::PeekLink() = default;
++PeekLink::PeekLink(const PeekLink&) = default;
++PeekLink& PeekLink::operator=(const PeekLink&) = default;
++PeekLink::~PeekLink() = default;
++
++BrowserWindowInterface* OpenPeek(tabs::TabInterface* source,
++                                 const PeekLink& link) {
++  if (!source || !source->GetContents() || TakeDismissal(source, link.url)) {
++    return nullptr;
++  }
++  // P11 (PLAN.md CMD-9): the page is made in the pinned tab's own jar, so a
++  // pin in a Space with its own session peeks with that session's cookies.
++  // The shared jar is the profile's own.
++  content::WebContents* const from = source->GetContents();
++  content::BrowserContext* const context = from->GetBrowserContext();
++  const content::StoragePartitionConfig jar =
++      spaces::StoragePartitionConfigForWebContents(from);
++  scoped_refptr<content::SiteInstance> site;
++  if (spaces::IsSpaceStoragePartition(jar) &&
++      spaces::PageBelongsInSpaceJar(link.url)) {
++    site = content::SiteInstance::CreateForFixedStoragePartition(
++        context, link.url, jar);
++  }
++  content::WebContents::CreateParams create(context, std::move(site));
++  std::unique_ptr<content::WebContents> contents =
++      content::WebContents::Create(create);
++  content::WebContents* const page = contents.get();
++  BrowserWindowInterface* const window =
++      MakePeek(source, std::move(contents), link.url);
++  if (!window) {
++    return nullptr;
++  }
++  // P11 (PLAN.md CMD-10): the link as the page asked for it -- its
++  // initiator, referrer and gesture -- not as if the user had typed it.
++  content::NavigationController::LoadURLParams load(link.url);
++  load.transition_type = ui::PAGE_TRANSITION_LINK;
++  load.is_renderer_initiated = true;
++  load.referrer = link.referrer;
++  load.initiator_origin = link.initiator_origin;
++  load.initiator_frame_token = link.initiator_frame_token;
++  load.initiator_process_id = link.initiator_process_id;
++  load.source_site_instance = link.source_site_instance;
++  load.has_user_gesture = link.user_gesture;
++  page->GetController().LoadURLWithParams(load);
++  ShowPeek(window, page);
++  return window;
++}
++
++BrowserWindowInterface* OpenPeekWithContents(
++    tabs::TabInterface* source,
++    std::unique_ptr<content::WebContents> contents,
++    const GURL& url) {
++  if (!source || !contents || TakeDismissal(source, url)) {
++    return nullptr;
++  }
++  content::WebContents* const page = contents.get();
++  BrowserWindowInterface* const window =
++      MakePeek(source, std::move(contents), url);
++  if (window) {
++    ShowPeek(window, page);
++  }
++  return window;
++}
++
++bool IsPeekWindow(const BrowserWindowInterface* window) {
++  return PageOf(window) != nullptr;
++}
++
++tabs::TabInterface* PeekSourceOf(const BrowserWindowInterface* window) {
++  const PeekPage* const page = PageOf(window);
++  return page ? page->source() : nullptr;
++}
++
++bool PeekCanSplit(const BrowserWindowInterface* window) {
++  const tabs::TabInterface* const source = PeekSourceOf(window);
++  return source && !source->IsPinned() && !source->IsSplit();
++}
++
++BrowserWindowInterface* PeekOver(const BrowserWindowInterface* window) {
++  if (!window) {
++    return nullptr;
++  }
++  BrowserWindowInterface* found = nullptr;
++  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++      [&](BrowserWindowInterface* candidate) {
++        const PeekPage* const page = PageOf(candidate);
++        if (page && page->source_window() == window) {
++          found = candidate;
++          return false;
++        }
++        return true;
++      });
++  return found;
++}
++
++void ForgetPeek(content::WebContents* contents) {
++  if (contents) {
++    contents->RemoveUserData(PeekPage::UserDataKey());
++  }
++}
++
++std::u16string PeekOpenAsTabLabel() {
++  return l10n_util::GetStringUTF16(IDS_STEDDING_PEEK_OPEN_AS_TAB);
++}
++
++std::u16string PeekOpenInSplitLabel() {
++  return l10n_util::GetStringUTF16(IDS_STEDDING_LITTLE_OPEN_IN_SPLIT);
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/peek.h b/chrome/browser/ui/stedding/peek.h
+new file mode 100644
+index 0000000000000..388d1d76cc92a
+--- /dev/null
++++ b/chrome/browser/ui/stedding/peek.h
+@@ -0,0 +1,97 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_PEEK_H_
++#define CHROME_BROWSER_UI_STEDDING_PEEK_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/memory/scoped_refptr.h"
++#include "content/public/common/child_process_id.h"
++#include "content/public/common/referrer.h"
++#include "third_party/blink/public/common/tokens/tokens.h"
++#include "url/gurl.h"
++#include "url/origin.h"
++
++class BrowserWindowInterface;
++
++namespace content {
++class SiteInstance;
++class WebContents;
++}  // namespace content
++
++namespace tabs {
++class TabInterface;
++}  // namespace tabs
++
++namespace stedding {
++
++// docs/features/peek.md: a link from a pinned tab that leaves its site opens
++// in a peek, a little window (docs/features/little.md) over the pinned tab's
++// window. The page is a whole tab, in the pinned tab's jar; Open as Tab and
++// Open in Split View move it into the window as it is, Escape closes it, and
++// so does a click on the window it came from.
++
++// The link a peek loads, as the page asked for it (peek P11, PLAN.md
++// CMD-10): its initiator, referrer and gesture go with it, so the page loads
++// as it would have in the pinned tab.
++struct PeekLink {
++  PeekLink();
++  PeekLink(const PeekLink&);
++  PeekLink& operator=(const PeekLink&);
++  ~PeekLink();
++
++  GURL url;
++  content::Referrer referrer;
++  std::optional<url::Origin> initiator_origin;
++  std::optional<blink::LocalFrameToken> initiator_frame_token;
++  content::ChildProcessId initiator_process_id;
++  scoped_refptr<content::SiteInstance> source_site_instance;
++  bool user_gesture = false;
++};
++
++// P6: opens `link` in a peek over the window of `source`, the page made in
++// `source`'s jar. A peek already over that window closes first (P13).
++// Returns the peek, or null when none opened: the window could not be made,
++// or the link is the one whose peek a click on `source`'s window has just
++// closed (P14).
++BrowserWindowInterface* OpenPeek(tabs::TabInterface* source,
++                                 const PeekLink& link);
++
++// P8: the same for a page the source made itself (window.open, a link with
++// an opener), which already shares its jar.
++BrowserWindowInterface* OpenPeekWithContents(
++    tabs::TabInterface* source,
++    std::unique_ptr<content::WebContents> contents,
++    const GURL& url);
++
++// Whether `window` is a peek: a little window whose page a peek opened.
++bool IsPeekWindow(const BrowserWindowInterface* window);
++
++// The pinned tab a peek's page came from; null when it is gone, or when
++// `window` is not a peek.
++tabs::TabInterface* PeekSourceOf(const BrowserWindowInterface* window);
++
++// P9: whether the peek's page can go into a split beside the pinned tab it
++// came from. An essential cannot take a pair (it would pin the page), nor a
++// tab already in a split; their peeks offer Open as Tab alone.
++bool PeekCanSplit(const BrowserWindowInterface* window);
++
++// The peek open over `window`, or null.
++BrowserWindowInterface* PeekOver(const BrowserWindowInterface* window);
++
++// The page leaves the peek (a promotion): it stops being one, and a click on
++// the source's window no longer closes the window it is in.
++void ForgetPeek(content::WebContents* contents);
++
++// P7, P9: the names of the peek's two ways into the window, on its row and
++// in its page menu.
++std::u16string PeekOpenAsTabLabel();
++std::u16string PeekOpenInSplitLabel();
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_PEEK_H_
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index a95d5a359b385..9e5435da4660e 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -60,7 +60,6 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/commandbar/address_row_controls.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+-#include "chrome/browser/ui/views/peek/peek_view.h"
+ #include "chrome/browser/ui/views/stedding/isolation_mark_view.h"
+ #include "chrome/browser/ui/webui/stedding_archive/stedding_archive_ui.h"
+ #include "chrome/common/webui_url_constants.h"
+@@ -607,11 +606,9 @@ void CommandBarView::BuildActions() {
+   spaces::SpaceModel* const spaces = spaces::SpaceModel::From(browser_);
+   // K16: while a peek is open the page on screen is not the active tab's,
+   // so the tab-scoped rows step aside; the Space, capture and setting rows
+-  // stay.
+-  BrowserView* const browser_view =
+-      BrowserView::GetBrowserViewForBrowser(browser_);
+-  const bool peeking = peek_open_for_testing_.value_or(
+-      browser_view && stedding::PeekView::GetOpen(browser_view) != nullptr);
++  // stay. A peek is a window of its own now, which a click on this one
++  // closes (peek P14), so only a test sees one here.
++  const bool peeking = peek_open_for_testing_.value_or(false);
+   tabs::TabInterface* const active = peeking ? nullptr : tabs->GetActiveTab();
+   PrefService* const prefs = browser_->GetProfile()->GetPrefs();
+   chrome::BrowserCommandController* const commands =
+diff --git a/chrome/browser/ui/views/peek/BUILD.gn b/chrome/browser/ui/views/peek/BUILD.gn
+index 8af697283d23c..29ba2bc07ca4c 100644
+--- a/chrome/browser/ui/views/peek/BUILD.gn
++++ b/chrome/browser/ui/views/peek/BUILD.gn
+@@ -3,36 +3,25 @@
+ # found in the LICENSE file.
+ 
+ source_set("peek") {
+-  public = [
+-    "peek_accelerators.h",
+-    "peek_navigation_throttle.h",
+-    "peek_view.h",
+-  ]
+-  sources = [
+-    "peek_navigation_throttle.cc",
+-    "peek_view.cc",
+-  ]
++  public = [ "peek_navigation_throttle.h" ]
++  sources = [ "peek_navigation_throttle.cc" ]
+ 
+   public_deps = [
+     "//base",
+     "//content/public/browser",
+-    "//ui/views",
+     "//url",
+   ]
+ 
+   deps = [
+     "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/navigator",
+     "//chrome/browser/ui/spaces",
+-    "//chrome/browser/ui/stedding:prefs",
+-    "//chrome/browser/ui/stedding:copy_link",
++    "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:pin_lifecycle",
+-    "//chrome/browser/ui/tabs:tab_strip",
++    "//chrome/browser/ui/stedding:prefs",
+     "//components/prefs",
+     "//components/tabs:public",
+-    "//components/url_formatter",
+     "//net",
+-    "//ui/views/controls/webview",
+-    "//chrome/browser/ui/navigator",
+   ]
+ }
+ 
+diff --git a/chrome/browser/ui/views/peek/peek_accelerators.h b/chrome/browser/ui/views/peek/peek_accelerators.h
+deleted file mode 100644
+index b44eee26a7a4f..0000000000000
+--- a/chrome/browser/ui/views/peek/peek_accelerators.h
++++ /dev/null
+@@ -1,31 +0,0 @@
+-// Copyright 2026 The Stedding Authors
+-// Use of this source code is governed by a BSD-style license that can be
+-// found in the LICENSE file.
+-
+-#ifndef CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_ACCELERATORS_H_
+-#define CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_ACCELERATORS_H_
+-
+-#include "ui/base/accelerators/accelerator.h"
+-#include "ui/events/event_constants.h"
+-#include "ui/events/keycodes/keyboard_codes.h"
+-
+-namespace stedding {
+-
+-// The peek's own keys (docs/features/peek.md): view accelerators, not
+-// commands, so the shortcut reference reads them from here rather than from
+-// the command tables (shortcuts Z1).
+-
+-// Cmd-O: the peeked page becomes a tab.
+-inline ui::Accelerator PeekPromoteAccelerator() {
+-  return ui::Accelerator(ui::VKEY_O, ui::EF_PLATFORM_ACCELERATOR);
+-}
+-
+-// Shift-Cmd-O: the peeked page becomes a split with the current tab.
+-inline ui::Accelerator PeekSplitAccelerator() {
+-  return ui::Accelerator(ui::VKEY_O,
+-                         ui::EF_PLATFORM_ACCELERATOR | ui::EF_SHIFT_DOWN);
+-}
+-
+-}  // namespace stedding
+-
+-#endif  // CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_ACCELERATORS_H_
+diff --git a/chrome/browser/ui/views/peek/peek_navigation_throttle.cc b/chrome/browser/ui/views/peek/peek_navigation_throttle.cc
+index e5984e0251eb5..30c9e6aa80642 100644
+--- a/chrome/browser/ui/views/peek/peek_navigation_throttle.cc
++++ b/chrome/browser/ui/views/peek/peek_navigation_throttle.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/peek/peek_navigation_throttle.h"
+ 
++#include <array>
++#include <string_view>
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
+@@ -15,7 +17,7 @@
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+-#include "chrome/browser/ui/views/peek/peek_view.h"
++#include "chrome/browser/ui/stedding/peek.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ // Out of order on purpose: keeps this hunk clear of the settings patch.
+@@ -24,6 +26,7 @@
+ #include "content/public/browser/navigation_throttle_registry.h"
+ #include "content/public/browser/web_contents.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "net/base/url_util.h"
+ #include "url/gurl.h"
+ 
+ namespace stedding {
+@@ -35,15 +38,16 @@ PeekNavigationThrottle::Opener& OpenerOverride() {
+   return *opener;
+ }
+ 
+-void OpenPeek(base::WeakPtr<tabs::TabInterface> source, const GURL& url) {
++void OpenPeekFor(base::WeakPtr<tabs::TabInterface> source,
++                 const PeekLink& link) {
+   if (!source) {
+     return;
+   }
+   if (OpenerOverride()) {
+-    OpenerOverride().Run(source.get(), url);
++    OpenerOverride().Run(source.get(), link.url);
+     return;
+   }
+-  PeekView::Show(source.get(), url);
++  OpenPeek(source.get(), link);
+ }
+ 
+ bool IsPinnedAnywhere(tabs::TabInterface* tab) {
+@@ -57,29 +61,96 @@ bool IsPinnedAnywhere(tabs::TabInterface* tab) {
+ 
+ }  // namespace
+ 
++GURL PeekTargetOf(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS() || !url.has_query()) {
++    return url;
++  }
++  for (const char* const name : {"u", "q", "url"}) {
++    std::string value;
++    if (!net::GetValueForKeyInQuery(url, name, &value)) {
++      continue;
++    }
++    const GURL target(value);
++    if (target.is_valid() && target.SchemeIsHTTPOrHTTPS()) {
++      return target;
++    }
++  }
++  return url;
++}
++
++bool IsSignInAddress(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return false;
++  }
++  static constexpr auto kHostStarts = std::to_array<std::string_view>(
++      {"login.", "logon.", "signin.", "auth.", "accounts.", "account.",
++       "sso.", "idp.", "oauth."});
++  const std::string_view host = url.host();
++  for (const std::string_view start : kHostStarts) {
++    if (host.starts_with(start)) {
++      return true;
++    }
++  }
++  static constexpr auto kSteps = std::to_array<std::string_view>(
++      {"login", "logon", "signin", "sign_in", "sign-in", "oauth", "oauth2",
++       "sso", "authorize", "saml", "auth"});
++  std::string_view path = url.path();
++  while (!path.empty()) {
++    const size_t start = path.find_first_not_of('/');
++    if (start == std::string_view::npos) {
++      break;
++    }
++    path.remove_prefix(start);
++    const size_t end = path.find('/');
++    const std::string_view step = path.substr(0, end);
++    for (const std::string_view sign_in : kSteps) {
++      if (step == sign_in) {
++        return true;
++      }
++    }
++    if (end == std::string_view::npos) {
++      break;
++    }
++    path.remove_prefix(end);
++  }
++  return false;
++}
++
+ bool ShouldPeek(const PeekSignals& signals, const GURL& from, const GURL& to) {
+   if (!signals.peek_enabled || !signals.tab_is_pinned ||
+-      !signals.renderer_initiated || !signals.link_click || signals.is_post) {
++      !signals.renderer_initiated || !signals.link_click ||
++      !signals.user_gesture || !signals.source_active || signals.is_post) {
+     return false;
+   }
+   if (!from.SchemeIsHTTPOrHTTPS() || !to.SchemeIsHTTPOrHTTPS()) {
+     return false;
+   }
++  // P15: a redirect link is where it leads; P16: signing in happens in the
++  // pin itself, wherever the sign-in page is.
++  const GURL target = PeekTargetOf(to);
++  if (IsSignInAddress(to) || IsSignInAddress(target)) {
++    return false;
++  }
+   return !net::registry_controlled_domains::SameDomainOrHost(
+-      from, to, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++      from, target,
++      net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+ }
+ 
+ bool MaybePeekInsteadOfNewTab(NavigateParams* params) {
+-  if (!params->source_contents || !params->is_renderer_initiated ||
+-      !params->url.is_valid()) {
++  if (!params->source_contents || !params->url.is_valid()) {
+     return false;
+   }
+   if (params->disposition != WindowOpenDisposition::NEW_FOREGROUND_TAB &&
+       params->disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+     return false;
+   }
+-  if (!ui::PageTransitionCoreTypeIs(params->transition,
+-                                    ui::PAGE_TRANSITION_LINK)) {
++  // P8: a page the source made itself (target=_blank, window.open) arrives
++  // made, its gesture the original one; a link the page asked the browser to
++  // open (a modifier-click) arrives as a renderer's link.
++  const bool made = params->contents_to_insert != nullptr;
++  if (!made && (!params->is_renderer_initiated ||
++                !ui::PageTransitionCoreTypeIs(params->transition,
++                                              ui::PAGE_TRANSITION_LINK))) {
+     return false;
+   }
+   tabs::TabInterface* const tab =
+@@ -94,9 +165,13 @@ bool MaybePeekInsteadOfNewTab(NavigateParams* params) {
+   PeekSignals signals;
+   signals.tab_is_pinned = IsPinnedAnywhere(tab);
+   signals.renderer_initiated = true;
+-  // A new tab asked for by a page is the user's doing or a popup; either way
+-  // a peek is the right size for it. Script redirects are not this path.
+-  signals.link_click = params->user_gesture;
++  // A new tab asked for by a page is the user's doing or a popup; only the
++  // user's peeks (PLAN.md CMD-10). Script redirects are not this path.
++  const bool gesture =
++      made ? params->original_user_gesture : params->user_gesture;
++  signals.link_click = gesture;
++  signals.user_gesture = gesture;
++  signals.source_active = tab->IsActivated();
+   signals.is_post = params->post_data != nullptr;
+   signals.peek_enabled =
+       Profile::FromBrowserContext(params->source_contents->GetBrowserContext())
+@@ -114,11 +189,20 @@ bool MaybePeekInsteadOfNewTab(NavigateParams* params) {
+     return true;
+   }
+   if (params->contents_to_insert) {
+-    PeekView::ShowContents(tab, std::move(params->contents_to_insert),
+-                           params->url);
+-  } else {
+-    PeekView::Show(tab, params->url);
++    OpenPeekWithContents(tab, std::move(params->contents_to_insert),
++                         params->url);
++    return true;
+   }
++  PeekLink link;
++  link.url = params->url;
++  link.referrer = params->referrer;
++  link.initiator_origin = params->initiator_origin;
++  link.initiator_frame_token = params->initiator_frame_token;
++  link.initiator_process_id =
++      content::ChildProcessId::FromUnsafeValue(params->initiator_process_id);
++  link.source_site_instance = params->source_site_instance;
++  link.user_gesture = params->user_gesture;
++  OpenPeek(tab, link);
+   return true;
+ }
+ 
+@@ -167,6 +251,8 @@ PeekNavigationThrottle::WillStartRequest() {
+   signals.tab_is_pinned = IsPinnedAnywhere(tab);
+   signals.renderer_initiated = handle->IsRendererInitiated();
+   signals.link_click = handle->WasInitiatedByLinkClick();
++  signals.user_gesture = handle->HasUserGesture();
++  signals.source_active = tab->IsActivated();
+   signals.is_post = handle->IsPost();
+   signals.peek_enabled =
+       Profile::FromBrowserContext(handle->GetWebContents()->GetBrowserContext())
+@@ -177,11 +263,20 @@ PeekNavigationThrottle::WillStartRequest() {
+   if (!ShouldPeek(signals, from, handle->GetURL())) {
+     return PROCEED;
+   }
+-  // Not from inside the throttle check: opening a view while the navigation
+-  // is being torn down is asking for re-entrancy.
++  // P11 (PLAN.md CMD-10): the peek loads the link as the page asked for it.
++  PeekLink link;
++  link.url = handle->GetURL();
++  link.referrer = content::Referrer(handle->GetReferrer());
++  link.initiator_origin = handle->GetInitiatorOrigin();
++  link.initiator_frame_token = handle->GetInitiatorFrameToken();
++  link.initiator_process_id = handle->GetInitiatorProcessId();
++  link.source_site_instance = handle->GetSourceSiteInstance();
++  link.user_gesture = handle->HasUserGesture();
++  // Not from inside the throttle check: opening a window while the
++  // navigation is being torn down is asking for re-entrancy.
+   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE,
+-      base::BindOnce(&OpenPeek, tab->GetWeakPtr(), handle->GetURL()));
++      base::BindOnce(&OpenPeekFor, tab->GetWeakPtr(), std::move(link)));
+   return CANCEL_AND_IGNORE;
+ }
+ 
+diff --git a/chrome/browser/ui/views/peek/peek_navigation_throttle.h b/chrome/browser/ui/views/peek/peek_navigation_throttle.h
+index fadf6a3e98994..07d96a9138baa 100644
+--- a/chrome/browser/ui/views/peek/peek_navigation_throttle.h
++++ b/chrome/browser/ui/views/peek/peek_navigation_throttle.h
+@@ -35,16 +35,32 @@ struct PeekSignals {
+   // redirect: sign-in flows bounce through other sites by script and must not
+   // be caught.
+   bool link_click = false;
++  // The user's own gesture started it, and the tab it came from is the one
++  // on screen (PLAN.md CMD-10): a page's script, or a tab in a Space out of
++  // view, never peeks.
++  bool user_gesture = false;
++  bool source_active = false;
+   bool is_post = false;
+   // The chrome://settings "Stedding" switch (peek P10).
+   bool peek_enabled = true;
+ };
+ 
+ // True when a navigation with `signals` from `from` to `to` should open in a
+-// peek instead of navigating the pinned tab away: a link click from a pinned
+-// tab to a different site (eTLD+1), http(s) both sides.
++// peek instead of navigating the pinned tab away: the user's link click from
++// the pinned tab on screen to a different site (eTLD+1), http(s) both sides.
++// A redirect link (its `u=`, `q=` or `url=` naming the target) is judged by
++// its target (P15); a sign-in address stays in the pin (P16).
+ bool ShouldPeek(const PeekSignals& signals, const GURL& from, const GURL& to);
+ 
++// P15: the address a redirect link leads to -- the http(s) address in its
++// `u`, `q` or `url` parameter -- or `url` itself when it is not one.
++GURL PeekTargetOf(const GURL& url);
++
++// P16: whether `url` is a sign-in page: a host that starts with login.,
++// signin., auth., accounts., sso. and the like, or a path with a sign-in step
++// (/login, /signin, /oauth, /sso, /authorize, /saml).
++bool IsSignInAddress(const GURL& url);
++
+ // The other way a link leaves a pinned tab: it asks for a new tab
+ // (target=_blank, window.open, a modifier-click). Called at the top of
+ // chrome::Navigate(); when the navigation is a renderer-initiated link from
+@@ -60,7 +76,7 @@ bool MaybePeekInsteadOfNewTab(NavigateParams* params);
+ // only, and cancels the ones ShouldPeek() says so, opening the peek instead.
+ class PeekNavigationThrottle : public content::NavigationThrottle {
+  public:
+-  // Opens a peek for `url` from `source`. The default opens PeekView.
++  // Opens a peek for `url` from `source`. The default opens a peek window.
+   using Opener =
+       base::RepeatingCallback<void(tabs::TabInterface* source, const GURL& url)>;
+ 
+diff --git a/chrome/browser/ui/views/peek/peek_unittest.cc b/chrome/browser/ui/views/peek/peek_unittest.cc
+index 5e52f66610dbd..9eea8b759a549 100644
+--- a/chrome/browser/ui/views/peek/peek_unittest.cc
++++ b/chrome/browser/ui/views/peek/peek_unittest.cc
+@@ -14,7 +14,6 @@
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/peek/peek_navigation_throttle.h"
+-#include "chrome/browser/ui/views/peek/peek_view.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -35,6 +34,12 @@ TEST(ShouldPeekTest, Decisions) {
+   pinned.tab_is_pinned = true;
+   pinned.renderer_initiated = true;
+   pinned.link_click = true;
++  pinned.user_gesture = true;
++  pinned.source_active = true;
++  PeekSignals no_gesture = pinned;
++  no_gesture.user_gesture = false;
++  PeekSignals hidden = pinned;
++  hidden.source_active = false;
+   PeekSignals unpinned = pinned;
+   unpinned.tab_is_pinned = false;
+   PeekSignals typed = pinned;
+@@ -80,6 +85,31 @@ TEST(ShouldPeekTest, Decisions) {
+        GURL("chrome://settings/"), false},
+       {"P5: an empty source", pinned, GURL(), GURL("https://example.org/"),
+        false},
++      {"P11: a script's click, no gesture", no_gesture,
++       GURL("https://example.com/"), GURL("https://example.org/"), false},
++      {"P11: a pin out of view", hidden, GURL("https://example.com/"),
++       GURL("https://example.org/"), false},
++      {"P15: a redirect link off the site", pinned,
++       GURL("https://mail.example.com/"),
++       GURL("https://www.example.com/url?q=https://example.org/a&sa=D"), true},
++      {"P15: a redirect link back to the site", pinned,
++       GURL("https://mail.example.com/"),
++       GURL("https://l.example.net/l.php?u=https%3A%2F%2Fdocs.example.com%2F"),
++       false},
++      {"P15: a url= redirect", pinned, GURL("https://chat.example.com/"),
++       GURL("https://chat.example.com/redir?url=https://example.org/"), true},
++      {"P15: a q= that is a search, not an address", pinned,
++       GURL("https://example.com/"), GURL("https://example.com/search?q=cats"),
++       false},
++      {"P16: a sign-in host", pinned, GURL("https://example.com/"),
++       GURL("https://accounts.example.org/o/oauth2/auth"), false},
++      {"P16: a sign-in path", pinned, GURL("https://example.com/"),
++       GURL("https://example.org/login?next=/"), false},
++      {"P16: a sign-in step deeper in", pinned, GURL("https://example.com/"),
++       GURL("https://id.example.net/app/sso/saml"), false},
++      {"P16: a page that only mentions logins", pinned,
++       GURL("https://example.com/"), GURL("https://example.org/logins-explained"),
++       true},
+   };
+   for (const Decision& row : kRows) {
+     SCOPED_TRACE(row.name);
+@@ -215,61 +245,5 @@ TEST_F(PeekNewTabTest, OtherNewTabLinksOpenTabs) {
+   PeekNavigationThrottle::SetOpenerForTesting({});
+ }
+ 
+-class PeekViewTest : public BrowserWithTestWindowTest {
+- protected:
+-  TabStripModel& tabs() { return *browser()->tab_strip_model(); }
+-};
+-
+-// P6: a peek owns a page of its own, loading the URL it was given, and the
+-// window's tabs are untouched.
+-TEST_F(PeekViewTest, PeekLoadsItsOwnPage) {
+-  AddTab(browser(), GURL("https://example.com/"));
+-  // Not shown in a window; the model half needs no widget.
+-  auto peek = std::make_unique<PeekView>(browser());
+-  peek->Load(GURL("https://example.org/article"));
+-  ASSERT_TRUE(peek->web_contents());
+-  EXPECT_EQ(GURL("https://example.org/article"),
+-            peek->web_contents()->GetVisibleURL());
+-  EXPECT_EQ(1, tabs().count());
+-  EXPECT_EQ(GURL("https://example.com/"),
+-            tabs().GetActiveWebContents()->GetLastCommittedURL());
+-}
+-
+-// P7: promoting moves the very same page into a new active tab; the peek is
+-// left with nothing.
+-TEST_F(PeekViewTest, PromotingMovesThePageIntoANewActiveTab) {
+-  AddTab(browser(), GURL("https://example.com/"));
+-  auto peek = std::make_unique<PeekView>(browser());
+-  peek->Load(GURL("https://example.org/article"));
+-  content::WebContents* const page = peek->web_contents();
+-
+-  peek->PromoteToTab();
+-
+-  EXPECT_EQ(nullptr, peek->web_contents());
+-  ASSERT_EQ(2, tabs().count());
+-  EXPECT_EQ(page, tabs().GetActiveWebContents());
+-  EXPECT_EQ(GURL("https://example.org/article"), page->GetVisibleURL());
+-}
+-
+-// P9: promoting into a split pairs the page with the tab the peek came
+-// from; both end up in one split and the page is active.
+-TEST_F(PeekViewTest, PromotingIntoASplitPairsWithTheSourceTab) {
+-  AddTab(browser(), GURL("https://example.com/"));
+-  tabs::TabInterface* const source = tabs().GetActiveTab();
+-  auto peek = std::make_unique<PeekView>(browser());
+-  peek->set_source_tab(source->GetWeakPtr());
+-  peek->Load(GURL("https://example.org/article"));
+-  content::WebContents* const page = peek->web_contents();
+-
+-  peek->PromoteToSplit();
+-
+-  EXPECT_EQ(nullptr, peek->web_contents());
+-  ASSERT_EQ(2, tabs().count());
+-  EXPECT_EQ(page, tabs().GetActiveWebContents());
+-  EXPECT_TRUE(source->IsSplit());
+-  EXPECT_TRUE(tabs().GetActiveTab()->IsSplit());
+-  EXPECT_EQ(source->GetSplit(), tabs().GetActiveTab()->GetSplit());
+-}
+-
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/peek/peek_view.cc b/chrome/browser/ui/views/peek/peek_view.cc
+deleted file mode 100644
+index 708094d01a65c..0000000000000
+--- a/chrome/browser/ui/views/peek/peek_view.cc
++++ /dev/null
+@@ -1,426 +0,0 @@
+-// Copyright 2026 The Stedding Authors
+-// Use of this source code is governed by a BSD-style license that can be
+-// found in the LICENSE file.
+-
+-#include "chrome/browser/ui/views/peek/peek_view.h"
+-
+-#include "chrome/browser/ui/stedding/copy_link.h"
+-#include "chrome/browser/ui/views/peek/peek_accelerators.h"
+-
+-#include <string>
+-#include <utility>
+-
+-#include "base/functional/bind.h"
+-#include "base/task/single_thread_task_runner.h"
+-#include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/ui/browser.h"
+-#include "chrome/browser/ui/browser_tabstrip.h"
+-#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+-#include "chrome/browser/ui/tabs/tab_strip_model.h"
+-#include "chrome/browser/ui/views/frame/browser_view.h"
+-#include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
+-#include "components/tabs/public/tab_interface.h"
+-#include "components/url_formatter/elide_url.h"
+-#include "content/public/browser/navigation_controller.h"
+-#include "content/public/browser/navigation_entry.h"
+-#include "content/public/browser/navigation_handle.h"
+-#include "content/public/browser/page_navigator.h"
+-#include "content/public/browser/web_contents.h"
+-#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
+-#include "ui/base/l10n/l10n_util.h"
+-#include "ui/base/metadata/metadata_impl_macros.h"
+-#include "ui/base/ui_base_types.h"
+-#include "ui/color/color_id.h"
+-#include "ui/color/color_provider.h"
+-#include "ui/compositor/layer.h"
+-#include "ui/gfx/geometry/insets.h"
+-#include "ui/gfx/geometry/rounded_corners_f.h"
+-#include "ui/views/background.h"
+-#include "ui/views/controls/button/md_text_button.h"
+-#include "ui/views/controls/label.h"
+-#include "ui/views/controls/webview/webview.h"
+-#include "ui/views/layout/box_layout.h"
+-#include "ui/views/layout/flex_layout.h"
+-#include "ui/views/layout/flex_layout_types.h"
+-#include "ui/views/view_class_properties.h"
+-#include "url/gurl.h"
+-
+-namespace stedding {
+-
+-namespace {
+-
+-constexpr int kCardRadius = 12;
+-constexpr int kHeaderHeight = 44;
+-constexpr gfx::Insets kCardInsets = gfx::Insets::VH(28, 56);
+-constexpr SkColor kScrim = SkColorSetA(SK_ColorBLACK, 0x73);
+-
+-}  // namespace
+-
+-namespace {
+-
+-// The peek over `source`'s window, opened if there is none. Null when the
+-// tab has no browser view (tests, a closing window).
+-PeekView* OpenOrGet(tabs::TabInterface* source) {
+-  BrowserWindowInterface* const browser = source->GetBrowserWindowInterface();
+-  if (!browser) {
+-    return nullptr;
+-  }
+-  BrowserView* const browser_view =
+-      BrowserView::GetBrowserViewForBrowser(browser);
+-  if (!browser_view) {
+-    return nullptr;
+-  }
+-  if (PeekView* const open = PeekView::GetOpen(browser_view)) {
+-    return open;
+-  }
+-  // Last child of the browser view: above the web contents once it paints to
+-  // its own layer, the same arrangement as the command bar.
+-  PeekView* const peek =
+-      browser_view->AddChildView(std::make_unique<PeekView>(browser));
+-  peek->SetPaintToLayer();
+-  peek->layer()->SetFillsBoundsOpaquely(false);
+-  peek->layer()->SetName("SteddingPeek");
+-  peek->AddedToBrowserView(browser_view);
+-  peek->set_source_tab(source->GetWeakPtr());
+-  return peek;
+-}
+-
+-}  // namespace
+-
+-// static
+-void PeekView::Show(tabs::TabInterface* source, const GURL& url) {
+-  if (PeekView* const peek = OpenOrGet(source)) {
+-    peek->Load(url);
+-    peek->web_view_->RequestFocus();
+-  }
+-}
+-
+-// static
+-void PeekView::ShowContents(tabs::TabInterface* source,
+-                            std::unique_ptr<content::WebContents> contents,
+-                            const GURL& url) {
+-  PeekView* const peek = OpenOrGet(source);
+-  if (!peek) {
+-    return;
+-  }
+-  peek->Adopt(std::move(contents));
+-  if (url.is_valid() && !peek->contents_->GetController().GetPendingEntry() &&
+-      peek->contents_->GetLastCommittedURL().is_empty()) {
+-    peek->Load(url);
+-  }
+-  peek->UpdateTitle();
+-  peek->web_view_->RequestFocus();
+-}
+-
+-void PeekView::AddedToBrowserView(BrowserView* browser_view) {
+-  parent_observation_.Observe(browser_view);
+-  UpdateBounds();
+-}
+-
+-// static
+-PeekView* PeekView::GetOpen(BrowserView* browser_view) {
+-  for (views::View* child : browser_view->children()) {
+-    if (PeekView* const peek = views::AsViewClass<PeekView>(child)) {
+-      if (!peek->closing_) {
+-        return peek;
+-      }
+-    }
+-  }
+-  return nullptr;
+-}
+-
+-PeekView::PeekView(BrowserWindowInterface* browser) : browser_(browser) {
+-  contents_ = content::WebContents::Create(
+-      content::WebContents::CreateParams(browser_->GetProfile()));
+-  contents_->SetDelegate(this);
+-  Observe(contents_.get());
+-  BuildContents();
+-  AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+-  AddAccelerator(PeekPromoteAccelerator());
+-  AddAccelerator(PeekSplitAccelerator());
+-  // Copy link inside a peek copies the peek's page, the one being looked at
+-  // (docs/features/copy-link.md).
+-  AddAccelerator(ui::Accelerator(
+-      ui::VKEY_C, ui::EF_PLATFORM_ACCELERATOR | ui::EF_SHIFT_DOWN));
+-  AddAccelerator(ui::Accelerator(
+-      ui::VKEY_C,
+-      ui::EF_PLATFORM_ACCELERATOR | ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN));
+-}
+-
+-PeekView::~PeekView() {
+-  if (web_view_) {
+-    web_view_->SetWebContents(nullptr);
+-  }
+-  Observe(nullptr);
+-  if (contents_) {
+-    contents_->SetDelegate(nullptr);
+-  }
+-}
+-
+-void PeekView::BuildContents() {
+-  SetBackground(views::CreateSolidBackground(kScrim));
+-  SetLayoutManager(std::make_unique<views::BoxLayout>(
+-      views::BoxLayout::Orientation::kVertical, kCardInsets));
+-
+-  card_ = AddChildView(std::make_unique<views::View>());
+-  card_->SetPaintToLayer();
+-  card_->layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(kCardRadius));
+-  card_->layer()->SetIsFastRoundedCorner(true);
+-  card_->layer()->SetMasksToBounds(true);
+-  card_->SetBackground(views::CreateSolidBackground(ui::kColorDialogBackground));
+-  auto* const card_layout =
+-      card_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+-          views::BoxLayout::Orientation::kVertical));
+-
+-  views::View* const header = card_->AddChildView(std::make_unique<views::View>());
+-  header->SetPreferredSize(gfx::Size(0, kHeaderHeight));
+-  auto* const header_layout =
+-      header->SetLayoutManager(std::make_unique<views::BoxLayout>(
+-          views::BoxLayout::Orientation::kHorizontal,
+-          gfx::Insets::VH(0, 16), 12));
+-  header_layout->set_cross_axis_alignment(
+-      views::BoxLayout::CrossAxisAlignment::kCenter);
+-  title_ = header->AddChildView(std::make_unique<views::Label>(
+-      std::u16string(), views::style::CONTEXT_LABEL,
+-      views::style::STYLE_PRIMARY));
+-  title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+-  title_->SetElideBehavior(gfx::ELIDE_TAIL);
+-  header_layout->SetFlexForView(title_, 1);
+-  header->AddChildView(std::make_unique<views::MdTextButton>(
+-      base::BindRepeating(&PeekView::PromoteToTab, base::Unretained(this)),
+-      u"Open in Tab  ⌘O"));
+-  header->AddChildView(std::make_unique<views::MdTextButton>(
+-      base::BindRepeating(&PeekView::PromoteToSplit, base::Unretained(this)),
+-      u"Open in Split  ⇧⌘O"));
+-  header->AddChildView(std::make_unique<views::MdTextButton>(
+-      base::BindRepeating(&PeekView::Close, base::Unretained(this)),
+-      u"Close  esc"));
+-
+-  web_view_ = card_->AddChildView(
+-      std::make_unique<views::WebView>(browser_->GetProfile()));
+-  web_view_->SetWebContents(contents_.get());
+-  card_layout->SetFlexForView(web_view_, 1);
+-}
+-
+-void PeekView::Load(const GURL& url) {
+-  content::NavigationController::LoadURLParams params(url);
+-  params.transition_type = ui::PAGE_TRANSITION_LINK;
+-  contents_->GetController().LoadURLWithParams(params);
+-  UpdateTitle();
+-}
+-
+-void PeekView::Adopt(std::unique_ptr<content::WebContents> contents) {
+-  if (!contents) {
+-    return;
+-  }
+-  web_view_->SetWebContents(nullptr);
+-  Observe(nullptr);
+-  if (contents_) {
+-    contents_->SetDelegate(nullptr);
+-  }
+-  contents_ = std::move(contents);
+-  contents_->SetDelegate(this);
+-  Observe(contents_.get());
+-  web_view_->SetWebContents(contents_.get());
+-}
+-
+-void PeekView::PromoteToTab() {
+-  if (closing_ || !contents_) {
+-    return;
+-  }
+-  web_view_->SetWebContents(nullptr);
+-  Observe(nullptr);
+-  contents_->SetDelegate(nullptr);
+-  const GURL url = contents_->GetLastCommittedURL().is_empty()
+-                       ? contents_->GetVisibleURL()
+-                       : contents_->GetLastCommittedURL();
+-  chrome::AddWebContents(browser_, nullptr, std::move(contents_), url,
+-                         WindowOpenDisposition::NEW_FOREGROUND_TAB,
+-                         blink::mojom::WindowFeatures());
+-  Close();
+-}
+-
+-void PeekView::PromoteToSplit() {
+-  if (closing_ || !contents_) {
+-    return;
+-  }
+-  // The navigator pairs a NEW_SPLIT_VIEW tab with the active tab, so the
+-  // source tab is made active first; a source already in a split gets a
+-  // plain tab instead, as Browser::OpenURLFromTab does.
+-  TabStripModel* const tabs =
+-      browser_->GetTabStripModel();
+-  content::WebContents* source = nullptr;
+-  if (source_tab_) {
+-    const int index = tabs->GetIndexOfTab(source_tab_.get());
+-    if (index != TabStripModel::kNoTab) {
+-      tabs->ActivateTabAt(index);
+-      source = source_tab_->GetContents();
+-    }
+-  }
+-  tabs::TabInterface* const active = tabs->GetActiveTab();
+-  if (!active || active->IsSplit()) {
+-    PromoteToTab();
+-    return;
+-  }
+-  web_view_->SetWebContents(nullptr);
+-  Observe(nullptr);
+-  contents_->SetDelegate(nullptr);
+-  const GURL url = contents_->GetLastCommittedURL().is_empty()
+-                       ? contents_->GetVisibleURL()
+-                       : contents_->GetLastCommittedURL();
+-  chrome::AddWebContents(browser_, source ? source : active->GetContents(),
+-                         std::move(contents_), url,
+-                         WindowOpenDisposition::NEW_SPLIT_VIEW,
+-                         blink::mojom::WindowFeatures());
+-  Close();
+-}
+-
+-void PeekView::Close() {
+-  if (closing_) {
+-    return;
+-  }
+-  closing_ = true;
+-  parent_observation_.Reset();
+-  SetVisible(false);
+-  if (!parent()) {
+-    return;
+-  }
+-  // Deleting a view from inside its own event handling is not safe; a turn
+-  // later it is.
+-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+-      FROM_HERE, base::BindOnce(
+-                     [](base::WeakPtr<PeekView> peek) {
+-                       if (peek && peek->parent()) {
+-                         peek->parent()->RemoveChildViewT(peek.get());
+-                       }
+-                     },
+-                     weak_factory_.GetWeakPtr()));
+-}
+-
+-bool PeekView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+-  if (accelerator.key_code() == ui::VKEY_ESCAPE) {
+-    Close();
+-    return true;
+-  }
+-  if (accelerator.key_code() == ui::VKEY_O) {
+-    if (accelerator.IsShiftDown()) {
+-      PromoteToSplit();
+-    } else {
+-      PromoteToTab();
+-    }
+-    return true;
+-  }
+-  if (accelerator.key_code() == ui::VKEY_C) {
+-    stedding::CopyLink(browser_, contents_.get(),
+-                       accelerator.IsAltDown() ? stedding::LinkFormat::kMarkdown
+-                                               : stedding::LinkFormat::kPlain);
+-    return true;
+-  }
+-  return views::View::AcceleratorPressed(accelerator);
+-}
+-
+-bool PeekView::OnMousePressed(const ui::MouseEvent& event) {
+-  // Only the scrim reaches here: the card swallows its own presses and the
+-  // web view handles its own.
+-  Close();
+-  return true;
+-}
+-
+-void PeekView::AddedToWidget() {
+-  views::View::AddedToWidget();
+-  UpdateBounds();
+-}
+-
+-content::WebContents* PeekView::OpenURLFromTab(
+-    content::WebContents* source,
+-    const content::OpenURLParams& params,
+-    base::OnceCallback<void(content::NavigationHandle&)>
+-        navigation_handle_callback) {
+-  if (params.disposition == WindowOpenDisposition::CURRENT_TAB && contents_) {
+-    content::NavigationController::LoadURLParams load(params);
+-    base::WeakPtr<content::NavigationHandle> handle =
+-        contents_->GetController().LoadURLWithParams(load);
+-    if (navigation_handle_callback && handle) {
+-      std::move(navigation_handle_callback).Run(*handle);
+-    }
+-    return contents_.get();
+-  }
+-  // Anything that wants its own tab or window goes to the browser as usual.
+-  // Browser::OpenURL's own path; the Browser itself is not reachable from
+-  // the window interface since M155.
+-  return BrowserWebContentsDelegate::From(browser_.get())
+-      ->OpenURLFromTab(nullptr, params, std::move(navigation_handle_callback));
+-}
+-
+-content::WebContents* PeekView::AddNewContents(
+-    content::WebContents* source,
+-    std::unique_ptr<content::WebContents> new_contents,
+-    const GURL& target_url,
+-    WindowOpenDisposition disposition,
+-    const blink::mojom::WindowFeatures& window_features,
+-    bool user_gesture,
+-    bool* was_blocked) {
+-  // A popup from a peeked page becomes a real tab; the peek is transient.
+-  return chrome::AddWebContents(
+-      browser_, nullptr, std::move(new_contents), target_url,
+-      WindowOpenDisposition::NEW_FOREGROUND_TAB, window_features,
+-      NavigateParams::WindowAction::kShowWindow, user_gesture);
+-}
+-
+-void PeekView::CloseContents(content::WebContents* source) {
+-  Close();
+-}
+-
+-bool PeekView::HandleKeyboardEvent(
+-    content::WebContents* source,
+-    const input::NativeWebKeyboardEvent& event) {
+-  // Keys the page did not take (Escape, ⌘O) reach the accelerators above.
+-  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+-      event, GetFocusManager());
+-}
+-
+-void PeekView::TitleWasSet(content::NavigationEntry* entry) {
+-  UpdateTitle();
+-}
+-
+-void PeekView::DidFinishNavigation(
+-    content::NavigationHandle* navigation_handle) {
+-  UpdateTitle();
+-}
+-
+-void PeekView::OnViewBoundsChanged(views::View* observed_view) {
+-  UpdateBounds();
+-}
+-
+-void PeekView::UpdateBounds() {
+-  views::View* const window = parent();
+-  if (!window) {
+-    return;
+-  }
+-  BrowserView* const browser_view =
+-      BrowserView::GetBrowserViewForBrowser(browser_);
+-  if (!browser_view) {
+-    return;
+-  }
+-  gfx::RectF contents_f(browser_view->contents_container()->GetLocalBounds());
+-  views::View::ConvertRectToTarget(browser_view->contents_container(), window,
+-                                   &contents_f);
+-  SetBoundsRect(gfx::ToEnclosingRect(contents_f));
+-}
+-
+-void PeekView::UpdateTitle() {
+-  if (!title_ || !contents_) {
+-    return;
+-  }
+-  const std::u16string title = contents_->GetTitle();
+-  const GURL& url = contents_->GetVisibleURL();
+-  const std::u16string host =
+-      url_formatter::FormatUrlForSecurityDisplay(url);
+-  title_->SetText(title.empty() || title == host ? host
+-                                                 : title + u"  ·  " + host);
+-}
+-
+-BEGIN_METADATA(PeekView)
+-END_METADATA
+-
+-}  // namespace stedding
+diff --git a/chrome/browser/ui/views/peek/peek_view.h b/chrome/browser/ui/views/peek/peek_view.h
+deleted file mode 100644
+index 6c16011927858..0000000000000
+--- a/chrome/browser/ui/views/peek/peek_view.h
++++ /dev/null
+@@ -1,149 +0,0 @@
+-// Copyright 2026 The Stedding Authors
+-// Use of this source code is governed by a BSD-style license that can be
+-// found in the LICENSE file.
+-
+-#ifndef CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_VIEW_H_
+-#define CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_VIEW_H_
+-
+-#include <memory>
+-#include <utility>
+-
+-#include "base/memory/raw_ptr.h"
+-#include "base/memory/weak_ptr.h"
+-#include "base/scoped_observation.h"
+-#include "content/public/browser/web_contents.h"
+-#include "content/public/browser/web_contents_delegate.h"
+-#include "content/public/browser/web_contents_observer.h"
+-#include "ui/base/metadata/metadata_header_macros.h"
+-#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
+-#include "ui/views/view.h"
+-#include "ui/views/view_observer.h"
+-
+-class BrowserView;
+-class BrowserWindowInterface;
+-class GURL;
+-
+-namespace tabs {
+-class TabInterface;
+-}
+-
+-namespace views {
+-class Label;
+-class WebView;
+-}  // namespace views
+-
+-namespace stedding {
+-
+-// A page shown over the window instead of in a tab: what a link from a pinned
+-// tab opens when it would leave the pinned site (docs/PRODUCT.md, "Peek").
+-// The peek owns its WebContents. Escape or a click on the scrim dismisses it
+-// and the page is gone; ⌘O (or the button) promotes it to a real tab, moving
+-// the very same WebContents into the strip so nothing reloads.
+-//
+-// Like the command bar it is a layered child of the browser view, not a
+-// widget of its own, so keys reach it through the window's focus manager.
+-class PeekView : public views::View,
+-                 public content::WebContentsDelegate,
+-                 public content::WebContentsObserver,
+-                 public views::ViewObserver {
+-  METADATA_HEADER(PeekView, views::View)
+-
+- public:
+-  // Opens `url` in a peek over the window `source` is in, replacing any peek
+-  // already open there.
+-  static void Show(tabs::TabInterface* source, const GURL& url);
+-
+-  // As Show(), but the peek adopts `contents` (a renderer-created page,
+-  // window.open's) and loads `url` into it only if nothing is loading yet.
+-  static void ShowContents(tabs::TabInterface* source,
+-                           std::unique_ptr<content::WebContents> contents,
+-                           const GURL& url);
+-
+-  // The open peek in `browser_view`, or null.
+-  static PeekView* GetOpen(BrowserView* browser_view);
+-
+-  explicit PeekView(BrowserWindowInterface* browser);
+-  PeekView(const PeekView&) = delete;
+-  PeekView& operator=(const PeekView&) = delete;
+-  ~PeekView() override;
+-
+-  // Navigates the peek's own page.
+-  void Load(const GURL& url);
+-
+-  // Replaces the peek's page with `contents`, which the peek then owns.
+-  void Adopt(std::unique_ptr<content::WebContents> contents);
+-
+-  // Moves the page into a new foreground tab of the browser and closes.
+-  void PromoteToTab();
+-
+-  // Moves the page into a new tab split with the tab the peek came from (the
+-  // active tab when there is none) and closes.
+-  void PromoteToSplit();
+-
+-  // Removes the peek from the window and destroys its page. Safe to call from
+-  // inside an event the peek is handling.
+-  void Close();
+-
+-  content::WebContents* web_contents() { return contents_.get(); }
+-
+-  // Hooks the peek to the browser view it was just added to.
+-  void AddedToBrowserView(BrowserView* browser_view);
+-
+-  void set_source_tab(base::WeakPtr<tabs::TabInterface> tab) {
+-    source_tab_ = std::move(tab);
+-  }
+-
+-  // views::View:
+-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+-  bool OnMousePressed(const ui::MouseEvent& event) override;
+-  void AddedToWidget() override;
+-
+-  // content::WebContentsDelegate:
+-  content::WebContents* OpenURLFromTab(
+-      content::WebContents* source,
+-      const content::OpenURLParams& params,
+-      base::OnceCallback<void(content::NavigationHandle&)>
+-          navigation_handle_callback) override;
+-  content::WebContents* AddNewContents(
+-      content::WebContents* source,
+-      std::unique_ptr<content::WebContents> new_contents,
+-      const GURL& target_url,
+-      WindowOpenDisposition disposition,
+-      const blink::mojom::WindowFeatures& window_features,
+-      bool user_gesture,
+-      bool* was_blocked) override;
+-  void CloseContents(content::WebContents* source) override;
+-  bool HandleKeyboardEvent(content::WebContents* source,
+-                           const input::NativeWebKeyboardEvent& event) override;
+-
+-  // content::WebContentsObserver:
+-  void TitleWasSet(content::NavigationEntry* entry) override;
+-  void DidFinishNavigation(
+-      content::NavigationHandle* navigation_handle) override;
+-
+-  // views::ViewObserver:
+-  void OnViewBoundsChanged(views::View* observed_view) override;
+-
+- private:
+-  void BuildContents();
+-  // Covers the window's content area; the card is laid out inside.
+-  void UpdateBounds();
+-  void UpdateTitle();
+-
+-  const raw_ptr<BrowserWindowInterface> browser_;
+-  // The tab whose link opened the peek; what PromoteToSplit() pairs with.
+-  base::WeakPtr<tabs::TabInterface> source_tab_;
+-  std::unique_ptr<content::WebContents> contents_;
+-  raw_ptr<views::View> card_ = nullptr;
+-  raw_ptr<views::Label> title_ = nullptr;
+-  raw_ptr<views::WebView> web_view_ = nullptr;
+-  bool closing_ = false;
+-  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
+-  base::ScopedObservation<views::View, views::ViewObserver> parent_observation_{
+-      this};
+-  base::WeakPtrFactory<PeekView> weak_factory_{this};
+-};
+-
+-}  // namespace stedding
+-
+-#endif  // CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_VIEW_H_
+diff --git a/chrome/browser/ui/views/toolbar/stedding_little_promote_button.cc b/chrome/browser/ui/views/toolbar/stedding_little_promote_button.cc
+index 23e4f9f84db19..e438c560c38ea 100644
+--- a/chrome/browser/ui/views/toolbar/stedding_little_promote_button.cc
++++ b/chrome/browser/ui/views/toolbar/stedding_little_promote_button.cc
+@@ -9,6 +9,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/strings/strcat.h"
++#include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -16,6 +17,7 @@
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/peek.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -40,22 +42,36 @@ namespace {
+ constexpr int kIconSize = 14;
+ constexpr int kSideInset = 8;
+ 
++// The split's chord: Shift-Cmd-O on the Mac; elsewhere Ctrl+Shift+O, which is
++// the bookmark manager's and in a little window makes the split (little E2).
++#if BUILDFLAG(IS_MAC)
++constexpr int kSplitChordCommand = IDC_STEDDING_LITTLE_PROMOTE_SPLIT;
++#else
++constexpr int kSplitChordCommand = IDC_SHOW_BOOKMARK_MANAGER;
++#endif
++
+ }  // namespace
+ 
+ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(LittlePromoteButton, kElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(LittlePromoteButton, kSplitElementId);
+ 
+-LittlePromoteButton::LittlePromoteButton(BrowserWindowInterface* browser)
++LittlePromoteButton::LittlePromoteButton(BrowserWindowInterface* browser,
++                                         bool split)
+     : views::LabelButton(base::BindRepeating(&LittlePromoteButton::OnPressed,
+                                              base::Unretained(this)),
+-                         OpenInMainWindowLabel()),
+-      browser_(browser) {
+-  SetProperty(views::kElementIdentifierKey, kElementId);
++                         split ? PeekOpenInSplitLabel()
++                               : OpenInMainWindowLabel()),
++      browser_(browser),
++      split_(split) {
++  SetProperty(views::kElementIdentifierKey, split ? kSplitElementId : kElementId);
+   // The address's colours: dimmed at rest, as the address's scheme and path
+   // are, and the host's full colour under the pointer, on the theme's bar in
+   // light and dark alike.
+-  const gfx::VectorIcon& icon = features::IsRoundedIconsEnabled()
+-                                    ? kOpenInBrowserIcon
+-                                    : kOpenInBrowserOldIcon;
++  const gfx::VectorIcon& icon =
++      split ? (features::IsRoundedIconsEnabled() ? kSplitSceneIcon
++                                                 : kSplitSceneOldIcon)
++      : features::IsRoundedIconsEnabled() ? kOpenInBrowserIcon
++                                          : kOpenInBrowserOldIcon;
+   SetImageModel(
+       views::Button::STATE_NORMAL,
+       ui::ImageModel::FromVectorIcon(icon, kColorOmniboxTextDimmed, kIconSize));
+@@ -72,7 +88,7 @@ LittlePromoteButton::LittlePromoteButton(BrowserWindowInterface* browser)
+   SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, kSideInset)));
+   // The row's buttons' hover and press: Back's, Reload's (little E8).
+   ConfigureInkDrop(this);
+-  GetViewAccessibility().SetName(OpenInMainWindowLabel());
++  GetViewAccessibility().SetName(std::u16string(GetText()));
+   // Shown by Update() once the window is known to be little.
+   SetVisible(false);
+   if (browser_->GetTabStripModel()) {
+@@ -84,14 +100,19 @@ LittlePromoteButton::LittlePromoteButton(BrowserWindowInterface* browser)
+ LittlePromoteButton::~LittlePromoteButton() = default;
+ 
+ std::u16string LittlePromoteButton::TooltipText() const {
+-  std::u16string text =
+-      l10n_util::GetStringUTF16(IDS_STEDDING_LITTLE_OPEN_IN_TOOLTIP);
++  const bool peek = IsPeekWindow(browser_);
++  std::u16string text = l10n_util::GetStringUTF16(
++      split_ ? IDS_STEDDING_PEEK_OPEN_IN_SPLIT_TOOLTIP
++      : peek ? IDS_STEDDING_PEEK_OPEN_AS_TAB_TOOLTIP
++             : IDS_STEDDING_LITTLE_OPEN_IN_TOOLTIP);
+   // Cmd-O is Open File's chord, which moves the page in a little window
+   // (little E2); as the menus print it.
+   ui::Accelerator chord;
+   if (BrowserView* const view = BrowserView::GetBrowserViewForBrowser(browser_);
+       view && view->GetWidget() &&
+-      view->GetAcceleratorForCommandId(IDC_OPEN_FILE, &chord)) {
++      view->GetAcceleratorForCommandId(split_ ? kSplitChordCommand
++                                              : IDC_OPEN_FILE,
++                                       &chord)) {
+     base::StrAppend(&text, {u" (", chord.GetShortcutText(), u")"});
+   }
+   return text;
+@@ -106,18 +127,28 @@ void LittlePromoteButton::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
+-  if (change.type() == TabStripModelChange::kInserted) {
++  // A peek's page is its window's once it is in and active (peek P7, P9).
++  if (change.type() == TabStripModelChange::kInserted ||
++      selection.active_tab_changed()) {
+     Update();
+   }
+ }
+ 
+ void LittlePromoteButton::OnPressed() {
+-  chrome::ExecuteCommand(browser_, IDC_STEDDING_LITTLE_PROMOTE);
++  chrome::ExecuteCommand(browser_, split_ ? IDC_STEDDING_LITTLE_PROMOTE_SPLIT
++                                          : IDC_STEDDING_LITTLE_PROMOTE);
+ }
+ 
+ void LittlePromoteButton::Update() {
+-  const bool little = IsLittleWindow(browser_);
++  // peek P7, P9: a peek's page is known once it is in the window; its two
++  // ways in are named for where they put it.
++  const bool little = IsLittleWindow(browser_) &&
++                      (!split_ || PeekCanSplit(browser_));
+   if (little) {
++    const std::u16string label =
++        split_ ? PeekOpenInSplitLabel() : PromoteLabel(browser_);
++    SetText(label);
++    GetViewAccessibility().SetName(label);
+     SetTooltipText(TooltipText());
+     // As tall as the row's other buttons.
+     const int height = GetLayoutConstant(LayoutConstant::kToolbarButtonHeight);
+diff --git a/chrome/browser/ui/views/toolbar/stedding_little_promote_button.h b/chrome/browser/ui/views/toolbar/stedding_little_promote_button.h
+index 55d4d8c9f23e9..d3663e7be4266 100644
+--- a/chrome/browser/ui/views/toolbar/stedding_little_promote_button.h
++++ b/chrome/browser/ui/views/toolbar/stedding_little_promote_button.h
+@@ -33,14 +33,19 @@ class LittlePromoteButton : public views::LabelButton,
+ 
+  public:
+   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kSplitElementId);
+ 
+-  explicit LittlePromoteButton(BrowserWindowInterface* browser);
++  // `split`: peek P9's Open in Split View, shown in a peek alone; otherwise
++  // the move into a tab, Open in Stedding or, in a peek, Open as Tab (P7).
++  explicit LittlePromoteButton(BrowserWindowInterface* browser,
++                               bool split = false);
+   LittlePromoteButton(const LittlePromoteButton&) = delete;
+   LittlePromoteButton& operator=(const LittlePromoteButton&) = delete;
+   ~LittlePromoteButton() override;
+ 
+   // "Move this page into a tab of the main window (⌘O)": the action and the
+-  // window's chord for it; the action alone when the window has none.
++  // window's chord for it; the action alone when the window has none. A
++  // peek's two say where the page goes from there.
+   std::u16string TooltipText() const;
+ 
+   // views::View:
+@@ -59,6 +64,7 @@ class LittlePromoteButton : public views::LabelButton,
+   void Update();
+ 
+   const raw_ptr<BrowserWindowInterface> browser_;
++  const bool split_;
+ };
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 4c6d1d5ed0a62..fff41a52e6e8e 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -418,7 +418,10 @@ void ToolbarView::Init() {
+         std::make_unique<PinnedToolbarActionsContainer>(browser_view_, this));
+     pinned_toolbar_actions_ = pinned_toolbar_actions_container_;
+     // Stedding little E7: "Open in Stedding" at the bar's right end, shown
+-    // in a little window alone.
++    // in a little window alone. A peek's bar has Open in Split View before
++    // it, and calls it Open as Tab (peek P7, P9).
++    AddChildView(std::make_unique<stedding::LittlePromoteButton>(
++        browser_, /*split=*/true));
+     AddChildView(std::make_unique<stedding::LittlePromoteButton>(browser_));
+     views::FlexLayout* const layout =
+         SetLayoutManager(std::make_unique<views::FlexLayout>());
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 957a74ec8e00c..16c639a6890a8 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -775,6 +775,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                     " into a split, Escape closes it; a site with a route "
+                     "opens in its Space instead. Off opens such links as "
+                     "tabs."}));
++  // peek P1, P10.
++  html_source->AddString("steddingPeekLabel",
++                         "Open links from pinned tabs in a peek");
++  html_source->AddString(
++      "steddingPeekSubLabel",
++      base::StrCat({"A link that leaves a pinned tab\u2019s site opens in a "
++                    "window over this one, and the pinned tab stays where "
++                    "it was. ",
++                    key("\u2318O", "Ctrl+O"), " keeps the page as a tab, ",
++                    key("\u21E7\u2318O", "Ctrl+Shift+O"),
++                    " puts it beside the pinned tab; Escape or a click on this "
++                    "window closes it."}));
+   // import I20.
+   html_source->AddString("steddingSidebarFilesLabel", "Export and import");
+   html_source->AddString(
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+index 969551040740c..e3e8d5a6dcccf 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+@@ -151,8 +151,10 @@ std::vector<ShortcutGroup> ShortcutReference() {
+   Add(sidebar, IDC_STEDDING_TOGGLE_ADDRESS_ROW,
+       u"Show or hide the address row on its own");
+   Add(sidebar, IDC_STEDDING_LITTLE_PROMOTE_SPLIT,
+-      u"In a little window: send the page into a split of your window");
+-  Add(sidebar, IDC_STEDDING_LITTLE_CLOSE, u"In a little window: close it");
++      u"In a little window or a peek: send the page into a split of your "
++      u"window");
++  Add(sidebar, IDC_STEDDING_LITTLE_CLOSE,
++      u"In a little window or a peek: close it");
+   Add(sidebar, IDC_STEDDING_NEW_BLANK_WINDOW,
+       u"New Blank Window: a window with Spaces of its own");
+   AddChord(sidebar, SpaceRange(), u"Jump to Space 1 to 9");
+@@ -214,8 +216,6 @@ std::vector<ShortcutGroup> ShortcutReference() {
+   Add(tabs, IDC_RESTORE_TAB,
+       u"Reopen closed tabs, each in its Space and folder (the toast’s Undo "
+       u"brings back a whole close)");
+-  // No Peek rows while Peek is withdrawn (PLAN.md decision 2, BACKLOG S-82);
+-  // they come back with it.
+ 
+   ShortcutGroup& page = groups.emplace_back();
+   page.title = u"Page";
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
+index 4481320b671ab..65c6cf563127c 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler_unittest.cc
+@@ -303,15 +303,16 @@ TEST(ShortcutReferenceTest, ArcsSplitKeyNoteIsPresent) {
+ }
+ #endif
+ 
+-// BACKLOG S-82: the list keeps step with the product. No row offers Peek
+-// while it is withdrawn (PLAN.md decision 2), and the row chords say the
+-// ninth goes to the last row (tabs R10, R11), not to the ninth.
++// BACKLOG S-82: the list keeps step with the product. Peek's rows are back
++// with it (peek P7, P9), and the row chords say the ninth goes to the last
++// row (tabs R10, R11), not to the ninth.
+ TEST(ShortcutReferenceTest, TheListMatchesTheProduct) {
+   bool rows = false;
++  bool peek = false;
+   for (const ShortcutGroup& group : ShortcutReference()) {
+     for (const ShortcutRow& row : group.rows) {
+-      EXPECT_EQ(std::u16string::npos, row.what.find(u"peek"))
+-          << base::UTF16ToUTF8(row.what);
++      peek |= row.what.find(u"or a peek: send the page into a split") !=
++              std::u16string::npos;
+       EXPECT_EQ(std::u16string::npos, row.what.find(u"first nine"))
+           << base::UTF16ToUTF8(row.what);
+       rows |= row.what.find(u"first eight rows you can see, or the last") !=
+@@ -319,6 +320,13 @@ TEST(ShortcutReferenceTest, TheListMatchesTheProduct) {
+     }
+   }
+   EXPECT_TRUE(rows);
++#if BUILDFLAG(IS_MAC)
++  // On Windows the split rides the bookmark manager's Ctrl+Shift+O in a
++  // little window (little E2); the command has no chord of its own to list.
++  EXPECT_TRUE(peek);
++#else
++  EXPECT_FALSE(peek);
++#endif
+ }
+ 
+ // tabs R29, player Mp5 (BACKLOG S-122): the mute key is Control-M on the
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 6447e29afe02a..a299fe23339dc 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -48,6 +48,7 @@ test("stedding_browser_tests") {
+     "make_app_quiet_browsertest.cc",
+     "media_keys_browsertest.cc",
+     "motion_frames_browsertest.cc",
++    "peek_browsertest.cc",
+     "pinned_run_browsertest.cc",
+     "privacy_defaults_browsertest.cc",
+     "private_coat_browsertest.cc",
+@@ -98,6 +99,9 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ssl:test_support",
+     "//chrome/browser/ui/tabs:features",
+     "//chrome/browser/ui/tabs/alert:tab_alert",
++    # peek P14: the window's activation, as a click on it brings.
++    "//chrome/browser/ui/browser_active_state_manager",
++    "//chrome/browser/ui/stedding:little_window",
+     "//components/certificate_transparency:proto",
+     "//components/payments/core",
+     "//components/safe_browsing/core/common:features",
+diff --git a/chrome/test/stedding/little_window_browsertest.cc b/chrome/test/stedding/little_window_browsertest.cc
+index 2a2b5cd56d76e..6a7256b02eb7d 100644
+--- a/chrome/test/stedding/little_window_browsertest.cc
++++ b/chrome/test/stedding/little_window_browsertest.cc
+@@ -61,10 +61,12 @@
+ #include "net/test/embedded_test_server/http_request.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/accelerators/accelerator.h"
++#include "ui/base/base_window.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/events/event.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/gfx/geometry/rect.h"
+ #include "ui/menus/simple_menu_model.h"
+ #include "ui/shell_dialogs/fake_select_file_dialog.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+@@ -105,6 +107,10 @@ class LittleWindowTest : public InProcessBrowserTest {
+         browser()->GetProfile(), embedded_test_server()->GetURL("/little"),
+         /*anchor=*/nullptr, untrusted_launch);
+     ASSERT_TRUE(little);
++    // E1: at most 1000 x 700; the window sizer had set that aside.
++    const gfx::Rect bounds = little->GetWindow()->GetBounds();
++    EXPECT_LE(bounds.width(), 1000);
++    EXPECT_LE(bounds.height(), 700);
+     ASSERT_TRUE(base::test::RunUntil([&]() {
+       base::AutoLock lock(lock_);
+       return seen_;
+diff --git a/chrome/test/stedding/peek_browsertest.cc b/chrome/test/stedding/peek_browsertest.cc
+new file mode 100644
+index 0000000000000..accba78c8784e
+--- /dev/null
++++ b/chrome/test/stedding/peek_browsertest.cc
+@@ -0,0 +1,420 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// docs/features/peek.md: a link that leaves a pinned tab's site opens in a
++// peek, a little window over the window, and the pinned tab stays.
++
++#include "chrome/browser/ui/stedding/peek.h"
++
++#include <string>
++
++#include "base/functional/bind.h"
++#include "base/run_loop.h"
++#include "base/strings/stringprintf.h"
++#include "base/synchronization/lock.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/test/run_until.h"
++#include "base/thread_annotations.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_active_state_manager/browser_active_state_manager.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/interaction/browser_elements_views.h"
++#include "chrome/browser/ui/views/toolbar/stedding_little_promote_button.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/render_widget_host_view.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "ui/base/base_window.h"
++#include "ui/gfx/geometry/rect.h"
++#include "url/gurl.h"
++
++namespace {
++
++class PeekTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    // HTTPS: a page sends its Sec-Fetch- headers to secure sites alone.
++    embedded_https_test_server().SetSSLConfig(
++        net::EmbeddedTestServer::CERT_TEST_NAMES);
++    embedded_https_test_server().RegisterRequestMonitor(
++        base::BindRepeating(&PeekTest::OnRequest, base::Unretained(this)));
++    ASSERT_TRUE(embedded_https_test_server().Start());
++    // Peek is off on a fresh profile (P10); these are a user's who turned
++    // it on.
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kPeekEnabled, true);
++  }
++
++  // The server's thread: what the peeked page asked with.
++  void OnRequest(const net::test_server::HttpRequest& request) {
++    if (request.GetURL().path() != "/title3.html") {
++      return;
++    }
++    base::AutoLock lock(lock_);
++    const auto site = request.headers.find("Sec-Fetch-Site");
++    fetch_site_ = site == request.headers.end() ? "" : site->second;
++    const auto referrer = request.headers.find("Referer");
++    referrer_ = referrer == request.headers.end() ? "" : referrer->second;
++  }
++
++  TabStripModel& tabs() { return *browser()->tab_strip_model(); }
++  content::WebContents* contents() { return tabs().GetActiveWebContents(); }
++  tabs::TabInterface* tab() { return tabs().GetActiveTab(); }
++
++  GURL Url(const std::string& host, const std::string& path) {
++    return embedded_https_test_server().GetURL(host, path);
++  }
++
++  // The pinned page at a.test, in a tab of its own, with one link, to `to`,
++  // as `target`; an essential, or with `in_space` pinned in its Space.
++  void OpenPin(const GURL& to,
++               const std::string& target = "",
++               bool in_space = false) {
++    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        browser(), Url("a.test", "/title1.html"),
++        WindowOpenDisposition::NEW_FOREGROUND_TAB,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    ASSERT_TRUE(content::ExecJs(
++        contents(),
++        base::StringPrintf(
++            "const a = document.createElement('a');"
++            "a.id = 'link'; a.href = '%s'; a.target = '%s';"
++            "a.textContent = 'the link';"
++            "a.style = 'display:block;font-size:40px;padding:20px';"
++            "document.body.prepend(a);",
++            to.spec().c_str(), target.c_str()),
++        // No activation from the setup itself: the clicks below say whose
++        // gesture they are.
++        content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++    if (in_space) {
++      spaces::SpaceModel::From(browser())->SetSpacePinned(tab(), true);
++    } else {
++      tabs().SetTabPinned(tabs().active_index(), true);
++    }
++    ASSERT_EQ(Url("a.test", "/title1.html"), contents()->GetLastCommittedURL());
++  }
++
++  // The user's click on the link: the link's click with the user's
++  // activation, as a page sees a real one. A synthetic mouse event never
++  // reached a page that Windows' occlusion tracker counted as covered, beside
++  // other tests' windows.
++  void ClickLink() {
++    EXPECT_TRUE(content::ExecJs(contents(),
++                                "document.getElementById('link').click();"));
++  }
++
++  // The peek over the window, once its page has loaded.
++  BrowserWindowInterface* WaitForPeek() {
++    if (!base::test::RunUntil(
++            [&]() { return stedding::PeekOver(browser()) != nullptr; })) {
++      int windows = 0;
++      ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++          [&](BrowserWindowInterface*) {
++            ++windows;
++            return true;
++          });
++      ADD_FAILURE() << "no peek: the pin is at "
++                    << contents()->GetLastCommittedURL() << ", " << windows
++                    << " windows, the pin's window "
++                    << (browser()->IsActive() ? "active" : "inactive");
++      return nullptr;
++    }
++    BrowserWindowInterface* const peek = stedding::PeekOver(browser());
++    content::WebContents* const page =
++        peek->GetTabStripModel()->GetActiveWebContents();
++    return page && content::WaitForLoadStop(page) ? peek : nullptr;
++  }
++
++  // A click that leaves the page where it is: the pin's navigation is
++  // caught, or a script's click is not the user's. The watch starts before
++  // the click, whose navigation starts while its script runs.
++  void ClickLinkAndWaitForItsNavigation() {
++    content::TestNavigationObserver observer(
++        contents(), 1, content::MessageLoopRunner::QuitMode::IMMEDIATE,
++        /*ignore_uncommitted_navigations=*/false);
++    ClickLink();
++    observer.WaitForNavigationFinished();
++  }
++
++  static stedding::LittlePromoteButton* ButtonOf(
++      BrowserWindowInterface* window,
++      ui::ElementIdentifier id) {
++    BrowserElementsViews* const elements = BrowserElementsViews::From(window);
++    return elements ? elements->GetViewAs<stedding::LittlePromoteButton>(id)
++                    : nullptr;
++  }
++
++  base::Lock lock_;
++  std::string fetch_site_ GUARDED_BY(lock_);
++  std::string referrer_ GUARDED_BY(lock_);
++};
++
++// P1, P6, P11, P12, P13: the link opens in a peek over the window, a whole
++// page in a window of its own, loaded as the page's link -- cross-site, with
++// its referrer -- and the pinned tab stays where it was. The next link
++// replaces it.
++IN_PROC_BROWSER_TEST_F(PeekTest, ALinkLeavingThePinOpensAPeekOverTheWindow) {
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++  tabs::TabInterface* const pin = tab();
++  const int count = tabs().count();
++  ClickLink();
++  BrowserWindowInterface* const peek = WaitForPeek();
++  ASSERT_TRUE(peek) << "no peek opened";
++
++  EXPECT_TRUE(stedding::IsLittleWindow(peek));
++  EXPECT_TRUE(stedding::IsPeekWindow(peek));
++  EXPECT_EQ(pin, stedding::PeekSourceOf(peek));
++  content::WebContents* const page =
++      peek->GetTabStripModel()->GetActiveWebContents();
++  EXPECT_EQ(to, page->GetLastCommittedURL());
++  ASSERT_TRUE(page->GetRenderWidgetHostView());
++  EXPECT_GT(page->GetRenderWidgetHostView()->GetViewBounds().height(), 0)
++      << "the page is laid out 0 px tall (CMD-9)";
++  EXPECT_EQ(count, tabs().count());
++  EXPECT_EQ(Url("a.test", "/title1.html"), contents()->GetLastCommittedURL());
++  EXPECT_TRUE(browser()->GetWindow()->GetBounds().Contains(
++      peek->GetWindow()->GetBounds()))
++      << "the peek is not over its window";
++  {
++    base::AutoLock lock(lock_);
++    EXPECT_EQ("cross-site", fetch_site_);
++    EXPECT_NE(std::string::npos, referrer_.find("a.test")) << referrer_;
++  }
++  // An essential cannot take a split; its peek offers Open as Tab alone.
++  stedding::LittlePromoteButton* const as_tab =
++      ButtonOf(peek, stedding::LittlePromoteButton::kElementId);
++  ASSERT_TRUE(as_tab);
++  EXPECT_TRUE(as_tab->GetVisible());
++  EXPECT_EQ(stedding::PeekOpenAsTabLabel(), as_tab->GetText());
++  stedding::LittlePromoteButton* const split =
++      ButtonOf(peek, stedding::LittlePromoteButton::kSplitElementId);
++  ASSERT_TRUE(split);
++  EXPECT_FALSE(split->GetVisible());
++
++  // P13: the link again, with the peek still up, replaces it.
++  ClickLink();
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    int peeks = 0;
++    ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++        [&](BrowserWindowInterface* window) {
++          peeks += stedding::IsPeekWindow(window) ? 1 : 0;
++          return true;
++        });
++    BrowserWindowInterface* const now = stedding::PeekOver(browser());
++    return peeks == 1 && now && now != peek;
++  })) << "not one peek, the new one";
++}
++
++// P2, P4, P11: a link on the pin's own site, or a script's click with no
++// gesture from the user, goes on in the pinned tab.
++IN_PROC_BROWSER_TEST_F(PeekTest, ASameSiteLinkOrAScriptsClickStaysInThePin) {
++  {
++    SCOPED_TRACE("the pin's own site");
++    const GURL to = Url("a.test", "/title2.html");
++    ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++    content::TestNavigationObserver observer(contents());
++    ClickLink();
++    observer.Wait();
++    EXPECT_EQ(to, contents()->GetLastCommittedURL());
++  }
++  {
++    SCOPED_TRACE("a script's click");
++    const GURL to = Url("b.test", "/title2.html");
++    ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++    content::TestNavigationObserver observer(contents());
++    ASSERT_TRUE(content::ExecJs(contents(),
++                                "document.getElementById('link').click();",
++                                content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++    observer.Wait();
++    EXPECT_EQ(to, contents()->GetLastCommittedURL());
++  }
++  EXPECT_FALSE(stedding::PeekOver(browser()));
++}
++
++// P7: Open as Tab moves the very page into a tab of the window, without
++// loading it again, and the peek is gone.
++IN_PROC_BROWSER_TEST_F(PeekTest, OpenAsTabMovesThePageAsItIs) {
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++  const int count = tabs().count();
++  ClickLink();
++  BrowserWindowInterface* const peek = WaitForPeek();
++  ASSERT_TRUE(peek);
++  content::WebContents* const page =
++      peek->GetTabStripModel()->GetActiveWebContents();
++  const int entry = page->GetController().GetLastCommittedEntry()->GetUniqueID();
++
++  chrome::ExecuteCommand(peek, IDC_STEDDING_LITTLE_PROMOTE);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return stedding::PeekOver(browser()) == nullptr; }));
++  EXPECT_EQ(count + 1, tabs().count());
++  EXPECT_EQ(page, contents()) << "not the same page, or not the active tab";
++  EXPECT_EQ(entry, page->GetController().GetLastCommittedEntry()->GetUniqueID())
++      << "the page loaded again";
++  EXPECT_FALSE(stedding::IsPeekWindow(browser()));
++}
++
++// P9: from a tab pinned in its Space, Open in Split View puts the page in a
++// split beside it.
++IN_PROC_BROWSER_TEST_F(PeekTest, OpenInSplitViewPairsThePageWithItsPin) {
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to, "", /*in_space=*/true));
++  tabs::TabInterface* const pin = tab();
++  ClickLink();
++  BrowserWindowInterface* const peek = WaitForPeek();
++  ASSERT_TRUE(peek);
++  EXPECT_TRUE(stedding::PeekCanSplit(peek));
++  stedding::LittlePromoteButton* const split =
++      ButtonOf(peek, stedding::LittlePromoteButton::kSplitElementId);
++  ASSERT_TRUE(split);
++  EXPECT_TRUE(split->GetVisible());
++  content::WebContents* const page =
++      peek->GetTabStripModel()->GetActiveWebContents();
++
++  chrome::ExecuteCommand(peek, IDC_STEDDING_LITTLE_PROMOTE_SPLIT);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return stedding::PeekOver(browser()) == nullptr; }));
++  tabs::TabInterface* const moved =
++      tabs::TabInterface::MaybeGetFromContents(page);
++  ASSERT_TRUE(moved);
++  EXPECT_EQ(browser(), moved->GetBrowserWindowInterface());
++  EXPECT_TRUE(moved->IsSplit());
++  EXPECT_TRUE(pin->IsSplit());
++  EXPECT_EQ(moved->GetSplit(), pin->GetSplit());
++}
++
++// P14: a click on the window closes the peek, and when the click was on
++// the very link, the link does not open it again.
++IN_PROC_BROWSER_TEST_F(PeekTest, AClickOnTheWindowClosesThePeek) {
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++  ClickLink();
++  ASSERT_TRUE(WaitForPeek());
++
++  // The press of a click activates the window before the link sees it; a
++  // click, not the window taking the activation back as the peek appears,
++  // which the peek lets pass for its first 750 ms.
++  {
++    base::RunLoop grace;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE, grace.QuitClosure(), base::Seconds(1));
++    grace.Run();
++  }
++  BrowserActiveStateManager::From(browser())->DidBecomeActive();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return stedding::PeekOver(browser()) == nullptr; }))
++      << "the peek stayed";
++  ClickLinkAndWaitForItsNavigation();
++  content::RunAllTasksUntilIdle();
++  EXPECT_FALSE(stedding::PeekOver(browser())) << "the link opened it again";
++  EXPECT_EQ(Url("a.test", "/title1.html"), contents()->GetLastCommittedURL());
++
++  // Another click later is a new one.
++  ClickLink();
++  EXPECT_TRUE(WaitForPeek());
++}
++
++// private V6: a peek from a private window is private, and Open as Tab
++// keeps the page in that window.
++IN_PROC_BROWSER_TEST_F(PeekTest, APeekFromAPrivateWindowStaysPrivate) {
++  BrowserWindowInterface* const incognito =
++      CreateIncognitoBrowser(browser()->GetProfile());
++  ASSERT_TRUE(incognito);
++  incognito->GetProfile()->GetPrefs()->SetBoolean(stedding::prefs::kPeekEnabled,
++                                                  true);
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(incognito, Url("a.test", "/title1.html")));
++  TabStripModel* const tabs = incognito->GetTabStripModel();
++  content::WebContents* const pin = tabs->GetActiveWebContents();
++  ASSERT_TRUE(content::ExecJs(
++      pin,
++      base::StringPrintf("const a = document.createElement('a');"
++                         "a.id = 'link'; a.href = '%s';"
++                         "a.textContent = 'the link';"
++                         "document.body.prepend(a);",
++                         Url("b.test", "/title3.html").spec().c_str()),
++      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++  tabs->SetTabPinned(tabs->active_index(), true);
++  ASSERT_TRUE(
++      content::ExecJs(pin, "document.getElementById('link').click();"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return stedding::PeekOver(incognito) != nullptr; }))
++      << "no peek from the private window";
++  BrowserWindowInterface* const peek = stedding::PeekOver(incognito);
++  EXPECT_TRUE(peek->GetProfile()->IsOffTheRecord());
++  EXPECT_EQ(incognito->GetProfile(), peek->GetProfile());
++  content::WebContents* const page =
++      peek->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(page));
++
++  chrome::ExecuteCommand(peek, IDC_STEDDING_LITTLE_PROMOTE);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return stedding::PeekOver(incognito) == nullptr; }));
++  EXPECT_EQ(page, tabs->GetActiveWebContents())
++      << "the page left the private window";
++}
++
++// P8: a link that asks for a new tab peeks too, and no tab is added.
++IN_PROC_BROWSER_TEST_F(PeekTest, ALinkForANewTabPeeks) {
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to, "_blank"));
++  const int count = tabs().count();
++  ClickLink();
++  BrowserWindowInterface* const peek = WaitForPeek();
++  ASSERT_TRUE(peek);
++  EXPECT_EQ(to, peek->GetTabStripModel()
++                    ->GetActiveWebContents()
++                    ->GetLastCommittedURL());
++  EXPECT_EQ(count, tabs().count());
++}
++
++// P11 (PLAN.md CMD-9): a pin in a Space with a session of its own peeks in
++// that session's jar.
++IN_PROC_BROWSER_TEST_F(PeekTest, APinInASpaceWithItsOwnJarPeeksInIt) {
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  const spaces::SpaceId work = model->AddSpace("Work", SK_ColorBLUE)->id();
++  model->SetSpaceIsolated(work, true);
++  ASSERT_TRUE(model->SetActiveSpace(work));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), Url("a.test", "/title1.html"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  ASSERT_EQ(work, model->FindSpaceForTab(tab()));
++  const content::StoragePartitionConfig jar =
++      spaces::StoragePartitionConfigForWebContents(contents());
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(jar));
++
++  ASSERT_NO_FATAL_FAILURE(OpenPin(Url("b.test", "/title3.html"), "",
++                                  /*in_space=*/true));
++  ClickLink();
++  BrowserWindowInterface* const peek = WaitForPeek();
++  ASSERT_TRUE(peek);
++  EXPECT_EQ(jar, spaces::StoragePartitionConfigForWebContents(
++                     peek->GetTabStripModel()->GetActiveWebContents()))
++      << "the peek is not in the Space's jar";
++}
++
++}  // namespace

@@ -168,7 +168,7 @@ def parse_steps(path):
                 if len(words) != 1 or _number(words[0]) < 0:
                     raise ValueError("wait takes a number of seconds")
                 args = (_number(words[0]),)
-            elif op in ('shot', 'screen'):
+            elif op in ('shot', 'shots', 'screen'):
                 if not rest.strip():
                     raise ValueError("%s takes the file to write" % op)
                 args = (rest.strip(),)
@@ -580,6 +580,15 @@ class Driver:
         if result.returncode != 0:
             sys.exit(result.returncode or 1)
 
+    def shots(self, path):
+        # Every window of the pid, each on its own, largest first: a peek or a
+        # little window over the main one is a window of its own.
+        time.sleep(0.6)
+        prefix = path[:-4] if path.endswith(".png") else path
+        result = subprocess.run([sys.executable, CAPTURE, str(self.pid), prefix])
+        if result.returncode != 0:
+            sys.exit(result.returncode or 1)
+
     def screen_rect(self):
         """The display the window's centre is on, in the top-left screen
         coordinates Quartz's window bounds use."""
@@ -650,6 +659,8 @@ class Driver:
             time.sleep(args[0])
         elif op == 'shot':
             self.shot(args[0])
+        elif op == 'shots':
+            self.shots(args[0])
         elif op == 'screen':
             self.screen(args[0])
         elif op == 'activate':

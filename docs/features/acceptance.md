@@ -254,6 +254,43 @@ One row per run, as for the core loop. A check left out of a run is "not run".
 | 2026-10-20 | installed beta 20 | Windows 11 | — | — | pass | not run | pass (the shortcut's first request carried Work's cookie) | not run | not run | not run | not run | pass, from the app's menu and from chrome://apps | The uninstall box ran its two sentences together; fixed in patch 0072. The Start menu folder is "Stedding Apps" (Wa8) |
 | 2026-10-20 | release build of patch 0075 | macOS 27 | pass, from the command bar; File → Add to Dock… is listed and enabled but was not pressed (the input tool does not drive the menu bar); Enter in the dialog did nothing, its Add button worked (BACKLOG `S-235`) | not run | — | not run | not run | not run | not run | not run | not run | pass, from chrome://apps: the launcher and the tile went, the Dock had its 43 tiles in the same order; the app window's own Uninstall was not tried | The empty `~/Applications/Stedding Apps.localized` folder stays after the last app goes, as Chromium leaves its own |
 
+## Peek
+
+The live checks `docs/features/peek.md` cites: what a person does with a peek on a real
+build, with the real pointer and keyboard, which the browser tests cannot (they click by
+script and call the window's activation). About ten minutes on each platform.
+
+### Before the run
+
+- An installed build, Peek on (Settings → Stedding → "Open links from pinned tabs in a peek").
+- A page on one site with links to another, served from this computer: for example
+  `python3 -m http.server 8765` serving `pin.html` (a link to `http://localhost:8765/peeked.html`,
+  opened as `http://127.0.0.1:8765/pin.html`, so the two are different sites) and `peeked.html`
+  (a page with a button that calls `alert()`).
+- A real site with redirect links for `pk_redirect`: a mail or chat app you use, pinned.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `pk_open` | Open `pin.html`, pin it in its Space (⌘D, Ctrl+D), click its link. | A peek opens over the window, a margin of the window showing around it, the page loaded, its row showing the address, Open in Split View and Open as Tab; the pinned tab stays on `pin.html` (P1, P6, P12). |
+| `pk_dialog` | In the peek, press the page's button. | The page's dialog shows in the peek (P6). |
+| `pk_as_tab` | Open a peek; press Open as Tab, then the same with ⌘O (Ctrl+O). | The page becomes the active tab of the window, under the Clear line, without loading again; the peek is gone (P7). |
+| `pk_split` | Open a peek; press Open in Split View, then the same with ⇧⌘O (Ctrl+Shift+O). | The page sits in a split beside the pinned tab (P9). |
+| `pk_essential` | Drag the pin into the essentials, click its link. | The peek offers Open as Tab alone (P9). |
+| `pk_close` | Open a peek; click the window's margin outside it. Open it again; press Escape. Open it again; press ⌘W (Ctrl+W). | Each closes the peek, and the window is in front, the pinned tab where it was (P14). |
+| `pk_fullscreen` | Put the window in full screen (⌃⌘F on the Mac, F11 on Windows), click the pin's link. | The peek opens over the full-screen window, in its Space on the Mac, not on another desktop (P6). |
+| `pk_redirect` | In the pinned mail or chat app, click a link to another site, then a link to the app's own pages, then its "Sign in" or account link. | The first peeks; the second and the third go on in the pin (P2, P15, P16). |
+| `pk_off` | Turn Peek off in Settings; click the pin's link. | The pinned tab follows the link, as any tab would (P10). |
+
+### Runs
+
+One row per run, as for the core loop.
+
+| Date | Build | Platform | `pk_open` | `pk_dialog` | `pk_as_tab` | `pk_split` | `pk_essential` | `pk_close` | `pk_fullscreen` | `pk_redirect` | `pk_off` | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-25 | patch 0088, release, a copy with its own data folder | Mac | pass | pass | pass (the button and ⌘O) | pass (the button and ⇧⌘O; the pair's row leaves the pinned run, splits J5) | TBD | pass (margin, Escape, ⌘W) | pass | TBD | pass | driven by `tooling/drive` with synthetic input, the owner asleep; captures by window id |
+
 ## The tests beside the script
 
 The script is what a person sees; these browser tests drive the same paths through the
