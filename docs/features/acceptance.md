@@ -290,6 +290,7 @@ One row per run, as for the core loop.
 | Date | Build | Platform | `pk_open` | `pk_dialog` | `pk_as_tab` | `pk_split` | `pk_essential` | `pk_close` | `pk_fullscreen` | `pk_redirect` | `pk_off` | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-10-25 | patch 0088, release, a copy with its own data folder | Mac | pass | pass | pass (the button and ⌘O) | pass (the button and ⇧⌘O; the pair's row leaves the pinned run, splits J5) | TBD | pass (margin, Escape, ⌘W) | pass | TBD | pass | driven by `tooling/drive` with synthetic input, the owner asleep; captures by window id |
+| 2026-10-25 | patch 0088, `out\win-release` | Windows 11 | pass (`example.com` pinned, a link to `iana.org`: a peek at the window's inset bounds) | TBD | pass (Ctrl+O) | TBD | TBD | pass (Escape, a click on the window's margin) | TBD | TBD | TBD | `tooling\win\drive.ps1`'s real pointer and keyboard, the owner asleep; checked by window bounds and DevTools' page list, no captures |
 
 ## The tests beside the script
 

@@ -45,11 +45,12 @@ Escape, ⌘W and full screen, and with Peek off a pin that followed its link
 (`docs/features/acceptance.md`, "Peek"). On Windows, the release, checks and AddressSanitizer
 builds: every unit test (1040) and every browser test (501, and 157 one at a time), but for
 `S-291`'s flake once on the release build; then Peek's and the little window's ten browser tests
-three times on the release and checks builds. Not tried: Windows by hand, a real site's redirect
-and sign-in links (P15 and P16 have unit tests only), an essential's peek by hand. The owner's
-questions: whether Peek is on by default (`PLAN.md` decision 2), and whether a Space pin that
-joins a split keeps its place in the pinned run (splits J5, `S-102`), which Open in Split View
-from a peek now meets.
+three times on the release and checks builds; and with `tooling\win\drive.ps1`'s real pointer
+and keyboard a peek's opening, Escape, a click on the window and Ctrl+O. Not tried: a real
+site's redirect and sign-in links (P15 and P16 have unit tests only), an essential's peek by
+hand. The owner's questions: whether Peek is on by default (`PLAN.md` decision 2), and whether
+a Space pin that joins a split keeps its place in the pinned run (splits J5, `S-102`), which
+Open in Split View from a peek now meets.
 
 ## 2026-10-25, after midnight -- 0.3.0 beta 15 released
 
