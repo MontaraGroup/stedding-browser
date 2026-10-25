@@ -10,6 +10,24 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-25, evening -- 0.3.0 beta 16 released
+
+The day's features and the owner's notes went out as 0.3.0 beta 16 (v0.3.0-beta.16, the
+repository's latest release), both platforms, both update feeds. Before it, the last open
+faults were fixed: the blocker's tests read a blocked image as loaded, and a list was fetched
+twice when both came in together; the right-hand sidebar's toggle sat 3 DIP above the address
+row; the History panel's next page waited on a frame, and Chromium's history handler dropped a
+pending callback before its receiver (a mojo DCHECK as the panel closed mid-query); the Windows
+recorder test asked a page without the focus. Checked on the release tree: Mac 1238 unit tests,
+661 browser tests and 185 one at a time; Windows release and DCHECK builds 1233 unit, 622
+browser and 192 one at a time, all passing. The signed app passed Apple's distribution check and
+Gatekeeper from the downloaded image; the Mac feed and image signatures verify. On Windows the
+installer upgraded an installed beta 15, uninstalled keeping the profile and installed again,
+and an installed beta 15 found beta 16 in the real feed in 25 seconds and was on it after a
+restart. The site and the Homebrew cask name beta 16. Not done: the AddressSanitizer build's
+tests (running when this was written), a Mac update from the real feed on a spare install, and
+the new features tried by hand.
+
 ## 2026-10-25, day -- the owner's notes on Peek and the sidebar, wave 1 built
 
 The owner's notes after trying the Peek build, each fixed in the series:
