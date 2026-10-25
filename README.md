@@ -58,6 +58,12 @@ The rest is in the [release notes](docs/release-notes/archive.md#stedding-030-be
 5. **Site cleanup in one step.** Clear Site Cookies and Reload (⌥⇧⌘R) signs you out of the
    site in front of you and nothing else; Close Duplicate Tabs is one command away.
    [Spec](docs/features/commandbar.md)
+6. **Your sidebar on every computer, with no server.** Pick a folder that syncs (iCloud
+   Drive, OneDrive, a network share) and each Stedding keeps its Spaces, pins and folders
+   there. [Spec](docs/features/sidebar-file.md)
+7. **Links without trackers, and blocking if you want it.** `utm_` and similar parameters
+   come off the links you open; ad and tracker blocking is built in, off until you turn it
+   on. [Spec](docs/features/clean-links.md), [Spec](docs/features/blocker.md)
 
 Dark pages, apps from pages and local development tabs came with 0.2.0 beta 18 on Windows and
 with 0.2.0 beta 20 on the Mac.
@@ -78,6 +84,10 @@ with 0.2.0 beta 20 on the Mac.
 - **⌘T for everything**: a URL, a search, or any open or archived tab in any Space; ⇧⌘P lists
   every command with its key.
 - **Split view**: drag a tab onto the page, and it opens beside it.
+- **Peek**: a link from a pinned tab that leaves its site opens over the window; keep it as a
+  tab or beside the pin. On a click, or only on a held press, as you choose.
+- **History and Downloads in the sidebar**, the sidebar on the left or the right, and
+  **shortcuts you can change**.
 - **Little windows** for links from other apps, with **Open in Stedding** to keep the
   page as a tab; sites **routed** to their Space, **sleeping tabs**, and an **archive** for
   idle tabs, off until you choose.
@@ -106,7 +116,7 @@ Each feature has a specification naming the test behind every behaviour:
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.3.0 beta 15**, for macOS and Windows, on Chromium 156.0.8078.48.
+is **0.3.0 beta 16**, for macOS and Windows, on Chromium 156.0.8078.48.
 
 | Platform | File | |
 |---|---|---|

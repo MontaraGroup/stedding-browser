@@ -45,16 +45,16 @@ embedder hook for page activation; the feature itself stays.
  chrome/browser/ui/stedding/blocker/DEPS       |   6 +
  chrome/browser/ui/stedding/blocker/blocker.cc | 117 ++++
  chrome/browser/ui/stedding/blocker/blocker.h  |  36 ++
- .../blocker/blocker_activation_throttle.cc    |  71 +++
+ .../blocker/blocker_activation_throttle.cc    |  71 ++
  .../blocker/blocker_activation_throttle.h     |  52 ++
  .../ui/stedding/blocker/blocker_convert.cc    | 222 +++++++
  .../ui/stedding/blocker/blocker_convert.h     |  79 +++
  .../blocker/blocker_convert_unittest.cc       | 168 +++++
- .../ui/stedding/blocker/blocker_lists.cc      | 603 ++++++++++++++++++
+ .../ui/stedding/blocker/blocker_lists.cc      | 607 ++++++++++++++++++
  .../ui/stedding/blocker/blocker_lists.h       | 226 +++++++
  .../blocker/blocker_lists_unittest.cc         | 250 ++++++++
  .../ui/stedding/blocker/blocker_rules.cc      | 216 +++++++
- .../ui/stedding/blocker/blocker_rules.h       | 107 ++++
+ .../ui/stedding/blocker/blocker_rules.h       | 107 +++
  .../blocker/blocker_rules_unittest.cc         | 160 +++++
  chrome/browser/ui/stedding/stedding_prefs.cc  |   7 +
  chrome/browser/ui/stedding/stedding_prefs.h   |  12 +
@@ -82,12 +82,12 @@ embedder hook for page activation; the feature itself stays.
  .../data/stedding/blocker/blocker-tracker.js  |   1 +
  .../test/data/stedding/blocker/easylist.txt   |  10 +
  .../data/stedding/blocker/easyprivacy.txt     |   6 +
- chrome/test/data/stedding/blocker/page.html   |  42 ++
+ chrome/test/data/stedding/blocker/page.html   |  48 ++
  chrome/test/stedding/BUILD.gn                 |  10 +
- chrome/test/stedding/blocker_browsertest.cc   | 580 +++++++++++++++++
+ chrome/test/stedding/blocker_browsertest.cc   | 572 +++++++++++++++++
  ...ent_subresource_filter_throttle_manager.cc |  46 +-
  ...tent_subresource_filter_throttle_manager.h |  15 +
- 52 files changed, 3959 insertions(+), 5 deletions(-)
+ 52 files changed, 3961 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/blocker/BUILD.gn
  create mode 100644 chrome/browser/ui/stedding/blocker/DEPS
  create mode 100644 chrome/browser/ui/stedding/blocker/blocker.cc
@@ -1324,10 +1324,10 @@ index 0000000000000..f4a9e28f03579
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/blocker/blocker_lists.cc b/chrome/browser/ui/stedding/blocker/blocker_lists.cc
 new file mode 100644
-index 0000000000000..5d79d5f02d35a
+index 0000000000000..f588dd63d7404
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/blocker/blocker_lists.cc
-@@ -0,0 +1,603 @@
+@@ -0,0 +1,607 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1765,9 +1765,11 @@ index 0000000000000..5d79d5f02d35a
 +  if (it == loaders_.end()) {
 +    return;
 +  }
++  // The list stays in flight, its entry empty, until it is stored or found
++  // wanting: another list's turn in between found it due and fetched it
++  // again.
 +  const std::unique_ptr<network::SimpleURLLoader> loader =
 +      std::move(it->second);
-+  loaders_.erase(it);
 +  const ListSpec* const spec = SpecFor(id);
 +  const network::mojom::URLResponseHead* const head = loader->ResponseInfo();
 +  const int code =
@@ -1779,6 +1781,7 @@ index 0000000000000..5d79d5f02d35a
 +      file_task_runner_->PostTask(FROM_HERE,
 +                                  base::GetDeleteFileCallback(download));
 +    }
++    loaders_.erase(id);
 +    if (answered && code == 304) {
 +      OnNotModified(id);
 +    } else {
@@ -1821,6 +1824,7 @@ index 0000000000000..5d79d5f02d35a
 +                            std::string etag,
 +                            std::string last_modified,
 +                            std::optional<base::TimeDelta> expiry) {
++  loaders_.erase(id);
 +  if (!expiry) {
 +    // Bk3: not a filter list; the stored one stays.
 +    FetchFailed(id);
@@ -3852,10 +3856,10 @@ index 0000000000000..a5cc354f9d7d9
 +/blocker-tracker.js
 diff --git a/chrome/test/data/stedding/blocker/page.html b/chrome/test/data/stedding/blocker/page.html
 new file mode 100644
-index 0000000000000..a58cafd9fbc0f
+index 0000000000000..5d7a6eac675b2
 --- /dev/null
 +++ b/chrome/test/data/stedding/blocker/page.html
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,48 @@
 +<!doctype html>
 +<!-- Stedding's blocker tests (docs/features/blocker.md Bk1): one listed and
 +     one unlisted script, image, frame and fetch, and a listed tracker. -->
@@ -3863,8 +3867,8 @@ index 0000000000000..a58cafd9fbc0f
 +<script src="blocker-ad-script.js"></script>
 +<script src="blocker-ok-script.js"></script>
 +<script src="blocker-tracker.js"></script>
-+<img id="adImage" src="blocker-ad-image.svg" onload="window.adImage = true">
-+<img id="okImage" src="blocker-ok-image.svg" onload="window.okImage = true">
++<img id="adImage" src="blocker-ad-image.svg">
++<img id="okImage" src="blocker-ok-image.svg">
 +<iframe id="adFrame" src="blocker-ad-frame.html"></iframe>
 +<iframe id="okFrame" src="blocker-ok-frame.html"></iframe>
 +<script>
@@ -3874,6 +3878,12 @@ index 0000000000000..a58cafd9fbc0f
 +    if (document.readyState !== 'complete') {
 +      await new Promise(resolve => addEventListener('load', resolve));
 +    }
++    // An image the filter blocked still fires its load event in this
++    // Chromium; it has no size, as nothing came.
++    const drawn = id => {
++      const image = document.getElementById(id);
++      return image.complete && image.naturalWidth > 0;
++    };
 +    const framed = id => {
 +      try {
 +        const body = document.getElementById(id).contentDocument.body;
@@ -3891,7 +3901,7 @@ index 0000000000000..a58cafd9fbc0f
 +    };
 +    return [
 +      !!window.adScript, !!window.okScript, !!window.tracker,
-+      !!window.adImage, !!window.okImage,
++      drawn('adImage'), drawn('okImage'),
 +      framed('adFrame'), framed('okFrame'),
 +      await fetched('blocker-ad-fetch.json'),
 +      await fetched('blocker-ok-fetch.json'),
@@ -3928,10 +3938,10 @@ index 30079f0c716cc..31ae7728d0873 100644
      "//chrome/browser/ui/stedding:motion",
 diff --git a/chrome/test/stedding/blocker_browsertest.cc b/chrome/test/stedding/blocker_browsertest.cc
 new file mode 100644
-index 0000000000000..5fbbce7efc312
+index 0000000000000..b8f595887b641
 --- /dev/null
 +++ b/chrome/test/stedding/blocker_browsertest.cc
-@@ -0,0 +1,580 @@
+@@ -0,0 +1,572 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4270,7 +4280,11 @@ index 0000000000000..5fbbce7efc312
 +      browser(), list_server_.GetURL("/set-cookie?visitor=1")));
 +  TurnOnAndWait();
 +  const std::vector<net::test_server::HttpRequest> requests = ListRequests();
-+  ASSERT_EQ(2u, requests.size());
++  std::string asked;
++  for (const net::test_server::HttpRequest& request : requests) {
++    asked += request.relative_url + " ";
++  }
++  ASSERT_EQ(2u, requests.size()) << asked;
 +  for (const net::test_server::HttpRequest& request : requests) {
 +    SCOPED_TRACE(request.relative_url);
 +    EXPECT_FALSE(request.headers.contains("Cookie"));
@@ -4295,18 +4309,10 @@ index 0000000000000..5fbbce7efc312
 +}
 +
 +// Bk11: after a launch with a ruleset indexed at the run before, the first
-+// page, given on the command line, is filtered.
-+class BlockerLaunchTest : public BlockerTest {
-+ protected:
-+  void SetUpCommandLine(base::CommandLine* command_line) override {
-+    BlockerTest::SetUpCommandLine(command_line);
-+    if (!content::IsPreTest()) {
-+      ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
-+      command_line->AppendArg(
-+          embedded_test_server()->GetURL(kPage).spec());
-+    }
-+  }
-+};
++// page is filtered, with no list fetched at the launch. A browser test opens
++// its window on a blank page whatever the command line names, so the first
++// page is the first navigation.
++using BlockerLaunchTest = BlockerTest;
 +
 +IN_PROC_BROWSER_TEST_F(BlockerLaunchTest,
 +                       PRE_TheFirstPageAfterALaunchIsFiltered) {
@@ -4315,13 +4321,9 @@ index 0000000000000..5fbbce7efc312
 +
 +IN_PROC_BROWSER_TEST_F(BlockerLaunchTest,
 +                       TheFirstPageAfterALaunchIsFiltered) {
-+  content::WebContents* const first =
-+      browser()->GetTabStripModel()->GetWebContentsAt(0);
-+  ASSERT_TRUE(first);
-+  ASSERT_TRUE(content::WaitForLoadStop(first));
-+  ASSERT_EQ(embedded_test_server()->GetURL(kPage),
-+            first->GetLastCommittedURL());
-+  EXPECT_EQ(kListedBlocked, Results(first));
++  Open("a.test");
++  EXPECT_EQ(kListedBlocked, Results(Active()));
++  EXPECT_TRUE(ListRequests().empty()) << "a list fetched at the launch";
 +}
 +
 +// Bk6: the shield follows the active tab's site, the switch and its own

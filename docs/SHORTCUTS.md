@@ -11,6 +11,11 @@ splitting the current tab with a new one is ⌃⌘N from 0.2.0 beta 20;
 0.2.0 beta 17 and earlier have only ⌥⌘N for it, which still splits after that, except while
 Arc runs.
 
+You can change these keys: **Settings → Stedding → Shortcuts** has a row for every
+command, with Add to record new keys, a switch to turn a command's keys off and Reset
+to put them back (from the release that carries BACKLOG S-91; earlier builds show the list
+read-only). The tables below are the keys the browser ships with.
+
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
 ## Sidebar and Spaces
@@ -19,6 +24,8 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 |---|---|---|
 | Close the sidebar, to icons or hidden completely (Settings → Stedding → Sidebar), or bring it back | ⌘S | Ctrl+S |
 | Show or hide the address row on its own | ⇧⌘D | Ctrl+Shift+D |
+| History in the sidebar, or the History page with Settings → Stedding → Sidebar → "Open History and Downloads in the sidebar" off; again to close | ⌘Y | Ctrl+H |
+| Downloads in the sidebar, or the Downloads page with that setting off; again to close | ⇧⌘J or ⌥⌘L | Ctrl+J |
 | Jump to Space 1 to 9 | ⌃1 – ⌃9 | Alt+1 – Alt+9 |
 | Next Space / previous Space | ⌥⌘→ / ⌥⌘← | Ctrl+Alt+→ / Ctrl+Alt+← |
 | Move the tab to the next / previous Space | ⌥⇧⌘→ / ⌥⇧⌘← | Ctrl+Alt+Shift+→ / ← |

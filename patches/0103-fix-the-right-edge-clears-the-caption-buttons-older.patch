@@ -23,9 +23,11 @@ Removable when: never; to be folded into the patches that own the code.
 ---
  .../browser/ui/spaces/arc_sidebar_importer.cc | 37 +++++++++++++--
  .../ui/spaces/sidebar_backup_unittest.cc      | 29 ++++++++++++
+ .../layout/stedding_browser_view_layout.cc    | 14 ++++++
  .../frame/vertical_tab_strip_region_view.cc   | 47 ++++++++++++-------
+ .../vertical_tab_strip_top_container.cc       |  6 +++
  .../stedding/sidebar_forms_browsertest.cc     | 17 ++++++-
- 4 files changed, 107 insertions(+), 23 deletions(-)
+ 6 files changed, 127 insertions(+), 23 deletions(-)
 
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 index 8d1a12e18eea9..5dd957e292f53 100644
@@ -164,6 +166,31 @@ index 71241ea897129..f1d9eccefc952 100644
  // Sf6: everything Export all Spaces... writes comes in on another install
  // (a second profile), unloaded: every Space with its name, icon, exact
  // colour pair and own session; the pins, a pinned folder with a folder in
+diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
+index ab9ee8b0c48d8..30b36fa2ad741 100644
+--- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
++++ b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
+@@ -255,6 +255,20 @@ SteddingBrowserViewLayout::CalculateProposedLayout(
+           0, base::ClampCeil(over_strip.ContentWithPadding().width()) -
+                  past_strip));
+     }
++#if BUILDFLAG(IS_MAC)
++    // sidebar Y41: on the window's right the toggle shares the address row's
++    // line across the window, the lights now on the row. The row sits a card
++    // gutter down the window; the toggle took the strip's own top row's
++    // centre and sat 3 DIP above the row's.
++    if (at_trailing_edge && lights_center == 0 &&
++        delegate().IsToolbarVisible() && views().toolbar) {
++      // The row as it was last laid out: taller than it asks to be.
++      const int row = views().toolbar->height() > 0
++                          ? views().toolbar->height()
++                          : views().toolbar->GetPreferredSize().height();
++      lights_center = CardGutter(views()) + row / 2;
++    }
++#endif
+     strip->SetCaptionButtonCenterForLayout(lights_center);
+   }
+   return layout;
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 index 10e0a4ccf946a..80a0bdabe822f 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
@@ -311,6 +338,23 @@ index 10e0a4ccf946a..80a0bdabe822f 100644
  }
  
  bool VerticalTabStripRegionView::IsPointerAtLeadingEdge() const {
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+index 84c79d06e58da..206e16e17415b 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+@@ -128,6 +128,12 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+     if (first_button_height > 0) {
+       const int baseline_height = GetBaselineMinHeight();
+       current_y = std::max(0, (baseline_height - first_button_height) / 2);
++      // Stedding (sidebar Y41): a centre the window gives with no lights
++      // over the rail is the address row's beside it, on the window's right.
++      if (caption_button_width_ == 0 && caption_button_center_ > 0) {
++        current_y =
++            std::max(0, caption_button_center_ - first_button_height / 2);
++      }
+     }
+ 
+     // Because the collapsed state is set at the end of the transition, we need
 diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
 index d40e5c19bd163..92500b4ec4df0 100644
 --- a/chrome/test/stedding/sidebar_forms_browsertest.cc

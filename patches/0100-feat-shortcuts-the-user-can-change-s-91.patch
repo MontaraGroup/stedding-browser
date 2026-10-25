@@ -91,8 +91,8 @@ ships its own desktop shortcut remapping that Stedding adopts.
  .../settings/stedding_shortcuts_handler.h     |  62 +-
  .../stedding_shortcuts_handler_unittest.cc    | 195 ++++++
  chrome/test/stedding/BUILD.gn                 |   7 +
- .../stedding/shortcut_rebind_browsertest.cc   | 561 ++++++++++++++++++
- 65 files changed, 5630 insertions(+), 93 deletions(-)
+ .../stedding/shortcut_rebind_browsertest.cc   | 557 ++++++++++++++++++
+ 65 files changed, 5626 insertions(+), 93 deletions(-)
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts
  create mode 100644 chrome/browser/ui/stedding/shortcut_catalog.cc
@@ -6337,10 +6337,10 @@ index 27714e198b594..8a2d43ea5dbea 100644
        "//ui/gfx:test_support",
 diff --git a/chrome/test/stedding/shortcut_rebind_browsertest.cc b/chrome/test/stedding/shortcut_rebind_browsertest.cc
 new file mode 100644
-index 0000000000000..2a8155abe3926
+index 0000000000000..88bc1742a1752
 --- /dev/null
 +++ b/chrome/test/stedding/shortcut_rebind_browsertest.cc
-@@ -0,0 +1,561 @@
+@@ -0,0 +1,557 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -6381,14 +6381,16 @@ index 0000000000000..2a8155abe3926
 +#include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
++#include "components/input/native_web_keyboard_event.h"
 +#include "components/prefs/pref_service.h"
-+#include "content/public/browser/render_widget_host_view.h"
++#include "content/public/browser/keyboard_event_processing_result.h"
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/test/browser_test.h"
 +#include "content/public/test/browser_test_utils.h"
 +#include "content/public/test/test_launcher.h"
 +#include "extensions/common/extension.h"
 +#include "extensions/test/test_extension_dir.h"
++#include "third_party/blink/public/common/input/web_input_event.h"
 +#include "ui/base/accelerators/accelerator.h"
 +#include "ui/base/window_open_disposition.h"
 +#include "ui/events/event_constants.h"
@@ -6671,31 +6673,25 @@ index 0000000000000..2a8155abe3926
 +IN_PROC_BROWSER_TEST_F(ShortcutRecordTest, TheBrowsersKeysReachTheRecorder) {
 +  content::WebContents* const page = OpenSettings();
 +  ASSERT_TRUE(page);
-+  ASSERT_TRUE(content::ExecJs(page, R"(
-+      window.heard = [];
-+      window.addEventListener('keydown', e => {
-+        window.heard.push(e.code);
-+        e.preventDefault();
-+      }, true);
-+      chrome.send('steddingRecordShortcut', [true]);)"));
++  ASSERT_TRUE(
++      content::ExecJs(page, "chrome.send('steddingRecordShortcut', [true]);"));
 +  ASSERT_TRUE(base::test::RunUntil([&]() { return Recording(); }));
 +#if !BUILDFLAG(IS_MAC)
-+  // Ctrl+N, New Window, is a chord the window takes before any page. The
-+  // key goes to the page with the focus, as the user's would.
++  // Ctrl+N, New Window, is a chord the window takes before any page. While
++  // a chord is recorded the window leaves it to the page: asked before the
++  // page, it does not take it. Asked directly: a key injected into a page
++  // that does not have the window's focus never reached it on Windows.
 +  const size_t windows = GetAllBrowserWindowInterfaces().size();
-+  page->Focus();
-+  ASSERT_TRUE(base::test::RunUntil([&]() {
-+    return page->GetRenderWidgetHostView() &&
-+           page->GetRenderWidgetHostView()->HasFocus();
-+  })) << "the settings page never took the focus";
-+  content::SimulateKeyPress(page, ui::DomKey::FromCharacter('n'),
-+                            ui::DomCode::US_N, ui::VKEY_N, /*control=*/true,
-+                            /*shift=*/false, /*alt=*/false,
-+                            /*command=*/false);
-+  EXPECT_TRUE(base::test::RunUntil([&]() {
-+    return content::EvalJs(page, "window.heard.join(',')").ExtractString() ==
-+           "KeyN";
-+  }));
++  input::NativeWebKeyboardEvent ctrl_n(blink::WebInputEvent::Type::kRawKeyDown,
++                                       blink::WebInputEvent::kControlKey,
++                                       base::TimeTicks::Now());
++  ctrl_n.windows_key_code = ui::VKEY_N;
++  ctrl_n.dom_key = ui::DomKey::FromCharacter('n');
++  ctrl_n.dom_code = static_cast<int>(ui::DomCode::US_N);
++  ASSERT_TRUE(page->GetDelegate());
++  EXPECT_EQ(content::KeyboardEventProcessingResult::NOT_HANDLED,
++            page->GetDelegate()->PreHandleKeyboardEvent(page, ctrl_n))
++      << "the window took Ctrl+N before the recording page";
 +  EXPECT_EQ(windows, GetAllBrowserWindowInterfaces().size())
 +      << "the recorder had the key, not New Window";
 +#endif

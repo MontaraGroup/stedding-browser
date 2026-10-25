@@ -36,7 +36,7 @@ sidebar's column.
  .../browser/resources/stedding_library/app.ts |  71 ++
  .../resources/stedding_library/common.ts      | 173 ++++
  .../stedding_library/downloads_panel.ts       | 288 ++++++
- .../stedding_library/history_panel.ts         | 211 ++++
+ .../stedding_library/history_panel.ts         | 229 +++++
  .../stedding_library/stedding_library.html    |  26 +
  chrome/browser/ui/BUILD.gn                    |   9 +
  .../browser/ui/browser_command_controller.cc  |  16 +
@@ -66,6 +66,7 @@ sidebar's column.
  .../vertical_tab_strip_bottom_container.cc    |  60 ++
  .../vertical_tab_strip_bottom_container.h     |  15 +
  .../browser/ui/webui/chrome_web_ui_configs.cc |   5 +
+ .../webui/history/browsing_history_handler.cc |   8 +-
  .../browser/ui/webui/settings/settings_ui.cc  |  10 +
  .../settings/stedding_shortcuts_handler.cc    | 484 ++++++++-
  .../ui/webui/stedding_library/BUILD.gn        |  67 ++
@@ -79,10 +80,10 @@ sidebar's column.
  chrome/test/stedding/BUILD.gn                 |   8 +
  chrome/test/stedding/downloads_browsertest.cc |  30 +-
  .../stedding/settings_spaces_browsertest.cc   |   4 +
- .../stedding/sidebar_panels_browsertest.cc    | 947 ++++++++++++++++++
+ .../stedding/sidebar_panels_browsertest.cc    | 953 ++++++++++++++++++
  .../test/stedding/sidebar_rail_browsertest.cc |   3 +
  tools/gritsettings/resource_ids.spec          |   5 +
- 57 files changed, 5244 insertions(+), 20 deletions(-)
+ 58 files changed, 5275 insertions(+), 21 deletions(-)
  create mode 100644 chrome/app/vector_icons/stedding_archive_box.icon
  create mode 100644 chrome/browser/resources/stedding_library/BUILD.gn
  create mode 100644 chrome/browser/resources/stedding_library/app.css
@@ -1142,10 +1143,10 @@ index 0000000000000..c497811c11537
 +}
 diff --git a/chrome/browser/resources/stedding_library/history_panel.ts b/chrome/browser/resources/stedding_library/history_panel.ts
 new file mode 100644
-index 0000000000000..d3d22c2080bb6
+index 0000000000000..a634d5f3d4a6a
 --- /dev/null
 +++ b/chrome/browser/resources/stedding_library/history_panel.ts
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,229 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1226,6 +1227,13 @@ index 0000000000000..d3d22c2080bb6
 +      }
 +    }, {root: this.list_, rootMargin: '0px 0px 200px 0px'});
 +    observer.observe(this.sentinel_);
++    // The list's own scroll asks too: the observer waits for a frame, and a
++    // scroll to the end in a busy moment went unanswered.
++    this.list_.addEventListener('scroll', () => {
++      if (this.nearEnd_()) {
++        this.more_();
++      }
++    });
 +
 +    this.query_();
 +  }
@@ -1264,6 +1272,17 @@ index 0000000000000..d3d22c2080bb6
 +    this.finished_ = !results.info || results.info.finished;
 +    this.loading_ = false;
 +    this.render_();
++    // Still at the end, as after a scroll made while this page loaded: the
++    // next one comes too.
++    if (this.nearEnd_()) {
++      this.more_();
++    }
++  }
++
++  // Pn6: whether the list is within 200 px of its end.
++  private nearEnd_(): boolean {
++    const list = this.list_;
++    return list.scrollTop + list.clientHeight >= list.scrollHeight - 200;
 +  }
 +
 +  private render_() {
@@ -3809,6 +3828,25 @@ index 1556a16a67564..f9c2dda9a41bc 100644
    map.AddWebUIConfig(std::make_unique<DrivePickerHostUIConfig>());
    map.AddWebUIConfig(std::make_unique<FeedbackUIConfig>());
    map.AddWebUIConfig(std::make_unique<HistoryUIConfig>());
+diff --git a/chrome/browser/ui/webui/history/browsing_history_handler.cc b/chrome/browser/ui/webui/history/browsing_history_handler.cc
+index b834f476a2b9d..3111fd07fc0e2 100644
+--- a/chrome/browser/ui/webui/history/browsing_history_handler.cc
++++ b/chrome/browser/ui/webui/history/browsing_history_handler.cc
+@@ -458,7 +458,13 @@ BrowsingHistoryHandler::BrowsingHistoryHandler(
+       clock_(base::DefaultClock::GetInstance()),
+       browsing_history_service_(nullptr) {}
+ 
+-BrowsingHistoryHandler::~BrowsingHistoryHandler() = default;
++BrowsingHistoryHandler::~BrowsingHistoryHandler() {
++  // Stedding (docs/features/sidebar-panels.md): the receiver goes before a
++  // query's callback still waiting on it, so a History panel closed while a
++  // search runs drops the callback with its pipe closed (mojo DCHECKs on a
++  // callback dropped while its receiver is connected).
++  page_handler_.reset();
++}
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ void BrowsingHistoryHandler::SetSidePanelUIEmbedder(
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
 index 9b8544396871a..26afbc3287a44 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
@@ -5295,10 +5333,10 @@ index 546e9309a0804..dff0b8721622a 100644
      for (const char* key :
 diff --git a/chrome/test/stedding/sidebar_panels_browsertest.cc b/chrome/test/stedding/sidebar_panels_browsertest.cc
 new file mode 100644
-index 0000000000000..ab7ac275ecf07
+index 0000000000000..0630c7fc3dfbf
 --- /dev/null
 +++ b/chrome/test/stedding/sidebar_panels_browsertest.cc
-@@ -0,0 +1,947 @@
+@@ -0,0 +1,953 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -5500,6 +5538,14 @@ index 0000000000000..ab7ac275ecf07
 +        panel_page(),
 +        "{ const list = document.getElementById('list');"
 +        "  list.scrollTop = list.scrollHeight; }"));
++  }
++  // Scrolls to the list's end until it holds `count` rows, as a person
++  // scrolls on when the next rows have not come yet.
++  [[nodiscard]] bool ScrollUntilRows(int count) {
++    return base::test::RunUntil([&]() {
++      ScrollToTheEnd();
++      return RowCount() == count;
++    });
 +  }
 +  // Types `text` into the panel's search field, as a person does.
 +  void Search(const std::string& text) {
@@ -5844,16 +5890,14 @@ index 0000000000000..ab7ac275ecf07
 +  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_SHOW_HISTORY));
 +  ASSERT_TRUE(WaitForPanel(SidebarPanel::kHistory));
 +  ASSERT_TRUE(WaitForRows(50)) << RowCount();
-+  ScrollToTheEnd();
-+  ASSERT_TRUE(WaitForRows(65)) << RowCount();
++  ASSERT_TRUE(ScrollUntilRows(65)) << RowCount();
 +
 +  // This Week leaves the visits of ten days ago out.
 +  ASSERT_TRUE(content::ExecJs(
 +      panel_page(),
 +      "document.querySelector('.chip[data-range=week]').click()"));
 +  ASSERT_TRUE(WaitForRows(50)) << RowCount();
-+  ScrollToTheEnd();
-+  EXPECT_TRUE(WaitForRows(60)) << RowCount();
++  EXPECT_TRUE(ScrollUntilRows(60)) << RowCount();
 +
 +  Search("needle");
 +  EXPECT_TRUE(WaitForRows(2)) << RowCount();

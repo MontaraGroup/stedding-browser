@@ -165,9 +165,13 @@ Space out of everything. To have it for every Space you add, turn on Settings �
 Spaces → **Give every new Space its own session**; it offers to turn it on for the Spaces you
 already have too.
 
-**Is there sync?**
-No: there is no account anywhere in the product. Export a Space as a file (Settings → Stedding →
-Spaces → Export Space…) and import it on the other machine.
+**Is there sync? Can I sync without an account?**
+There is no account anywhere in the product. Settings → Stedding → Spaces → Sync through a
+folder keeps your Spaces, pins, pinned folders and essentials the same on your computers
+through a folder you choose: one your own sync tool keeps (Syncthing, iCloud Drive, OneDrive)
+or a shared drive. Stedding has no server and sends nothing; your tool moves the files. Open
+tabs, history, passwords and sign-ins never travel. Or export a Space as a file (Export
+Space…) and import it on the other machine.
 
 **Do my extensions work?**
 Yes. It is Chromium; extensions install from the Chrome Web Store. ⌘E (Ctrl+Alt+E on Windows)
@@ -184,6 +188,12 @@ as YouTube, plays normally.
 Yes. Over the sidebar or its icons, scroll sideways: a two-finger swipe on a touchpad, a mouse's
 tilting wheel, or Shift with the wheel. On Windows, Ctrl with the wheel over the sidebar does it
 too. Scrolling up and down still scrolls your tabs ([SHORTCUTS.md](SHORTCUTS.md)).
+
+**Can I change a keyboard shortcut?**
+Yes, from the release that carries it (BACKLOG S-91): Settings → Stedding → Shortcuts. Press
+Add on a command's row and press the keys; if another command has them, the row says which,
+and Replace moves them. A switch turns a command's keys off, and Reset puts its own keys back.
+Your shortcuts apply to every profile and window on the computer.
 
 **Why does ⌃1 switch desktops instead of Spaces?**
 With a second desktop, macOS Mission Control takes ⌃1–⌃9 before the browser sees them. The
