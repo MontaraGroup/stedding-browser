@@ -11,7 +11,7 @@ its items still open on 2026-10-14 are BACKLOG rows that name their ids.
 1. Horizontal tab mode stays. Do not remove or hide the toggle. Switching either way must not
    crash, Stedding's views are torn down and rebuilt with the strip, menu ids are
    range-checked, and Spaces, pins and folders keep working in horizontal mode.
-2. Peek is off by default until it is rebuilt (`S-93`).
+2. Peek is on by default, since its rebuild on the little window (the owner, 2026-10-25; `S-93`).
 3. The Space sleep timer defaults to Never until sleep is gated.
 4. Every cut the audit listed is approved (the list is in the history file, section 2; patch
    0055 applied them, `S-61`).

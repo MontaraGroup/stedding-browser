@@ -10,6 +10,15 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-25, morning -- Peek on by default
+
+The owner chose Peek on by default (`PLAN.md` decision 2). A fresh profile's pinned tab now
+peeks a link to another site; `DefaultsTest.AFreshProfileHoldsAndWorksAfterStay` says so, and
+the switch in Settings › Stedding turns it off. Checked: every unit test on the Mac; Peek's,
+the defaults', the little window's and the pinned run's browser tests on the Mac; every unit and
+browser test on Windows' release and checks builds (1040; 502, and 157 one at a time). Not
+released.
+
 ## 2026-10-25, night -- Peek rebuilt on the little window
 
 The owner's next big feature, overnight and not released (`S-93`). Peek had been switched off

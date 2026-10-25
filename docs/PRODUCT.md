@@ -236,8 +236,8 @@ yet, `docs/features/library.md`) and a `+`.
   navigating the pinned tab away. "Open as Tab" (`⌘O`) and "Open in Split View" (`⇧⌘O`,
   beside the pinned tab) move the very page into the window; Escape or a click on the
   window closes it. **Peek is what makes pinned tabs behave like apps.** Rebuilt on the
-  little window (2026-10-25, `S-93`), so the page is a whole tab; off by default until the
-  owner turns it on (`PLAN.md` decision 2), with its switch in Settings › Stedding
+  little window (2026-10-25, `S-93`), so the page is a whole tab; on by default (the owner,
+  2026-10-25, `PLAN.md` decision 2), with its switch in Settings › Stedding
   (`features/peek.md`).
 - **Little Arc** **[1.0]** — the little window: a link from another application opens in
   a small window of its own, to read and dismiss. Its top is one row, the main window's

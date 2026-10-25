@@ -33,8 +33,9 @@ The peek's row has Open in Split View (Shift-Cmd-O, shown when the pin can
 take a pair: not an essential, not a tab in a split) and Open as Tab
 (Cmd-O); PromoteLittleWindow sends the page back to the pin's window and
 Space, the mark taken off first. The page menu's first row says Open as
-Tab in a peek. Settings > Stedding has the switch again, still off by
-default (PLAN.md decision 2), and the shortcut list names the peek.
+Tab in a peek. Settings > Stedding has the switch again, and Peek is on
+by default (the owner, 2026-10-25; PLAN.md decision 2); the shortcut list
+names the peek.
 CreateLittleWindow is the little window without its page, shared by both,
 and it sets the window's bounds once the window is made: the window sizer
 had set the requested ones aside, so a little window opened at the last
@@ -53,12 +54,14 @@ Removable when: never; it is product behaviour.
  chrome/browser/ui/stedding/little_window.h    |  18 +-
  chrome/browser/ui/stedding/peek.cc            | 324 +++++++++++++
  chrome/browser/ui/stedding/peek.h             |  97 ++++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   5 +-
+ .../ui/stedding/stedding_prefs_unittest.cc    |   4 +-
  .../ui/views/commandbar/command_bar_view.cc   |   9 +-
  chrome/browser/ui/views/peek/BUILD.gn         |  21 +-
  .../browser/ui/views/peek/peek_accelerators.h |  31 --
  .../ui/views/peek/peek_navigation_throttle.cc | 135 +++++-
  .../ui/views/peek/peek_navigation_throttle.h  |  22 +-
- chrome/browser/ui/views/peek/peek_unittest.cc |  88 ++--
+ chrome/browser/ui/views/peek/peek_unittest.cc |  98 ++--
  chrome/browser/ui/views/peek/peek_view.cc     | 426 ------------------
  chrome/browser/ui/views/peek/peek_view.h      | 149 ------
  .../toolbar/stedding_little_promote_button.cc |  59 ++-
@@ -68,9 +71,10 @@ Removable when: never; it is product behaviour.
  .../settings/stedding_shortcuts_handler.cc    |   8 +-
  .../stedding_shortcuts_handler_unittest.cc    |  18 +-
  chrome/test/stedding/BUILD.gn                 |   4 +
+ chrome/test/stedding/defaults_browsertest.cc  |  22 +-
  .../stedding/little_window_browsertest.cc     |   6 +
  chrome/test/stedding/peek_browsertest.cc      | 420 +++++++++++++++++
- 25 files changed, 1209 insertions(+), 754 deletions(-)
+ 28 files changed, 1234 insertions(+), 770 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/peek.cc
  create mode 100644 chrome/browser/ui/stedding/peek.h
  delete mode 100644 chrome/browser/ui/views/peek/peek_accelerators.h
@@ -773,6 +777,41 @@ index 0000000000000..388d1d76cc92a
 +}  // namespace stedding
 +
 +#endif  // CHROME_BROWSER_UI_STEDDING_PEEK_H_
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 6f8ccfbecc491..3decc84d07c18 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -16,8 +16,9 @@ namespace stedding::prefs {
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kNewTabShowHint, true);
+   registry->RegisterBooleanPref(kNewTabShowShortcuts, true);
+-  // Peek's host does not show a page yet. Off until that is rebuilt.
+-  registry->RegisterBooleanPref(kPeekEnabled, false);
++  // peek P10: on, the owner's choice once Peek was rebuilt on the little
++  // window (2026-10-25).
++  registry->RegisterBooleanPref(kPeekEnabled, true);
+   // Never by default: nothing closes a tab the user did not close unless
+   // they choose a time in Settings, the welcome flow's behaviour step or the
+   // command bar (archive A6; the owner, 2026-10-11). It was 12 hours.
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index 6ed9aa3c1acd6..c151d5070cf31 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -30,12 +30,12 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+        {kNewTabShowHint, kNewTabShowShortcuts, kCopyStripTracking, kUiAnimate,
+         kShowLinkAddress, kPinsCloseSleeps, kMenusShort, kHoldCmdNumbers,
+         kDarkPagesButton, kMarkLocalTabs, kLittleEnabled,
+-        kCopyLinkButton}) {
++        kCopyLinkButton, kPeekEnabled}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_TRUE(service.GetBoolean(name)) << name;
+   }
+   for (const char* name :
+-       {kPeekEnabled, kToolbarHideWithSidebar, kSidebarPageFlush, kUndoToast,
++       {kToolbarHideWithSidebar, kSidebarPageFlush, kUndoToast,
+         kSpaceNotices, kFullscreenHint, kNestChildTabs, kSpacesOwnSession}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_FALSE(service.GetBoolean(name)) << name;
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 index a95d5a359b385..9e5435da4660e 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
@@ -1160,7 +1199,7 @@ index fadf6a3e98994..07d96a9138baa 100644
        base::RepeatingCallback<void(tabs::TabInterface* source, const GURL& url)>;
  
 diff --git a/chrome/browser/ui/views/peek/peek_unittest.cc b/chrome/browser/ui/views/peek/peek_unittest.cc
-index 5e52f66610dbd..9eea8b759a549 100644
+index 5e52f66610dbd..50e2f5c93e2e6 100644
 --- a/chrome/browser/ui/views/peek/peek_unittest.cc
 +++ b/chrome/browser/ui/views/peek/peek_unittest.cc
 @@ -14,7 +14,6 @@
@@ -1216,6 +1255,30 @@ index 5e52f66610dbd..9eea8b759a549 100644
    };
    for (const Decision& row : kRows) {
      SCOPED_TRACE(row.name);
+@@ -89,9 +119,9 @@ TEST(ShouldPeekTest, Decisions) {
+ 
+ class PeekThrottleTest : public BrowserWithTestWindowTest {
+  protected:
+-  // Peek is off by default (PLAN.md decision 2). These cases check the
+-  // throttle while a user has turned it on; with it off every navigation
+-  // proceeds and none of them can fail.
++  // Peek is on by default (PLAN.md decision 2); these cases say so again, so
++  // they do not lean on the default. With it off every navigation proceeds
++  // and none of them can fail.
+   void SetUp() override {
+     BrowserWithTestWindowTest::SetUp();
+     profile()->GetPrefs()->SetBoolean(prefs::kPeekEnabled, true);
+@@ -148,8 +178,8 @@ TEST_F(PeekThrottleTest, ScriptRedirectFromPinnedTabProceeds) {
+ 
+ class PeekNewTabTest : public BrowserWithTestWindowTest {
+  protected:
+-  // Peek is off by default until its host is rebuilt (PLAN.md decision 2,
+-  // CMD-4); these cases check what it does when a user turns it on.
++  // Peek is on by default (PLAN.md decision 2); these cases say so again, so
++  // they do not lean on the default.
+   void SetUp() override {
+     BrowserWithTestWindowTest::SetUp();
+     profile()->GetPrefs()->SetBoolean(prefs::kPeekEnabled, true);
 @@ -215,61 +245,5 @@ TEST_F(PeekNewTabTest, OtherNewTabLinksOpenTabs) {
    PeekNavigationThrottle::SetOpenerForTesting({});
  }
@@ -2154,6 +2217,66 @@ index 6447e29afe02a..a299fe23339dc 100644
      "//components/certificate_transparency:proto",
      "//components/payments/core",
      "//components/safe_browsing/core/common:features",
+diff --git a/chrome/test/stedding/defaults_browsertest.cc b/chrome/test/stedding/defaults_browsertest.cc
+index 39de516f47ddb..bc2c3b28f3b66 100644
+--- a/chrome/test/stedding/defaults_browsertest.cc
++++ b/chrome/test/stedding/defaults_browsertest.cc
+@@ -4,8 +4,8 @@
+ 
+ // Defaults a fresh profile must have, run the way a user meets them.
+ //
+-// Peek is off until it is rebuilt (PLAN.md CMD-4, owner decision 2): a
+-// link that leaves a pinned tab's site navigates the tab, and no peek opens.
++// Peek is on (owner decision 2, since its rebuild): a link that leaves a
++// pinned tab's site opens a peek, and the pinned tab stays.
+ //
+ // "Close all windows", then Stay at a page's "Leave site?", leaves the
+ // session service shut down under live windows; the Space and folder
+@@ -46,6 +46,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/peek.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -298,8 +299,8 @@ IN_PROC_BROWSER_TEST_F(DefaultsTest, AFreshProfileHoldsAndWorksAfterStay) {
+         << "a chrome:// page keeps its unload handlers";
+   }
+   {
+-    SCOPED_TRACE("pinned link navigates in place");
+-    EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(
++    SCOPED_TRACE("a pinned tab's link to another site peeks");
++    EXPECT_TRUE(browser()->GetProfile()->GetPrefs()->GetBoolean(
+         stedding::prefs::kPeekEnabled));
+     ASSERT_TRUE(ui_test_utils::NavigateToURL(
+         browser(),
+@@ -308,15 +309,22 @@ IN_PROC_BROWSER_TEST_F(DefaultsTest, AFreshProfileHoldsAndWorksAfterStay) {
+     content::WebContents* const pinned = tabs()->GetWebContentsAt(0);
+     const GURL away =
+         embedded_test_server()->GetURL("away.test", "/title2.html");
+-    content::TestNavigationObserver navigated(pinned);
++    const GURL home = pinned->GetLastCommittedURL();
+     ASSERT_TRUE(content::ExecJs(
+         pinned, content::JsReplace("const a = document.createElement('a');"
+                                    "a.href = $1; document.body.appendChild(a);"
+                                    "a.click();",
+                                    away)));
+-    navigated.Wait();
+-    EXPECT_EQ(away, pinned->GetLastCommittedURL()) << "the tab went, no peek";
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return stedding::PeekOver(browser()) != nullptr; }))
++        << "no peek on a fresh profile";
++    EXPECT_EQ(home, pinned->GetLastCommittedURL()) << "the pinned tab went";
+     EXPECT_EQ(1, tabs()->count());
++    BrowserWindowInterface* const peek = stedding::PeekOver(browser());
++    views::test::WidgetDestroyedWaiter closed(
++        BrowserView::GetBrowserViewForBrowser(peek)->GetWidget());
++    peek->GetWindow()->Close();
++    closed.Wait();
+   }
+   BrowserView* const view = BrowserView::GetBrowserViewForBrowser(browser());
+   view->GetWidget()->SetBounds(gfx::Rect(0, 0, 1600, 900));
 diff --git a/chrome/test/stedding/little_window_browsertest.cc b/chrome/test/stedding/little_window_browsertest.cc
 index 2a2b5cd56d76e..6a7256b02eb7d 100644
 --- a/chrome/test/stedding/little_window_browsertest.cc
