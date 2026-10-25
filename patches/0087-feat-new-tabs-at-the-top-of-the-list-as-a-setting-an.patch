@@ -100,10 +100,10 @@ Removable when: never; it is product behaviour.
  .../webui/settings/stedding_spaces_handler.h  |   1 +
  .../stedding_welcome_handler_unittest.cc      |   2 +-
  chrome/test/stedding/BUILD.gn                 |   1 +
- .../test/stedding/edit_space_browsertest.cc   | 206 ++++
+ .../test/stedding/edit_space_browsertest.cc   | 209 +++++
  .../test/stedding/pinned_run_browsertest.cc   | 368 ++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  90 ++
- 37 files changed, 3217 insertions(+), 241 deletions(-)
+ 37 files changed, 3220 insertions(+), 241 deletions(-)
  create mode 100644 chrome/browser/ui/spaces/space_icon.cc
  create mode 100644 chrome/browser/ui/spaces/space_icon.h
  create mode 100644 chrome/browser/ui/spaces/space_icon_unittest.cc
@@ -3961,10 +3961,10 @@ index 558d502d89c7e..6447e29afe02a 100644
      "fullscreen_hint_browsertest.cc",
 diff --git a/chrome/test/stedding/edit_space_browsertest.cc b/chrome/test/stedding/edit_space_browsertest.cc
 new file mode 100644
-index 0000000000000..624ed53651f71
+index 0000000000000..ed21d4794c432
 --- /dev/null
 +++ b/chrome/test/stedding/edit_space_browsertest.cc
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,209 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -3990,6 +3990,7 @@ index 0000000000000..624ed53651f71
 +#include "content/public/test/browser_test.h"
 +#include "testing/gtest/include/gtest/gtest.h"
 +#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/test/widget_test.h"
 +#include "ui/views/widget/widget.h"
 +#include "ui/views/window/dialog_delegate.h"
 +
@@ -4005,19 +4006,21 @@ index 0000000000000..624ed53651f71
 +  return *model;
 +}
 +
-+// Done or Cancel, as the dialog's own buttons do, and the window gone.
++// Done or Cancel, as the dialog's own buttons do, and the window gone. The
++// widget is not read after the button: on Windows it is freed as it closes.
 +void Close(spaces::EditSpaceView* view, bool done) {
 +  views::Widget* const widget = view->GetWidget();
 +  ASSERT_TRUE(widget);
 +  views::DialogDelegate* const dialog =
 +      widget->widget_delegate()->AsDialogDelegate();
 +  ASSERT_TRUE(dialog);
++  views::test::WidgetDestroyedWaiter destroyed(widget);
 +  if (done) {
 +    dialog->AcceptDialog();
 +  } else {
 +    dialog->CancelDialog();
 +  }
-+  ASSERT_TRUE(base::test::RunUntil([&]() { return widget->IsClosed(); }));
++  destroyed.Wait();
 +}
 +
 +// spaces B41: the window holds the name, the icon and the colour; Done
