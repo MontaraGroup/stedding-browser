@@ -328,8 +328,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   one (`features/player.md` Mp3).
 - **Downloads** **[1.0]** — Chromium's downloads, with the progress ring on the sidebar's
   bottom-left button (`features/toolbar.md` T14). History and Downloads as panels in the
-  sidebar's column, in the tabs' place, by ⌘Y and ⇧⌘J and the bottom row's buttons: **[M10]**,
-  written 2026-10-25, not built yet (`features/sidebar-panels.md`, `S-98`).
+  sidebar's column, in the tabs' place, by ⌘Y and ⇧⌘J, the foot's History button and the
+  downloads button: **[M10]**, built 2026-10-25 (`features/sidebar-panels.md`, `S-98`).
 - **Library** **[1.0]** — archived tabs, captures and downloads behind the sidebar's
   bottom-left button, and easels when they return (`features/library.md`; `S-61`).
 

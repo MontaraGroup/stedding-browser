@@ -1,0 +1,1090 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 17:58:57 -0400
+Subject: fix: no Google sign-in at first run, an even sidebar foot, a shadow
+ under the command bar
+
+Browser sign-in is never offered (privacy Q16, GitHub issue 38). Chromium
+allows it wherever an OAuth client is configured, and the
+GOOGLE_DEFAULT_CLIENT_ID and GOOGLE_DEFAULT_CLIENT_SECRET environment
+variables, which guides for Chromium builds tell people to set, configure
+one. Windows apps see the user's environment, so Stedding there asked to
+sign in to Google at the first start; apps opened from the Mac's Finder
+do not, so the Mac did not. Chromium's own first run, the screen that
+asked, never opens either: Stedding's welcome is the first start
+(welcome W18).
+
+The sidebar's foot: History moves from the bottom row to the Archived
+row's line, at its end with its icon over the "+"; the line is shorter,
+its text two sizes under the rows' and at half their strength. The
+bottom row keeps the downloads button and the "+" at its ends, and the
+Space chips centre on the whole row, not on what the button leaves them
+(sidebar Y44, the owner).
+
+The command bar casts a shadow and has a hairline edge, so it stands off
+a white page in the light look (commandbar K36, GitHub issue 37).
+
+Why: GitHub issues 38 and 37, and the owner on the sidebar's foot
+(2026-10-25).
+Removable when: never; to be folded into the patches that own the code.
+---
+ .../account_consistency_mode_manager.cc       |  27 ++--
+ .../signin/account_consistency_mode_manager.h |   4 +-
+ .../browser/ui/startup/first_run_service.cc   |  13 +-
+ chrome/browser/ui/views/commandbar/BUILD.gn   |   2 +
+ .../ui/views/commandbar/command_bar_view.cc   |  15 +-
+ .../ui/views/commandbar/command_bar_view.h    |   6 +
+ .../commandbar/command_bar_view_unittest.cc   |  32 ++++
+ .../frame/vertical_tab_strip_region_view.cc   | 151 +++++++++++++-----
+ .../frame/vertical_tab_strip_region_view.h    |   7 +-
+ .../ui/views/spaces/space_switcher_view.cc    |  36 +++++
+ .../ui/views/spaces/space_switcher_view.h     |   9 ++
+ .../views/tabs/common/clear_tabs_separator.h  |   7 +
+ .../vertical_tab_strip_bottom_container.cc    |  60 -------
+ .../vertical_tab_strip_bottom_container.h     |  15 --
+ .../test/stedding/clear_space_browsertest.cc  |  18 ++-
+ .../stedding/privacy_defaults_browsertest.cc  |  40 +++++
+ .../stedding/sidebar_panels_browsertest.cc    |  45 ++++--
+ .../test/stedding/sidebar_rail_browsertest.cc |  21 +++
+ chrome/test/stedding/welcome_browsertest.cc   |  24 +++
+ 19 files changed, 373 insertions(+), 159 deletions(-)
+
+diff --git a/chrome/browser/signin/account_consistency_mode_manager.cc b/chrome/browser/signin/account_consistency_mode_manager.cc
+index 7d4c893cbcd99..053e0324c0991 100644
+--- a/chrome/browser/signin/account_consistency_mode_manager.cc
++++ b/chrome/browser/signin/account_consistency_mode_manager.cc
+@@ -25,7 +25,6 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/signin/public/base/signin_buildflags.h"
+ #include "components/signin/public/base/signin_pref_names.h"
+-#include "google_apis/google_api_keys.h"
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "chrome/browser/ash/account_manager/account_manager_util.h"
+@@ -64,19 +63,14 @@ bool IsBrowserSigninAllowedByCommandLine() {
+ // Returns true if Desktop Identity Consistency can be enabled for this build
+ // (i.e. if OAuth client ID and client secret are configured).
+ bool CanEnableDiceForBuild() {
+-  if (g_ignore_missing_oauth_client_for_testing ||
+-      google_apis::HasOAuthClientConfigured()) {
+-    return true;
+-  }
+-
+-  // Only log this once.
+-  [[maybe_unused]] static bool logged_warning = []() {
+-    LOG(WARNING) << "Desktop Identity Consistency cannot be enabled as no "
+-                    "OAuth client ID and client secret have been configured.";
+-    return true;
+-  }();
+-
+-  return false;
++  // Stedding (privacy Q16, GitHub issue 38): browser sign-in is never
++  // offered, also where an OAuth client reaches the build from the
++  // GOOGLE_DEFAULT_CLIENT_ID and GOOGLE_DEFAULT_CLIENT_SECRET environment
++  // variables or the --oauth2-client-id switch, as guides for Chromium builds
++  // suggest. With one, Windows, whose apps see the user's environment, asked
++  // to sign in to Google at the first start; the Mac, whose apps opened from
++  // the Finder do not, did not. Upstream's tests still ask for it.
++  return g_ignore_missing_oauth_client_for_testing;
+ }
+ #endif
+ 
+@@ -188,8 +182,9 @@ bool AccountConsistencyModeManager::IsMirrorEnabledForProfile(
+ }
+ 
+ // static
+-void AccountConsistencyModeManager::SetIgnoreMissingOAuthClientForTesting() {
+-  g_ignore_missing_oauth_client_for_testing = true;
++void AccountConsistencyModeManager::SetIgnoreMissingOAuthClientForTesting(
++    bool ignore) {
++  g_ignore_missing_oauth_client_for_testing = ignore;
+ }
+ 
+ // static
+diff --git a/chrome/browser/signin/account_consistency_mode_manager.h b/chrome/browser/signin/account_consistency_mode_manager.h
+index d43fd67954892..3a2436b492618 100644
+--- a/chrome/browser/signin/account_consistency_mode_manager.h
++++ b/chrome/browser/signin/account_consistency_mode_manager.h
+@@ -63,7 +63,9 @@ class AccountConsistencyModeManager : public KeyedService {
+ 
+   // By default, Desktop Identity Consistency (aka Dice) is not enabled in
+   // builds lacking an API key. For testing, set to have Dice enabled in tests.
+-  static void SetIgnoreMissingOAuthClientForTesting();
++  // Stedding (privacy Q16): false takes it back, for a test of the shipped
++  // behaviour.
++  static void SetIgnoreMissingOAuthClientForTesting(bool ignore = true);
+ 
+   // Returns true is the AccountConsistencyModeManager should be instantiated
+   // for the profile. Guest, incognito and system sessions do not instantiate
+diff --git a/chrome/browser/ui/startup/first_run_service.cc b/chrome/browser/ui/startup/first_run_service.cc
+index 7e1709c6744f6..b2621f5452cff 100644
+--- a/chrome/browser/ui/startup/first_run_service.cc
++++ b/chrome/browser/ui/startup/first_run_service.cc
+@@ -32,7 +32,9 @@
+ #include "content/public/browser/browser_context.h"
+ 
+ namespace {
+-bool IsFirstRunEligibleProfile(Profile* profile) {
++// Unused since Stedding opens no Chromium first run (ShouldOpenFirstRun);
++// kept so the hunk stays this small.
++[[maybe_unused]] bool IsFirstRunEligibleProfile(Profile* profile) {
+   if (profile->IsOffTheRecord()) {
+     return false;
+   }
+@@ -46,7 +48,7 @@ bool IsFirstRunEligibleProfile(Profile* profile) {
+   return true;
+ }
+ 
+-bool IsFirstRunEligibleProcess() {
++[[maybe_unused]] bool IsFirstRunEligibleProcess() {
+   if (!first_run::IsChromeFirstRun()) {
+     return false;
+   }
+@@ -295,6 +297,9 @@ FirstRunServiceFactory::BuildServiceInstanceForBrowserContext(
+ // Helpers ---------------------------------------------------------------------
+ 
+ bool ShouldOpenFirstRun(Profile* profile) {
+-  return IsFirstRunEligibleProcess() && IsFirstRunEligibleProfile(profile) &&
+-         !IsFirstRunMarkedFinishedInPrefs();
++  // Stedding (docs/features/welcome.md W18): the first start is Stedding's
++  // own welcome flow. Chromium's, which asks to sign in to Google before any
++  // window, never opens: on Windows it showed at the first launch (GitHub
++  // issue 38), and Stedding has no Google sign-in to offer.
++  return false;
+ }
+diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
+index 52f305906639c..1e8a2f57be2fa 100644
+--- a/chrome/browser/ui/views/commandbar/BUILD.gn
++++ b/chrome/browser/ui/views/commandbar/BUILD.gn
+@@ -89,6 +89,8 @@ source_set("unit_tests") {
+     "//chrome/browser/ui/views/stedding:isolation_mark",
+     "//chrome/test:test_support",
+     "//testing/gtest",
++    "//ui/compositor",
++    "//ui/decoration",
+     "//ui/gfx/geometry",
+     "//ui/gfx/range",
+     "//ui/views",
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index 75ccb1b8ebdb2..9e618bd4f8046 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -110,6 +110,7 @@
+ #include "ui/views/layout/layout_manager_base.h"
+ #include "ui/views/layout/proposed_layout.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/view_shadow.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ 
+@@ -150,6 +151,9 @@ END_METADATA
+ constexpr int kPanelRadius = 16;
+ constexpr int kRowRadius = 10;
+ constexpr int kPanelInset = 12;
++// K36: the shadow's depth, a bubble's, and the hairline round the panel.
++constexpr int kPanelElevation = 16;
++constexpr int kPanelEdge = 1;
+ constexpr int kFontSizeDelta = 3;
+ constexpr size_t kMaxTabResults = 4;
+ constexpr size_t kMaxSuggestions = 6;
+@@ -523,6 +527,10 @@ void CommandBarView::Show(BrowserWindowInterface* browser,
+   bar->SetPaintToLayer();
+   bar->layer()->SetFillsBoundsOpaquely(false);
+   bar->layer()->SetName("SteddingCommandBar");
++  // K36 (GitHub issue 37): on a white page in the light look the bar's white
++  // ground had no edge at all; a shadow under it sets it off any page.
++  bar->shadow_ = std::make_unique<views::ViewShadow>(bar, kPanelElevation);
++  bar->shadow_->SetRoundedCornerRadius(kPanelRadius);
+   bar->parent_observation_.Observe(host);
+   bar->UpdateBounds();
+   bar->field_->RequestFocus();
+@@ -1371,7 +1379,12 @@ CommandBarView::CommandBarView(BrowserWindowInterface* browser) : browser_(brows
+   }
+   SetBackground(views::CreateRoundedRectBackground(ui::kColorDialogBackground,
+                                                    kPanelRadius));
+-  SetBorder(views::CreateEmptyBorder(gfx::Insets(kPanelInset)));
++  // K36: and a hairline round its edge, inside the same inset (the padding
++  // comes after the line).
++  SetBorder(views::CreatePaddedBorder(
++      views::CreateRoundedRectBorder(kPanelEdge, kPanelRadius,
++                                     ui::kColorBubbleBorder),
++      gfx::Insets(kPanelInset - kPanelEdge)));
+   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+   BuildContents();
+ }
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.h b/chrome/browser/ui/views/commandbar/command_bar_view.h
+index 3acb3c0858c38..4f501cfa25aa8 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.h
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.h
+@@ -49,6 +49,7 @@ class SingletonHwndHotKeyObserver;
+ namespace views {
+ class EventMonitor;
+ class Label;
++class ViewShadow;
+ class ScrollView;
+ class Textfield;
+ }  // namespace views
+@@ -160,6 +161,8 @@ class CommandBarView : public views::View,
+   views::ScrollView* list_for_testing() { return list_; }
+   // K16: a test window has no BrowserView to ask about a peek.
+   void SetPeekOpenForTesting(bool open) { peek_open_for_testing_ = open; }
++  // K36: the shadow Show() puts under the bar.
++  const views::ViewShadow* shadow_for_testing() const { return shadow_.get(); }
+   // The open tabs listed (K2), and the archived ones (archive A10).
+   size_t result_count_for_testing() const;
+   size_t archived_count_for_testing() const;
+@@ -434,6 +437,9 @@ class CommandBarView : public views::View,
+   bool closing_ = false;
+   // Set once the field has focus; focus changes before that are the bar's own.
+   bool watching_focus_ = false;
++  // K36 (GitHub issue 37): the shadow under the bar, so it stands off a page
++  // of its own colour.
++  std::unique_ptr<views::ViewShadow> shadow_;
+   // toolbar T39: the bar lists the extension rows alone, as the chord opened
+   // it; and the chord's modifier is still held.
+   bool extensions_only_ = false;
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+index 91af64ae9ce10..de7fc9abf55e0 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -13,6 +13,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/run_loop.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/test/bind.h"
+@@ -58,6 +59,8 @@
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/l10n/l10n_util.h"
++#include "ui/compositor/layer.h"
++#include "ui/decoration/shadow.h"
+ #include "ui/events/event.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+ #include "ui/gfx/geometry/point.h"
+@@ -70,6 +73,7 @@
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/test/views_test_utils.h"
+ #include "ui/views/view.h"
++#include "ui/views/view_shadow.h"
+ #include "ui/views/view_tracker.h"
+ #include "ui/views/view_utils.h"
+ #include "url/gurl.h"
+@@ -1019,6 +1023,34 @@ TEST_F(CommandBarViewTest, ANewDocumentNeverReplacesAPage) {
+             tabs().GetActiveWebContents()->GetVisibleURL());
+ }
+ 
++// commandbar K36 (GitHub issue 37): the bar stands off the page under it, a
++// white one in the light look too: a shadow under it, and a hairline round its
++// edge inside the panel's inset.
++TEST_F(CommandBarViewTest, TheBarStandsOffThePage) {
++  AddTab(browser(), GURL("https://example.com/"));
++  // A host with a layer, as the browser view's is: the bar's layer and the
++  // shadow's are its layer's children.
++  views::View host;
++  host.SetPaintToLayer();
++  const auto scoped_host = CommandBarView::SetHostForTesting(&host);
++  CommandBarView::Show(browser(), CommandBarView::Mode::kTabs);
++  CommandBarView* const bar = CommandBarView::GetOpenBar(&host);
++  ASSERT_TRUE(bar);
++  ASSERT_TRUE(bar->shadow_for_testing()) << "the bar casts no shadow";
++  ASSERT_TRUE(bar->layer());
++  ASSERT_TRUE(bar->layer()->parent());
++  const std::vector<raw_ptr<ui::Layer, VectorExperimental>>& stack =
++      bar->layer()->parent()->children();
++  const auto bar_at = std::ranges::find(stack, bar->layer());
++  const auto shadow_at = std::ranges::find(
++      stack, bar->shadow_for_testing()->shadow()->layer());
++  ASSERT_NE(stack.end(), bar_at);
++  ASSERT_NE(stack.end(), shadow_at) << "the shadow is not drawn";
++  EXPECT_LT(shadow_at, bar_at) << "the shadow is over the bar";
++  ASSERT_TRUE(bar->GetBorder());
++  EXPECT_EQ(gfx::Insets(12), bar->GetBorder()->GetInsets());
++}
++
+ // commandbar K28, K15: a normal window offers the blank documents; a private
+ // window offers none, in either mode.
+ TEST_F(CommandBarViewTest, PrivateWindowsOfferNoNewDocuments) {
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 80a0bdabe822f..cf80dfecff4dc 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -85,6 +85,7 @@
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/spaces/page_split_drag_target.h"
+ #include "chrome/browser/ui/views/spaces/space_drag_target.h"
++#include "chrome/browser/ui/views/spaces/space_switcher_rules.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
+ #include "chrome/browser/ui/views/spaces/space_tab_visibility_controller.h"
+ #include "chrome/browser/ui/views/stedding/sidebar_resize_handle.h"
+@@ -197,9 +198,10 @@ class SidebarRowButton : public views::LabelButton {
+     label()->SetSubpixelRenderingEnabled(false);
+   }
+ 
+-  // sidebar Y27: a quiet row, the Archived row, wears the rows' text colour at
+-  // two thirds of its strength and takes the full colour hovered or pressed;
+-  // `icon` is drawn in the same colour at `icon_size`.
++  // sidebar Y27, Y44: a quiet row, the archive line's Archived and History,
++  // wears the rows' text colour at half its strength and takes the full
++  // colour hovered or pressed; `icon` is drawn in the same colour at
++  // `icon_size`.
+   void SetQuiet(const gfx::VectorIcon& icon, int icon_size) {
+     quiet_icon_ = &icon;
+     quiet_icon_size_ = icon_size;
+@@ -220,7 +222,7 @@ class SidebarRowButton : public views::LabelButton {
+     }
+     const SkColor full =
+         provider->GetColor(kColorTabForegroundInactiveFrameActive);
+-    const SkColor quiet = stedding::SidebarQuietColor(full);
++    const SkColor quiet = stedding::SidebarFaintColor(full);
+     SetEnabledTextColors(quiet);
+     SetTextColor(views::Button::STATE_HOVERED, full);
+     SetTextColor(views::Button::STATE_PRESSED, full);
+@@ -275,8 +277,23 @@ constexpr int kRailFormMargin = 4;
+ // The Archived row's name while the rail draws its icon alone (PLAN.md WIN-3).
+ constexpr char16_t kArchivedRowName[] = u"Archived tabs";
+ // docs/features/sidebar-panels.md Pn15: the History button's name, for
+-// screen readers and as its tooltip.
++// screen readers and as its tooltip, and its label on the archive line.
+ constexpr char16_t kHistoryButtonName[] = u"History";
++
++// sidebar Y44: the archive line is shorter than a row, its text two sizes
++// under the rows' (never under 11) and, in the open sidebar, its icons a size
++// under their favicons.
++int ArchiveLineHeight() {
++  return std::max(24, stedding::SidebarRowHeight() - 8);
++}
++gfx::FontList ArchiveLineFont() {
++  const gfx::FontList rows = stedding::SidebarFont();
++  return rows.DeriveWithSizeDelta(std::max(11, rows.GetFontSize() - 2) -
++                                  rows.GetFontSize());
++}
++int ArchiveLineIconSize(bool rail) {
++  return stedding::SidebarFaviconSize() + (rail ? 4 : -2);
++}
+ // Pn13: the downloads button's nudge: up this far and back, twice.
+ constexpr int kNudgeRise = 4;
+ constexpr base::TimeDelta kNudgeStep = base::Milliseconds(80);
+@@ -658,8 +675,21 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+     // The row declares the switcher's height and a fixed flex, exactly as the
+     // switcher did when it was a direct child, so the sidebar's vertical
+     // layout keeps it at the bottom.
+-    // The archive's door: one muted row above the switcher, in the New Tab
+-    // row's dress (archive A7).
++    // sidebar Y44: one quiet line above the switcher's row: the archive's
++    // door (archive A7) at its start, its icon on the rows' favicon column
++    // over the downloads button's, and History (sidebar panels Pn15) at its
++    // end, its icon over the "+". The row below keeps one button at each end
++    // and the Space chips between them (the owner, 2026-10-25). ApplyRailForm
++    // stacks the two in the rail and sets their insets, icons and font.
++    auto archive_line = std::make_unique<views::View>();
++    archive_line_layout_ =
++        archive_line->SetLayoutManager(std::make_unique<views::BoxLayout>(
++            views::BoxLayout::Orientation::kHorizontal));
++    archive_line->SetProperty(
++        views::kFlexBehaviorKey,
++        views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
++                                 views::MaximumFlexSizeRule::kPreferred));
++    archive_line_ = content_area_view_->AddChildView(std::move(archive_line));
+     auto archived_row = std::make_unique<SidebarRowButton>(
+         base::BindRepeating(
+             [](BrowserView* browser_view) {
+@@ -671,20 +701,34 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+     archived_row->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+     // sidebar panels Pn15: an archive box; the clock is History's.
+     archived_row->SetQuiet(kSteddingArchiveBoxIcon,
+-                           stedding::SidebarFaviconSize());
++                           ArchiveLineIconSize(/*rail=*/false));
+     // On the rows' favicon column, its label where their titles start
+     // (ApplyRailForm gives each form its own).
+     archived_row->SetImageLabelSpacing(kRowFaviconTitleGap);
+     archived_row->SetBorder(views::CreateEmptyBorder(
+         gfx::Insets::VH(0, region_horizontal_padding + kRowFaviconInset)));
+-    archived_row->SetPreferredSize(
+-        gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
++    archived_row->SetPreferredSize(gfx::Size(0, ArchiveLineHeight()));
+     archived_row->SetTooltipText(kArchivedRowName);
+-    archived_row->SetProperty(
+-        views::kFlexBehaviorKey,
+-        views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+-                                 views::MaximumFlexSizeRule::kPreferred));
+-    archived_row_ = content_area_view_->AddChildView(std::move(archived_row));
++    archived_row_ = archive_line_->AddChildView(std::move(archived_row));
++    archive_line_layout_->SetFlexForView(archived_row_, 1);
++    // sidebar panels Pn15: History, by the path ⌘Y takes, in the Archived
++    // row's dress.
++    auto history_row = std::make_unique<SidebarRowButton>(
++        base::BindRepeating(
++            [](BrowserView* browser_view) {
++              chrome::ExecuteCommand(browser_view->browser(),
++                                     IDC_SHOW_HISTORY);
++            },
++            browser_view),
++        kHistoryButtonName);
++    history_row->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
++    history_row->SetQuiet(vector_icons::kHistoryIcon,
++                          ArchiveLineIconSize(/*rail=*/false));
++    history_row->SetImageLabelSpacing(kRowFaviconTitleGap);
++    history_row->SetTooltipText(kHistoryButtonName);
++    history_row->GetViewAccessibility().SetName(
++        std::u16string(kHistoryButtonName));
++    history_button_ = archive_line_->AddChildView(std::move(history_row));
+     // updates Up3: "New Stedding Version Available", between the Archived
+     // row and the Space row, as Arc puts its own above the Spaces; hidden
+     // until a later version is ready. A row of the content area, as they are.
+@@ -724,16 +768,6 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+               browser_view)));
+       downloads_button_->SetProperty(views::kMarginsKey,
+                                      gfx::Insets::TLBR(0, 10, 0, 0));
+-      // sidebar panels Pn15: History beside it, by the path ⌘Y takes.
+-      history_button_ = bottom_row->AddChildView(
+-          bottom_button_container_->CreateHistoryButton(
+-              vector_icons::kHistoryIcon, kHistoryButtonName,
+-              base::BindRepeating(
+-                  [](BrowserView* browser_view) {
+-                    chrome::ExecuteCommand(browser_view->browser(),
+-                                           IDC_SHOW_HISTORY);
+-                  },
+-                  browser_view)));
+     }
+     space_switcher_ =
+         bottom_row->AddChildView(std::make_unique<spaces::SpaceSwitcherView>(
+@@ -1341,14 +1375,17 @@ void VerticalTabStripRegionView::OnThemeChanged() {
+                        },
+                        weak_factory_.GetWeakPtr()));
+   }
+-  // sidebar Y2, Y3: the Archived row at the preset's height and text size
+-  // (a density change arrives as a theme change).
++  // sidebar Y2, Y3, Y44: the archive line at its height and text size, from
++  // the preset's and the rows' (a density change arrives as a theme change).
++  for (views::View* const view :
++       {static_cast<views::View*>(archived_row_.get()),
++        history_button_.get()}) {
++    if (auto* const row = views::AsViewClass<SidebarRowButton>(view)) {
++      row->label()->SetFontList(ArchiveLineFont());
++    }
++  }
+   if (archived_row_) {
+-    static_cast<SidebarRowButton*>(archived_row_.get())
+-        ->label()
+-        ->SetFontList(stedding::SidebarFont());
+-    archived_row_->SetPreferredSize(
+-        gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
++    archived_row_->SetPreferredSize(gfx::Size(0, ArchiveLineHeight()));
+   }
+   // sidebar Y1, Y8: the form sizes the New Tab row's plus, the Archived
+   // row's icon and the downloads button's place by the preset's favicon,
+@@ -3473,10 +3510,40 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+       row->GetViewAccessibility().SetName(std::u16string(kArchivedRowName));
+     }
+     row->SetTooltipText(kArchivedRowName);
++    // Open, its icon is smaller than the favicons it stands over (sidebar
++    // Y44): centred on their column, and its label still starting where
++    // their titles start.
++    const int icon = ArchiveLineIconSize(rail);
++    const int shrink = rail ? 0 : stedding::SidebarFaviconSize() - icon;
+     row->SetBorder(views::CreateEmptyBorder(
+-        gfx::Insets::VH(0, rail ? 0 : open_column_inset)));
+-    row->SetQuiet(kSteddingArchiveBoxIcon,
+-                  stedding::SidebarFaviconSize() + (rail ? 4 : 0));
++        gfx::Insets::VH(0, rail ? 0 : open_column_inset + shrink / 2)));
++    row->SetImageLabelSpacing(kRowFaviconTitleGap + shrink - shrink / 2);
++    row->SetQuiet(kSteddingArchiveBoxIcon, icon);
++  }
++  // sidebar Y44, sidebar panels Pn15: History at the archive line's end, its
++  // icon over the "+" (the switcher's trailing inset and half a chip from
++  // the row's end); in the rail, its icon alone under the Archived row's,
++  // on the column's centre line, the line stacked.
++  if (archive_line_layout_) {
++    archive_line_layout_->SetOrientation(
++        rail ? views::BoxLayout::Orientation::kVertical
++             : views::BoxLayout::Orientation::kHorizontal);
++  }
++  if (auto* const row = views::AsViewClass<SidebarRowButton>(history_button_)) {
++    const int icon = ArchiveLineIconSize(rail);
++    row->SetHorizontalAlignment(rail ? gfx::ALIGN_CENTER : gfx::ALIGN_RIGHT);
++    row->SetText(rail ? std::u16string() : std::u16string(kHistoryButtonName));
++    row->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
++        0, rail ? 0 : open_column_inset, 0,
++        rail ? 0
++             : spaces::kSwitcherTrailingInset + spaces::kSwitcherChip / 2 -
++                   icon / 2)));
++    row->SetQuiet(vector_icons::kHistoryIcon, icon);
++    // The open line's height is the Archived row's; the rail's stack gives
++    // each its own.
++    row->SetPreferredSize(rail ? std::optional<gfx::Size>(
++                                     gfx::Size(0, ArchiveLineHeight()))
++                               : std::nullopt);
+   }
+   // The update pill sits on the rows' column too, a little apart from the
+   // rows above and below it (updates Up3, sidebar Y25).
+@@ -3514,13 +3581,13 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+     downloads_button_->SetProperty(
+         views::kMarginsKey, rail ? gfx::Insets::TLBR(0, 0, 8, 0)
+                                  : gfx::Insets::TLBR(0, open_left, 0, 0));
+-  }
+-  // sidebar panels Pn15: History beside it, or under it in the rail's
+-  // stack, on the column's centre line (sidebar Y28).
+-  if (history_button_) {
+-    history_button_->SetProperty(views::kMarginsKey,
+-                                 rail ? gfx::Insets::TLBR(0, 0, 8, 0)
+-                                      : gfx::Insets::TLBR(0, 2, 0, 0));
++    // sidebar Y44: the chips centre on the whole row, the button's part of
++    // it included, not on what the button leaves them.
++    if (space_switcher_) {
++      space_switcher_->SetLeadingExtent(
++          rail ? 0
++               : open_left + downloads_button_->GetPreferredSize().width());
++    }
+   }
+   // The row's height follows its children (sidebar Y13); the orientation
+   // and the margins above changed what they add up to.
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+index 2d37aa013c91d..678b0b26448c1 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -474,6 +474,7 @@ class VerticalTabStripRegionView final
+ 
+   raw_ptr<spaces::SpaceSwitcherView> space_switcher_ = nullptr;
+   // The row the downloads button and the switcher share; vertical in the rail.
++  // Its chips centre on the whole row (sidebar Y44).
+   raw_ptr<views::View> bottom_row_ = nullptr;
+   raw_ptr<views::BoxLayout> bottom_row_layout_ = nullptr;
+   // The rail's dress for the rows that have one: icon-only, stacked, centred.
+@@ -568,6 +569,10 @@ class VerticalTabStripRegionView final
+   // Whether the rows are in their rail form right now (ApplyRailForm):
+   // the floating Space name stays away in the rail (sidebar Y14).
+   bool rail_form_ = false;
++  // sidebar Y44: the line above the switcher's row, the Archived row (archive
++  // A7) at its start and the History button at its end; stacked in the rail.
++  raw_ptr<views::View> archive_line_ = nullptr;
++  raw_ptr<views::BoxLayout> archive_line_layout_ = nullptr;
+   // archive A7: the row above the switcher that opens the archived view.
+   raw_ptr<views::LabelButton> archived_row_ = nullptr;
+   // Stedding (tabs R11-R13): row numbers while Cmd is held. Modifier-only
+@@ -589,7 +594,7 @@ class VerticalTabStripRegionView final
+   base::CallbackListSubscription numbers_paint_as_active_subscription_;
+   // Bottom-left of the sidebar, next to the Space switcher (Arc's placement).
+   raw_ptr<views::View> downloads_button_ = nullptr;
+-  // docs/features/sidebar-panels.md Pn15: beside the downloads button.
++  // docs/features/sidebar-panels.md Pn15: at the archive line's end.
+   raw_ptr<views::View> history_button_ = nullptr;
+   // docs/features/sidebar-panels.md: the window's panels, in a window with
+   // Spaces; the panel open in the content area's column, if any; the hold
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index 31cfe669e54e0..1a7af3a1d2624 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <cstdlib>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -411,6 +412,14 @@ SpaceSwitcherView::SpaceSwitcherView(SpaceModel& model, BrowserWindowInterface&
+ 
+ SpaceSwitcherView::~SpaceSwitcherView() = default;
+ 
++void SpaceSwitcherView::SetLeadingExtent(int extent) {
++  if (leading_extent_ == extent) {
++    return;
++  }
++  leading_extent_ = extent;
++  ApplyOverflow();
++}
++
+ void SpaceSwitcherView::SetCollapsed(bool collapsed) {
+   if (collapsed_ == collapsed) {
+     return;
+@@ -803,6 +812,33 @@ void SpaceSwitcherView::ApplyOverflow() {
+           gfx::Insets::TLBR(0, chip_gap / 2, 0, chip_gap - chip_gap / 2));
+     }
+   }
++  // sidebar Y44: the chips centre on the row this view sits in. The side
++  // with less before the chips -- the leading extent and inset on one, the
++  // "+" and the trailing inset on the other -- takes the difference as a
++  // fixed margin on its spacer, and the two spacers share what is left
++  // equally. Never more than the row has to spare: a narrow row keeps every
++  // chip and the "+" in it, as it did.
++  if (!collapsed_ && leading_spacer_ && trailing_spacer_) {
++    const int add =
++        add_button_ && add_button_->GetVisible() ? chip_size : 0;
++    int used = form.inset + kSwitcherTrailingInset + add;
++    for (const auto& chip : chips_) {
++      const gfx::Insets* const margins =
++          chip.first->GetProperty(views::kMarginsKey);
++      used += chip.first->GetPreferredSize().width() +
++              (margins ? margins->width() : 0);
++    }
++    const int imbalance =
++        (leading_extent_ + form.inset) - (kSwitcherTrailingInset + add);
++    const int shift =
++        std::min(std::abs(imbalance), std::max(0, width() - used));
++    leading_spacer_->SetProperty(
++        views::kMarginsKey,
++        gfx::Insets::TLBR(0, imbalance < 0 ? shift : 0, 0, 0));
++    trailing_spacer_->SetProperty(
++        views::kMarginsKey,
++        gfx::Insets::TLBR(0, 0, 0, imbalance > 0 ? shift : 0));
++  }
+   if (collapsed_) {
+     // As tall as the stack it holds, so the "+" is never laid out past the
+     // window's bottom: a fixed height counted every chip full while the
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.h b/chrome/browser/ui/views/spaces/space_switcher_view.h
+index 7c8c1b7aa056b..afc01efe93b14 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.h
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.h
+@@ -114,6 +114,13 @@ class SpaceSwitcherView : public views::View,
+   // row that ran out of the rail and over the page (operator, 2026-09-08).
+   void SetCollapsed(bool collapsed);
+ 
++  // sidebar Y44: how much of the row this view sits in comes before it (the
++  // downloads button and its margin). The open row centres its chips on the
++  // whole row, not on this view: the button at one end and the "+" at the
++  // other differ in what they take, and the chips stood off the sidebar's
++  // centre by half the difference (the owner, 2026-10-25).
++  void SetLeadingExtent(int extent);
++
+   // tabs R11: on the Mac the chips show their Ctrl-N chord in place of the
+   // glyph while Cmd is held.
+   void SetNumberBadges(bool showing);
+@@ -250,6 +257,8 @@ class SpaceSwitcherView : public views::View,
+   raw_ptr<views::View> leading_spacer_ = nullptr;
+   raw_ptr<views::View> trailing_spacer_ = nullptr;
+   raw_ptr<views::View> add_button_ = nullptr;
++  // SetLeadingExtent's.
++  int leading_extent_ = 0;
+ 
+   // The chip for each Space, in model order. Parallel to model_->spaces() and
+   // rebuilt with it; spacer views between chips make lookups by child index
+diff --git a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
+index fe547907a3bac..ab2a6db16ea6d 100644
+--- a/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
++++ b/chrome/browser/ui/views/tabs/common/clear_tabs_separator.h
+@@ -23,6 +23,13 @@ inline SkColor SidebarQuietColor(SkColor full) {
+ }
+ inline constexpr SkAlpha kSidebarQuietLineAlpha = 0x2C;
+ 
++// sidebar Y44: the archive line, Archived and History, sits further back
++// still, at half the rows' strength, and takes the full colour hovered or
++// pressed as the quiet controls do.
++inline SkColor SidebarFaintColor(SkColor full) {
++  return SkColorSetA(full, static_cast<SkAlpha>(SkColorGetA(full) / 2));
++}
++
+ }  // namespace stedding
+ 
+ // The line between pinned and unpinned tabs, with a Clear at its trailing end.
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+index a750cfe73dfbb..4bb03bc11c077 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -5,7 +5,6 @@
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ 
+ #include "base/functional/bind.h"
+-#include "base/memory/raw_ref.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
+ #include "ui/actions/action_id.h"
+@@ -17,11 +16,7 @@
+ #include "chrome/browser/ui/views/tabs/shared/new_tab_button.h"
+ #include "chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.h"
+ #include "ui/actions/actions.h"
+-#include "ui/base/models/image_model.h"
+-#include "ui/gfx/vector_icon_types.h"
+-#include "ui/views/widget/widget.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+-#include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/actions/action_view_controller.h"
+ #include "ui/views/view_class_properties.h"
+ 
+@@ -82,61 +77,6 @@ VerticalTabStripBottomContainer::CreateDownloadsButton(
+   return button;
+ }
+ 
+-namespace {
+-
+-// Pn15: a strip button that is no action's. It draws `icon` in the colour
+-// TopContainerButton gives an action's icon, and follows the window's
+-// activation and theme itself, as the action keeps its own buttons.
+-class SidebarHistoryButton : public TopContainerButton {
+-  METADATA_HEADER(SidebarHistoryButton, TopContainerButton)
+-
+- public:
+-  explicit SidebarHistoryButton(const gfx::VectorIcon& icon) : icon_(icon) {}
+-  SidebarHistoryButton(const SidebarHistoryButton&) = delete;
+-  SidebarHistoryButton& operator=(const SidebarHistoryButton&) = delete;
+-  ~SidebarHistoryButton() override = default;
+-
+- protected:
+-  // views::LabelButton:
+-  void OnThemeChanged() override {
+-    TopContainerButton::OnThemeChanged();
+-    UpdateIcon(ui::ImageModel::FromVectorIcon(*icon_));
+-  }
+-
+-  // views::View:
+-  void AddedToWidget() override {
+-    paint_as_active_subscription_ =
+-        GetWidget()->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+-            [](SidebarHistoryButton* self) {
+-              self->UpdateIcon(ui::ImageModel::FromVectorIcon(*self->icon_));
+-            },
+-            base::Unretained(this)));
+-    UpdateIcon(ui::ImageModel::FromVectorIcon(*icon_));
+-  }
+-  void RemovedFromWidget() override { paint_as_active_subscription_ = {}; }
+-
+- private:
+-  const raw_ref<const gfx::VectorIcon> icon_;
+-  base::CallbackListSubscription paint_as_active_subscription_;
+-};
+-
+-BEGIN_METADATA(SidebarHistoryButton)
+-END_METADATA
+-
+-}  // namespace
+-
+-std::unique_ptr<views::View>
+-VerticalTabStripBottomContainer::CreateHistoryButton(
+-    const gfx::VectorIcon& icon,
+-    const std::u16string& name,
+-    views::Button::PressedCallback pressed) {
+-  auto button = std::make_unique<SidebarHistoryButton>(icon);
+-  button->SetTooltipText(name);
+-  button->GetViewAccessibility().SetName(name);
+-  button->SetCallback(std::move(pressed));
+-  return button;
+-}
+-
+ void VerticalTabStripBottomContainer::SetNewTabButtonVisible(bool visible) {
+   new_tab_button_->SetVisible(visible);
+ }
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+index 2b5dc10ac9f0d..ec003347f99b1 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h
+@@ -6,7 +6,6 @@
+ #define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_BOTTOM_CONTAINER_H_
+ 
+ #include <memory>
+-#include <string>
+ 
+ #include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
+@@ -18,10 +17,6 @@ class BrowserWindowInterface;
+ class ExpandOnHoverLock;
+ class TabStripFlatEdgeButton;
+ 
+-namespace gfx {
+-struct VectorIcon;
+-}  // namespace gfx
+-
+ namespace actions {
+ class ActionItem;
+ }  // namespace actions
+@@ -53,16 +48,6 @@ class VerticalTabStripBottomContainer : public views::FlexLayoutView {
+   std::unique_ptr<views::View> CreateDownloadsButton(
+       views::Button::PressedCallback pressed);
+ 
+-  // docs/features/sidebar-panels.md Pn15: the History button beside the
+-  // downloads button, in its dress: `icon` at the strip's button size, in
+-  // the rows' colour of the window's activation, named `name` for screen
+-  // readers and as its tooltip. Bound to no action; `pressed` runs on a
+-  // press. The caller owns the view.
+-  std::unique_ptr<views::View> CreateHistoryButton(
+-      const gfx::VectorIcon& icon,
+-      const std::u16string& name,
+-      views::Button::PressedCallback pressed);
+-
+   VerticalTabStripBottomContainer(
+       tabs::VerticalTabStripStateController* state_controller,
+       actions::ActionItem* root_action_item,
+diff --git a/chrome/test/stedding/clear_space_browsertest.cc b/chrome/test/stedding/clear_space_browsertest.cc
+index f85582f77ccb4..ca9ad3f58b5bd 100644
+--- a/chrome/test/stedding/clear_space_browsertest.cc
++++ b/chrome/test/stedding/clear_space_browsertest.cc
+@@ -527,10 +527,10 @@ IN_PROC_BROWSER_TEST_F(ClearSpaceTest, TabReachesClearAndReturnRunsIt) {
+ }
+ 
+ 
+-// sidebar Y27: the Clear line's word and the Archived row sit back from the
+-// tabs, in the rows' text colour at two thirds of its strength, and take the
+-// full colour under the pointer, so they are found and read when wanted
+-// (the owner, 2026-10-18).
++// sidebar Y27, Y44: the Clear line's word and the Archived row sit back from
++// the tabs, in the rows' text colour at two thirds of its strength and the
++// Archived row at half, and take the full colour under the pointer, so they
++// are found and read when wanted (the owner, 2026-10-18, 2026-10-25).
+ IN_PROC_BROWSER_TEST_F(ClearSpaceTest, ClearAndArchivedSitBackUntilHovered) {
+   ASSERT_NO_FATAL_FAILURE(AddBlankTab(browser()));
+   views::Widget* const widget =
+@@ -573,13 +573,15 @@ IN_PROC_BROWSER_TEST_F(ClearSpaceTest, ClearAndArchivedSitBackUntilHovered) {
+     }
+   }
+   ASSERT_TRUE(archived) << "the sidebar shows no Archived row";
+-  EXPECT_EQ(quiet, archived->GetCurrentTextColor())
+-      << "the Archived row is not quiet";
++  const SkColor faint = stedding::SidebarFaintColor(full);
++  ASSERT_LT(SkColorGetA(faint), SkColorGetA(quiet));
++  EXPECT_EQ(faint, archived->GetCurrentTextColor())
++      << "the Archived row is not faint";
+   archived->SetState(views::Button::STATE_HOVERED);
+   EXPECT_EQ(full, archived->GetCurrentTextColor())
+-      << "the hovered Archived row is still quiet";
++      << "the hovered Archived row is still faint";
+   archived->SetState(views::Button::STATE_NORMAL);
+-  EXPECT_EQ(quiet, archived->GetCurrentTextColor());
++  EXPECT_EQ(faint, archived->GetCurrentTextColor());
+ }
+ 
+ }  // namespace
+diff --git a/chrome/test/stedding/privacy_defaults_browsertest.cc b/chrome/test/stedding/privacy_defaults_browsertest.cc
+index 60b891cc38197..86df1d6c97543 100644
+--- a/chrome/test/stedding/privacy_defaults_browsertest.cc
++++ b/chrome/test/stedding/privacy_defaults_browsertest.cc
+@@ -9,11 +9,14 @@
+ // framed by another sets no cookie. The rows cited reads of the preferences'
+ // defaults and of the switch the preference becomes.
+ 
++#include <memory>
+ #include <string>
+ 
++#include "base/environment.h"
+ #include "base/test/run_until.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/signin/account_consistency_mode_manager.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -22,9 +25,11 @@
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/content_settings/core/common/pref_names.h"
+ #include "components/prefs/pref_service.h"
++#include "components/signin/public/base/signin_pref_names.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
++#include "google_apis/google_api_keys.h"
+ #include "net/dns/mock_host_resolver.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -144,6 +149,41 @@ IN_PROC_BROWSER_TEST_F(GlobalPrivacyControlTest,
+ 
+ // Every host resolves to the test server; rules are set before the browser
+ // starts its work, as the resolver allows no change after that.
++// privacy Q16 (GitHub issue 38): browser sign-in is never offered, also with
++// an OAuth client given to the build by the GOOGLE_DEFAULT_CLIENT_ID and
++// GOOGLE_DEFAULT_CLIENT_SECRET environment variables, as on a Windows computer
++// that has them. The test suite pretends every build has a client
++// (ChromeTestSuite); that is taken back, so the variables' client is the one
++// there is.
++class BrowserSigninTest : public InProcessBrowserTest {
++ protected:
++  void SetUpInProcessBrowserTestFixture() override {
++    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
++    AccountConsistencyModeManager::SetIgnoreMissingOAuthClientForTesting(
++        false);
++    std::unique_ptr<base::Environment> env = base::Environment::Create();
++    env->SetVar("GOOGLE_DEFAULT_CLIENT_ID", "stedding-test-client");
++    env->SetVar("GOOGLE_DEFAULT_CLIENT_SECRET", "stedding-test-secret");
++  }
++  void TearDownInProcessBrowserTestFixture() override {
++    std::unique_ptr<base::Environment> env = base::Environment::Create();
++    env->UnSetVar("GOOGLE_DEFAULT_CLIENT_ID");
++    env->UnSetVar("GOOGLE_DEFAULT_CLIENT_SECRET");
++    AccountConsistencyModeManager::SetIgnoreMissingOAuthClientForTesting();
++    InProcessBrowserTest::TearDownInProcessBrowserTestFixture();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(BrowserSigninTest, NoOAuthClientTurnsSignInOn) {
++  ASSERT_TRUE(google_apis::HasOAuthClientConfigured())
++      << "the variables gave the build no OAuth client";
++  Profile* const profile = browser()->GetProfile();
++  EXPECT_FALSE(profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed))
++      << "browser sign-in is allowed";
++  EXPECT_FALSE(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile))
++      << "Google's sign-in headers and prompts are on";
++}
++
+ class ThirdPartyCookiesTest : public InProcessBrowserTest {
+  protected:
+   void SetUpOnMainThread() override {
+diff --git a/chrome/test/stedding/sidebar_panels_browsertest.cc b/chrome/test/stedding/sidebar_panels_browsertest.cc
+index 7740f1f4565e3..c08916632e4cb 100644
+--- a/chrome/test/stedding/sidebar_panels_browsertest.cc
++++ b/chrome/test/stedding/sidebar_panels_browsertest.cc
+@@ -878,11 +878,12 @@ IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, ADangerousRowSendsToThePage) {
+   EXPECT_TRUE(item->IsDangerous()) << "the panel decided for the user";
+ }
+ 
+-// Pn15, Pn14: the History button sits beside the downloads button, named
+-// "History", and opens its panel; in the rail it stands under the downloads
+-// button on the column's centre line. The Archived row wears the archive
+-// box. With the setting off the button is not drawn.
+-IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, TheHistoryButtonSitsBesideDownloads) {
++// Pn15, Pn14, sidebar Y44: the History button ends the archive line, the
++// Archived row at its start, named "History", and opens its panel; the
++// downloads button and the "+" end the row below. In the rail it stands under
++// the Archived row's icon on the column's centre line. The Archived row wears
++// the archive box. With the setting off the button is not drawn.
++IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, TheHistoryButtonEndsTheArchiveLine) {
+   Layout();
+   views::View* const history_button = region()->history_button();
+   views::View* const downloads = region()->downloads_button();
+@@ -893,9 +894,7 @@ IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, TheHistoryButtonSitsBesideDownloads) {
+   ASSERT_TRUE(button);
+   EXPECT_EQ(u"History", button->GetTooltipText());
+   EXPECT_EQ(u"History", button->GetViewAccessibility().GetCachedName());
+-  EXPECT_GE(history_button->GetBoundsInScreen().x(),
+-            downloads->GetBoundsInScreen().right())
+-      << "not after the downloads button";
++  EXPECT_EQ(u"History", button->GetText()) << "the open line does not name it";
+ 
+   auto* const archived = views::AsViewClass<views::LabelButton>(
+       FindButtonWithTooltip(region(), u"Archived tabs"));
+@@ -906,6 +905,26 @@ IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, TheHistoryButtonSitsBesideDownloads) {
+   ASSERT_TRUE(glyph->IsVectorIcon());
+   EXPECT_EQ(&kSteddingArchiveBoxIcon, glyph->GetVectorIcon().vector_icon());
+ 
++  const gfx::Rect history = history_button->GetBoundsInScreen();
++  const gfx::Rect archived_bounds = archived->GetBoundsInScreen();
++  EXPECT_NEAR(archived_bounds.CenterPoint().y(), history.CenterPoint().y(), 1)
++      << "not on the Archived row's line";
++  EXPECT_LE(archived_bounds.right(), history.x()) << "not after the Archived row";
++  EXPECT_LT(history.bottom(), downloads->GetBoundsInScreen().y())
++      << "still on the downloads button's row";
++  views::Button* const add = FindButtonWithTooltip(region(), u"New Space");
++  ASSERT_TRUE(add);
++  EXPECT_GT(history.right(), add->GetBoundsInScreen().x())
++      << "not at the line's end, over the \"+\"";
++  // One button at each end of the row below, the chips between them.
++  for (views::View* const child : downloads->parent()->children()) {
++    if (child->GetVisible() && child != downloads) {
++      EXPECT_GE(child->GetBoundsInScreen().x(),
++                downloads->GetBoundsInScreen().right())
++          << "something stands before the downloads button";
++    }
++  }
++
+   stedding::test::ClickLeftMouse(
+       window(), history_button->GetBoundsInScreen().CenterPoint());
+   ASSERT_TRUE(WaitForPanel(SidebarPanel::kHistory));
+@@ -918,12 +937,16 @@ IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, TheHistoryButtonSitsBesideDownloads) {
+   ASSERT_TRUE(base::test::RunUntil([&]() { return !Animating(); }));
+   Layout();
+   ASSERT_TRUE(history_button->IsDrawn());
+-  EXPECT_NEAR(downloads->GetBoundsInScreen().CenterPoint().x(),
++  EXPECT_TRUE(button->GetText().empty()) << "the rail names it in words";
++  EXPECT_NEAR(archived->GetBoundsInScreen().CenterPoint().x(),
+               history_button->GetBoundsInScreen().CenterPoint().x(), 1)
+       << "off the rail's centre line";
+   EXPECT_GE(history_button->GetBoundsInScreen().y(),
+-            downloads->GetBoundsInScreen().bottom())
+-      << "not under the downloads button";
++            archived->GetBoundsInScreen().bottom())
++      << "not under the Archived row";
++  EXPECT_LE(history_button->GetBoundsInScreen().bottom(),
++            downloads->GetBoundsInScreen().y())
++      << "not above the downloads button";
+   region()->SetHoveredForTesting(std::nullopt);
+ 
+   browser()->GetProfile()->GetPrefs()->SetBoolean(
+diff --git a/chrome/test/stedding/sidebar_rail_browsertest.cc b/chrome/test/stedding/sidebar_rail_browsertest.cc
+index b80b88994236d..5f5349a05df8a 100644
+--- a/chrome/test/stedding/sidebar_rail_browsertest.cc
++++ b/chrome/test/stedding/sidebar_rail_browsertest.cc
+@@ -13,6 +13,7 @@
+ #include <algorithm>
+ #include <cstddef>
+ #include <cstdlib>
++#include <limits>
+ #include <map>
+ #include <memory>
+ #include <optional>
+@@ -1776,6 +1777,26 @@ IN_PROC_BROWSER_TEST_F(SidebarColumnTest, EveryGlyphStandsOnTheColumn) {
+                   {"the downloads button's icon",
+                    ImageCentreX(region()->downloads_button())},
+               });
++    // sidebar Y44: at the other end History's icon stands over the "+",
++    // and the chips centre on the row the downloads button and the "+"
++    // end, not on what the button leaves them.
++    const std::optional<double> add =
++        ImageCentreX(FindButtonWithTooltip(switcher, u"New Space"));
++    ASSERT_TRUE(add) << "the \"+\" is not drawn";
++    expect_on(*add, {{"the History button's icon",
++                      ImageCentreX(region()->history_button())}});
++    double chips_left = std::numeric_limits<double>::max();
++    double chips_right = std::numeric_limits<double>::lowest();
++    for (const auto& [name, chip] : chips()) {
++      ASSERT_TRUE(chip && chip->IsDrawn()) << name << " is not drawn";
++      chips_left = std::min<double>(chips_left, chip->GetBoundsInScreen().x());
++      chips_right =
++          std::max<double>(chips_right, chip->GetBoundsInScreen().right());
++    }
++    EXPECT_NEAR(
++        CentreX(region()->downloads_button()->parent()->GetBoundsInScreen()),
++        (chips_left + chips_right) / 2, 1.0)
++        << "the chips are off the row's centre";
+     // The name after the glyph starts where the rows' titles start, give
+     // or take the first letters' own margins.
+     TabView* const row = stedding::test::FindDrawnRow(root, plain);
+diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
+index c694fc0d8eda0..4b6a84b909ba6 100644
+--- a/chrome/test/stedding/welcome_browsertest.cc
++++ b/chrome/test/stedding/welcome_browsertest.cc
+@@ -27,6 +27,7 @@
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/first_run/first_run.h"
+ #include "chrome/browser/infobars/infobar_features.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
+@@ -35,9 +36,11 @@
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/profiles/profile_picker.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_colors.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/startup/first_run_service.h"
+ #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
+ #include "chrome/browser/ui/startup/startup_types.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+@@ -570,6 +573,27 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, ABookmarksFileComesInAsBookmarks) {
+ // window or a popup. Its swatch tints the first Space, and after Finish the
+ // flow does not open again, in this run or after a restart. W1 cited a test
+ // of the preference's registration, which never opened a window.
++// welcome W18 (GitHub issue 38): Chromium's first run, which asks to sign in
++// to Google before any window opens, never opens on a first launch;
++// Stedding's welcome flow is the first start. It opened on Windows.
++class ChromiumFirstRunTest : public InProcessBrowserTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    command_line->RemoveSwitch(switches::kNoFirstRun);
++    command_line->AppendSwitch(switches::kForceFirstRun);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(ChromiumFirstRunTest, NeverOpensSoNothingAsksToSignIn) {
++  ASSERT_TRUE(first_run::IsChromeFirstRun()) << "not a first launch";
++  Profile* const profile = browser()->GetProfile();
++  EXPECT_FALSE(ShouldOpenFirstRun(profile));
++  EXPECT_FALSE(FirstRunServiceFactory::GetForBrowserContext(profile));
++  EXPECT_FALSE(ProfilePicker::IsFirstRunOpen());
++  EXPECT_FALSE(ProfilePicker::IsOpen()) << "a window asking to sign in";
++}
++
+ class WelcomeFirstRunTest : public InProcessBrowserTest {
+  protected:
+   void SetUpOnMainThread() override {

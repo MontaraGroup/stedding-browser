@@ -269,7 +269,9 @@ Google shut off access to its private Sync APIs for third-party Chromium builds 
 2021; forks cannot offer Chrome sync legitimately, and we will not pretend
 otherwise. Signing into Google *websites* works normally — this only concerns
 browser-level account integration, which the de-Googling work removes
-(ARCHITECTURE.md). Sync services are out of scope on the way to 1.0 (ROADMAP.md).
+(ARCHITECTURE.md). Stedding never offers to sign the browser in to Google, also on a
+computer with Google's OAuth environment variables set (`features/privacy.md` Q16). Sync
+services are out of scope on the way to 1.0 (ROADMAP.md).
 Today the sidebar travels between machines as a file: **Export Space…** writes one Space and
 **Export all Spaces…** every Space, to Downloads, and **Import sidebar…** reads either on the
 other machine; profile import covers the rest. The file holds each Space's name, icon,
