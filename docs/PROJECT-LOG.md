@@ -10,6 +10,27 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-24, late -- Edit Space: any emoji, any colour, one for each look
+
+The owner asked for people to choose their own emoji and colour for a Space, one colour or one
+for each of the light and dark looks, automatic by default (spaces B41–B44, `S-99`). Edit Space
+is a window of its own, from the Space menu's first row and Settings' Edit button: the icon
+beside the name, then an Icon tab (any emoji typed, pasted or from the system's picker, kept
+whole; thirty-six to press; No Icon) and a Colour tab (One colour or Light and dark; the twelve
+colours with a deeper and a softer step; a custom picker with a hex field; the sidebar pictured
+in each look, a press on one choosing the look to colour). A Space keeps the dark look's colour
+in the profile's list and the session, and the window takes the colour for the look it is in,
+again when the look changes. A browser-modal dialog here is 448 DIP wide and no taller than its
+window allows, which is why the page is split into tabs: the first layout ran under its buttons.
+
+Seen on the Mac's release build: opened from the Space menu with the real pointer, both tabs,
+Light and dark with coral for the dark look, in the light and the dark look. Tests: the new
+`EditSpaceTest.*` (five), `SpaceIconTest`, the pair in `SpaceModelTest` and `SpaceRegistryTest`;
+the Mac's whole sweep green (1048 unit tests, 532 and 150 browser tests). PC: the Spaces unit tests and
+74 of 75 of those browser suites passed; the 75th, `SidebarClickTest.ACloseKeepsTheListWhereItIs`,
+failed at its premise as `S-291` does and passed five runs alone.
+
+
 ## 2026-10-24, night -- three GitHub issues fixed, the issues labelled
 
 The owner held beta 15 for more work and asked for the GitHub issues to be read and labelled.

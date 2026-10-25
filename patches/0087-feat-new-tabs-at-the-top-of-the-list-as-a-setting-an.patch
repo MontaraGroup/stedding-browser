@@ -33,6 +33,19 @@ the engines do; every control shows an amber ring with the keyboard
 focus. Drawn by the page in boxes and SVG paths, in the brand's palette;
 nothing is fetched.
 
+Spaces B41-B44 (the owner, 2026-10-24: people choose their own emoji
+and colour for a Space, one colour or one for each of the light and dark
+looks, automatic by default): Edit Space, a window of its own from the
+Space menu's first row and Settings' Edit button, with the Space's name,
+an Icon tab (any emoji, typed, pasted or from the system's picker, kept
+whole; a grid of thirty-six; No Icon) and a Colour tab (one colour or
+Light and dark, a palette of the twelve with a deeper and a softer step,
+a custom picker with a hex field, and a picture of the sidebar in each
+look). A Space keeps an optional dark look's colour (Space, the profile's
+registry and the session), and the window takes the colour for the look
+it is in, again whenever the look changes; the switcher's dots and the
+Ctrl-Tab switcher's dot follow. The Space menu's six fixed icons are gone.
+
 GitHub issues 26 and 29, the tests (their fixes are in the patches that
 own the code): a row dropped on the top half of the first row under the
 Clear line takes the first place there and stays a tab; a link opened
@@ -40,6 +53,9 @@ from an essential when the pinned run begins with a pinned folder lands
 under the line.
 
 Tests: PinnedRunTest.NewTabsOpenAtTheTopWhenAsked,
+EditSpaceTest.*, SpaceIconTest.TheFirstCharacterIsKeptWhole,
+SpaceModelTest.ALightAndDarkPairIsKeptAndOneColourClearsIt,
+SpaceRegistryTest.TheDarkColourRoundTrips,
 PinnedRunTest.ARowDroppedOnTheFirstRowTakesTheTop,
 PinnedRunTest.ALinkFromAnEssentialPassesAPinnedFolder,
 WelcomeFlowTest.TheFlowOpensOnAWelcomeScreen,
@@ -51,24 +67,49 @@ few and too alike (the owner, 2026-10-23).
 Removable when: never; it is product behaviour.
 ---
  .../api/settings_private/prefs_util.cc        |   3 +
- .../stedding_page/stedding_page.html.ts       |   7 +
- .../resources/stedding_welcome/app.css        | 827 +++++++++++++++---
+ .../stedding_page/stedding_page.html.ts       |  12 +
+ .../settings/stedding_page/stedding_page.ts   |  11 +
+ .../resources/stedding_welcome/app.css        | 827 +++++++++++++---
  .../browser/resources/stedding_welcome/app.ts | 365 ++++++--
+ chrome/browser/ui/spaces/BUILD.gn             |   3 +
  .../browser/ui/spaces/arc_sidebar_importer.cc |  79 +-
  .../spaces/arc_sidebar_importer_unittest.cc   |   9 +-
+ chrome/browser/ui/spaces/space.h              |  11 +
  chrome/browser/ui/spaces/space_colors.h       |  49 +-
- chrome/browser/ui/spaces/space_model.cc       |  56 +-
- chrome/browser/ui/spaces/space_model.h        |  13 +
- chrome/browser/ui/spaces/space_registry.cc    |   5 +-
+ chrome/browser/ui/spaces/space_icon.cc        |  28 +
+ chrome/browser/ui/spaces/space_icon.h         |  21 +
+ .../browser/ui/spaces/space_icon_unittest.cc  |  33 +
+ chrome/browser/ui/spaces/space_model.cc       |  78 +-
+ chrome/browser/ui/spaces/space_model.h        |  19 +
+ .../browser/ui/spaces/space_model_unittest.cc |  23 +
+ chrome/browser/ui/spaces/space_registry.cc    |  19 +-
+ chrome/browser/ui/spaces/space_registry.h     |   9 +-
+ .../ui/spaces/space_registry_unittest.cc      |  36 +
  chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   4 +
  chrome/browser/ui/tabs/tab_strip_model.cc     |  13 +-
  chrome/browser/ui/tabs/tab_strip_model.h      |   8 +
- .../browser/ui/webui/settings/settings_ui.cc  |   8 +
+ .../frame/vertical_tab_strip_region_view.cc   |  16 +-
+ chrome/browser/ui/views/spaces/BUILD.gn       |   7 +
+ .../ui/views/spaces/edit_space_view.cc        | 879 ++++++++++++++++++
+ .../browser/ui/views/spaces/edit_space_view.h | 131 +++
+ .../ui/views/spaces/space_switcher_view.cc    |  42 +-
+ .../switcher/recent_tabs_switcher_view.cc     |   8 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  11 +
+ .../webui/settings/stedding_spaces_handler.cc |  22 +
+ .../webui/settings/stedding_spaces_handler.h  |   1 +
  .../stedding_welcome_handler_unittest.cc      |   2 +-
+ chrome/test/stedding/BUILD.gn                 |   1 +
+ .../test/stedding/edit_space_browsertest.cc   | 206 ++++
  .../test/stedding/pinned_run_browsertest.cc   | 368 ++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  90 ++
- 18 files changed, 1692 insertions(+), 216 deletions(-)
+ 37 files changed, 3205 insertions(+), 241 deletions(-)
+ create mode 100644 chrome/browser/ui/spaces/space_icon.cc
+ create mode 100644 chrome/browser/ui/spaces/space_icon.h
+ create mode 100644 chrome/browser/ui/spaces/space_icon_unittest.cc
+ create mode 100644 chrome/browser/ui/views/spaces/edit_space_view.cc
+ create mode 100644 chrome/browser/ui/views/spaces/edit_space_view.h
+ create mode 100644 chrome/test/stedding/edit_space_browsertest.cc
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -85,7 +126,7 @@ index a5cd8dafdde14..5c842c1336c14 100644
    (*s_allowlist)[stedding::prefs::kBookmarksConverted] =
        settings_api::PrefType::kBoolean;
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
-index 39e05d4572407..bc6ebcee8a883 100644
+index 39e05d4572407..15f07b2e9309b 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 @@ -148,6 +148,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
@@ -102,6 +143,40 @@ index 39e05d4572407..bc6ebcee8a883 100644
    <settings-toggle-button
        id="bookmarksShown"
        class="hr"
+@@ -526,6 +533,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
+           aria-description="${space.isolationMark}"
+           @change="${this.onSpaceNameChange_}">
+       </cr-input>
++      <cr-button class="space-edit" data-id="${space.id}"
++          aria-label="${this.editLabel_(space)}"
++          @click="${this.onEditSpaceClick_}">
++        $i18n{steddingEditSpace}
++      </cr-button>
+       ${space.canIsolate ? html`
+       <cr-toggle class="space-isolated" data-id="${space.id}"
+           ?checked="${space.isolated}"
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+index b3f27bfb8dd8b..04fc8d2a56554 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+@@ -426,6 +426,17 @@ export class SettingsSteddingPageElement extends
+                                    space.displayName);
+   }
+ 
++  // spaces B41: Edit Space, over the window this page is in.
++  protected editLabel_(space: SteddingSpace): string {
++    return loadTimeData.getStringF('steddingEditNamedSpace',
++                                   space.displayName);
++  }
++
++  protected onEditSpaceClick_(e: Event) {
++    chrome.send('steddingEditSpace',
++                [(e.currentTarget as HTMLElement).dataset['id']]);
++  }
++
+   // spaces B5 (BACKLOG S-148): the browser asks first, over the window, the
+   // question every deletion of a Space asks (its name and its tabs); the
+   // list follows the answer. A Space without its own session was deleted
 diff --git a/chrome/browser/resources/stedding_welcome/app.css b/chrome/browser/resources/stedding_welcome/app.css
 index 5ee34e22a3fcf..7bd88c02c9c67 100644
 --- a/chrome/browser/resources/stedding_welcome/app.css
@@ -1606,6 +1681,34 @@ index debd2903cb537..e3293c00fcca6 100644
  {
    const wanted = location.hash.slice(1);
    if ((STEPS as string[]).includes(wanted)) {
+diff --git a/chrome/browser/ui/spaces/BUILD.gn b/chrome/browser/ui/spaces/BUILD.gn
+index 2130030a1a19e..a614a8a4c019f 100644
+--- a/chrome/browser/ui/spaces/BUILD.gn
++++ b/chrome/browser/ui/spaces/BUILD.gn
+@@ -43,6 +43,7 @@ source_set("spaces") {
+     "sidebar_backup.h",
+     "space_jar_navigation_throttle.h",
+     "space.h",
++    "space_icon.h",
+     "space_registry.h",
+     "space_registry_factory.h",
+     "space_colors.h",
+@@ -64,6 +65,7 @@ source_set("spaces") {
+     "space_jar_navigation_throttle.cc",
+     "space_query.cc",
+     "space.cc",
++    "space_icon.cc",
+     "space_registry.cc",
+     "space_registry_factory.cc",
+     "space_commands.cc",
+@@ -144,6 +146,7 @@ source_set("unit_tests") {
+     "sidebar_backup_unittest.cc",
+     "space_commands_unittest.cc",
+     "space_partitions_unittest.cc",
++    "space_icon_unittest.cc",
+     "space_registry_unittest.cc",
+     "space_model_unittest.cc",
+     "space_model_window_unittest.cc",
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 index 20d11f6e7be29..030592426b008 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
@@ -1784,6 +1887,42 @@ index 7e938ddbc36dc..4db4fdfde19aa 100644
  }
  
  // I9: the file is read through a copy.
+diff --git a/chrome/browser/ui/spaces/space.h b/chrome/browser/ui/spaces/space.h
+index d9fdeed26942a..32b5c5d205c6b 100644
+--- a/chrome/browser/ui/spaces/space.h
++++ b/chrome/browser/ui/spaces/space.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_SPACES_SPACE_H_
+ #define CHROME_BROWSER_UI_SPACES_SPACE_H_
+ 
++#include <optional>
+ #include <string>
+ 
+ #include "chrome/browser/ui/spaces/space_id.h"
+@@ -45,6 +46,15 @@ class Space {
+   bool color_chosen() const { return color_chosen_; }
+   void set_color_chosen(bool chosen) { color_chosen_ = chosen; }
+ 
++  // spaces B43: the dark look's colour, when the Space has a pair; none for
++  // one colour, which both looks take (automatic). ColorFor() is the colour
++  // a window in `dark` look takes.
++  const std::optional<SkColor>& dark_color() const { return dark_color_; }
++  void SetDarkColor(std::optional<SkColor> color) { dark_color_ = color; }
++  SkColor ColorFor(bool dark) const {
++    return dark && dark_color_ ? *dark_color_ : color_;
++  }
++
+   // A short string the user picks to identify the Space in the switcher --
+   // typically one emoji. Empty until they choose one, in which case the
+   // switcher shows a dot in the Space's colour instead.
+@@ -62,6 +72,7 @@ class Space {
+   std::string name_;
+   SkColor color_;
+   bool color_chosen_ = false;
++  std::optional<SkColor> dark_color_;
+   std::string icon_;
+   bool pins_collapsed_ = false;
+ };
 diff --git a/chrome/browser/ui/spaces/space_colors.h b/chrome/browser/ui/spaces/space_colors.h
 index e0afc51c8b8fc..d37e786a4a853 100644
 --- a/chrome/browser/ui/spaces/space_colors.h
@@ -1852,8 +1991,108 @@ index e0afc51c8b8fc..d37e786a4a853 100644
  }  // namespace spaces
  
  #endif  // CHROME_BROWSER_UI_SPACES_SPACE_COLORS_H_
+diff --git a/chrome/browser/ui/spaces/space_icon.cc b/chrome/browser/ui/spaces/space_icon.cc
+new file mode 100644
+index 0000000000000..a4a4be1652ba5
+--- /dev/null
++++ b/chrome/browser/ui/spaces/space_icon.cc
+@@ -0,0 +1,28 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/spaces/space_icon.h"
++
++#include "base/i18n/break_iterator.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++
++namespace spaces {
++
++std::string SpaceIconFromText(std::u16string_view text) {
++  const std::u16string_view trimmed =
++      base::TrimWhitespace(text, base::TRIM_LEADING);
++  if (trimmed.empty()) {
++    return std::string();
++  }
++  // A grapheme cluster is what a reader takes for one character.
++  base::i18n::BreakIterator characters(trimmed,
++                                       base::i18n::BreakIterator::BREAK_CHARACTER);
++  if (!characters.Init() || !characters.Advance()) {
++    return std::string();
++  }
++  return base::UTF16ToUTF8(characters.GetString());
++}
++
++}  // namespace spaces
+diff --git a/chrome/browser/ui/spaces/space_icon.h b/chrome/browser/ui/spaces/space_icon.h
+new file mode 100644
+index 0000000000000..b435fde358aad
+--- /dev/null
++++ b/chrome/browser/ui/spaces/space_icon.h
+@@ -0,0 +1,21 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_SPACES_SPACE_ICON_H_
++#define CHROME_BROWSER_UI_SPACES_SPACE_ICON_H_
++
++#include <string>
++#include <string_view>
++
++namespace spaces {
++
++// spaces B42: the icon a Space takes from what was typed or pasted for it:
++// the first character, leading spaces aside, kept whole -- an emoji with its
++// skin tone, a flag's two letters, a family joined with zero-width joiners.
++// Empty when there is none.
++std::string SpaceIconFromText(std::u16string_view text);
++
++}  // namespace spaces
++
++#endif  // CHROME_BROWSER_UI_SPACES_SPACE_ICON_H_
+diff --git a/chrome/browser/ui/spaces/space_icon_unittest.cc b/chrome/browser/ui/spaces/space_icon_unittest.cc
+new file mode 100644
+index 0000000000000..4d1b9171fa629
+--- /dev/null
++++ b/chrome/browser/ui/spaces/space_icon_unittest.cc
+@@ -0,0 +1,33 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/spaces/space_icon.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace spaces {
++namespace {
++
++// spaces B42: the first character typed or pasted is the icon, kept whole.
++TEST(SpaceIconTest, TheFirstCharacterIsKeptWhole) {
++  EXPECT_EQ("\U0001F98A", SpaceIconFromText(u"\U0001F98A fox"));
++  EXPECT_EQ("\U0001F44D\U0001F3FD",
++            SpaceIconFromText(u"\U0001F44D\U0001F3FD\U0001F44D"))
++      << "a skin tone stays with its hand";
++  EXPECT_EQ("\U0001F1FA\U0001F1E6",
++            SpaceIconFromText(u"\U0001F1FA\U0001F1E6\U0001F1F5\U0001F1F1"))
++      << "a flag is two letters, one character";
++  EXPECT_EQ("\U0001F468‍\U0001F469‍\U0001F467",
++            SpaceIconFromText(u"\U0001F468‍\U0001F469‍\U0001F467 "
++                              u"home"))
++      << "a family joined with zero-width joiners";
++  EXPECT_EQ("✈️", SpaceIconFromText(u"✈️ trips"))
++      << "an emoji's presentation selector";
++  EXPECT_EQ("W", SpaceIconFromText(u"  Work")) << "leading spaces aside";
++  EXPECT_EQ("", SpaceIconFromText(u"   "));
++  EXPECT_EQ("", SpaceIconFromText(u""));
++}
++
++}  // namespace
++}  // namespace spaces
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index ba327b8732b42..b242130727c54 100644
+index ba327b8732b42..b881532c6fe4e 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -4,6 +4,8 @@
@@ -1865,7 +2104,7 @@ index ba327b8732b42..b242130727c54 100644
  #include <algorithm>
  #include <map>
  #include <optional>
-@@ -153,7 +155,7 @@ namespace {
+@@ -153,13 +155,14 @@ namespace {
  // caller has to handle. It is deliberately unnamed: a single unnamed Space is
  // indistinguishable from an ordinary window, which is what a user who has never
  // heard of Spaces should see.
@@ -1874,7 +2113,14 @@ index ba327b8732b42..b242130727c54 100644
  
  // The registry's entry for `space`, kept by its id.
  RegistryEntry RegistryEntryFor(const Space& space) {
-@@ -187,8 +189,8 @@ std::vector<std::unique_ptr<Space>> SpacesFromSessionList(
+   RegistryEntry entry(space.id(), space.name(), space.color());
+   entry.icon = space.icon();
+   entry.color_chosen = space.color_chosen();
++  entry.dark_color = space.dark_color();
+   entry.pins_collapsed = space.pins_collapsed();
+   return entry;
+ }
+@@ -187,12 +190,16 @@ std::vector<std::unique_ptr<Space>> SpacesFromSessionList(
      const std::string* const icon = entry.FindString("icon");
      auto space = std::make_unique<Space>(
          id, name ? *name : std::string(),
@@ -1885,7 +2131,15 @@ index ba327b8732b42..b242130727c54 100644
      if (icon) {
        space->SetIcon(*icon);
      }
-@@ -349,6 +351,10 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+     space->set_color_chosen(entry.FindBool("color_chosen").value_or(false));
++    // spaces B44: a session from before the pair reads as one colour.
++    if (const std::optional<int> dark = entry.FindInt("dark_color")) {
++      space->SetDarkColor(static_cast<SkColor>(*dark));
++    }
+     // pins H17: a session from before the state existed is expanded.
+     space->set_pins_collapsed(
+         entry.FindBool("pins_collapsed").value_or(false));
+@@ -349,6 +356,10 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
    tab_strip_model_->SetBeforeDetachTabsCallback(
        base::BindRepeating(&SpaceModel::KeepAVisibleTabAsTabsLeave,
                            base::Unretained(this), /*closing=*/false));
@@ -1896,7 +2150,7 @@ index ba327b8732b42..b242130727c54 100644
    // tabs R5, R33 (BACKLOG S-112): Sleep Tab on the row on screen shows the
    // row a close would. The strip asks TabToShowAsTabsLeave() itself.
    stedding::SetRowAfterSleep(&RowAfterSleepIn);
-@@ -412,6 +418,8 @@ SpaceModel::~SpaceModel() {
+@@ -412,6 +423,8 @@ SpaceModel::~SpaceModel() {
      // strip after this model would call into freed memory.
      tab_strip_model_->SetBeforeDetachTabsCallback(
          TabStripModel::BeforeCloseTabsCallback());
@@ -1905,7 +2159,30 @@ index ba327b8732b42..b242130727c54 100644
      tab_strip_model_->RemoveObserver(this);
      tab_strip_model_ = nullptr;
    }
-@@ -1146,6 +1154,26 @@ void SpaceModel::KeepAVisibleTabAsTabsLeave(
+@@ -548,11 +561,13 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+       Space* const space = it->get();
+       const bool differs = space->name() != entry.name ||
+                            space->icon() != entry.icon ||
+-                           space->color() != entry.color;
++                           space->color() != entry.color ||
++                           space->dark_color() != entry.dark_color;
+       space->SetName(entry.name);
+       space->SetIcon(entry.icon);
+       space->SetColor(entry.color);
+       space->set_color_chosen(entry.color_chosen);
++      space->SetDarkColor(entry.dark_color);
+       if (differs) {
+         changed.push_back(entry.id);
+       }
+@@ -565,6 +580,7 @@ void SpaceModel::SyncWithRegistry(bool seed) {
+       auto space = std::make_unique<Space>(entry.id, entry.name, entry.color);
+       space->SetIcon(entry.icon);
+       space->set_color_chosen(entry.color_chosen);
++      space->SetDarkColor(entry.dark_color);
+       space->set_pins_collapsed(entry.pins_collapsed);
+       spaces_.push_back(std::move(space));
+       added.push_back(entry.id);
+@@ -1146,6 +1162,26 @@ void SpaceModel::KeepAVisibleTabAsTabsLeave(
    }
  }
  
@@ -1932,7 +2209,7 @@ index ba327b8732b42..b242130727c54 100644
  void SpaceModel::OnTabStripModelChanged(
      TabStripModel* tab_strip_model,
      const TabStripModelChange& change,
-@@ -1185,7 +1213,7 @@ void SpaceModel::OnTabStripModelChanged(
+@@ -1185,7 +1221,7 @@ void SpaceModel::OnTabStripModelChanged(
    // Remember where the user is in the active Space, but only a tab that is
    // really in it: an essentials tab is in every Space and remembering it would
    // make every Space reopen on the same tab.
@@ -1941,7 +2218,7 @@ index ba327b8732b42..b242130727c54 100644
      RecordActivation(tab_strip_model->GetActiveTab());
      if (tabs::TabInterface* const active = tab_strip_model->GetActiveTab();
          active && !active->IsPinned()) {
-@@ -1542,20 +1570,32 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
+@@ -1542,20 +1578,32 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
    // A row the sidebar shows that stays: the one rule for which rows show
    // (spaces B33) passes over another Space's tabs, a tab moved to another
    // Space since it was used, a collapsed folder's rows and a collapsed
@@ -1978,11 +2255,59 @@ index ba327b8732b42..b242130727c54 100644
          if (row_in_view_.is_null() || row_in_view_.Run(tab)) {
            return tab;
          }
+@@ -1897,8 +1945,14 @@ void SpaceModel::SetSpaceName(const SpaceId& id, std::string name) {
+ }
+ 
+ void SpaceModel::SetSpaceColor(const SpaceId& id, SkColor color) {
++  SetSpaceColors(id, color, std::nullopt);
++}
++
++void SpaceModel::SetSpaceColors(const SpaceId& id,
++                                SkColor color,
++                                std::optional<SkColor> dark) {
+   if (registry_) {
+-    registry_->SetColor(id, color, /*chosen=*/true);
++    registry_->SetColor(id, color, /*chosen=*/true, dark);
+     return;
+   }
+   Space* space = GetSpace(id);
+@@ -1906,6 +1960,7 @@ void SpaceModel::SetSpaceColor(const SpaceId& id, SkColor color) {
+     return;
+   }
+   space->SetColor(color);
++  space->SetDarkColor(dark);
+   observers_.Notify(&Observer::OnSpaceMetadataChanged, id);
+   SaveToSession();
+ }
+@@ -3384,6 +3439,9 @@ std::string SpaceModel::Serialize() const {
+     entry.Set("icon", space->icon());
+     entry.Set("color", static_cast<int>(space->color()));
+     entry.Set("color_chosen", space->color_chosen());
++    if (space->dark_color()) {
++      entry.Set("dark_color", static_cast<int>(*space->dark_color()));
++    }
+     entry.Set("pins_collapsed", space->pins_collapsed());
+     list.Append(std::move(entry));
+   }
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index 42eab14610eae..25624426eca9d 100644
+index 42eab14610eae..093c6bf8aa2f1 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
-@@ -552,6 +552,17 @@ class SpaceModel : public TabStripModelObserver,
+@@ -333,7 +333,13 @@ class SpaceModel : public TabStripModelObserver,
+   void CloseDuplicateTabs();
+ 
+   void SetSpaceName(const SpaceId& id, std::string name);
++  // spaces B43: one colour, which both looks take; it clears a pair.
+   void SetSpaceColor(const SpaceId& id, SkColor color);
++  // spaces B43: `color` for the light look and `dark` for the dark one; with
++  // no `dark`, one colour.
++  void SetSpaceColors(const SpaceId& id,
++                      SkColor color,
++                      std::optional<SkColor> dark);
+   void SetSpaceIcon(const SpaceId& id, std::string icon);
+ 
+   // sessions S2, S7: isolation is the registry's `profile_id`. No-op without
+@@ -552,6 +558,17 @@ class SpaceModel : public TabStripModelObserver,
    bool HidesTab(const tabs::TabInterface* tab) const;
  
    // TabStripModelObserver:
@@ -2000,7 +2325,7 @@ index 42eab14610eae..25624426eca9d 100644
    void OnTabStripModelChanged(
        TabStripModel* tab_strip_model,
        const TabStripModelChange& change,
-@@ -764,6 +775,8 @@ class SpaceModel : public TabStripModelObserver,
+@@ -764,6 +781,8 @@ class SpaceModel : public TabStripModelObserver,
    PrefChangeRegistrar pref_registrar_;
    raw_ptr<TabStripModel> tab_strip_model_ = nullptr;
    bool wrote_window_state_ = false;
@@ -2009,8 +2334,42 @@ index 42eab14610eae..25624426eca9d 100644
    // The profile outlives a SessionService that ShutdownForProfile destroys
    // while the window is still up. The service is fetched at each write.
    raw_ptr<Profile> profile_ = nullptr;
+diff --git a/chrome/browser/ui/spaces/space_model_unittest.cc b/chrome/browser/ui/spaces/space_model_unittest.cc
+index ffc4858611146..63fa9808de13e 100644
+--- a/chrome/browser/ui/spaces/space_model_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_unittest.cc
+@@ -88,6 +88,29 @@ TEST(SpaceModelTest, RenameAndRecolour) {
+   EXPECT_EQ(kBlue, space->color());
+ }
+ 
++// spaces B43, B44: a Space's colour is one colour or a pair. The pair gives
++// each look its own, comes through the session, and one colour set again
++// (the Space menu's list) clears the dark one.
++TEST(SpaceModelTest, ALightAndDarkPairIsKeptAndOneColourClearsIt) {
++  SpaceModel model;
++  const SpaceId id = model.active_id();
++  model.SetSpaceColors(id, kBlue, kRed);
++  const Space* const space = model.GetSpace(id);
++  ASSERT_TRUE(space);
++  EXPECT_EQ(kBlue, space->ColorFor(/*dark=*/false));
++  EXPECT_EQ(kRed, space->ColorFor(/*dark=*/true));
++  EXPECT_TRUE(space->color_chosen());
++
++  SpaceModel read;
++  read.RestoreFrom(model.Serialize());
++  EXPECT_EQ(std::optional<SkColor>(kRed), read.active_space()->dark_color())
++      << "the pair did not come through the session";
++
++  model.SetSpaceColor(id, kBlue);
++  EXPECT_FALSE(space->dark_color()) << "one colour kept the dark one";
++  EXPECT_EQ(kBlue, space->ColorFor(/*dark=*/true));
++}
++
+ // spaces B31: a colour the user chose is remembered as chosen, so the window
+ // tints the ground for it even while it is the only Space, and the choice
+ // survives a session round trip with the colour.
 diff --git a/chrome/browser/ui/spaces/space_registry.cc b/chrome/browser/ui/spaces/space_registry.cc
-index ce296cf0c8c07..dc6f41eb29021 100644
+index ce296cf0c8c07..6c21595bdf597 100644
 --- a/chrome/browser/ui/spaces/space_registry.cc
 +++ b/chrome/browser/ui/spaces/space_registry.cc
 @@ -4,6 +4,8 @@
@@ -2022,7 +2381,34 @@ index ce296cf0c8c07..dc6f41eb29021 100644
  #include <algorithm>
  #include <utility>
  
-@@ -221,7 +223,8 @@ std::vector<RegistryEntry> SpaceRegistry::FromValue(
+@@ -106,10 +108,14 @@ void SpaceRegistry::SetIcon(const SpaceId& id, std::string icon) {
+   }
+ }
+ 
+-void SpaceRegistry::SetColor(const SpaceId& id, SkColor color, bool chosen) {
++void SpaceRegistry::SetColor(const SpaceId& id,
++                             SkColor color,
++                             bool chosen,
++                             std::optional<SkColor> dark) {
+   if (RegistryEntry* const entry = FindMutable(id)) {
+     entry->color = color;
+     entry->color_chosen = chosen;
++    entry->dark_color = dark;
+     Changed();
+   }
+ }
+@@ -195,6 +201,10 @@ base::ListValue SpaceRegistry::ToValue(
+     dict.Set("icon", entry.icon);
+     dict.Set("color", static_cast<int>(entry.color));
+     dict.Set("color_chosen", entry.color_chosen);
++    // spaces B44: only a pair writes the dark look's colour.
++    if (entry.dark_color) {
++      dict.Set("dark_color", static_cast<int>(*entry.dark_color));
++    }
+     dict.Set("profile", entry.profile_id);
+     dict.Set("isolated", entry.isolated);
+     dict.Set("pins_collapsed", entry.pins_collapsed);
+@@ -221,11 +231,16 @@ std::vector<RegistryEntry> SpaceRegistry::FromValue(
      const std::string* const name = dict->FindString("name");
      RegistryEntry entry(
          SpaceId::FromRawToken(*token), name ? *name : std::string(),
@@ -2032,6 +2418,102 @@ index ce296cf0c8c07..dc6f41eb29021 100644
      if (const std::string* const icon = dict->FindString("icon")) {
        entry.icon = *icon;
      }
+     entry.color_chosen = dict->FindBool("color_chosen").value_or(false);
++    // spaces B44: a list from before the pair reads as one colour.
++    if (const std::optional<int> dark = dict->FindInt("dark_color")) {
++      entry.dark_color = static_cast<SkColor>(*dark);
++    }
+     // pins H17: a registry from before the state existed is expanded.
+     entry.pins_collapsed = dict->FindBool("pins_collapsed").value_or(false);
+     if (const std::string* const profile = dict->FindString("profile")) {
+diff --git a/chrome/browser/ui/spaces/space_registry.h b/chrome/browser/ui/spaces/space_registry.h
+index e707bf3cce0a4..902a6f2318a81 100644
+--- a/chrome/browser/ui/spaces/space_registry.h
++++ b/chrome/browser/ui/spaces/space_registry.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_SPACES_SPACE_REGISTRY_H_
+ #define CHROME_BROWSER_UI_SPACES_SPACE_REGISTRY_H_
+ 
++#include <optional>
+ #include <string>
+ #include <vector>
+ 
+@@ -34,6 +35,8 @@ struct RegistryEntry {
+   std::string icon;
+   SkColor color;
+   bool color_chosen = false;
++  // spaces B43, B44: the dark look's colour of a pair; none for one colour.
++  std::optional<SkColor> dark_color;
+   std::string profile_id;
+   // sessions S2, S7: whether the Space's tabs use that partition right now.
+   // Off keeps the token, so on again reattaches the same jar (ADR 0019). A
+@@ -77,7 +80,11 @@ class SpaceRegistry : public KeyedService {
+   bool Move(const SpaceId& id, int delta);
+   void SetName(const SpaceId& id, std::string name);
+   void SetIcon(const SpaceId& id, std::string icon);
+-  void SetColor(const SpaceId& id, SkColor color, bool chosen);
++  // spaces B43: one colour clears a pair's dark colour; `dark` makes a pair.
++  void SetColor(const SpaceId& id,
++                SkColor color,
++                bool chosen,
++                std::optional<SkColor> dark = std::nullopt);
+   // pins H17: collapses or expands the Space's pinned run. Setting the state
+   // it has already writes nothing and tells nobody.
+   void SetPinsCollapsed(const SpaceId& id, bool collapsed);
+diff --git a/chrome/browser/ui/spaces/space_registry_unittest.cc b/chrome/browser/ui/spaces/space_registry_unittest.cc
+index 91cae740fa7fd..7509e1bd62d5a 100644
+--- a/chrome/browser/ui/spaces/space_registry_unittest.cc
++++ b/chrome/browser/ui/spaces/space_registry_unittest.cc
+@@ -4,6 +4,10 @@
+ 
+ #include "chrome/browser/ui/spaces/space_registry.h"
+ 
++#include <optional>
++#include <vector>
++
++#include "base/values.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/testing_pref_service.h"
+@@ -54,6 +58,38 @@ TEST(SpaceRegistryTest, RoundTrip) {
+       SpaceRegistry::FromValue(SpaceRegistry::ToValue(again.entries())).size());
+ }
+ 
++// spaces B43, B44: a pair's dark colour is kept in the profile's list and
++// read back; one colour set again clears it; a list from before the pair
++// (no "dark_color") reads as one colour.
++TEST(SpaceRegistryTest, TheDarkColourRoundTrips) {
++  TestingPrefServiceSimple prefs;
++  prefs.registry()->RegisterListPref(stedding::prefs::kSpaceRegistry);
++  SpaceId work = SpaceId::GenerateNew();
++  {
++    SpaceRegistry registry(&prefs);
++    work = registry.Add("Work", SK_ColorBLUE);
++    registry.SetColor(work, SK_ColorBLUE, /*chosen=*/true, SK_ColorRED);
++  }
++  {
++    SpaceRegistry again(&prefs);
++    ASSERT_EQ(1u, again.entries().size());
++    EXPECT_EQ(SK_ColorBLUE, again.entries()[0].color);
++    EXPECT_EQ(std::optional<SkColor>(SK_ColorRED),
++              again.entries()[0].dark_color);
++    again.SetColor(work, SK_ColorGREEN, /*chosen=*/true);
++    EXPECT_FALSE(again.entries()[0].dark_color) << "one colour clears it";
++  }
++  base::ListValue old_list;
++  base::DictValue old_entry;
++  old_entry.Set("id", work.ToString());
++  old_entry.Set("name", "Work");
++  old_entry.Set("color", static_cast<int>(SK_ColorBLUE));
++  old_list.Append(std::move(old_entry));
++  const std::vector<RegistryEntry> read = SpaceRegistry::FromValue(old_list);
++  ASSERT_EQ(1u, read.size());
++  EXPECT_FALSE(read[0].dark_color);
++}
++
+ // sessions S35 (BACKLOG S-274): a Space added while "Give every new Space
+ // its own session" is on starts with a jar of its own; one added while it is
+ // off shares the session, and turning it on changes no Space already there.
 diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
 index 707528a19d9f3..6f8ccfbecc491 100644
 --- a/chrome/browser/ui/stedding/stedding_prefs.cc
@@ -2117,11 +2599,1249 @@ index 45564668955ff..2123516abed75 100644
    // Set by the embedder; see SetBeforeDetachTabsCallback().
    BeforeCloseTabsCallback before_detach_tabs_callback_;
  
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 25654c0580dda..46093334834a7 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -124,6 +124,7 @@
+ #include "ui/display/screen.h"
+ #include "ui/events/event.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/image/image_skia.h"
+@@ -331,8 +332,15 @@ class VerticalTabStripRegionView::SpaceTint
+     // menu; spaces B31: the choice showed nothing on a fresh profile,
+     // 2026-09-05).
+     const bool tint = active && (model_->size() > 1 || active->color_chosen());
+-    widget->SetUserColorOverride(tint ? std::optional<SkColor>(active->color())
+-                                      : std::nullopt);
++    // spaces B43: a Space with a light and a dark colour gives the window the
++    // one for the look it is in; OnThemeChanged applies it again when the
++    // look changes. Setting the colour it already has changes nothing.
++    const ui::ColorProvider* const provider = host_->GetColorProvider();
++    const bool dark =
++        provider &&
++        color_utils::IsDark(provider->GetColor(ui::kColorPrimaryBackground));
++    widget->SetUserColorOverride(
++        tint ? std::optional<SkColor>(active->ColorFor(dark)) : std::nullopt);
+   }
+ 
+   // spaces::SpaceModel::Observer:
+@@ -1211,6 +1219,10 @@ void VerticalTabStripRegionView::OnPaintAsActiveChangedForNumbers() {
+ 
+ void VerticalTabStripRegionView::OnThemeChanged() {
+   views::View::OnThemeChanged();
++  // spaces B43: the look changed, so a Space's pair gives another colour.
++  if (space_tint_) {
++    space_tint_->Apply();
++  }
+   // sidebar Y2, Y3: the Archived row at the preset's height and text size
+   // (a density change arrives as a theme change).
+   if (archived_row_) {
+diff --git a/chrome/browser/ui/views/spaces/BUILD.gn b/chrome/browser/ui/views/spaces/BUILD.gn
+index 0b757dbcfab4e..a53b1c87e104b 100644
+--- a/chrome/browser/ui/views/spaces/BUILD.gn
++++ b/chrome/browser/ui/views/spaces/BUILD.gn
+@@ -4,6 +4,7 @@
+ 
+ source_set("spaces") {
+   public = [
++    "edit_space_view.h",
+     "page_split_drag_target.h",
+     "space_dialogs.h",
+     "space_drag_target.h",
+@@ -13,6 +14,7 @@ source_set("spaces") {
+     "split_drop_rules.h",
+   ]
+   sources = [
++    "edit_space_view.cc",
+     "page_split_drag_target.cc",
+     "space_dialogs.cc",
+     "space_drag_target.cc",
+@@ -54,7 +56,12 @@ source_set("spaces") {
+     "//content/public/browser",
+     "//content/public/common",
+     "//ui/base",
++    # spaces B42: the system's emoji picker, into Edit Space's icon field.
++    "//ui/base/emoji",
+     "//ui/menus",
++    "//cc/paint",
++    "//ui/color",
++    "//ui/gfx",
+   ]
+ }
+ 
+diff --git a/chrome/browser/ui/views/spaces/edit_space_view.cc b/chrome/browser/ui/views/spaces/edit_space_view.cc
+new file mode 100644
+index 0000000000000..2c95676c03915
+--- /dev/null
++++ b/chrome/browser/ui/views/spaces/edit_space_view.cc
+@@ -0,0 +1,879 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/spaces/edit_space_view.h"
++
++#include <algorithm>
++#include <array>
++#include <memory>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/strings/stringprintf.h"
++#include "base/strings/utf_string_conversions.h"
++#include "cc/paint/paint_flags.h"
++#include "cc/paint/paint_shader.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_colors.h"
++#include "chrome/browser/ui/spaces/space_icon.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "components/constrained_window/constrained_window_views.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/base_window.h"
++#include "ui/base/emoji/emoji_panel_helper.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/dialog_model.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
++#include "ui/base/mojom/ui_base_types.mojom-shared.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/point_f.h"
++#include "ui/gfx/geometry/rect_f.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/background.h"
++#include "ui/views/bubble/bubble_dialog_model_host.h"
++#include "ui/views/border.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/button/radio_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/tabbed_pane/tabbed_pane.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/view_class_properties.h"
++
++namespace spaces {
++
++namespace {
++
++constexpr int kSectionGap = 14;
++constexpr int kRowGap = 8;
++constexpr int kEmojiCell = 32;
++constexpr int kEmojisPerRow = 12;
++constexpr int kSwatch = 22;
++constexpr int kSwatchGap = 5;
++constexpr int kPadWidth = 300;
++constexpr int kPadHeight = 72;
++constexpr int kHueHeight = 12;
++constexpr int kPreviewWidth = 196;
++constexpr int kPreviewHeight = 64;
++constexpr int kColourModeGroup = 1;
++
++// The sidebar's grounds in each look before a Space tints them, and how much
++// of the Space's colour each takes (spaces B11: 22% light, 30% dark).
++constexpr SkColor kLightGround = SkColorSetRGB(0xE4, 0xD8, 0xB4);
++constexpr SkColor kDarkGround = SkColorSetRGB(0x27, 0x29, 0x3F);
++constexpr float kLightTint = 0.22f;
++constexpr float kDarkTint = 0.30f;
++
++std::u16string HexOf(SkColor color) {
++  return base::ASCIIToUTF16(base::StringPrintf(
++      "#%02X%02X%02X", SkColorGetR(color), SkColorGetG(color),
++      SkColorGetB(color)));
++}
++
++// "#3E63DD" or "3e63dd", spaces around it allowed; anything else is none.
++std::optional<SkColor> ColorFromHex(std::u16string_view text) {
++  std::u16string_view hex = base::TrimWhitespace(text, base::TRIM_ALL);
++  if (!hex.empty() && hex.front() == u'#') {
++    hex.remove_prefix(1);
++  }
++  uint32_t value = 0;
++  if (hex.size() != 6 ||
++      !base::HexStringToUInt(base::UTF16ToASCII(hex), &value)) {
++    return std::nullopt;
++  }
++  return SkColorSetRGB((value >> 16) & 0xFF, (value >> 8) & 0xFF,
++                       value & 0xFF);
++}
++
++std::unique_ptr<views::View> Column(int spacing) {
++  auto view = std::make_unique<views::View>();
++  view->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(), spacing));
++  return view;
++}
++
++std::unique_ptr<views::View> Row(int spacing) {
++  auto view = std::make_unique<views::View>();
++  auto* const layout =
++      view->SetLayoutManager(std::make_unique<views::BoxLayout>(
++          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), spacing));
++  layout->set_cross_axis_alignment(
++      views::BoxLayout::CrossAxisAlignment::kCenter);
++  return view;
++}
++
++// A colour of the palette: a disc, ringed while it is the colour chosen.
++class Swatch : public views::Button {
++  METADATA_HEADER(Swatch, views::Button)
++
++ public:
++  Swatch(PressedCallback callback, SkColor color, std::u16string name)
++      : views::Button(std::move(callback)), color_(color) {
++    SetPreferredSize(gfx::Size(kSwatch, kSwatch));
++    SetTooltipText(name);
++    GetViewAccessibility().SetName(name);
++  }
++
++  SkColor color() const { return color_; }
++
++  void SetChosen(bool chosen) {
++    if (chosen_ != chosen) {
++      chosen_ = chosen;
++      GetViewAccessibility().SetIsSelected(chosen);
++      SchedulePaint();
++    }
++  }
++
++  // views::Button:
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    const gfx::RectF bounds(GetLocalBounds());
++    const gfx::PointF centre = bounds.CenterPoint();
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    if (chosen_) {
++      const ui::ColorProvider* const provider = GetColorProvider();
++      flags.setStyle(cc::PaintFlags::kStroke_Style);
++      flags.setStrokeWidth(2);
++      flags.setColor(provider ? provider->GetColor(ui::kColorLabelForeground)
++                              : SK_ColorBLACK);
++      canvas->DrawCircle(centre, bounds.width() / 2 - 1, flags);
++    }
++    flags.setStyle(cc::PaintFlags::kFill_Style);
++    flags.setColor(color_);
++    canvas->DrawCircle(centre, bounds.width() / 2 - (chosen_ ? 5 : 3), flags);
++  }
++
++ private:
++  const SkColor color_;
++  bool chosen_ = false;
++};
++
++BEGIN_METADATA(Swatch)
++END_METADATA
++
++// An emoji of the grid, drawn large, on a tile while it is the icon chosen.
++class EmojiButton : public views::Button {
++  METADATA_HEADER(EmojiButton, views::Button)
++
++ public:
++  EmojiButton(PressedCallback callback, std::u16string emoji)
++      : views::Button(std::move(callback)), emoji_(std::move(emoji)) {
++    SetPreferredSize(gfx::Size(kEmojiCell, kEmojiCell));
++    SetTooltipText(emoji_);
++    GetViewAccessibility().SetName(emoji_);
++  }
++
++  void SetChosen(bool chosen) {
++    if (chosen_ != chosen) {
++      chosen_ = chosen;
++      GetViewAccessibility().SetIsSelected(chosen);
++      SchedulePaint();
++    }
++  }
++
++  // views::Button:
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    const ui::ColorProvider* const provider = GetColorProvider();
++    const SkColor ink = provider
++                            ? provider->GetColor(ui::kColorLabelForeground)
++                            : SK_ColorBLACK;
++    if (chosen_ || IsMouseHovered()) {
++      cc::PaintFlags flags;
++      flags.setAntiAlias(true);
++      flags.setColor(SkColorSetA(ink, chosen_ ? 0x2A : 0x12));
++      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), 8, flags);
++    }
++    canvas->DrawStringRectWithFlags(
++        emoji_, gfx::FontList().DeriveWithSizeDelta(6), ink, GetLocalBounds(),
++        gfx::Canvas::TEXT_ALIGN_CENTER);
++  }
++
++ private:
++  const std::u16string emoji_;
++  bool chosen_ = false;
++};
++
++BEGIN_METADATA(EmojiButton)
++END_METADATA
++
++}  // namespace
++
++// The sidebar in one look, tinted with `color`: the Space's glyph and name
++// over three rows (spaces B41).
++class EditSpaceView::LookPreview : public views::View {
++  METADATA_HEADER(LookPreview, views::View)
++
++ public:
++  // `pressed` chooses this look to colour, while the Space has a pair.
++  LookPreview(bool dark, base::RepeatingClosure pressed)
++      : dark_(dark), pressed_(std::move(pressed)) {
++    GetViewAccessibility().SetRole(ax::mojom::Role::kImage);
++    GetViewAccessibility().SetName(dark ? u"The sidebar in the dark look"
++                                        : u"The sidebar in the light look");
++  }
++
++  void SetChosen(bool chosen) {
++    if (chosen_ != chosen) {
++      chosen_ = chosen;
++      SchedulePaint();
++    }
++  }
++
++  bool OnMousePressed(const ui::MouseEvent& event) override {
++    pressed_.Run();
++    return true;
++  }
++
++  void Set(SkColor color, std::u16string glyph, std::u16string name) {
++    color_ = color;
++    glyph_ = std::move(glyph);
++    name_ = std::move(name);
++    SchedulePaint();
++  }
++
++  SkColor ground() const {
++    return color_utils::AlphaBlend(
++        color_, dark_ ? kDarkGround : kLightGround,
++        static_cast<SkAlpha>((dark_ ? kDarkTint : kLightTint) * 255));
++  }
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(kPreviewWidth, kPreviewHeight);
++  }
++
++  void OnPaint(gfx::Canvas* canvas) override {
++    const gfx::RectF bounds(GetLocalBounds());
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(ground());
++    canvas->DrawRoundRect(bounds, 10, flags);
++    if (chosen_) {
++      const ui::ColorProvider* const provider = GetColorProvider();
++      cc::PaintFlags ring;
++      ring.setAntiAlias(true);
++      ring.setStyle(cc::PaintFlags::kStroke_Style);
++      ring.setStrokeWidth(2);
++      ring.setColor(provider ? provider->GetColor(ui::kColorFocusableBorderFocused)
++                             : SK_ColorBLUE);
++      gfx::RectF inset = bounds;
++      inset.Inset(1);
++      canvas->DrawRoundRect(inset, 9, ring);
++    }
++    const SkColor ink =
++        dark_ ? SkColorSetRGB(0xED, 0xEB, 0xF2) : SkColorSetRGB(0x1F, 0x23, 0x30);
++    // The Space's title row: its glyph, or a dot in its colour, and its name.
++    const gfx::FontList font;
++    const int title_y = 6;
++    if (glyph_.empty()) {
++      flags.setColor(color_);
++      canvas->DrawCircle(gfx::PointF(20, title_y + 9), 5, flags);
++    } else {
++      canvas->DrawStringRect(glyph_, font.DeriveWithSizeDelta(3), ink,
++                             gfx::Rect(10, title_y, 22, 20));
++    }
++    canvas->DrawStringRect(name_, font.DeriveWithWeight(gfx::Font::Weight::BOLD),
++                           ink, gfx::Rect(36, title_y, kPreviewWidth - 46, 20));
++    // Two rows, the first the one on screen.
++    constexpr std::array<int, 2> kRowWidths = {140, 108};
++    for (size_t i = 0; i < kRowWidths.size(); ++i) {
++      const float y = 30 + i * 16;
++      if (i == 0) {
++        flags.setColor(SkColorSetA(ink, 0x1C));
++        canvas->DrawRoundRect(gfx::RectF(8, y - 4, kPreviewWidth - 16, 16), 6,
++                              flags);
++      }
++      flags.setColor(SkColorSetA(ink, 0x70));
++      canvas->DrawRoundRect(gfx::RectF(16, y + 1, 8, 8), 2, flags);
++      flags.setColor(SkColorSetA(ink, 0x3C));
++      canvas->DrawRoundRect(gfx::RectF(30, y + 2, kRowWidths[i], 6), 3, flags);
++    }
++  }
++
++ private:
++  const bool dark_;
++  const base::RepeatingClosure pressed_;
++  bool chosen_ = false;
++  SkColor color_ = SK_ColorGRAY;
++  std::u16string glyph_;
++  std::u16string name_;
++};
++
++BEGIN_METADATA(EditSpaceView, LookPreview)
++END_METADATA
++
++// A colour's saturation, across, and brightness, down, at the hue chosen on
++// the bar (spaces B43, Custom).
++class EditSpaceView::SaturationValuePad : public views::View {
++  METADATA_HEADER(SaturationValuePad, views::View)
++
++ public:
++  using Changed = base::RepeatingCallback<void(float saturation, float value)>;
++
++  explicit SaturationValuePad(Changed changed) : changed_(std::move(changed)) {
++    GetViewAccessibility().SetRole(ax::mojom::Role::kImage);
++    GetViewAccessibility().SetName(u"Saturation and brightness");
++  }
++
++  void Set(float hue, float saturation, float value) {
++    hue_ = hue;
++    saturation_ = saturation;
++    value_ = value;
++    SchedulePaint();
++  }
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(kPadWidth, kPadHeight);
++  }
++
++  void OnPaint(gfx::Canvas* canvas) override {
++    const gfx::RectF bounds(GetLocalBounds());
++    SkScalar pure_hsv[3] = {hue_, 1, 1};
++    const SkPoint across[2] = {{bounds.x(), bounds.y()},
++                               {bounds.right(), bounds.y()}};
++    const SkColor4f across_colors[2] = {
++        SkColors::kWhite, SkColor4f::FromColor(SkHSVToColor(pure_hsv))};
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setShader(cc::PaintShader::MakeLinearGradient(
++        across, across_colors, nullptr, 2, SkTileMode::kClamp));
++    canvas->DrawRoundRect(bounds, 6, flags);
++    const SkPoint down[2] = {{bounds.x(), bounds.y()},
++                             {bounds.x(), bounds.bottom()}};
++    const SkColor4f down_colors[2] = {SkColors::kTransparent,
++                                      SkColors::kBlack};
++    flags.setShader(cc::PaintShader::MakeLinearGradient(
++        down, down_colors, nullptr, 2, SkTileMode::kClamp));
++    canvas->DrawRoundRect(bounds, 6, flags);
++    cc::PaintFlags ring;
++    ring.setAntiAlias(true);
++    ring.setStyle(cc::PaintFlags::kStroke_Style);
++    ring.setStrokeWidth(2);
++    ring.setColor(value_ > 0.6f && saturation_ < 0.4f ? SK_ColorBLACK
++                                                       : SK_ColorWHITE);
++    canvas->DrawCircle(
++        gfx::PointF(bounds.x() + saturation_ * bounds.width(),
++                    bounds.y() + (1 - value_) * bounds.height()),
++        6, ring);
++  }
++
++  bool OnMousePressed(const ui::MouseEvent& event) override {
++    Pick(event.location());
++    return true;
++  }
++
++  bool OnMouseDragged(const ui::MouseEvent& event) override {
++    Pick(event.location());
++    return true;
++  }
++
++ private:
++  void Pick(const gfx::Point& point) {
++    if (width() <= 0 || height() <= 0) {
++      return;
++    }
++    const float saturation =
++        std::clamp(static_cast<float>(point.x()) / width(), 0.f, 1.f);
++    const float value =
++        1 - std::clamp(static_cast<float>(point.y()) / height(), 0.f, 1.f);
++    changed_.Run(saturation, value);
++  }
++
++  const Changed changed_;
++  float hue_ = 0;
++  float saturation_ = 0;
++  float value_ = 0;
++};
++
++BEGIN_METADATA(EditSpaceView, SaturationValuePad)
++END_METADATA
++
++// The hue, along the spectrum (spaces B43, Custom).
++class EditSpaceView::HueBar : public views::View {
++  METADATA_HEADER(HueBar, views::View)
++
++ public:
++  using Changed = base::RepeatingCallback<void(float hue)>;
++
++  explicit HueBar(Changed changed) : changed_(std::move(changed)) {
++    GetViewAccessibility().SetRole(ax::mojom::Role::kImage);
++    GetViewAccessibility().SetName(u"Hue");
++  }
++
++  void Set(float hue) {
++    hue_ = hue;
++    SchedulePaint();
++  }
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(kPadWidth, kHueHeight);
++  }
++
++  void OnPaint(gfx::Canvas* canvas) override {
++    const gfx::RectF bounds(GetLocalBounds());
++    const SkPoint ends[2] = {{bounds.x(), bounds.y()},
++                             {bounds.right(), bounds.y()}};
++    std::array<SkColor4f, 7> stops;
++    for (size_t i = 0; i < stops.size(); ++i) {
++      SkScalar hsv[3] = {i * 60.f, 1, 1};
++      stops[i] = SkColor4f::FromColor(SkHSVToColor(hsv));
++    }
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setShader(cc::PaintShader::MakeLinearGradient(
++        ends, stops.data(), nullptr, stops.size(), SkTileMode::kClamp));
++    canvas->DrawRoundRect(bounds, bounds.height() / 2, flags);
++    cc::PaintFlags ring;
++    ring.setAntiAlias(true);
++    ring.setStyle(cc::PaintFlags::kStroke_Style);
++    ring.setStrokeWidth(2);
++    ring.setColor(SK_ColorWHITE);
++    canvas->DrawCircle(gfx::PointF(bounds.x() + hue_ / 360.f * bounds.width(),
++                                   bounds.CenterPoint().y()),
++                       bounds.height() / 2 + 1, ring);
++  }
++
++  bool OnMousePressed(const ui::MouseEvent& event) override {
++    Pick(event.location());
++    return true;
++  }
++
++  bool OnMouseDragged(const ui::MouseEvent& event) override {
++    Pick(event.location());
++    return true;
++  }
++
++ private:
++  void Pick(const gfx::Point& point) {
++    if (width() <= 0) {
++      return;
++    }
++    changed_.Run(std::clamp(static_cast<float>(point.x()) / width(), 0.f,
++                            0.999f) *
++                 360.f);
++  }
++
++  const Changed changed_;
++  float hue_ = 0;
++};
++
++BEGIN_METADATA(EditSpaceView, HueBar)
++END_METADATA
++
++// static
++const std::vector<std::u16string>& EditSpaceView::EmojiChoices() {
++  static const base::NoDestructor<std::vector<std::u16string>> kChoices({
++      u"\U0001F3E0", u"\U0001F4BC", u"\U0001F4DA", u"\U0001F3A8",
++      u"\U0001F52C", u"\U0001F3B5", u"\U0001F3AE", u"✈️",
++      u"\U0001F6D2", u"\U0001F4B0", u"\U0001F3CB️", u"\U0001F373",
++      u"\U0001F331", u"\U0001F9EA", u"\U0001F4BB", u"\U0001F4DD",
++      u"\U0001F4F7", u"\U0001F3AC", u"⚽", u"\U0001F43E",
++      u"❤️", u"⭐", u"\U0001F525", u"\U0001F319",
++      u"☀️", u"\U0001F30A", u"\U0001F3D4️", u"\U0001F680",
++      u"\U0001F393", u"\U0001F9E0", u"\U0001F6E0️", u"\U0001F4C8",
++      u"\U0001F5C2️", u"\U0001F3A7", u"☕", u"\U0001F30D",
++  });
++  return *kChoices;
++}
++
++// static
++std::vector<SkColor> EditSpaceView::PaletteColors() {
++  std::vector<SkColor> colors;
++  for (const SpaceColorChoice& choice : kSpaceColors) {
++    colors.push_back(color_utils::AlphaBlend(SK_ColorBLACK, choice.color,
++                                             static_cast<SkAlpha>(0.30 * 255)));
++  }
++  for (const SpaceColorChoice& choice : kSpaceColors) {
++    colors.push_back(choice.color);
++  }
++  for (const SpaceColorChoice& choice : kSpaceColors) {
++    colors.push_back(color_utils::AlphaBlend(SK_ColorWHITE, choice.color,
++                                             static_cast<SkAlpha>(0.45 * 255)));
++  }
++  return colors;
++}
++
++EditSpaceView::EditSpaceView(SpaceModel& model, SpaceId id)
++    : model_(model.GetWeakPtr()), id_(id) {
++  const Space* const space = model.GetSpace(id);
++  CHECK(space);
++  icon_ = space->icon();
++  light_ = space->color();
++  pair_ = space->dark_color().has_value();
++  dark_ = space->dark_color().value_or(space->color());
++  SkScalar hsv[3];
++  SkColorToHSV(light_, hsv);
++  hue_ = hsv[0];
++
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(), kSectionGap));
++
++  // The Space as the sidebar heads it: its icon, then its name.
++  views::View* const head = AddChildView(Row(12));
++  icon_preview_ = head->AddChildView(std::make_unique<views::Label>());
++  icon_preview_->SetFontList(gfx::FontList().DeriveWithSizeDelta(16));
++  icon_preview_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  icon_preview_->SetPreferredSize(gfx::Size(48, 48));
++  icon_preview_->GetViewAccessibility().SetName(u"The Space's icon");
++  name_field_ = head->AddChildView(std::make_unique<views::Textfield>());
++  name_field_->SetText(base::UTF8ToUTF16(space->name()));
++  name_field_->SetPlaceholderText(u"Space name");
++  name_field_->GetViewAccessibility().SetName(u"Space name");
++  name_field_->set_controller(this);
++  static_cast<views::BoxLayout*>(head->GetLayoutManager())
++      ->SetFlexForView(name_field_, 1);
++
++  // The icon and the colour, a page each, so the window fits a small screen.
++  auto* const tabs = AddChildView(std::make_unique<views::TabbedPane>());
++  BuildIconSection(tabs->AddTab(u"Icon", Column(kRowGap)));
++  BuildColourSection(tabs->AddTab(u"Colour", Column(kRowGap)));
++  Refresh();
++}
++
++EditSpaceView::~EditSpaceView() = default;
++
++void EditSpaceView::BuildIconSection(views::View* section) {
++  section->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(12, 0, 4, 0)));
++  views::View* const side = section->AddChildView(Column(6));
++  icon_field_ = side->AddChildView(std::make_unique<views::Textfield>());
++  icon_field_->SetPlaceholderText(u"Type or paste any emoji");
++  icon_field_->GetViewAccessibility().SetName(u"Icon");
++  icon_field_->set_controller(this);
++  views::View* const buttons = side->AddChildView(Row(8));
++  // spaces B42: the system's own picker, into the field.
++  if (ui::IsEmojiPanelSupported()) {
++    buttons->AddChildView(std::make_unique<views::MdTextButton>(
++        base::BindRepeating(
++            [](EditSpaceView* view) {
++              view->icon_field_->RequestFocus();
++              ui::ShowEmojiPanel();
++            },
++            base::Unretained(this)),
++        u"More Emoji\u2026"));
++  }
++  buttons->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&EditSpaceView::PressNoIconForTesting,
++                          base::Unretained(this)),
++      u"No Icon"));
++
++  views::View* const grid = section->AddChildView(Column(2));
++  views::View* row = nullptr;
++  const std::vector<std::u16string>& choices = EmojiChoices();
++  for (size_t i = 0; i < choices.size(); ++i) {
++    if (i % kEmojisPerRow == 0) {
++      row = grid->AddChildView(Row(2));
++    }
++    emoji_buttons_.push_back(row->AddChildView(std::make_unique<EmojiButton>(
++        base::BindRepeating(&EditSpaceView::PressEmojiForTesting,
++                            base::Unretained(this), i),
++        choices[i])));
++  }
++}
++
++void EditSpaceView::BuildColourSection(views::View* section) {
++  section->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(12, 0, 4, 0)));
++  // spaces B43: one colour, which both looks take, or one for each.
++  views::View* const mode = section->AddChildView(Row(16));
++  one_colour_ = mode->AddChildView(std::make_unique<views::RadioButton>(
++      u"One colour", kColourModeGroup));
++  one_colour_->SetCallback(base::BindRepeating(
++      &EditSpaceView::ChoosePairForTesting, base::Unretained(this), false));
++  two_colours_ = mode->AddChildView(std::make_unique<views::RadioButton>(
++      u"Light and dark", kColourModeGroup));
++  two_colours_->SetCallback(base::BindRepeating(
++      &EditSpaceView::ChoosePairForTesting, base::Unretained(this), true));
++
++
++  views::View* const palette = section->AddChildView(Column(kSwatchGap));
++  const std::vector<SkColor> colors = PaletteColors();
++  views::View* row = nullptr;
++  for (size_t i = 0; i < colors.size(); ++i) {
++    if (i % kSpaceColors.size() == 0) {
++      row = palette->AddChildView(Row(kSwatchGap));
++    }
++    const size_t base = i % kSpaceColors.size();
++    const size_t step = i / kSpaceColors.size();
++    std::u16string name = kSpaceColors.at(base).name;
++    if (step == 0) {
++      name += u", deeper";
++    } else if (step == 2) {
++      name += u", softer";
++    }
++    swatches_.push_back(row->AddChildView(std::make_unique<Swatch>(
++        base::BindRepeating(&EditSpaceView::PressPaletteForTesting,
++                            base::Unretained(this), i),
++        colors[i], std::move(name))));
++  }
++
++  views::View* const custom = section->AddChildView(Row(12));
++  static_cast<views::BoxLayout*>(custom->GetLayoutManager())
++      ->set_cross_axis_alignment(views::BoxLayout::CrossAxisAlignment::kStart);
++  views::View* const picker = custom->AddChildView(Column(8));
++  pad_ = picker->AddChildView(std::make_unique<SaturationValuePad>(
++      base::BindRepeating(
++          [](EditSpaceView* view, float saturation, float value) {
++            SkScalar hsv[3] = {view->hue_, saturation, value};
++            view->SetEditedColor(SkHSVToColor(hsv), /*from_picker=*/true);
++          },
++          base::Unretained(this))));
++  hue_bar_ = picker->AddChildView(std::make_unique<HueBar>(base::BindRepeating(
++      [](EditSpaceView* view, float hue) {
++        SkScalar hsv[3];
++        SkColorToHSV(view->EditedColor(), hsv);
++        view->hue_ = hue;
++        // A grey has no hue to turn: the bar gives it some colour.
++        hsv[0] = hue;
++        if (hsv[1] < 0.05f) {
++          hsv[1] = 0.6f;
++          hsv[2] = std::max(hsv[2], 0.6f);
++        }
++        view->SetEditedColor(SkHSVToColor(hsv), /*from_picker=*/true);
++      },
++      base::Unretained(this))));
++  hex_field_ = custom->AddChildView(std::make_unique<views::Textfield>());
++  hex_field_->SetPlaceholderText(u"#RRGGBB");
++  hex_field_->GetViewAccessibility().SetName(u"Colour as a hex code");
++  hex_field_->SetDefaultWidthInChars(10);
++  hex_field_->set_controller(this);
++  BuildPreview(section);
++}
++
++void EditSpaceView::BuildPreview(views::View* page) {
++  // spaces B43: the sidebar in each look; with a pair, a press on one
++  // chooses the look the palette colours.
++  views::View* const row = page->AddChildView(Row(12));
++  for (const bool dark : {false, true}) {
++    views::View* const column = row->AddChildView(Column(4));
++    column->AddChildView(std::make_unique<views::Label>(
++                             dark ? u"Dark look" : u"Light look",
++                             views::style::CONTEXT_LABEL,
++                             views::style::STYLE_SECONDARY))
++        ->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++    LookPreview* const preview =
++        column->AddChildView(std::make_unique<LookPreview>(
++            dark, base::BindRepeating(&EditSpaceView::EditDarkForTesting,
++                                      base::Unretained(this), dark)));
++    (dark ? dark_preview_ : light_preview_) = preview;
++  }
++}
++
++void EditSpaceView::PressEmojiForTesting(size_t index) {
++  if (index < EmojiChoices().size()) {
++    SetIcon(base::UTF16ToUTF8(EmojiChoices()[index]));
++  }
++}
++
++void EditSpaceView::TypeIconForTesting(const std::u16string& text) {
++  icon_field_->SetText(text);
++  ContentsChanged(icon_field_, text);
++}
++
++void EditSpaceView::PressNoIconForTesting() {
++  icon_field_->SetText(std::u16string());
++  SetIcon(std::string());
++}
++
++void EditSpaceView::ChoosePairForTesting(bool pair) {
++  SetPair(pair);
++}
++
++void EditSpaceView::EditDarkForTesting(bool dark) {
++  SetEditingDark(dark);
++}
++
++void EditSpaceView::PressPaletteForTesting(size_t index) {
++  if (index < swatches_.size()) {
++    SetEditedColor(static_cast<Swatch*>(swatches_[index].get())->color(),
++                   /*from_picker=*/false);
++  }
++}
++
++void EditSpaceView::TypeHexForTesting(const std::u16string& hex) {
++  hex_field_->SetText(hex);
++  ContentsChanged(hex_field_, hex);
++}
++
++void EditSpaceView::ContentsChanged(views::Textfield* sender,
++                                    const std::u16string& new_contents) {
++  if (sender == icon_field_) {
++    // spaces B42: the first character, kept whole; an emptied field keeps
++    // the icon (No Icon clears it).
++    std::string icon = SpaceIconFromText(new_contents);
++    if (!icon.empty()) {
++      SetIcon(std::move(icon));
++    }
++    return;
++  }
++  if (sender == hex_field_) {
++    if (const std::optional<SkColor> color = ColorFromHex(new_contents)) {
++      SetEditedColor(*color, /*from_picker=*/false);
++    }
++    return;
++  }
++  // The name, in the preview.
++  Refresh();
++}
++
++void EditSpaceView::SetIcon(std::string icon) {
++  icon_ = std::move(icon);
++  Refresh();
++}
++
++SkColor EditSpaceView::EditedColor() const {
++  return pair_ && editing_dark_ ? dark_ : light_;
++}
++
++void EditSpaceView::SetEditedColor(SkColor color, bool from_picker) {
++  (pair_ && editing_dark_ ? dark_ : light_) = color;
++  colour_touched_ = true;
++  if (!from_picker) {
++    SkScalar hsv[3];
++    SkColorToHSV(color, hsv);
++    // A grey says nothing of hue; the picker keeps the one it had.
++    if (hsv[1] > 0.01f) {
++      hue_ = hsv[0];
++    }
++  }
++  Refresh();
++}
++
++void EditSpaceView::SetPair(bool pair) {
++  if (pair == pair_) {
++    return;
++  }
++  // A pair starts with the dark look in the one colour there was; the dark
++  // look is the one to choose next.
++  if (pair) {
++    dark_ = light_;
++  }
++  pair_ = pair;
++  editing_dark_ = pair;
++  colour_touched_ = true;
++  Refresh();
++}
++
++void EditSpaceView::SetEditingDark(bool dark) {
++  editing_dark_ = pair_ && dark;
++  SkScalar hsv[3];
++  SkColorToHSV(EditedColor(), hsv);
++  if (hsv[1] > 0.01f) {
++    hue_ = hsv[0];
++  }
++  Refresh();
++}
++
++void EditSpaceView::Refresh() {
++  const ui::ColorProvider* const provider = GetColorProvider();
++  const SkColor ink =
++      provider ? provider->GetColor(ui::kColorLabelForeground) : SK_ColorBLACK;
++  // The icon, or the dot a Space without one shows (spaces B11).
++  icon_preview_->SetText(icon_.empty() ? u"\u25CF" : base::UTF8ToUTF16(icon_));
++  icon_preview_->SetEnabledColor(icon_.empty() ? light_ : ink);
++  icon_preview_->SetBackground(views::CreateRoundedRectBackground(
++      SkColorSetA(ink, 0x14), 12));
++  const std::vector<std::u16string>& choices = EmojiChoices();
++  for (size_t i = 0; i < emoji_buttons_.size(); ++i) {
++    const bool chosen = base::UTF16ToUTF8(choices[i]) == icon_;
++    static_cast<EmojiButton*>(emoji_buttons_[i].get())->SetChosen(chosen);
++  }
++
++  one_colour_->SetChecked(!pair_);
++  two_colours_->SetChecked(pair_);
++  const SkColor edited = EditedColor();
++  for (const raw_ptr<views::Button>& swatch : swatches_) {
++    auto* const disc = static_cast<Swatch*>(swatch.get());
++    disc->SetChosen(disc->color() == edited);
++  }
++  SkScalar hsv[3];
++  SkColorToHSV(edited, hsv);
++  pad_->Set(hue_, hsv[1], hsv[2]);
++  hue_bar_->Set(hue_);
++  // A hex being typed is left as it is.
++  if (!hex_field_->HasFocus() ||
++      ColorFromHex(hex_field_->GetText()) != std::optional<SkColor>(edited)) {
++    if (!hex_field_->HasFocus()) {
++      hex_field_->SetText(HexOf(edited));
++    }
++  }
++
++  const std::u16string glyph =
++      icon_.empty() ? std::u16string() : base::UTF8ToUTF16(icon_);
++  std::u16string name(name_field_->GetText());
++  if (name.empty()) {
++    name = u"Space";
++  }
++  light_preview_->Set(light_, glyph, name);
++  dark_preview_->Set(pair_ ? dark_ : light_, glyph, name);
++  light_preview_->SetChosen(pair_ && !editing_dark_);
++  dark_preview_->SetChosen(pair_ && editing_dark_);
++  InvalidateLayout();
++}
++
++void EditSpaceView::Apply() {
++  SpaceModel* const model = model_.get();
++  if (!model || !model->GetSpace(id_)) {
++    return;
++  }
++  const std::string name = base::UTF16ToUTF8(
++      base::TrimWhitespace(name_field_->GetText(), base::TRIM_ALL));
++  if (name != model->GetSpace(id_)->name()) {
++    model->SetSpaceName(id_, name);
++  }
++  if (const Space* const space = model->GetSpace(id_);
++      space && icon_ != space->icon()) {
++    model->SetSpaceIcon(id_, icon_);
++  }
++  const std::optional<SkColor> dark =
++      pair_ ? std::optional<SkColor>(dark_) : std::nullopt;
++  if (const Space* const space = model->GetSpace(id_);
++      space && colour_touched_ &&
++      (light_ != space->color() || dark != space->dark_color() ||
++       !space->color_chosen())) {
++    model->SetSpaceColors(id_, light_, dark);
++  }
++}
++
++BEGIN_METADATA(EditSpaceView)
++END_METADATA
++
++EditSpaceView* ShowEditSpaceDialog(BrowserWindowInterface* window,
++                                   const SpaceId& id) {
++  SpaceModel* const model = window ? SpaceModel::From(window) : nullptr;
++  ui::BaseWindow* const base_window = window ? window->GetWindow() : nullptr;
++  if (!model || !model->GetSpace(id) || !base_window) {
++    return nullptr;
++  }
++  auto view = std::make_unique<EditSpaceView>(*model, id);
++  EditSpaceView* const raw = view.get();
++  ui::DialogModel::Builder builder;
++  builder.SetInternalName("SteddingEditSpaceDialog")
++      .SetTitle(u"Edit \u201C" + model->DisplayName(id) + u"\u201D")
++      .AddCustomField(std::make_unique<views::BubbleDialogModelHost::CustomView>(
++          std::move(view), views::BubbleDialogModelHost::FieldType::kControl,
++          raw->name_field()))
++      // The view lives as long as the dialog, which runs Done before it goes.
++      .AddOkButton(base::BindOnce(&EditSpaceView::Apply, base::Unretained(raw)),
++                   ui::DialogModel::Button::Params().SetLabel(u"Done"))
++      .AddCancelButton(base::DoNothing());
++  constrained_window::ShowBrowserModal(builder.Build(),
++                                       base_window->GetNativeWindow());
++  return raw;
++}
++
++}  // namespace spaces
+diff --git a/chrome/browser/ui/views/spaces/edit_space_view.h b/chrome/browser/ui/views/spaces/edit_space_view.h
+new file mode 100644
+index 0000000000000..ad424b3fa8515
+--- /dev/null
++++ b/chrome/browser/ui/views/spaces/edit_space_view.h
+@@ -0,0 +1,131 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_SPACES_EDIT_SPACE_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_SPACES_EDIT_SPACE_VIEW_H_
++
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/controls/textfield/textfield_controller.h"
++#include "ui/views/view.h"
++
++class BrowserWindowInterface;
++
++namespace views {
++class Button;
++class Label;
++class RadioButton;
++class Textfield;
++}  // namespace views
++
++namespace spaces {
++
++class SpaceModel;
++
++// spaces B41-B43 (the owner, 2026-10-24): Edit Space, a window of its own for
++// a Space's name, its icon -- any emoji -- and its colour, one colour for both
++// looks or one for each, with a picture of the sidebar in each look. Done
++// applies all of it at once; Cancel and Esc leave the Space as it was.
++class EditSpaceView : public views::View, public views::TextfieldController {
++  METADATA_HEADER(EditSpaceView, views::View)
++
++ public:
++  // The emoji the grid offers, in order (B42).
++  static const std::vector<std::u16string>& EmojiChoices();
++  // The palette, in rows of the twelve Space colours (B40): a deeper step,
++  // the colours themselves, a softer step (B43).
++  static std::vector<SkColor> PaletteColors();
++
++  EditSpaceView(SpaceModel& model, SpaceId id);
++  EditSpaceView(const EditSpaceView&) = delete;
++  EditSpaceView& operator=(const EditSpaceView&) = delete;
++  ~EditSpaceView() override;
++
++  // Done: applies the name, the icon and the colour, in every window of the
++  // profile. A colour left untouched stays as it was, unchosen too.
++  void Apply();
++
++  // What the window holds now, before Done.
++  const std::string& icon() const { return icon_; }
++  bool pair() const { return pair_; }
++  SkColor light_color() const { return light_; }
++  SkColor dark_color() const { return dark_; }
++
++  // The controls, for tests: what a press or a typed text does.
++  views::Textfield* name_field() { return name_field_; }
++  void PressEmojiForTesting(size_t index);
++  void TypeIconForTesting(const std::u16string& text);
++  void PressNoIconForTesting();
++  void ChoosePairForTesting(bool pair);
++  void EditDarkForTesting(bool dark);
++  void PressPaletteForTesting(size_t index);
++  void TypeHexForTesting(const std::u16string& hex);
++
++  // views::TextfieldController:
++  void ContentsChanged(views::Textfield* sender,
++                       const std::u16string& new_contents) override;
++
++ private:
++  class LookPreview;
++  class SaturationValuePad;
++  class HueBar;
++
++  void BuildIconSection(views::View* page);
++  void BuildColourSection(views::View* page);
++  void BuildPreview(views::View* page);
++
++  void SetIcon(std::string icon);
++  // The colour being edited: the dark look's while a pair edits it, else the
++  // one colour (the light look's).
++  SkColor EditedColor() const;
++  void SetEditedColor(SkColor color, bool from_picker);
++  void SetPair(bool pair);
++  void SetEditingDark(bool dark);
++  // Redraws what follows the choices: the grids' marks, the picker, the hex
++  // field, the preview.
++  void Refresh();
++
++  const base::WeakPtr<SpaceModel> model_;
++  const SpaceId id_;
++
++  std::string icon_;
++  bool pair_ = false;
++  bool editing_dark_ = false;
++  SkColor light_;
++  SkColor dark_;
++  // Whether the colour was touched: a Done that changed none leaves the
++  // Space's colour unchosen (spaces B31).
++  bool colour_touched_ = false;
++  // The hue the picker shows; a grey has none of its own, so it is kept.
++  float hue_ = 0;
++
++  raw_ptr<views::Textfield> name_field_ = nullptr;
++  raw_ptr<views::Label> icon_preview_ = nullptr;
++  raw_ptr<views::Textfield> icon_field_ = nullptr;
++  std::vector<raw_ptr<views::Button>> emoji_buttons_;
++  raw_ptr<views::RadioButton> one_colour_ = nullptr;
++  raw_ptr<views::RadioButton> two_colours_ = nullptr;
++  std::vector<raw_ptr<views::Button>> swatches_;
++  raw_ptr<SaturationValuePad> pad_ = nullptr;
++  raw_ptr<HueBar> hue_bar_ = nullptr;
++  raw_ptr<views::Textfield> hex_field_ = nullptr;
++  raw_ptr<LookPreview> light_preview_ = nullptr;
++  raw_ptr<LookPreview> dark_preview_ = nullptr;
++};
++
++// spaces B41: opens Edit Space for Space `id` over `window`. Returns the view
++// for tests; null when there is no such Space or window.
++EditSpaceView* ShowEditSpaceDialog(BrowserWindowInterface* window,
++                                   const SpaceId& id);
++
++}  // namespace spaces
++
++#endif  // CHROME_BROWSER_UI_VIEWS_SPACES_EDIT_SPACE_VIEW_H_
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index 9bb9caf7cd13f..31cfe669e54e0 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/toasts/api/toast_id.h"
+ #include "chrome/browser/ui/toasts/toast_controller.h"
++#include "chrome/browser/ui/views/spaces/edit_space_view.h"
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_rules.h"
+ #include "chrome/browser/ui/views/stedding/glyph_ink.h"
+@@ -131,6 +132,16 @@ constexpr auto kIconChoices = std::to_array<const char*>({
+     "\xF0\x9F\x8E\xB5",  // note
+ });
+ 
++// spaces B43: whether `view` is drawn in the dark look, for a Space with a
++// colour for each look.
++bool InDarkLook(const views::View& view) {
++  // As the window's ground decides it: by the primary background, white or
++  // near-black by the browser's own scheme, which no tint changes.
++  const ui::ColorProvider* const provider = view.GetColorProvider();
++  return provider &&
++         color_utils::IsDark(provider->GetColor(ui::kColorPrimaryBackground));
++}
++
+ // The colour swatch drawn beside a colour's name in the context menu.
+ constexpr int kSwatchSize = 16;
+ 
+@@ -151,8 +162,8 @@ class SwatchSource : public gfx::CanvasImageSource {
+   const SkColor color_;
+ };
+ 
+-// Command ids: the icon choices occupy a block, then the rest.
+-constexpr int kFirstIconCommand = 100;
++// Command ids. 101-148 were the six fixed icons' block.
++constexpr int kEditSpaceCommand = 100;
+ constexpr int kMoveTabHereCommand = 149;
+ constexpr int kFirstColorCommand = 150;
+ constexpr int kRenameSpaceCommand = 199;
+@@ -758,12 +769,13 @@ void SpaceSwitcherView::ApplyOverflow() {
+     // After the tooltip, which a view takes as its description while it has
+     // none of its own: the chip's is the mark's, in every form, a dot's too.
+     chip->GetViewAccessibility().SetDescription(mark);
++    const SkColor space_color = space.ColorFor(InDarkLook(*this));
+     if (dot) {
+       chip->SetBackground(
+-          views::CreateRoundedRectBackground(space.color(), kSwitcherDot / 2));
++          views::CreateRoundedRectBackground(space_color, kSwitcherDot / 2));
+     } else if (drop) {
+       chip->SetBackground(views::CreateRoundedRectBackground(
+-          SkColorSetA(space.color(), kDropTargetAlpha), kDropTargetRadius));
++          SkColorSetA(space_color, kDropTargetAlpha), kDropTargetRadius));
+     } else {
+       chip->SetBackground(nullptr);
+     }
+@@ -774,7 +786,7 @@ void SpaceSwitcherView::ApplyOverflow() {
+           GetColorProvider()->GetColor(ui::kColorFrameActive);
+       chip->SetEnabledTextColors(ChordColor(
+           drop ? color_utils::GetResultingPaintColor(
+-                     SkColorSetA(space.color(), kDropTargetAlpha), ground)
++                     SkColorSetA(space_color, kDropTargetAlpha), ground)
+                : ground,
+           active || drop));
+     } else {
+@@ -890,15 +902,9 @@ void SpaceSwitcherView::BuildMenu(const SpaceId& id, SpaceMenuOrigin origin) {
+   menu_origin_ = origin;
+ 
+   menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+-  // Each icon with the word it stands for: a bare emoji in a menu row reads
+-  // as a mistake.
+-  static constexpr auto kIconNames = std::to_array<const char16_t*>(
+-      {u"Home", u"Work", u"Study", u"Design", u"Research", u"Music"});
+-  for (size_t i = 0; i < kIconChoices.size(); ++i) {
+-    menu_model_->AddItem(kFirstIconCommand + static_cast<int>(i),
+-                         base::UTF8ToUTF16(std::string(kIconChoices.at(i))) +
+-                             u"   " + kIconNames.at(i));
+-  }
++  // spaces B41, B42: the name, any emoji and the colour, one or a pair, in a
++  // window of their own; the six fixed icons the menu listed are there too.
++  menu_model_->AddItem(kEditSpaceCommand, u"Edit Space\u2026");
+   menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+   menu_model_->AddItem(kMoveTabHereCommand, u"Move Current Tab Here");
+   // pins H17: the Space's pinned run folds away and comes back. Collapse is
+@@ -957,6 +963,10 @@ void SpaceSwitcherView::ExecuteCommand(int command_id, int event_flags) {
+   if (!menu_space_) {
+     return;
+   }
++  if (command_id == kEditSpaceCommand) {
++    ShowEditSpaceDialog(&*browser_, *menu_space_);
++    return;
++  }
+   if (command_id == kMoveTabHereCommand) {
+     if (tabs::TabInterface* const tab =
+             browser_->GetTabStripModel()->GetActiveTab()) {
+@@ -1031,10 +1041,6 @@ void SpaceSwitcherView::ExecuteCommand(int command_id, int event_flags) {
+     }
+     return;
+   }
+-  const size_t choice = static_cast<size_t>(command_id - kFirstIconCommand);
+-  if (choice < kIconChoices.size()) {
+-    model_->SetSpaceIcon(*menu_space_, std::string(kIconChoices.at(choice)));
+-  }
+ }
+ 
+ void SpaceSwitcherView::Confirm(std::u16string title,
+diff --git a/chrome/browser/ui/views/switcher/recent_tabs_switcher_view.cc b/chrome/browser/ui/views/switcher/recent_tabs_switcher_view.cc
+index 695936cecdc44..b08e54f8f4996 100644
+--- a/chrome/browser/ui/views/switcher/recent_tabs_switcher_view.cc
++++ b/chrome/browser/ui/views/switcher/recent_tabs_switcher_view.cc
+@@ -29,6 +29,7 @@
+ #include "ui/events/event.h"
+ #include "ui/events/event_observer.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/rect_conversions.h"
+ #include "ui/gfx/geometry/rect_f.h"
+ #include "ui/gfx/text_constants.h"
+@@ -149,7 +150,12 @@ void RecentTabsSwitcherView::Refresh() {
+   const SkColor text =
+       provider ? provider->GetColor(ui::kColorLabelForeground) : SK_ColorWHITE;
+   const spaces::Space* const space = model->active_space();
+-  const SkColor dot = space ? space->color() : text;
++  // spaces B43: the colour for the look the switcher is drawn in.
++  const SkColor dot =
++      space ? space->ColorFor(provider &&
++                              color_utils::IsDark(provider->GetColor(
++                                  ui::kColorPrimaryBackground)))
++            : text;
+   for (size_t i = 0; i < tabs.size(); ++i) {
+     tabs::TabInterface* const tab = tabs[i];
+     auto cell = std::make_unique<views::View>();
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index e955a23d09ccd..984e9ca752295 100644
+index e955a23d09ccd..957a74ec8e00c 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -1137,6 +1137,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -734,6 +734,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   // PLAN.md WEB-20: each bin's name, the Space's in it. What a deletion
+   // asks comes from the browser (spaces B5).
+   html_source->AddString("steddingDeleteNamedSpace", "Delete $1");
++  // spaces B41: Edit Space, from the Space's row.
++  html_source->AddString("steddingEditSpace", "Edit\u2026");
++  html_source->AddString("steddingEditNamedSpace", "Edit $1");
+   // PLAN.md SPC-9: before a change of a Space's jar reloads its pages.
+   html_source->AddString("steddingIsolateSpaceTitle",
+                          "Turn on an independent session?");
+@@ -1137,6 +1140,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "steddingNestChildTabsSubLabel",
        "A link opened in a new tab sits indented under its page in the "
        "sidebar. Off, every tab sits at the left.");
@@ -2136,6 +3856,65 @@ index e955a23d09ccd..984e9ca752295 100644
    // import I14, settings T27 (WIN-15; decided 2026-10-22, the owner away
    // and asking for a decision): the way back from Turn Bookmarks into Pinned
    // Tabs.
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+index 9c539442bd6f2..1c697a62e671d 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+@@ -26,6 +26,7 @@
+ #include "chrome/browser/ui/spaces/space_registry_factory.h"
+ #include "chrome/browser/ui/spaces/space_router.h"
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/views/spaces/edit_space_view.h"
+ #include "chrome/browser/ui/views/spaces/space_dialogs.h"
+ #include "chrome/common/chrome_paths.h"
+ #include "components/prefs/pref_service.h"
+@@ -92,6 +93,10 @@ void SteddingSpacesHandler::RegisterMessages() {
+       "steddingImportFromArc",
+       base::BindRepeating(&SteddingSpacesHandler::HandleImportFromArc,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingEditSpace",
++      base::BindRepeating(&SteddingSpacesHandler::HandleEditSpace,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "steddingDeleteSpace",
+       base::BindRepeating(&SteddingSpacesHandler::HandleDeleteSpace,
+@@ -428,6 +433,23 @@ void SteddingSpacesHandler::OnArcImportDone(
+                          : u"Nothing was imported."));
+ }
+ 
++void SteddingSpacesHandler::HandleEditSpace(const base::ListValue& args) {
++  if (args.size() != 1U) {
++    return;
++  }
++  AllowJavascript();
++  const std::optional<spaces::SpaceId> id = ParseId(args[0]);
++  if (!id) {
++    return;
++  }
++  // spaces B41: the same window the Space menu opens, over the window this
++  // page is in; the list follows what Done applies.
++  spaces::ShowEditSpaceDialog(
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
++          web_ui()->GetWebContents()),
++      *id);
++}
++
+ void SteddingSpacesHandler::HandleDeleteSpace(const base::ListValue& args) {
+   if (args.size() != 1U) {
+     return;
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.h b/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
+index 78054ecf6eb1a..bdf2550a2936b 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
+@@ -53,6 +53,7 @@ class SteddingSpacesHandler : public settings::SettingsPageUIHandler,
+   // pages a change of that Space's jar reloads, which the page asks about
+   // before it changes one.
+   void HandleCountSpacePages(const base::ListValue& args);
++  void HandleEditSpace(const base::ListValue& args);
+   void HandleDeleteSpace(const base::ListValue& args);
+   // routing D5: steddingAddRoute(spaceId, site) and steddingRemoveRoute(index).
+   // import I20: steddingExportSpace(callback) -> path of the active Space,
 diff --git a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
 index f946739260551..32d1eac6018ab 100644
 --- a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
@@ -2149,6 +3928,230 @@ index f946739260551..32d1eac6018ab 100644
  }
  
  // welcome W12: the behaviour step reads the profile. A fresh one answers
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 558d502d89c7e..6447e29afe02a 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -31,6 +31,7 @@ test("stedding_browser_tests") {
+     "dark_pages_browsertest.cc",
+     "defaults_browsertest.cc",
+     "downloads_browsertest.cc",
++    "edit_space_browsertest.cc",
+     "external_extensions_browsertest.cc",
+     "folder_tabs_browsertest.cc",
+     "fullscreen_hint_browsertest.cc",
+diff --git a/chrome/test/stedding/edit_space_browsertest.cc b/chrome/test/stedding/edit_space_browsertest.cc
+new file mode 100644
+index 0000000000000..624ed53651f71
+--- /dev/null
++++ b/chrome/test/stedding/edit_space_browsertest.cc
+@@ -0,0 +1,206 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// spaces B41-B44 (the owner, 2026-10-24): Edit Space, a window for a Space's
++// name, any emoji and its colour, one for both looks or one for each.
++
++#include <optional>
++#include <string>
++
++#include "base/test/run_until.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/themes/theme_service.h"
++#include "chrome/browser/themes/theme_service_factory.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_colors.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/spaces/edit_space_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "content/public/test/browser_test.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++using EditSpaceTest = InProcessBrowserTest;
++
++constexpr size_t kPaletteRow = 12;  // a row of the palette: the twelve hues
++
++spaces::SpaceModel& Model(BrowserWindowInterface* browser) {
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser);
++  CHECK(model);
++  return *model;
++}
++
++// Done or Cancel, as the dialog's own buttons do, and the window gone.
++void Close(spaces::EditSpaceView* view, bool done) {
++  views::Widget* const widget = view->GetWidget();
++  ASSERT_TRUE(widget);
++  views::DialogDelegate* const dialog =
++      widget->widget_delegate()->AsDialogDelegate();
++  ASSERT_TRUE(dialog);
++  if (done) {
++    dialog->AcceptDialog();
++  } else {
++    dialog->CancelDialog();
++  }
++  ASSERT_TRUE(base::test::RunUntil([&]() { return widget->IsClosed(); }));
++}
++
++// spaces B41: the window holds the name, the icon and the colour; Done
++// applies them, Cancel leaves the Space as it was.
++IN_PROC_BROWSER_TEST_F(EditSpaceTest, TheWindowEditsTheSpaceAndCancelLeavesIt) {
++  spaces::SpaceModel& model = Model(browser());
++  const spaces::SpaceId id = model.active_id();
++  {
++    SCOPED_TRACE("Done applies the name, the icon and the colour");
++    spaces::EditSpaceView* const view =
++        spaces::ShowEditSpaceDialog(browser(), id);
++    ASSERT_TRUE(view);
++    view->name_field()->SetText(u"Work");
++    view->PressEmojiForTesting(1);
++    view->PressPaletteForTesting(kPaletteRow + 5);
++    ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++    const spaces::Space* const space = model.GetSpace(id);
++    ASSERT_TRUE(space);
++    EXPECT_EQ("Work", space->name());
++    EXPECT_EQ("\U0001F4BC", space->icon());
++    EXPECT_EQ(spaces::kSpaceColors.at(5).color, space->color());
++    EXPECT_FALSE(space->dark_color());
++    EXPECT_TRUE(space->color_chosen());
++  }
++  {
++    SCOPED_TRACE("Cancel leaves it");
++    spaces::EditSpaceView* const view =
++        spaces::ShowEditSpaceDialog(browser(), id);
++    ASSERT_TRUE(view);
++    view->name_field()->SetText(u"Elsewhere");
++    view->PressEmojiForTesting(2);
++    view->PressPaletteForTesting(kPaletteRow + 8);
++    ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/false));
++    const spaces::Space* const space = model.GetSpace(id);
++    ASSERT_TRUE(space);
++    EXPECT_EQ("Work", space->name());
++    EXPECT_EQ("\U0001F4BC", space->icon());
++    EXPECT_EQ(spaces::kSpaceColors.at(5).color, space->color());
++  }
++  {
++    SCOPED_TRACE("Done with nothing touched leaves the colour unchosen");
++    const spaces::SpaceId other = model.AddSpace("Other", SK_ColorGRAY)->id();
++    spaces::EditSpaceView* const view =
++        spaces::ShowEditSpaceDialog(browser(), other);
++    ASSERT_TRUE(view);
++    ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++    EXPECT_FALSE(model.GetSpace(other)->color_chosen());
++  }
++}
++
++// spaces B42: any emoji, the first character typed or pasted, kept whole;
++// No Icon gives the Space its dot again.
++IN_PROC_BROWSER_TEST_F(EditSpaceTest, AnyEmojiBecomesTheIcon) {
++  spaces::SpaceModel& model = Model(browser());
++  const spaces::SpaceId id = model.active_id();
++  spaces::EditSpaceView* view = spaces::ShowEditSpaceDialog(browser(), id);
++  ASSERT_TRUE(view);
++  view->TypeIconForTesting(u"\U0001F98A fox");
++  EXPECT_EQ("\U0001F98A", view->icon());
++  ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++  EXPECT_EQ("\U0001F98A", model.GetSpace(id)->icon());
++
++  view = spaces::ShowEditSpaceDialog(browser(), id);
++  ASSERT_TRUE(view);
++  view->TypeIconForTesting(u"\U0001F468‍\U0001F469‍\U0001F467");
++  EXPECT_EQ("\U0001F468‍\U0001F469‍\U0001F467", view->icon())
++      << "a family joined with zero-width joiners is one icon";
++  view->PressNoIconForTesting();
++  ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++  EXPECT_EQ("", model.GetSpace(id)->icon());
++}
++
++// spaces B43: a colour for each look. The window takes the light look's in
++// the light look and the dark look's in the dark one, at once when the look
++// changes; one colour again clears the pair.
++IN_PROC_BROWSER_TEST_F(EditSpaceTest, ALightAndDarkPairTintsEachLook) {
++  spaces::SpaceModel& model = Model(browser());
++  const spaces::SpaceId id = model.active_id();
++  ThemeService* const theme =
++      ThemeServiceFactory::GetForProfile(browser()->GetProfile());
++  theme->SetBrowserColorScheme(ThemeService::BrowserColorScheme::kLight);
++  const SkColor light = spaces::kSpaceColors.at(5).color;
++  constexpr SkColor kDark = SkColorSetRGB(0xDD, 0x44, 0x25);
++
++  spaces::EditSpaceView* view = spaces::ShowEditSpaceDialog(browser(), id);
++  ASSERT_TRUE(view);
++  view->ChoosePairForTesting(true);
++  view->EditDarkForTesting(false);
++  view->PressPaletteForTesting(kPaletteRow + 5);
++  view->EditDarkForTesting(true);
++  view->TypeHexForTesting(u"#dd4425");
++  EXPECT_EQ(light, view->light_color());
++  EXPECT_EQ(kDark, view->dark_color());
++  ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++  const spaces::Space* const space = model.GetSpace(id);
++  ASSERT_TRUE(space);
++  EXPECT_EQ(light, space->color());
++  EXPECT_EQ(std::optional<SkColor>(kDark), space->dark_color());
++
++  views::Widget* const window =
++      BrowserView::GetBrowserViewForBrowser(browser())->GetWidget();
++  {
++    SCOPED_TRACE("the light look");
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return window->user_color_override() == std::optional<SkColor>(light);
++    })) << "the window does not wear the light look's colour";
++  }
++  {
++    SCOPED_TRACE("the dark look");
++    theme->SetBrowserColorScheme(ThemeService::BrowserColorScheme::kDark);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return window->user_color_override() == std::optional<SkColor>(kDark);
++    })) << "the window does not wear the dark look's colour";
++  }
++  {
++    SCOPED_TRACE("one colour again");
++    view = spaces::ShowEditSpaceDialog(browser(), id);
++    ASSERT_TRUE(view);
++    EXPECT_TRUE(view->pair());
++    view->ChoosePairForTesting(false);
++    ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++    EXPECT_FALSE(model.GetSpace(id)->dark_color());
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return window->user_color_override() == std::optional<SkColor>(light);
++    })) << "the dark look kept the pair's colour";
++  }
++  theme->SetBrowserColorScheme(ThemeService::BrowserColorScheme::kSystem);
++}
++
++// spaces B44: the pair is kept with the Space through a restart.
++IN_PROC_BROWSER_TEST_F(EditSpaceTest, PRE_ThePairSurvivesARestart) {
++  spaces::SpaceModel& model = Model(browser());
++  const spaces::SpaceId id = model.active_id();
++  model.SetSpaceName(id, "Pair");
++  model.SetSpaceColors(id, spaces::kSpaceColors.at(5).color,
++                       SkColorSetRGB(0xDD, 0x44, 0x25));
++}
++
++IN_PROC_BROWSER_TEST_F(EditSpaceTest, ThePairSurvivesARestart) {
++  spaces::SpaceModel& model = Model(browser());
++  const spaces::Space* pair = nullptr;
++  for (const auto& space : model.spaces()) {
++    if (space->name() == "Pair") {
++      pair = space.get();
++    }
++  }
++  ASSERT_TRUE(pair) << "the Space did not come back";
++  EXPECT_EQ(spaces::kSpaceColors.at(5).color, pair->color());
++  EXPECT_EQ(std::optional<SkColor>(SkColorSetRGB(0xDD, 0x44, 0x25)),
++            pair->dark_color());
++}
++
++}  // namespace
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
 index 5e9d7ad357996..6955e55d61ed4 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc

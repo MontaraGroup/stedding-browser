@@ -144,14 +144,15 @@ yet, `docs/features/library.md`) and a `+`.
   fingers (B35), which Windows does not do yet (`docs/history/plan-2026-09-26.md` TAB-31).
   The icons live at the sidebar's bottom.
 - **Create, rename, reorder, delete** **[1.0]** — `+` creates; the Space's title row opens
-  its menu (rename, colour, icon, delete); drag a Space icon, or Move Left / Move Right, to
+  its menu (Edit Space…, colour, rename, delete); drag a Space icon, or Move Left / Move Right, to
   reorder. Deleting a Space asks first, naming the Space, its tabs and where they go, then
   moves its tabs into the Space the window shows; only the last Space cannot be deleted
   (`PLAN.md` decision 7; B5, B16, B27).
-- **Theme and icon** **[1.0]** — a colour from twelve swatches and an icon from a fixed set,
-  tinting the sidebar; light, dark or automatic for the whole browser
-  (`features/welcome.md` W4, W7; `features/spaces.md` B31). Any colour, a gradient and any
-  emoji: **[M10]** (`S-99`).
+- **Theme and icon** **[1.0]** — Edit Space, from the Space menu or Settings: any emoji,
+  and any colour from a palette or a picker, one colour for both looks or one for each of
+  the light and dark looks, tinting the sidebar; light, dark or automatic for the whole
+  browser (`features/welcome.md` W4, W7; `features/spaces.md` B31, B41–B44). A gradient:
+  **[M10]** (`S-99`).
 - **Per-Space sessions** **[1.0]** — a Space can keep its own cookies, HTTP cache and site
   storage, so the same site can be signed into with different accounts in different
   Spaces of one window. Opt-in per Space; off, Spaces share the profile's jar.
