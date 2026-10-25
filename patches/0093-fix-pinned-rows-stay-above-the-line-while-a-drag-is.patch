@@ -1,0 +1,388 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 09:37:16 -0400
+Subject: fix: pinned rows stay above the line while a drag is over a folder
+ (issue 33)
+
+pins H14 (docs/features/pins.md), GitHub issue 33. When a loose tab's row
+was dragged in among the Space's pins and the pointer moved over a folder's
+header, the folder took the drag and the sidebar list reset its drag state.
+The list's next layout judged the dragged row by its own pin, which is a
+loose tab's, so the Clear line was drawn above the row and every pinned
+folder and pin after it slid under the line until the pointer left the
+header.
+
+The list's layout now keeps the side the dragged rows had for as long as
+the drag goes on, also while another target holds it. It finds those rows
+through the drag handler, and between the run's last row and the first loose
+row it keeps the side last drawn. The drag handler lays the list out again
+whenever a drag ends (DestroyDragController), so a release, Esc or a lost
+capture over a folder draws the line from the tabs' pins again.
+
+Test: PinnedRunTest.PinnedRowsStayAboveTheLineWhileADragIsOverAFolder.
+
+Why: the line, the pins and the pinned folders jumped under the line during an ordinary drag into the pinned run.
+Removable when: the sidebar list keeps its drag state while a folder target holds the drag, or the folder target stops resetting it.
+---
+ .../ui/views/tabs/common/tab_drag_handler.cc  |  12 +
+ .../unpinned_tab_container_view_layout.cc     |  29 +-
+ .../test/stedding/pinned_run_browsertest.cc   | 254 ++++++++++++++++++
+ 3 files changed, 290 insertions(+), 5 deletions(-)
+
+diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+index d597168b26a02..22cb636c57240 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
+@@ -1255,6 +1255,18 @@ std::unique_ptr<TabDragController> TabDragHandlerImpl::ReleaseDragController() {
+ void TabDragHandlerImpl::DestroyDragController() {
+   drag_controller_.reset();
+   stedding_press_drag::ReleaseHeldPage(&tab_strip_region_view_.get());
++  // pins H14 (GitHub issue 33): while another target, a folder's header or
++  // rows, holds the drag, the list draws its dragged rows on the side of the
++  // Clear line they were last drawn on, and nothing tells the list when such
++  // a drag ends: the release, Esc or a lost capture goes to that target.
++  // Every drag ends here, so the list draws the line by the tabs' pins again.
++  if (auto* const strip = views::AsViewClass<TabStripView>(
++          tab_strip_region_view_->GetTabStripView())) {
++    if (UnpinnedTabContainerView* const list =
++            strip->GetUnpinnedTabsContainer()) {
++      list->InvalidateLayout();
++    }
++  }
+ }
+ 
+ void TabDragHandlerImpl::StartedDragging(
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+index ca554db94e824..529408ba3c2fe 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+@@ -291,9 +291,23 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+   // are not; between the run's last pin and the first loose row their middle
+   // against the line's says, the line drawn on their own side of them until
+   // they are past it.
++  //
++  // pins H14 (GitHub issue 33): over a folder's header or an open folder's
++  // rows the folder takes the drag, and this list's drag state is reset
++  // (OnTabDragExited), but its rows are still dragged and stand where the
++  // last reorder put them, perhaps among the pins. Judged by their pin
++  // there, a loose row put the line above itself and every pinned folder and
++  // pin after it, until the pointer left the folder. While another target
++  // holds the drag, the rows keep the side they were last drawn on.
++  const bool handling = tab_container_view->IsHandlingDrag();
++  const bool rows_dragged = handling || tab_container_view->IsDragging();
++  const auto is_dragged = [&](const views::View* child) {
++    return handling ? tab_container_view->GetVisualDataForDraggedView(*child)
++                          .has_value()
++                    : tab_container_view->IsViewDragging(*child);
++  };
+   std::optional<bool> dragged_pinned;
+-  if (tab_container_view->is_space_pinned_ &&
+-      tab_container_view->IsHandlingDrag()) {
++  if (tab_container_view->is_space_pinned_ && rows_dragged) {
+     views::View* before = nullptr;
+     views::View* after = nullptr;
+     views::View* first_dragged = nullptr;
+@@ -307,7 +321,7 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+           child->GetProperty(kHiddenForEssentialsDrag)) {
+         continue;
+       }
+-      if (tab_container_view->GetVisualDataForDraggedView(*child)) {
++      if (is_dragged(child)) {
+         first_dragged = first_dragged ? first_dragged : child;
+         dragged_height += child->GetPreferredSize().height();
+         dragged_group |= views::IsViewClass<TabGroupView>(child);
+@@ -322,6 +336,12 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+         dragged_pinned = true;
+       } else if (before && !pinned_in_model(before)) {
+         dragged_pinned = false;
++      } else if (!handling) {
++        // Between the run's last row and the first loose row, with no pointer
++        // in this list to measure against (its dragged bounds are reset): the
++        // side the line was last drawn on, at the run's end or under it.
++        dragged_pinned = tab_container_view->dragged_rows_pinned_.value_or(
++            pinned_in_model(first_dragged));
+       } else {
+         // The run's edge, and the line and the New Tab row under it.
+         const int edge = before ? before->bounds().bottom() : 0;
+@@ -348,8 +368,7 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+   }
+   tab_container_view->dragged_rows_pinned_ = dragged_pinned;
+   const auto is_space_pinned = [&](views::View* child) {
+-    if (dragged_pinned &&
+-        tab_container_view->GetVisualDataForDraggedView(*child)) {
++    if (dragged_pinned && is_dragged(child)) {
+       return *dragged_pinned;
+     }
+     return pinned_in_model(child);
+diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
+index 6955e55d61ed4..b850e4ed8ba77 100644
+--- a/chrome/test/stedding/pinned_run_browsertest.cc
++++ b/chrome/test/stedding/pinned_run_browsertest.cc
+@@ -12,6 +12,7 @@
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <utility>
+ #include <vector>
+ 
+ #include "base/functional/callback.h"
+@@ -1329,6 +1330,259 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ARowDroppedOnTheFirstRowTakesTheTop) {
+   }
+ }
+ 
++// pins H14 (GitHub issue 33): while a loose row is dragged in among the pins
++// and on over a folder's header, every pin and pinned folder stays above the
++// Clear line. Over a header the folder takes the drag and the list let go of
++// it, so the dragged row, already among the pins, was judged by its own pin,
++// a loose tab's: the line was drawn above it, and the pins and pinned folders
++// after it were drawn under the line until the pointer left the header. The
++// line also stays where it was when the pointer goes from just under the
++// run's last row, a pinned folder, onto that folder's header, and a drag
++// given up over a header draws the line by the tabs' pins again.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest,
++                       PinnedRowsStayAboveTheLineWhileADragIsOverAFolder) {
++  // The run: folder F of two pins, then pin B, then folder G of one pin, both
++  // folders collapsed. Under the line: L1 to L4, L4 staying there throughout
++  // so the line is drawn.
++  tabs::TabInterface* const f1 = tabs().GetActiveTab();
++  ASSERT_TRUE(f1);
++  tabs::TabInterface* const f2 = AddBlankTab();
++  tabs::TabInterface* const b = AddBlankTab();
++  tabs::TabInterface* const g1 = AddBlankTab();
++  tabs::TabInterface* const l1 = AddBlankTab();
++  tabs::TabInterface* const l2 = AddBlankTab();
++  tabs::TabInterface* const l3 = AddBlankTab();
++  tabs::TabInterface* const l4 = AddBlankTab();
++  tabs::FolderTabCollection* const f =
++      tabs().AddToNewFolder({Index(f1), Index(f2)});
++  ASSERT_TRUE(f);
++  f->SetTitle("Reading");
++  ASSERT_TRUE(model().CanPinFolder(f));
++  model().SetFolderSpacePinned(f, true);
++  model().SetSpacePinned(b, true);
++  tabs::FolderTabCollection* const g = tabs().AddToNewFolder({Index(g1)});
++  ASSERT_TRUE(g);
++  g->SetTitle("Later");
++  ASSERT_TRUE(model().CanPinFolder(g));
++  model().SetFolderSpacePinned(g, true);
++  f->SetCollapsed(true);
++  g->SetCollapsed(true);
++
++  // Whether the strip's order runs through `order`, one after another.
++  const auto order_is =
++      [&](const std::vector<const tabs::TabInterface*>& rows) {
++        for (size_t i = 1; i < rows.size(); ++i) {
++          if (Index(rows[i - 1]) + 1 != Index(rows[i])) {
++            return false;
++          }
++        }
++        return true;
++      };
++  // The strip's order, for failure messages.
++  const auto order = [&]() {
++    const std::vector<std::pair<const tabs::TabInterface*, const char*>> names =
++        {{f1, "F1"}, {f2, "F2"}, {b, "B"},   {g1, "G1"},
++         {l1, "L1"}, {l2, "L2"}, {l3, "L3"}, {l4, "L4"}};
++    std::string text = "the order is";
++    for (int i = 0; i < tabs().count(); ++i) {
++      const tabs::TabInterface* const tab = tabs().GetTabAtIndex(i);
++      const char* name = "?";
++      for (const auto& [named, label] : names) {
++        if (named == tab) {
++          name = label;
++        }
++      }
++      text = base::StrCat({text, " ", name});
++    }
++    return text;
++  };
++  ASSERT_TRUE(order_is({f1, f2, b, g1, l1, l2, l3, l4})) << order();
++  ASSERT_TRUE(HeaderAboveTheLine(f));
++  ASSERT_TRUE(IsAboveTheLine(b));
++  ASSERT_TRUE(HeaderAboveTheLine(g));
++  ASSERT_FALSE(IsAboveTheLine(l1));
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  // A press on `tab`'s row, moves in steps with the window laying out
++  // between two, and the release, as a person's drag goes.
++  gfx::Point pointer;
++  const auto press = [&](const tabs::TabInterface* tab) {
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    const TabView* const row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++    ASSERT_TRUE(row) << "the sidebar shows no row for the tab";
++    pointer = row->GetBoundsInScreen().CenterPoint();
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed,
++                                  pointer);
++  };
++  const auto move_to = [&](const gfx::Point& to) {
++    const gfx::Point from = pointer;
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++    pointer = to;
++  };
++  const auto release = [&]() {
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased,
++                                  pointer);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  };
++  // The middle of `folder`'s header, where the folder takes the drag.
++  const auto header_middle = [&](const tabs::FolderTabCollection* folder) {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    FolderView* const view = HeaderOf(folder);
++    EXPECT_TRUE(view) << "the sidebar shows no header for the folder";
++    return view ? view->GetHeaderBoundsInScreen().CenterPoint() : gfx::Point();
++  };
++  // Just under `folder`'s header: from the run's last row, a drop on the
++  // line, which joins the run's end.
++  const auto just_under = [&](const tabs::FolderTabCollection* folder) {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    FolderView* const view = HeaderOf(folder);
++    EXPECT_TRUE(view) << "the sidebar shows no header for the folder";
++    return view ? gfx::Point(view->GetHeaderBoundsInScreen().CenterPoint().x(),
++                             view->GetHeaderBoundsInScreen().bottom() + 3)
++                : gfx::Point();
++  };
++  // The middle of the room between `folder`'s header and `tab`'s row: during
++  // a drag, the dragged row's place.
++  const auto between = [&](const tabs::FolderTabCollection* folder,
++                           const tabs::TabInterface* tab) {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    FolderView* const header = HeaderOf(folder);
++    const TabView* const row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++    EXPECT_TRUE(header && row) << "the sidebar shows no row or header";
++    return header && row
++               ? gfx::Point(row->GetBoundsInScreen().CenterPoint().x(),
++                            (header->GetHeaderBoundsInScreen().bottom() +
++                             row->GetBoundsInScreen().y()) /
++                                2)
++               : gfx::Point();
++  };
++  // The Clear line's top, once the rows have settled.
++  const auto line_top = [&]() -> std::optional<int> {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    const ClearTabsSeparator* const line =
++        stedding::test::FindDrawnClearLine(widget()->GetRootView());
++    return line ? std::optional<int>(line->GetBoundsInScreen().y())
++                : std::nullopt;
++  };
++
++  {
++    SCOPED_TRACE("a loose row dragged before a pin, then over a folder");
++    const gfx::Point before_b = JustInsideTheTopOf(b);
++    ASSERT_NO_FATAL_FAILURE(press(l2));
++    move_to(before_b);
++    // The row is in the run, before B and G, before the pointer reaches a
++    // header: the case the issue reports.
++    ASSERT_TRUE(order_is({f1, f2, l2, b, g1, l1, l3, l4})) << order();
++    EXPECT_TRUE(IsAboveTheLine(b));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++
++    move_to(header_middle(f));
++    EXPECT_TRUE(order_is({f1, f2, l2, b, g1, l1, l3, l4}))
++        << "the drag over the header moved a row: " << order();
++    EXPECT_TRUE(HeaderAboveTheLine(f));
++    EXPECT_TRUE(IsAboveTheLine(b))
++        << "the pin after the dragged row went under the line";
++    EXPECT_TRUE(HeaderAboveTheLine(g))
++        << "the pinned folder after the dragged row went under the line";
++    EXPECT_FALSE(IsAboveTheLine(l1));
++
++    // Back to the room the row has among the pins, and dropped there.
++    move_to(between(f, b));
++    EXPECT_TRUE(IsAboveTheLine(b));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++    release();
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return model().IsSpacePinned(l2);
++    })) << "the row dropped among the pins stayed loose";
++    EXPECT_TRUE(order_is({f1, f2, l2, b, g1, l1, l3, l4})) << order();
++    EXPECT_TRUE(IsAboveTheLine(l2));
++    EXPECT_TRUE(IsAboveTheLine(b));
++    EXPECT_TRUE(HeaderAboveTheLine(f));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++    EXPECT_FALSE(IsAboveTheLine(l1));
++  }
++
++  {
++    // Between the run's last row, folder G, and the first loose row, the
++    // side is the row's middle against the line's while the list holds the
++    // drag; over G's header it is the side the row was last drawn on.
++    SCOPED_TRACE("a loose row dragged just under the run's last folder");
++    const gfx::Point under_g = just_under(g);
++    ASSERT_NO_FATAL_FAILURE(press(l1));
++    move_to(under_g);
++    ASSERT_TRUE(order_is({g1, l1, l3, l4})) << order();
++    const std::optional<int> line_before = line_top();
++    ASSERT_TRUE(line_before.has_value()) << "no Clear line during the drag";
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++
++    move_to(header_middle(g));
++    const std::optional<int> line_over = line_top();
++    ASSERT_TRUE(line_over.has_value()) << "no Clear line over the header";
++    EXPECT_NEAR(*line_before, *line_over, 1)
++        << "the line moved when the pointer went onto the folder's header";
++    EXPECT_TRUE(HeaderAboveTheLine(f));
++    EXPECT_TRUE(IsAboveTheLine(b));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++    EXPECT_FALSE(IsAboveTheLine(l3));
++
++    // Dropped on the line, the row joins the run's end.
++    move_to(just_under(g));
++    release();
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return model().IsSpacePinned(l1);
++    })) << "the row dropped on the line stayed loose";
++    EXPECT_TRUE(order_is({f1, f2, l2, b, g1, l1, l3, l4})) << order();
++    EXPECT_TRUE(IsAboveTheLine(l1));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++    EXPECT_FALSE(IsAboveTheLine(l3));
++  }
++
++  {
++    // A drag given up, as Esc gives it up: the window takes the pointer back
++    // from the drag, which puts the rows back where they were. Esc goes to an
++    // event monitor of the application, which a browser test cannot reach.
++    SCOPED_TRACE("a drag given up over a folder's header");
++    const gfx::Point before_l2 = JustInsideTheTopOf(l2);
++    ASSERT_NO_FATAL_FAILURE(press(l3));
++    move_to(before_l2);
++    ASSERT_TRUE(order_is({f1, f2, l3, l2, b, g1, l1, l4})) << order();
++
++    move_to(header_middle(f));
++    EXPECT_TRUE(IsAboveTheLine(l2));
++    EXPECT_TRUE(IsAboveTheLine(b));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++    EXPECT_TRUE(IsAboveTheLine(l1));
++    EXPECT_FALSE(IsAboveTheLine(l4));
++
++    widget()->GetRootView()->OnMouseCaptureLost();
++    base::RunLoop().RunUntilIdle();
++    ASSERT_TRUE(base::test::RunUntil([&]() {
++      return order_is({f1, f2, l2, b, g1, l1, l3, l4});
++    })) << "the given-up drag left the row in the run: "
++        << order();
++    EXPECT_FALSE(model().IsSpacePinned(l3));
++    EXPECT_FALSE(IsAboveTheLine(l3)) << "the line stayed under the row";
++    EXPECT_TRUE(HeaderAboveTheLine(f));
++    EXPECT_TRUE(IsAboveTheLine(l2));
++    EXPECT_TRUE(IsAboveTheLine(b));
++    EXPECT_TRUE(HeaderAboveTheLine(g));
++    EXPECT_TRUE(IsAboveTheLine(l1));
++    EXPECT_FALSE(IsAboveTheLine(l4));
++  }
++}
++
+ // pins H27 (BACKLOG S-277, GitHub issue 16): as in Arc, a tab's row dragged
+ // onto the essentials becomes an essential, before the card it is dropped on;
+ // an essential dragged into the list leaves the essentials for the place the

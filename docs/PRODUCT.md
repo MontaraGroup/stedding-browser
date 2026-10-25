@@ -116,9 +116,17 @@ yet, `docs/features/library.md`) and a `+`.
   only the selected tab (`S-110`).
 - **Drag a tab out** **[1.0]** — the tab opens in a window that shows the same Spaces
   (`features/windows.md` G1). A window that shares nothing is a Blank Window (§5).
-- **Sidebar export** **[1.0]** — a Space exports to a file and imports back
-  (`features/import.md` I18, I20; `features/sidebar-file.md`). Scheduled backups, the
-  sidebar folder and the version-2 catalog are **[cut]**.
+- **Sidebar export** **[1.0]** — a Space, or every Space with its pins, pinned folders and
+  essentials (Export all Spaces…), exports to a file and imports back on any computer,
+  merged by ids that survive a restart (`features/import.md` I18, I20;
+  `features/sidebar-file.md` Sf2, Sf6). Scheduled backups and the version-2 catalog are
+  **[cut]**; sync through a folder is below.
+- **Sync through a folder** **[1.0, built, not released]** — off by default; each computer
+  writes its sidebar to its own file in a folder the user picks and merges the others',
+  field by field, with removals only from the user's own action, large batches and Space
+  deletions held for a yes, Undo and backups. Not a sync service: no account, no server, no
+  network request; the user's own sync tool or shared drive moves the files
+  (`features/sidebar-file.md` Sf7–Sf41, ADR 0029, `S-282`).
 - **Copy URL, and copy as Markdown** **[1.0]** — `⇧⌘C` and `⌥⇧⌘C`, with tracking
   parameters removed, and a Copy Link button at the address field's right end, Option-click
   for Markdown, which a setting hides (`features/copy-link.md` L7; GitHub issue 11).
@@ -130,7 +138,11 @@ yet, `docs/features/library.md`) and a `+`.
 - **Undo after closing tabs** **[M10]** — after a close, a toast with Undo that reopens those
   tabs in their Space and folder; off by default since 2026-10-21 (the owner), a setting turns
   it on (`features/tabs.md` R25–R28, R30).
-- **The sidebar on the right** **[M10]** — a setting (`S-96`).
+- **The sidebar on the right** **[M10]** — "Sidebar on the right" in Settings, on the
+  sidebar's own menu, the Mac's View menu and the command bar puts the sidebar at the
+  window's right in every window at once; its edge, rail, handle and reveal edge mirror, and
+  the Mac's traffic lights stay left over the address row (`features/sidebar.md` Y34–Y43,
+  `S-96`). Written, not yet built.
 
 ## 2. Spaces
 
@@ -238,7 +250,9 @@ yet, `docs/features/library.md`) and a `+`.
   window closes it. **Peek is what makes pinned tabs behave like apps.** Rebuilt on the
   little window (2026-10-25, `S-93`), so the page is a whole tab; on by default (the owner,
   2026-10-25, `PLAN.md` decision 2), with its switch in Settings › Stedding
-  (`features/peek.md`).
+  and on the welcome flow. "Open a peek with" can ask for a press held 0.3 s or 0.5 s
+  instead of a click, so a plain click follows the link in the pinned tab as before
+  (`features/peek.md` P18).
 - **Little Arc** **[1.0]** — the little window: a link from another application opens in
   a small window of its own, to read and dismiss. Its top is one row, the main window's
   address row on the page's colour with the traffic lights inline, light or dark as the
@@ -314,7 +328,8 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   one (`features/player.md` Mp3).
 - **Downloads** **[1.0]** — Chromium's downloads, with the progress ring on the sidebar's
   bottom-left button (`features/toolbar.md` T14). History and Downloads as panels in the
-  sidebar's column: **[M10]** (`S-98`).
+  sidebar's column, in the tabs' place, by ⌘Y and ⇧⌘J and the bottom row's buttons: **[M10]**,
+  written 2026-10-25, not built yet (`features/sidebar-panels.md`, `S-98`).
 - **Library** **[1.0]** — archived tabs, captures and downloads behind the sidebar's
   bottom-left button, and easels when they return (`features/library.md`; `S-61`).
 
@@ -345,17 +360,21 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   (`features/archive.md` A6, `features/welcome.md` W12).
 - **View and restore the archive** **[1.0]** — the Archived view, by day and Space and
   searchable, and archived tabs in the command bar (archive A7–A11).
-- **History** **[1.0]** — `⌘Y`, Chromium's.
+- **History** **[1.0]** — `⌘Y`, Chromium's; as a panel in the sidebar's column with
+  Chromium's page one click away **[M10]** (`features/sidebar-panels.md`, `S-98`).
 - **Find in page** **[1.0]** — `⌘F`, Chromium's.
 
 ## 12. The rest
 
-- **Keyboard shortcut customisation** **[1.0]** — Arc has a full remapping page. Ours is
-  `S-91` (in M10, and the one M10 item 1.0 needs); the reference is read-only today
-  (`features/shortcuts.md` Z5).
+- **Keyboard shortcut customisation** **[1.0]** — the Shortcuts block in Settings is
+  editable (`S-91`, `features/shortcuts.md` Z5, Z10–Z22): record a chord, a conflict named
+  before it is taken, a switch per command, Reset per row and for all, search and a group
+  filter. The chords are the computer's, kept in Local State. Written 2026-10-25, not yet
+  built.
 - **Site Control Center** **[1.0]** — per-site permissions and controls from the address
-  area. Chromium's page info serves it today; one panel of Stedding's own, with the
-  blocker's switch, is `S-118` (M10). Its entry to Boosts waits on Boosts.
+  area: Chromium's page info with Stedding's controls in it, from the site chip and the
+  command bar (`features/site-controls.md`, `S-118`; written, not yet built). The
+  blocker's switch joins it with `S-88`. Its entry to Boosts waits on Boosts.
 - **Developer Mode** **[1.0]** — a localhost page always shows the address row
   (`features/toolbar.md` T11), and its tab is marked in the sidebar as Arc marks it:
   a yellow and black tape round the row while it is on screen, and at the
@@ -391,7 +410,10 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
 
 - **Ad and tracker blocking built in**, with a switch per site; its own ADR first: the
   engine, and filter lists fetched at run time, never built in (`S-88`).
-- **Clean links on every page opened**, not only on a copied link (`S-89`).
+- **Clean links on every page opened**, not only on a copied link (`S-89`;
+  `features/clean-links.md`): a page you open loses the tracking parameters a copy loses,
+  and a known redirect page that carries its target is skipped; Settings → Stedding →
+  Privacy turns it off and keeps a site's parameters.
 - **Web apps keep their own keys**: the first press goes to the page, a second to
   Stedding (`S-90`).
 - **Dark mode for web pages**, on Chromium's own (`S-100`): one switch, a moon at the

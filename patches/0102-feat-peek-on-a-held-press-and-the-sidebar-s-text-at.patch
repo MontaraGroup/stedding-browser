@@ -1,0 +1,1149 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 10:21:10 -0400
+Subject: feat: Peek on a held press, and the sidebar's text at 14
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The owner, 2026-10-25: Peek must be easy to turn off and to tune, on the
+setup screen as well as in Settings, and the sidebar's text should be 14.
+
+Peek P18: Settings › Stedding's "Open a peek with" offers a click (as
+before), a press held for 0.3 s or one held for 0.5 s. With a hold set, a
+plain click on a link in a pinned tab follows it in the tab, and keeping
+the mouse button down on the link that long opens the peek. Each tab keeps
+the left button's last down and up at its page's widget (PeekPress); the
+throttle and the new-tab hook read it with the setting.
+
+Welcome W17: the behaviour step asks how links from pinned tabs open: a
+peek on a click, on a 0.3 s or 0.5 s hold, or in the tab (Peek off).
+Welcome W18: the appearance step offers the sidebar's text size.
+
+Sidebar Y2: unset, the sidebar's text is 14 (it was the label font's 13 on
+the Mac), and a row's room around its text is 16, so 14 keeps every
+density's own row height; Settings lists 14 as the default.
+
+Why: the owner's notes on the Peek build.
+Removable when: never.
+---
+ .../api/settings_private/prefs_util.cc        |   2 +
+ .../stedding_page/stedding_page.html.ts       |  18 ++-
+ .../resources/stedding_welcome/app.css        |  26 ++++-
+ .../browser/resources/stedding_welcome/app.ts |  67 ++++++++++-
+ chrome/browser/ui/stedding/sidebar_density.cc |   4 +-
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   9 ++
+ .../ui/stedding/stedding_prefs_unittest.cc    |   3 +
+ chrome/browser/ui/stedding_ui_metrics.cc      |   5 +-
+ .../ui/stedding_ui_metrics_unittest.cc        |   7 +-
+ chrome/browser/ui/tab_helpers.cc              |   3 +
+ chrome/browser/ui/views/peek/BUILD.gn         |  11 +-
+ .../ui/views/peek/peek_navigation_throttle.cc |  32 ++++--
+ .../ui/views/peek/peek_navigation_throttle.h  |   9 ++
+ chrome/browser/ui/views/peek/peek_press.cc    | 106 ++++++++++++++++++
+ chrome/browser/ui/views/peek/peek_press.h     |  74 ++++++++++++
+ chrome/browser/ui/views/peek/peek_unittest.cc |  28 ++++-
+ .../common/stedding_tab_row_rules_unittest.cc |  10 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  11 +-
+ .../stedding_welcome_handler.cc               |  36 +++++-
+ .../stedding_welcome_handler_unittest.cc      |  25 +++++
+ chrome/test/stedding/peek_browsertest.cc      |  53 +++++++++
+ chrome/test/stedding/welcome_browsertest.cc   |  77 +++++++++----
+ 23 files changed, 563 insertions(+), 55 deletions(-)
+ create mode 100644 chrome/browser/ui/views/peek/peek_press.cc
+ create mode 100644 chrome/browser/ui/views/peek/peek_press.h
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 8b2355ffb2f35..b1ef9f2680ab7 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -346,6 +346,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kPeekEnabled] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kPeekHoldDelayMs] =
++      settings_api::PrefType::kNumber;
+   (*s_allowlist)[stedding::prefs::kExternalDefaultSpace] =
+       settings_api::PrefType::kString;
+   (*s_allowlist)[stedding::prefs::kCopyStripTracking] =
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index f1536323f5b7c..ffa043cc692f1 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -92,10 +92,9 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         pref-key="stedding.sidebar.text_size"
+         label="$i18n{steddingTextSizeLabel}"
+         .menuOptions="${[
+-          {value: 0, name: '$i18n{steddingTextSizeDefault}'},
+           {value: 12, name: '12'},
+           {value: 13, name: '13'},
+-          {value: 14, name: '14'},
++          {value: 0, name: '$i18n{steddingTextSizeDefault}'},
+           {value: 15, name: '15'},
+         ]}">
+     </settings-dropdown-menu>
+@@ -374,6 +373,21 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingPeekLabel}"
+       sub-label="$i18n{steddingPeekSubLabel}">
+   </settings-toggle-button>
++  <div class="hr settings-box">
++    <div class="start" id="peekHoldLabel">
++      <div class="label">$i18n{steddingPeekHoldLabel}</div>
++      <div class="secondary">$i18n{steddingPeekHoldSubLabel}</div>
++    </div>
++    <settings-dropdown-menu id="peekHold"
++        pref-key="stedding.peek.hold_delay_ms"
++        label="$i18n{steddingPeekHoldLabel}"
++        .menuOptions="${[
++          {value: 0, name: '$i18n{steddingPeekHoldClick}'},
++          {value: 300, name: '$i18n{steddingPeekHold300}'},
++          {value: 500, name: '$i18n{steddingPeekHold500}'},
++        ]}">
++    </settings-dropdown-menu>
++  </div>
+   <settings-toggle-button
+       id="newTabHint"
+       class="hr"
+diff --git a/chrome/browser/resources/stedding_welcome/app.css b/chrome/browser/resources/stedding_welcome/app.css
+index 7bd88c02c9c67..b9bb6e5411173 100644
+--- a/chrome/browser/resources/stedding_welcome/app.css
++++ b/chrome/browser/resources/stedding_welcome/app.css
+@@ -674,17 +674,35 @@ main.cover {
+   border-color: var(--ink);
+ }
+ 
+-/* The behaviour step: three questions, each a row of radio pills
++/* The appearance step's settings under the drawings (welcome W7, W17): the
++ * setting's name beside its choices, one row each. */
++.setting-row {
++  align-items: center;
++  display: flex;
++  flex-wrap: wrap;
++  gap: 10px 16px;
++}
++
++.setting-row .name {
++  font-weight: 600;
++  min-width: 140px;
++}
++
++.setting-row .pills {
++  margin-top: 0;
++}
++
++/* The behaviour step: four questions, each a row of radio pills
+  * (welcome W12). Keep each hint to one line: the step has to fit the dialog
+  * with nothing under its footer. */
+ .choices {
+   display: grid;
+-  gap: 16px;
++  gap: 10px;
+ }
+ 
+ .choice {
+   display: grid;
+-  gap: 4px;
++  gap: 2px;
+ }
+ 
+ .choice .name {
+@@ -710,7 +728,7 @@ main.cover {
+   color: var(--ink);
+   cursor: pointer;
+   font: 600 13px/1 system-ui, sans-serif;
+-  padding: 8px 14px;
++  padding: 7px 14px;
+ }
+ 
+ .pill[aria-checked='true'] {
+diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
+index 11d5deb023fcf..80c014ebbd5db 100644
+--- a/chrome/browser/resources/stedding_welcome/app.ts
++++ b/chrome/browser/resources/stedding_welcome/app.ts
+@@ -53,6 +53,10 @@ interface Behaviour {
+   archiveHours: number;
+   closedForm: number;
+   sleepMinutes: number;
++  // W16: Peek's hold in milliseconds, or -1 when links stay in the pin.
++  peek: number;
++  // W17: the sidebar's text size; 0 is the default, 14.
++  textSize: number;
+ }
+ 
+ // welcome W12: the behaviour step's three questions. Labels and values are
+@@ -102,8 +106,25 @@ const BEHAVIOURS: Array<{
+       [60, '1 hour'],
+     ],
+   },
++  {
++    // W16: Peek, on by default (peek P10), and the press it opens with (P18).
++    name: 'peek',
++    label: 'Links from pinned tabs to other sites',
++    hint: 'A peek shows the page in a window over this one, and the ' +
++        'pinned tab stays where it was.',
++    choices: [
++      [0, 'Peek on a click'],
++      [300, 'Peek on a 0.3 s hold'],
++      [500, 'Peek on a 0.5 s hold'],
++      [-1, 'Open in the tab'],
++    ],
++  },
+ ];
+ 
++// W17: the sidebar's text sizes, as Settings › Stedding offers them.
++const TEXT_SIZES: Array<[number, string]> =
++    [[12, '12'], [13, '13'], [0, '14'], [15, '15']];
++
+ const state = {
+   step: 'welcome' as Screen,
+   engines: [] as SearchEngine[],
+@@ -141,7 +162,13 @@ const state = {
+   // A swatch clicked in this flow: the drawings take its tint (W4).
+   spaceColorChosen: false,
+   // Until getBehaviour answers: a fresh profile's values (W12).
+-  behaviour: {archiveHours: 0, closedForm: 0, sleepMinutes: 0} as Behaviour,
++  behaviour: {
++    archiveHours: 0,
++    closedForm: 0,
++    sleepMinutes: 0,
++    peek: 0,
++    textSize: 0,
++  } as Behaviour,
+   defaultState: 'unknown',
+ };
+ 
+@@ -824,10 +851,42 @@ function renderStep(main: HTMLElement) {
+           });
+           swatches.append(swatch);
+         });
+-        main.append(
+-            el('p', 'lead', 'Space colour: the tint of your first Space\u2019s sidebar.'),
+-            swatches);
++        // The setting's name beside its choices, one row each, so the step
++        // fits the dialog with the text size under it (W17).
++        const row = el('div', 'setting-row');
++        const name = el('span', 'name', 'Space colour');
++        name.title = 'The tint of your first Space\u2019s sidebar';
++        row.append(name, swatches);
++        main.append(row);
++      }
++      // W17: the sidebar's text size, written at once.
++      const sizes = el('div', 'pills sizes');
++      sizes.setAttribute('role', 'radiogroup');
++      sizes.setAttribute('aria-label', 'Sidebar text size');
++      for (const [value, text] of TEXT_SIZES) {
++        const pill = el('button', 'pill', text);
++        pill.type = 'button';
++        pill.setAttribute('role', 'radio');
++        pill.setAttribute(
++            'aria-checked', String(state.behaviour.textSize === value));
++        pill.dataset['name'] = 'textSize';
++        pill.dataset['value'] = String(value);
++        pill.dataset['focus'] = `textSize-${value}`;
++        pill.addEventListener('click', () => {
++          state.behaviour.textSize = value;
++          chosenBehaviour.add('textSize');
++          chrome.send('setBehaviour', ['textSize', value]);
++          render();
++          document.querySelector<HTMLElement>(
++              `.pill[data-name="textSize"][data-value="${value}"]`)?.focus();
++        });
++        sizes.append(pill);
+       }
++      const sizeRow = el('div', 'setting-row');
++      const sizeName = el('span', 'name', 'Sidebar text size');
++      sizeName.title = 'Tab titles, folders and the Space\u2019s name';
++      sizeRow.append(sizeName, sizes);
++      main.append(sizeRow);
+       break;
+     }
+     case 'behaviour': {
+diff --git a/chrome/browser/ui/stedding/sidebar_density.cc b/chrome/browser/ui/stedding/sidebar_density.cc
+index c38d95b2e24f9..e0b022b3a3fdc 100644
+--- a/chrome/browser/ui/stedding/sidebar_density.cc
++++ b/chrome/browser/ui/stedding/sidebar_density.cc
+@@ -28,8 +28,10 @@ void ApplyFromLocalState(PrefService* local_state) {
+   const int density =
+       std::clamp(local_state->GetInteger(prefs::kSidebarDensity), 0, 2);
+   SetSidebarDensity(static_cast<SidebarDensity>(density));
++  // sidebar Y2: unset, the sidebar's text is 14 (the owner, 2026-10-25).
+   const int text = local_state->GetInteger(prefs::kSidebarTextSize);
+-  SetSidebarTextSize(text >= 12 && text <= 15 ? text : 0);
++  SetSidebarTextSize(text >= 12 && text <= 15 ? text
++                                              : prefs::kSidebarTextSizeDefault);
+ }
+ 
+ // Every layout in the tree recomputed: the row layouts read the metrics
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 6bf5098eb6843..116336c692be7 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -21,6 +21,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // peek P10: on, the owner's choice once Peek was rebuilt on the little
+   // window (2026-10-25).
+   registry->RegisterBooleanPref(kPeekEnabled, true);
++  // peek P18: a click peeks until the user asks for a held press.
++  registry->RegisterIntegerPref(kPeekHoldDelayMs, 0);
+   // Never by default: nothing closes a tab the user did not close unless
+   // they choose a time in Settings, the welcome flow's behaviour step or the
+   // command bar (archive A6; the owner, 2026-10-11). It was 12 hours.
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 9b55e3e49e1ad..db5803251d5d6 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -25,6 +25,11 @@ inline constexpr char kNewTabShowShortcuts[] =
+     "stedding.new_tab.show_shortcuts";
+ // Links that leave a pinned tab's site open in a peek (peek P1, P10).
+ inline constexpr char kPeekEnabled[] = "stedding.peek.enabled";
++// peek P18: how long the mouse button must be held down on a link from a
++// pinned tab for it to peek, in milliseconds; 0, a click peeks. The values
++// Settings and the welcome flow offer.
++inline constexpr char kPeekHoldDelayMs[] = "stedding.peek.hold_delay_ms";
++inline constexpr int kPeekHoldDelayChoices[] = {0, 300, 500};
+ 
+ // Hours an unpinned tab may sit unlooked-at before auto-archive closes it
+ // into the recently-closed list (docs/features/archive.md). 0 turns it off,
+@@ -53,6 +58,10 @@ inline constexpr char kGlobalPrivacyControl[] = "stedding.privacy.gpc";
+ // profile. Density 0/1/2; text size 0 (default) or 12-15.
+ inline constexpr char kSidebarDensity[] = "stedding.sidebar.density";
+ inline constexpr char kSidebarTextSize[] = "stedding.sidebar.text_size";
++// sidebar Y2: the size the sidebar's text is while the preference is
++// unset (0); Settings and the welcome flow offer 12 to 15.
++inline constexpr int kSidebarTextSizeDefault = 14;
++inline constexpr int kSidebarTextSizeChoices[] = {0, 12, 13, 15};
+ 
+ // True once the first-run welcome flow was finished or skipped
+ // (docs/features/welcome.md).
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index 61e2fcd1c43cc..2fb84af86b05c 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -53,6 +53,9 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   ASSERT_TRUE(service.FindPreference(kCleanLinksKeptSites));
+   EXPECT_TRUE(service.GetList(kCleanLinksKeptSites).empty());
+   EXPECT_EQ(0, service.GetInteger(kSpaceSleepMinutes));
++  // peek P18: a click peeks until the user asks for a held press.
++  ASSERT_TRUE(service.FindPreference(kPeekHoldDelayMs));
++  EXPECT_EQ(0, service.GetInteger(kPeekHoldDelayMs));
+   // tabs R39: no tab sleeps on a timer until the user chooses a time.
+   ASSERT_TRUE(service.FindPreference(kTabsIdleSleepMinutes));
+   EXPECT_EQ(0, service.GetInteger(kTabsIdleSleepMinutes));
+diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
+index 2d48bc74f9f51..a3780d9ef1bef 100644
+--- a/chrome/browser/ui/stedding_ui_metrics.cc
++++ b/chrome/browser/ui/stedding_ui_metrics.cc
+@@ -141,8 +141,9 @@ int& TextSizeInForce() {
+ }
+ 
+ // The vertical room a row needs around its text: the pill's insets and a
+-// little air, so a larger title never clips (Y2).
+-constexpr int kRowTextInsets = 22;
++// little air, so a larger title never clips (Y2). 14, the default size, fits
++// every density's own height.
++constexpr int kRowTextInsets = 16;
+ 
+ }  // namespace
+ 
+diff --git a/chrome/browser/ui/stedding_ui_metrics_unittest.cc b/chrome/browser/ui/stedding_ui_metrics_unittest.cc
+index 72da0c412c9f8..04aef1ef153b5 100644
+--- a/chrome/browser/ui/stedding_ui_metrics_unittest.cc
++++ b/chrome/browser/ui/stedding_ui_metrics_unittest.cc
+@@ -49,9 +49,12 @@ TEST_F(SidebarDensityTest, RowsNeverClipTheText) {
+   EXPECT_EQ(30, SidebarRowHeight());
+   SetSidebarTextSize(15);
+   EXPECT_EQ(15, GetSidebarTextSize());
+-  EXPECT_EQ(37, SidebarRowHeight()) << "15 + 22 > 30";
++  EXPECT_EQ(31, SidebarRowHeight()) << "15 + 16 > 30";
++  SetSidebarTextSize(14);
++  EXPECT_EQ(30, SidebarRowHeight()) << "14, the default, keeps Dense's 30";
++  SetSidebarTextSize(15);
+   SetSidebarDensity(SidebarDensity::kComfortable);
+-  EXPECT_EQ(44, SidebarRowHeight()) << "44 > 37: the preset holds";
++  EXPECT_EQ(44, SidebarRowHeight()) << "44 > 31: the preset holds";
+   SetSidebarTextSize(0);
+   EXPECT_EQ(44, SidebarRowHeight());
+ }
+diff --git a/chrome/browser/ui/tab_helpers.cc b/chrome/browser/ui/tab_helpers.cc
+index 19444c1dce549..c5b83340667a7 100644
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -163,6 +163,7 @@
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/views/peek/peek_press.h"
+ #include "components/image_fetcher/core/image_fetcher_service.h"
+ #include "components/omnibox/browser/omnibox_field_trial.h"
+ #include "components/web_modal/web_contents_modal_dialog_manager.h"
+@@ -462,6 +463,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents,
+   // the switch itself.
+   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
+     stedding::DarkPagesTabHelper::CreateForWebContents(web_contents);
++    // peek P18: the press a link from a pinned tab is followed with.
++    stedding::PeekPress::CreateForWebContents(web_contents);
+   }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+   RecentlyAudibleHelper::CreateForWebContents(web_contents);
+diff --git a/chrome/browser/ui/views/peek/BUILD.gn b/chrome/browser/ui/views/peek/BUILD.gn
+index 3cd882d05a04a..f424f60c23cf9 100644
+--- a/chrome/browser/ui/views/peek/BUILD.gn
++++ b/chrome/browser/ui/views/peek/BUILD.gn
+@@ -3,8 +3,14 @@
+ # found in the LICENSE file.
+ 
+ source_set("peek") {
+-  public = [ "peek_navigation_throttle.h" ]
+-  sources = [ "peek_navigation_throttle.cc" ]
++  public = [
++    "peek_navigation_throttle.h",
++    "peek_press.h",
++  ]
++  sources = [
++    "peek_navigation_throttle.cc",
++    "peek_press.cc",
++  ]
+ 
+   public_deps = [
+     "//base",
+@@ -22,6 +28,7 @@ source_set("peek") {
+     "//components/prefs",
+     "//components/tabs:public",
+     "//net",
++    "//third_party/blink/public/common:headers",
+   ]
+ }
+ 
+diff --git a/chrome/browser/ui/views/peek/peek_navigation_throttle.cc b/chrome/browser/ui/views/peek/peek_navigation_throttle.cc
+index 46bcac618d118..b4a238f888474 100644
+--- a/chrome/browser/ui/views/peek/peek_navigation_throttle.cc
++++ b/chrome/browser/ui/views/peek/peek_navigation_throttle.cc
+@@ -16,9 +16,10 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/peek.h"
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+-#include "chrome/browser/ui/stedding/peek.h"
++#include "chrome/browser/ui/views/peek/peek_press.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ // Out of order on purpose: keeps this hunk clear of the settings patch.
+@@ -51,6 +52,19 @@ void OpenPeekFor(base::WeakPtr<tabs::TabInterface> source,
+   OpenPeek(source.get(), link);
+ }
+ 
++// P10, P18: the settings the decision reads, and the press the link was
++// followed with.
++void ReadSettings(content::WebContents* source, PeekSignals& signals) {
++  const PrefService* const prefs =
++      Profile::FromBrowserContext(source->GetBrowserContext())->GetPrefs();
++  signals.peek_enabled = prefs->GetBoolean(stedding::prefs::kPeekEnabled);
++  signals.hold_delay =
++      base::Milliseconds(prefs->GetInteger(stedding::prefs::kPeekHoldDelayMs));
++  if (const PeekPress* const press = PeekPress::FromWebContents(source)) {
++    signals.press = press->LastPressBefore(base::TimeTicks::Now());
++  }
++}
++
+ bool IsPinnedAnywhere(tabs::TabInterface* tab) {
+   if (tab->IsPinned()) {
+     return true;
+@@ -132,6 +146,12 @@ bool ShouldPeek(const PeekSignals& signals, const GURL& from, const GURL& to) {
+       !signals.user_gesture || !signals.source_active || signals.is_post) {
+     return false;
+   }
++  // P18: with a held press asked for, a plain click follows the link in the
++  // pin as before; a press held that long peeks.
++  if (signals.hold_delay.is_positive() &&
++      (!signals.press || *signals.press < signals.hold_delay)) {
++    return false;
++  }
+   if (!from.SchemeIsHTTPOrHTTPS() || !to.SchemeIsHTTPOrHTTPS()) {
+     return false;
+   }
+@@ -183,10 +203,7 @@ bool MaybePeekInsteadOfNewTab(NavigateParams* params) {
+   signals.user_gesture = gesture;
+   signals.source_active = tab->IsActivated();
+   signals.is_post = params->post_data != nullptr;
+-  signals.peek_enabled =
+-      Profile::FromBrowserContext(params->source_contents->GetBrowserContext())
+-          ->GetPrefs()
+-          ->GetBoolean(stedding::prefs::kPeekEnabled);
++  ReadSettings(params->source_contents, signals);
+   // The pin's home site, not wherever it drifted to (pins H7).
+   if (!ShouldPeek(
+           signals,
+@@ -272,10 +289,7 @@ PeekNavigationThrottle::WillStartRequest() {
+   signals.user_gesture = handle->HasUserGesture();
+   signals.source_active = tab->IsActivated();
+   signals.is_post = handle->IsPost();
+-  signals.peek_enabled =
+-      Profile::FromBrowserContext(handle->GetWebContents()->GetBrowserContext())
+-          ->GetPrefs()
+-          ->GetBoolean(stedding::prefs::kPeekEnabled);
++  ReadSettings(handle->GetWebContents(), signals);
+   const GURL from =
+       stedding::PinnedSiteFor(tab->GetBrowserWindowInterface(), tab);
+   if (!ShouldPeek(signals, from, handle->GetURL())) {
+diff --git a/chrome/browser/ui/views/peek/peek_navigation_throttle.h b/chrome/browser/ui/views/peek/peek_navigation_throttle.h
+index c3e12fd10a1b8..b8dd18c68a3f1 100644
+--- a/chrome/browser/ui/views/peek/peek_navigation_throttle.h
++++ b/chrome/browser/ui/views/peek/peek_navigation_throttle.h
+@@ -5,7 +5,10 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_NAVIGATION_THROTTLE_H_
+ #define CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_NAVIGATION_THROTTLE_H_
+ 
++#include <optional>
++
+ #include "base/functional/callback.h"
++#include "base/time/time.h"
+ #include "content/public/browser/navigation_throttle.h"
+ 
+ class GURL;
+@@ -43,6 +46,12 @@ struct PeekSignals {
+   bool is_post = false;
+   // The chrome://settings "Stedding" switch (peek P10).
+   bool peek_enabled = true;
++  // P18: Settings › Stedding's "Open a peek with": zero for a click, or
++  // how long the mouse button must be held down on the link.
++  base::TimeDelta hold_delay;
++  // How long the button was held for the click this navigation follows;
++  // empty when it came from no press (a key, a script).
++  std::optional<base::TimeDelta> press;
+ };
+ 
+ // True when a navigation with `signals` from `from` to `to` should open in a
+diff --git a/chrome/browser/ui/views/peek/peek_press.cc b/chrome/browser/ui/views/peek/peek_press.cc
+new file mode 100644
+index 0000000000000..e27e7530b8f0b
+--- /dev/null
++++ b/chrome/browser/ui/views/peek/peek_press.cc
+@@ -0,0 +1,106 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/peek/peek_press.h"
++
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "third_party/blink/public/common/input/web_input_event.h"
++#include "third_party/blink/public/common/input/web_mouse_event.h"
++
++namespace stedding {
++
++namespace {
++
++// A click's navigation starts as its button comes up; a press older than
++// this is not the one a link is being followed for.
++constexpr base::TimeDelta kPressFreshFor = base::Seconds(1);
++
++bool IsLeftButton(const blink::WebInputEvent& event) {
++  return static_cast<const blink::WebMouseEvent&>(event).button ==
++         blink::WebPointerProperties::Button::kLeft;
++}
++
++}  // namespace
++
++PeekPress::PeekPress(content::WebContents* contents)
++    : content::WebContentsObserver(contents),
++      content::WebContentsUserData<PeekPress>(*contents) {
++  Watch(contents->GetPrimaryMainFrame());
++}
++
++PeekPress::~PeekPress() {
++  Unwatch();
++}
++
++std::optional<base::TimeDelta> PeekPress::LastPressBefore(
++    base::TimeTicks now) const {
++  if (down_.is_null() || up_.is_null() || now - up_ > kPressFreshFor) {
++    return std::nullopt;
++  }
++  return up_ - down_;
++}
++
++void PeekPress::OnInputEvent(const content::RenderWidgetHost& widget,
++                             const blink::WebInputEvent& event,
++                             input::InputEventSource source) {
++  switch (event.GetType()) {
++    case blink::WebInputEvent::Type::kMouseDown:
++      if (IsLeftButton(event)) {
++        down_ = base::TimeTicks::Now();
++        up_ = base::TimeTicks();
++      }
++      break;
++    case blink::WebInputEvent::Type::kMouseUp:
++      if (IsLeftButton(event) && !down_.is_null() && up_.is_null()) {
++        up_ = base::TimeTicks::Now();
++      }
++      break;
++    default:
++      break;
++  }
++}
++
++void PeekPress::RenderFrameHostChanged(content::RenderFrameHost* old_host,
++                                       content::RenderFrameHost* new_host) {
++  if (new_host && new_host->IsInPrimaryMainFrame()) {
++    Watch(new_host);
++  }
++}
++
++void PeekPress::RenderWidgetHostDestroyed(content::RenderWidgetHost* widget) {
++  if (widget == watched_) {
++    Unwatch();
++  }
++}
++
++void PeekPress::WebContentsDestroyed() {
++  Unwatch();
++}
++
++void PeekPress::Watch(content::RenderFrameHost* host) {
++  content::RenderWidgetHost* const widget =
++      host ? host->GetRenderWidgetHost() : nullptr;
++  if (widget == watched_) {
++    return;
++  }
++  Unwatch();
++  if (widget) {
++    widget->AddInputEventObserver(this);
++    widget->AddObserver(this);
++    watched_ = widget;
++  }
++}
++
++void PeekPress::Unwatch() {
++  if (watched_) {
++    watched_->RemoveInputEventObserver(this);
++    watched_->RemoveObserver(this);
++    watched_ = nullptr;
++  }
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(PeekPress);
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/peek/peek_press.h b/chrome/browser/ui/views/peek/peek_press.h
+new file mode 100644
+index 0000000000000..fda78d3c15663
+--- /dev/null
++++ b/chrome/browser/ui/views/peek/peek_press.h
+@@ -0,0 +1,74 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_PRESS_H_
++#define CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_PRESS_H_
++
++#include <optional>
++
++#include "base/memory/raw_ptr.h"
++#include "base/time/time.h"
++#include "content/public/browser/render_widget_host.h"
++#include "content/public/browser/render_widget_host_observer.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace content {
++class RenderFrameHost;
++}
++
++namespace stedding {
++
++// docs/features/peek.md P18: how long the user held the mouse button down on
++// a page for the click it navigates with. Settings › Stedding's "Open a peek
++// with" can ask for a held press; a plain click then follows the link in the
++// pinned tab as before. Kept from the input the page's main frame receives:
++// the left button's down and its up.
++class PeekPress : public content::WebContentsObserver,
++                  public content::WebContentsUserData<PeekPress>,
++                  public content::RenderWidgetHost::InputEventObserver,
++                  public content::RenderWidgetHostObserver {
++ public:
++  PeekPress(const PeekPress&) = delete;
++  PeekPress& operator=(const PeekPress&) = delete;
++  ~PeekPress() override;
++
++  // The press the last click was made with: from the button's down to its
++  // up, when the up came at most a second before `now`. Empty when there was
++  // none: a key's Enter, a script, a press long past, a button still down.
++  std::optional<base::TimeDelta> LastPressBefore(base::TimeTicks now) const;
++
++  // content::RenderWidgetHost::InputEventObserver:
++  void OnInputEvent(const content::RenderWidgetHost& widget,
++                    const blink::WebInputEvent& event,
++                    input::InputEventSource source) override;
++
++  // content::RenderWidgetHostObserver:
++  void RenderWidgetHostDestroyed(content::RenderWidgetHost* widget) override;
++
++  // content::WebContentsObserver:
++  void RenderFrameHostChanged(content::RenderFrameHost* old_host,
++                              content::RenderFrameHost* new_host) override;
++  void WebContentsDestroyed() override;
++
++ private:
++  friend class content::WebContentsUserData<PeekPress>;
++
++  explicit PeekPress(content::WebContents* contents);
++
++  // The main frame's widget is the one watched; a new document may bring a
++  // new one, and the old one may go before the page does.
++  void Watch(content::RenderFrameHost* host);
++  void Unwatch();
++
++  raw_ptr<content::RenderWidgetHost> watched_ = nullptr;
++  base::TimeTicks down_;
++  base::TimeTicks up_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_PRESS_H_
+diff --git a/chrome/browser/ui/views/peek/peek_unittest.cc b/chrome/browser/ui/views/peek/peek_unittest.cc
+index 7a2124c0c3630..043e62a5895ca 100644
+--- a/chrome/browser/ui/views/peek/peek_unittest.cc
++++ b/chrome/browser/ui/views/peek/peek_unittest.cc
+@@ -52,6 +52,18 @@ TEST(ShouldPeekTest, Decisions) {
+   post.is_post = true;
+   PeekSignals off = pinned;
+   off.peek_enabled = false;
++  // P18: a held press asked for, 0.3 s.
++  PeekSignals hold_click = pinned;
++  hold_click.hold_delay = base::Milliseconds(300);
++  hold_click.press = base::Milliseconds(90);
++  PeekSignals hold_key = hold_click;
++  hold_key.press.reset();
++  PeekSignals held = hold_click;
++  held.press = base::Milliseconds(420);
++  PeekSignals held_exactly = hold_click;
++  held_exactly.press = base::Milliseconds(300);
++  PeekSignals held_with_no_hold = pinned;
++  held_with_no_hold.press = base::Milliseconds(900);
+ 
+   struct Decision {
+     const char* name;
+@@ -81,6 +93,18 @@ TEST(ShouldPeekTest, Decisions) {
+        GURL("https://pay.example.org/"), false},
+       {"P10: the setting off", off, GURL("https://example.com/"),
+        GURL("https://example.org/"), false},
++      {"P18: a hold asked for, a plain click", hold_click,
++       GURL("https://example.com/"), GURL("https://example.org/"), false},
++      {"P18: a hold asked for, a key's Enter", hold_key,
++       GURL("https://example.com/"), GURL("https://example.org/"), false},
++      {"P18: a press held longer", held, GURL("https://example.com/"),
++       GURL("https://example.org/"), true},
++      {"P18: a press held exactly as long", held_exactly,
++       GURL("https://example.com/"), GURL("https://example.org/"), true},
++      {"P18: a held press to the pin's own site", held,
++       GURL("https://example.com/"), GURL("https://example.com/b"), false},
++      {"P18: no hold asked for, a long press", held_with_no_hold,
++       GURL("https://example.com/"), GURL("https://example.org/"), true},
+       {"P5: chrome:// as the source", pinned, GURL("chrome://newtab/"),
+        GURL("https://example.org/"), false},
+       {"P5: chrome:// as the destination", pinned, GURL("https://example.com/"),
+@@ -122,8 +146,8 @@ TEST(ShouldPeekTest, Decisions) {
+       {"P16: a sign-in step deeper in", pinned, GURL("https://example.com/"),
+        GURL("https://id.example.net/app/sso/saml"), false},
+       {"P16: a page that only mentions logins", pinned,
+-       GURL("https://example.com/"), GURL("https://example.org/logins-explained"),
+-       true},
++       GURL("https://example.com/"),
++       GURL("https://example.org/logins-explained"), true},
+   };
+   for (const Decision& row : kRows) {
+     SCOPED_TRACE(row.name);
+diff --git a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
+index 08de8d7512665..4f4f8fc9a13bf 100644
+--- a/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
++++ b/chrome/browser/ui/views/tabs/common/stedding_tab_row_rules_unittest.cc
+@@ -422,12 +422,12 @@ TEST_F(LocalRowLinesTest, TheComfortableRowAloneShowsTheHostLine) {
+       {SidebarDensity::kCompact, 12, 36, false},
+       {SidebarDensity::kCompact, 13, 36, false},
+       {SidebarDensity::kCompact, 14, 36, false},
+-      {SidebarDensity::kCompact, 15, 37, false},
++      {SidebarDensity::kCompact, 15, 36, false},
+       {SidebarDensity::kDense, 0, 30, false},
+-      {SidebarDensity::kDense, 12, 34, false},
+-      {SidebarDensity::kDense, 13, 35, false},
+-      {SidebarDensity::kDense, 14, 36, false},
+-      {SidebarDensity::kDense, 15, 37, false},
++      {SidebarDensity::kDense, 12, 30, false},
++      {SidebarDensity::kDense, 13, 30, false},
++      {SidebarDensity::kDense, 14, 30, false},
++      {SidebarDensity::kDense, 15, 31, false},
+   };
+   for (const Case& each : cases) {
+     SCOPED_TRACE(base::StrCat(
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 10e421f95cb5b..fe553da71fa82 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -815,6 +815,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                     key("\u21E7\u2318O", "Ctrl+Shift+O"),
+                     " puts it beside the pinned tab; Escape or a click on this "
+                     "window closes it."}));
++  // peek P18.
++  html_source->AddString("steddingPeekHoldLabel", "Open a peek with");
++  html_source->AddString(
++      "steddingPeekHoldSubLabel",
++      "With a held press, a plain click follows the link in the pinned tab "
++      "as before; keep the mouse button down on the link to peek.");
++  html_source->AddString("steddingPeekHoldClick", "A click");
++  html_source->AddString("steddingPeekHold300", "A press held for 0.3 s");
++  html_source->AddString("steddingPeekHold500", "A press held for 0.5 s");
+   // import I20.
+   html_source->AddString("steddingSidebarFilesLabel", "Export and import");
+   html_source->AddString(
+@@ -976,7 +985,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString(
+       "steddingTextSizeSubLabel",
+       "Tab titles, the Space title, folder names and the New Tab row.");
+-  html_source->AddString("steddingTextSizeDefault", "Default");
++  html_source->AddString("steddingTextSizeDefault", "14 (default)");
+   // privacy Q8: one row per preference, the protective side on.
+   html_source->AddString("steddingPrivacyTitle", "Privacy");
+   html_source->AddString(
+diff --git a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc
+index 7cf565082af76..2fc402bb9fee1 100644
+--- a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc
++++ b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler.cc
+@@ -14,6 +14,7 @@
+ #include "base/strings/string_util.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
+ #include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
+@@ -639,6 +640,18 @@ void WelcomeHandler::HandleGetBehaviour(const base::ListValue& args) {
+                 pref_service->GetInteger(prefs::kSidebarClosedForm));
+   behaviour.Set("sleepMinutes",
+                 pref_service->GetInteger(prefs::kSpaceSleepMinutes));
++  // W16: Peek's answer is its hold, or -1 when links stay in the pin.
++  behaviour.Set("peek", pref_service->GetBoolean(prefs::kPeekEnabled)
++                            ? pref_service->GetInteger(prefs::kPeekHoldDelayMs)
++                            : -1);
++  // W17: the sidebar's text size, the browser's own setting; 0 is the
++  // default, 14.
++  const PrefService* const local_state = g_browser_process->local_state();
++  behaviour.Set(
++      "textSize",
++      local_state && local_state->FindPreference(prefs::kSidebarTextSize)
++          ? local_state->GetInteger(prefs::kSidebarTextSize)
++          : 0);
+   ResolveJavascriptCallback(args[0], behaviour);
+ }
+ 
+@@ -655,6 +668,27 @@ void WelcomeHandler::HandleSetBehaviour(const base::ListValue& args) {
+   // The values Settings › Stedding, the command bar and the step offer, and
+   // nothing else: auto-archive (archive A6), the closed sidebar (sidebar
+   // Y19) and the Space sleep timer (tabs R6).
++  PrefService* const pref_service = Profile::FromWebUI(web_ui())->GetPrefs();
++  // W16: one question for Peek's switch and its hold; -1 keeps links in the
++  // pin.
++  if (*name == "peek") {
++    if (*value == -1) {
++      pref_service->SetBoolean(prefs::kPeekEnabled, false);
++    } else if (std::ranges::contains(prefs::kPeekHoldDelayChoices, *value)) {
++      pref_service->SetBoolean(prefs::kPeekEnabled, true);
++      pref_service->SetInteger(prefs::kPeekHoldDelayMs, *value);
++    }
++    return;
++  }
++  // W17: the sidebar's text size is the browser's, as in Settings.
++  if (*name == "textSize") {
++    PrefService* const local_state = g_browser_process->local_state();
++    if (local_state && local_state->FindPreference(prefs::kSidebarTextSize) &&
++        std::ranges::contains(prefs::kSidebarTextSizeChoices, *value)) {
++      local_state->SetInteger(prefs::kSidebarTextSize, *value);
++    }
++    return;
++  }
+   const char* pref = nullptr;
+   bool offered = false;
+   if (*name == "archiveHours") {
+@@ -672,7 +706,7 @@ void WelcomeHandler::HandleSetBehaviour(const base::ListValue& args) {
+   }
+   // The archiver, the sidebar and the Space model watch these preferences,
+   // so the choice takes effect now, as the appearance step's do.
+-  Profile::FromWebUI(web_ui())->GetPrefs()->SetInteger(pref, *value);
++  pref_service->SetInteger(pref, *value);
+ }
+ 
+ void WelcomeHandler::HandleGetDefaultBrowserState(const base::ListValue& args) {
+diff --git a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
+index 32d1eac6018ab..29ae55a39dc46 100644
+--- a/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
++++ b/chrome/browser/ui/webui/stedding_welcome/stedding_welcome_handler_unittest.cc
+@@ -161,6 +161,8 @@ TEST_F(SteddingWelcomeHandlerTest, GetBehaviourReadsThePreferences) {
+   EXPECT_EQ(prefs::kSidebarClosedToIcons,
+             fresh.arg3()->GetDict().FindInt("closedForm"));
+   EXPECT_EQ(0, fresh.arg3()->GetDict().FindInt("sleepMinutes"));
++  // W16: Peek on, opened by a click (peek P10, P18).
++  EXPECT_EQ(0, fresh.arg3()->GetDict().FindInt("peek"));
+ 
+   pref_service()->SetInteger(prefs::kArchiveIdleHours, 72);
+   pref_service()->SetInteger(prefs::kSidebarClosedForm,
+@@ -176,6 +178,29 @@ TEST_F(SteddingWelcomeHandlerTest, GetBehaviourReadsThePreferences) {
+   EXPECT_EQ(prefs::kSidebarClosedHidden,
+             chosen.arg3()->GetDict().FindInt("closedForm"));
+   EXPECT_EQ(60, chosen.arg3()->GetDict().FindInt("sleepMinutes"));
++
++  pref_service()->SetBoolean(prefs::kPeekEnabled, false);
++  base::ListValue off_args;
++  off_args.Append("off");
++  web_ui_.HandleReceivedMessage("getBehaviour", off_args);
++  ASSERT_EQ(3U, web_ui_.call_data().size());
++  EXPECT_EQ(-1, web_ui_.call_data().back()->arg3()->GetDict().FindInt("peek"))
++      << "Peek off answers -1";
++}
++
++// welcome W16: the Peek question writes Peek's switch and its hold: -1 turns
++// Peek off, a hold Settings offers turns it on with that hold, and a hold it
++// does not offer changes nothing.
++TEST_F(SteddingWelcomeHandlerTest, ThePeekChoiceWritesTheSwitchAndTheHold) {
++  SetBehaviour(base::Value("peek"), base::Value(-1));
++  EXPECT_FALSE(pref_service()->GetBoolean(prefs::kPeekEnabled));
++  SetBehaviour(base::Value("peek"), base::Value(500));
++  EXPECT_TRUE(pref_service()->GetBoolean(prefs::kPeekEnabled));
++  EXPECT_EQ(500, pref_service()->GetInteger(prefs::kPeekHoldDelayMs));
++  SetBehaviour(base::Value("peek"), base::Value(250));
++  EXPECT_EQ(500, pref_service()->GetInteger(prefs::kPeekHoldDelayMs));
++  SetBehaviour(base::Value("peek"), base::Value(0));
++  EXPECT_EQ(0, pref_service()->GetInteger(prefs::kPeekHoldDelayMs));
+ }
+ 
+ // welcome W12: each choice is written the moment it is made, without Next or
+diff --git a/chrome/test/stedding/peek_browsertest.cc b/chrome/test/stedding/peek_browsertest.cc
+index defc96b13bfad..55bb0a7d5813e 100644
+--- a/chrome/test/stedding/peek_browsertest.cc
++++ b/chrome/test/stedding/peek_browsertest.cc
+@@ -50,11 +50,14 @@
+ #include "net/dns/mock_host_resolver.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "net/test/embedded_test_server/http_request.h"
++#include "third_party/blink/public/common/input/web_input_event.h"
++#include "third_party/blink/public/common/input/web_mouse_event.h"
+ #include "ui/base/base_window.h"
+ #include "ui/events/keycodes/dom/dom_code.h"
+ #include "ui/events/keycodes/dom/dom_key.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+ #include "ui/gfx/geometry/insets.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "url/gurl.h"
+ 
+@@ -144,6 +147,25 @@ class PeekTest : public InProcessBrowserTest {
+                                 "document.getElementById('link').click();"));
+   }
+ 
++  // The user's press on the pinned page, held for `held`: the left button's
++  // down and up as the page's widget receives them, beside the link, so the
++  // press itself follows nothing.
++  void Press(base::TimeDelta held) {
++    const gfx::Point beside(400, 300);
++    content::SimulateMouseEvent(contents(),
++                                blink::WebInputEvent::Type::kMouseDown,
++                                blink::WebMouseEvent::Button::kLeft, beside);
++    if (held.is_positive()) {
++      base::RunLoop hold;
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++          FROM_HERE, hold.QuitClosure(), held);
++      hold.Run();
++    }
++    content::SimulateMouseEvent(contents(),
++                                blink::WebInputEvent::Type::kMouseUp,
++                                blink::WebMouseEvent::Button::kLeft, beside);
++  }
++
+   // The peek over the window, once its page has loaded.
+   BrowserWindowInterface* WaitForPeek() {
+     if (!base::test::RunUntil(
+@@ -584,6 +606,37 @@ IN_PROC_BROWSER_TEST_F(PeekTest, WithTheSettingOffThePinFollowsTheLink) {
+   EXPECT_EQ(to, contents()->GetLastCommittedURL());
+ }
+ 
++// P18: with "Open a peek with" set to a held press, a press held that long
++// on the pinned page peeks the link it follows, and a plain click follows the
++// link in the pin as before. The press is the page's own input: the left
++// button's down and up at its widget.
++IN_PROC_BROWSER_TEST_F(PeekTest, WithAHoldSetOnlyAHeldPressPeeks) {
++  browser()->GetProfile()->GetPrefs()->SetInteger(
++      stedding::prefs::kPeekHoldDelayMs, 300);
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++  tabs::TabInterface* const pin = tab();
++
++  Press(base::Milliseconds(450));
++  ClickLink();
++  BrowserWindowInterface* const peek = WaitForPeek();
++  ASSERT_TRUE(peek) << "a press held for 0.45 s did not peek";
++  EXPECT_EQ(
++      to,
++      peek->GetTabStripModel()->GetActiveWebContents()->GetLastCommittedURL());
++  EXPECT_EQ(Url("a.test", "/title1.html"), contents()->GetLastCommittedURL());
++  peek->GetWindow()->Close();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return stedding::PeekOver(browser()) == nullptr; }));
++
++  Press(base::TimeDelta());
++  ClickLinkAndWaitForItsNavigation();
++  content::RunAllTasksUntilIdle();
++  EXPECT_FALSE(stedding::PeekOver(browser())) << "a plain click peeked";
++  EXPECT_EQ(pin, tab());
++  EXPECT_EQ(to, contents()->GetLastCommittedURL());
++}
++
+ // private V6: a peek from a private window is private, and Open as Tab
+ // keeps the page in that window.
+ IN_PROC_BROWSER_TEST_F(PeekTest, APeekFromAPrivateWindowStaysPrivate) {
+diff --git a/chrome/test/stedding/welcome_browsertest.cc b/chrome/test/stedding/welcome_browsertest.cc
+index 6ad1581235bde..c694fc0d8eda0 100644
+--- a/chrome/test/stedding/welcome_browsertest.cc
++++ b/chrome/test/stedding/welcome_browsertest.cc
+@@ -139,7 +139,8 @@ constexpr char kCheckedPills[] = R"(
+ constexpr char kBehaviourOnceSettled[] = R"(
+     import('chrome://resources/js/cr.js')
+         .then(cr => cr.sendWithPromise('getBehaviour'))
+-        .then(b => `${b.archiveHours},${b.closedForm},${b.sleepMinutes}`))";
++        .then(b => `${b.archiveHours},${b.closedForm},${b.sleepMinutes},` +
++                   `${b.peek}`))";
+ 
+ // welcome W6, W11 (S-76): the keys step fits the dialog and teaches no peek
+ // (Peek is off until it is rebuilt, PLAN.md decision 2), the Space swipe
+@@ -218,8 +219,8 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest,
+   content::WebContents* const page = OpenWelcome(*browser());
+   ASSERT_TRUE(page);
+   {
+-    SCOPED_TRACE("step fits and shows 0,0,60");
+-    EXPECT_EQ("0,0,60", content::EvalJs(page, kBehaviourOnceSettled));
++    SCOPED_TRACE("step fits and shows 0,0,60,0");
++    EXPECT_EQ("0,0,60,0", content::EvalJs(page, kBehaviourOnceSettled));
+     ASSERT_EQ("", GoTo(page, ".choices"));
+     EXPECT_EQ("Step 4 of 6", content::EvalJs(page,
+                                              "document.querySelector('footer "
+@@ -230,19 +231,51 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest,
+     EXPECT_EQ("behaviour fits", content::EvalJs(page, R"(
+         (() => {
+           const main = document.querySelector('main');
+-          if (main.classList.contains('more')) {
+-            return 'behaviour fades out under the footer';
+-          }
+-          return main.scrollHeight <= main.clientHeight
+-              ? 'behaviour fits'
+-              : 'behaviour runs ' + (main.scrollHeight - main.clientHeight) +
+-                    'px under';
++          const over = main.scrollHeight - main.clientHeight;
++          return over <= 0 ? 'behaviour fits'
++                           : 'behaviour runs ' + over + 'px under the footer';
+         })())"));
+-    EXPECT_EQ("archiveHours=0,closedForm=0,sleepMinutes=60",
++    EXPECT_EQ("archiveHours=0,closedForm=0,sleepMinutes=60,peek=0",
+               content::EvalJs(page, kCheckedPills));
+   }
+ }
+ 
++// welcome W17: the appearance step offers the sidebar's text size, 14 until
++// the user chooses, and writes a choice at once to the browser's own setting;
++// the step still fits the dialog with the sizes under the colours.
++IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, TheAppearanceStepSetsTheTextSize) {
++  PrefService* const local_state = g_browser_process->local_state();
++  content::WebContents* const page = OpenWelcome(*browser());
++  ASSERT_TRUE(page);
++  EXPECT_EQ("0,0,0,0", content::EvalJs(page, kBehaviourOnceSettled));
++  ASSERT_EQ("", GoTo(page, ".sizes"));
++  EXPECT_EQ("textSize=0", content::EvalJs(page, kCheckedPills))
++      << "14, the default, shows as chosen";
++  EXPECT_EQ("14", content::EvalJs(page, R"(
++      document.querySelector('.pill[data-name="textSize"][data-value="0"]')
++          .textContent)"));
++  EXPECT_EQ("appearance fits", content::EvalJs(page, R"(
++      (() => {
++        const main = document.querySelector('main');
++        const over = main.scrollHeight - main.clientHeight;
++        return over <= 0 ? 'appearance fits'
++                         : 'appearance runs ' + over + 'px under the footer';
++      })())"));
++  ASSERT_TRUE(content::ExecJs(page, R"(
++      document.querySelector('.pill[data-name="textSize"][data-value="15"]')
++          .click())"));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return local_state->GetInteger(stedding::prefs::kSidebarTextSize) == 15;
++  }));
++  EXPECT_EQ("textSize=15", content::EvalJs(page, kCheckedPills));
++  ASSERT_TRUE(content::ExecJs(page, R"(
++      document.querySelector('.pill[data-name="textSize"][data-value="0"]')
++          .click())"));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return local_state->GetInteger(stedding::prefs::kSidebarTextSize) == 0;
++  }));
++}
++
+ // welcome W12: each choice is written as soon as it is clicked, on a profile
+ // that has not touched the preferences (they read 0, 0, 0). A late answer
+ // redraws the flow without moving the focus. On the Mac the focus landed on
+@@ -251,13 +284,14 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+   PrefService* const pref_service = browser()->GetProfile()->GetPrefs();
+   content::WebContents* const page = OpenWelcome(*browser());
+   ASSERT_TRUE(page);
+-  EXPECT_EQ("0,0,0", content::EvalJs(page, kBehaviourOnceSettled));
++  EXPECT_EQ("0,0,0,0", content::EvalJs(page, kBehaviourOnceSettled));
+   ASSERT_EQ("", GoTo(page, ".choices"));
+   {
+-    SCOPED_TRACE("three clicks write 24, hidden, 15");
++    SCOPED_TRACE("four clicks write 24, hidden, 15 and Peek on a 0.5 s hold");
+     ASSERT_TRUE(content::ExecJs(page, R"(
+         for (const [name, value] of
+-             [['archiveHours', 24], ['closedForm', 1], ['sleepMinutes', 15]]) {
++             [['archiveHours', 24], ['closedForm', 1], ['sleepMinutes', 15],
++              ['peek', 500]]) {
+           document.querySelector(
+               `.pill[data-name="${name}"][data-value="${value}"]`).click();
+         })"));
+@@ -267,11 +301,13 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+              pref_service->GetInteger(stedding::prefs::kSidebarClosedForm) ==
+                  stedding::prefs::kSidebarClosedHidden &&
+              pref_service->GetInteger(stedding::prefs::kSpaceSleepMinutes) ==
+-                 15;
++                 15 &&
++             pref_service->GetInteger(stedding::prefs::kPeekHoldDelayMs) == 500;
+     }));
+-    EXPECT_EQ("archiveHours=24,closedForm=1,sleepMinutes=15",
++    EXPECT_TRUE(pref_service->GetBoolean(stedding::prefs::kPeekEnabled));
++    EXPECT_EQ("archiveHours=24,closedForm=1,sleepMinutes=15,peek=500",
+               content::EvalJs(page, kCheckedPills));
+-    EXPECT_EQ("sleepMinutes=15", content::EvalJs(page, R"(
++    EXPECT_EQ("peek=500", content::EvalJs(page, R"(
+         document.activeElement.dataset.name + '=' +
+             document.activeElement.dataset.value)"));
+     EXPECT_EQ("Step 4 of 6", content::EvalJs(page,
+@@ -281,17 +317,18 @@ IN_PROC_BROWSER_TEST_F(WelcomeFlowTest, EachBehaviourChoiceIsWrittenAtOnce) {
+   {
+     // BACKLOG S-184: the answer redrew the old value over the click.
+     SCOPED_TRACE("a late answer keeps a choice already made");
+-    EXPECT_EQ("archiveHours=24,closedForm=1,sleepMinutes=15",
++    EXPECT_EQ("archiveHours=24,closedForm=1,sleepMinutes=15,peek=500",
+               content::EvalJs(page, R"(
+         (() => {
+           steddingWelcomeTest.applyBehaviour(
+-              {archiveHours: 0, closedForm: 0, sleepMinutes: 0});
++              {archiveHours: 0, closedForm: 0, sleepMinutes: 0, peek: 0,
++               textSize: 0});
+           return [...document.querySelectorAll(
+                       'main .pill[aria-checked="true"]')]
+               .map(pill => pill.dataset.name + '=' + pill.dataset.value)
+               .join(',');
+         })())"))
+-        << "the three choices clicked above stay";
++        << "the four choices clicked above stay";
+   }
+   {
+     SCOPED_TRACE("welcome stays unfinished");

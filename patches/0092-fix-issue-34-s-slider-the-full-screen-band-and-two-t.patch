@@ -1,0 +1,329 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 08:17:42 -0400
+Subject: fix: issue 34's slider, the full-screen band, and two test races
+
+GitHub issue 34: the sidebar width slider applies a drag when it is
+released. Live, each tick moved the sidebar, and with it the settings page
+and the slider under a pointer that had not moved, so the knob bounced.
+Full screen on the Mac (toolbar T8): with the address row hidden with the
+collapsed sidebar, macOS's full-screen title bar kept the row's height and
+showed an empty grey band over the page. In full screen the row stays and
+slides in with the pointer, as Chromium's toolbar does.
+S-302: the chip test borrows the debug page action, which no feature hides.
+S-291: the list test sets its window's size, waits for the scroll into view
+and says which case it was if its premise fails.
+
+Why: two bugs the owner and a user reported, and two flaky tests.
+Removable when: never; to be folded into the patches that own the code.
+---
+ .../stedding_page/stedding_page.html.ts       |  1 +
+ chrome/browser/ui/stedding/address_row.cc     |  6 +++
+ chrome/browser/ui/stedding/address_row.h      |  5 +++
+ .../browser/ui/stedding/address_row_rules.cc  |  3 ++
+ .../browser/ui/stedding/address_row_rules.h   |  4 ++
+ .../ui/stedding/address_row_rules_unittest.cc | 12 ++++++
+ chrome/browser/ui/views/frame/browser_view.cc |  8 ++++
+ .../test/stedding/address_band_browsertest.cc | 24 ++++++------
+ .../stedding/settings_spaces_browsertest.cc   |  9 +++++
+ .../stedding/sidebar_click_browsertest.cc     | 31 ++++++++++++++-
+ .../stedding/window_buttons_browsertest.mm    | 38 +++++++++++++++++++
+ 11 files changed, 128 insertions(+), 13 deletions(-)
+
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index a294d62a81a94..d3ae2fd481981 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -56,6 +56,7 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         pref-key="vertical_tabs.uncollapsed_width"
+         .ticks="${[126, 160, 200, 240, 280, 320, 352, 400, 440, 480]}"
+         .keepOffTickValues="${true}"
++        .updateValueInstantly="${false}"
+         label-aria="$i18n{steddingSidebarWidthLabel}"
+         label-min="126" label-max="480">
+     </settings-slider>
+diff --git a/chrome/browser/ui/stedding/address_row.cc b/chrome/browser/ui/stedding/address_row.cc
+index 36184f63774ae..f8b742c6aba74 100644
+--- a/chrome/browser/ui/stedding/address_row.cc
++++ b/chrome/browser/ui/stedding/address_row.cc
+@@ -73,10 +73,16 @@ bool AddressRow::IsVisible() {
+   }
+   signals.override = override_;
+   signals.caption_buttons_over_row = caption_buttons_over_row_;
++  signals.in_full_screen_title_bar = in_full_screen_title_bar_;
+   return ShouldShowAddressRow(signals);
+ }
+ 
+ void AddressRow::Toggle() {
++  // T8: in macOS's full screen the row stays; a hidden answer would be kept
++  // for after it, where nobody asked for it.
++  if (in_full_screen_title_bar_) {
++    return;
++  }
+   override_ = !IsVisible();
+   Relayout();
+ }
+diff --git a/chrome/browser/ui/stedding/address_row.h b/chrome/browser/ui/stedding/address_row.h
+index aa26b516dd3bf..53f3df3409fe1 100644
+--- a/chrome/browser/ui/stedding/address_row.h
++++ b/chrome/browser/ui/stedding/address_row.h
+@@ -48,6 +48,10 @@ class AddressRow : public TabStripModelObserver {
+     caption_buttons_over_row_ = over;
+   }
+ 
++  // T8: the window tells the row whether it is in macOS's own full screen,
++  // where the row stays (it shows only when the pointer reaches the top).
++  void set_in_full_screen_title_bar(bool in) { in_full_screen_title_bar_ = in; }
++
+   // TabStripModelObserver: the localhost exception follows the active tab.
+   void OnTabStripModelChanged(
+       TabStripModel* tab_strip_model,
+@@ -67,6 +71,7 @@ class AddressRow : public TabStripModelObserver {
+   std::optional<bool> override_;
+   std::optional<Sidebar> last_sidebar_;
+   bool caption_buttons_over_row_ = false;
++  bool in_full_screen_title_bar_ = false;
+   PrefChangeRegistrar pref_registrar_;
+   std::optional<ui::ScopedUnownedUserData<AddressRow>> scoped_user_data_;
+ };
+diff --git a/chrome/browser/ui/stedding/address_row_rules.cc b/chrome/browser/ui/stedding/address_row_rules.cc
+index d79cf4a656f1d..215cc4efd9913 100644
+--- a/chrome/browser/ui/stedding/address_row_rules.cc
++++ b/chrome/browser/ui/stedding/address_row_rules.cc
+@@ -7,6 +7,9 @@
+ namespace stedding {
+ 
+ bool ShouldShowAddressRow(const AddressRowSignals& signals) {
++  if (signals.in_full_screen_title_bar) {
++    return true;
++  }
+   if (signals.override.has_value()) {
+     return *signals.override;
+   }
+diff --git a/chrome/browser/ui/stedding/address_row_rules.h b/chrome/browser/ui/stedding/address_row_rules.h
+index f67830281d487..0a7138145e6e9 100644
+--- a/chrome/browser/ui/stedding/address_row_rules.h
++++ b/chrome/browser/ui/stedding/address_row_rules.h
+@@ -25,6 +25,10 @@ struct AddressRowSignals {
+   // buttons, the frame's trailing exclusion -- so a top strip exists
+   // whatever the sidebar does (T22).
+   bool caption_buttons_over_row = false;
++  // The window is in macOS's own full screen, whose title bar takes the
++  // height of the window's top strip (T8): with the row hidden, it stayed as
++  // tall as the row and showed an empty band over the page.
++  bool in_full_screen_title_bar = false;
+ };
+ 
+ bool ShouldShowAddressRow(const AddressRowSignals& signals);
+diff --git a/chrome/browser/ui/stedding/address_row_rules_unittest.cc b/chrome/browser/ui/stedding/address_row_rules_unittest.cc
+index 2794009deacd4..44ea2030640d0 100644
+--- a/chrome/browser/ui/stedding/address_row_rules_unittest.cc
++++ b/chrome/browser/ui/stedding/address_row_rules_unittest.cc
+@@ -45,6 +45,18 @@ TEST(AddressRowRulesTest, Visibility) {
+     signals.override = row.override;
+     EXPECT_EQ(row.show, ShouldShowAddressRow(signals));
+   }
++  // T8: in macOS's own full screen the row stays, whatever hides it outside:
++  // the full-screen title bar keeps the top strip's height, and with the row
++  // hidden it showed an empty band over the page (owner, 2026-10-25).
++  for (const std::optional<bool> override :
++       {std::optional<bool>(), std::optional<bool>(false)}) {
++    AddressRowSignals signals;
++    signals.hide_with_sidebar = true;
++    signals.sidebar_collapsed = true;
++    signals.override = override;
++    signals.in_full_screen_title_bar = true;
++    EXPECT_TRUE(ShouldShowAddressRow(signals));
++  }
+   // Which pages are localhost pages is the local-tabs rule, tested with it
+   // (LocalPagesTest.LocalIsTheLoopbackHostsOverHttp).
+ }
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index f800b0ef8bca7..5ad2674b490e1 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -3242,6 +3242,14 @@ bool BrowserView::IsToolbarVisible() const {
+       row->set_caption_buttons_over_row(
+           !frame_view->GetBrowserLayoutParams().trailing_exclusion.IsEmpty());
+     }
++#if BUILDFLAG(IS_MAC)
++    // T8: macOS's full-screen title bar takes the top strip's height; with
++    // the row hidden it stayed the row's height, an empty band over the page
++    // (owner, 2026-10-25). The row stays and slides in with the pointer.
++    row->set_in_full_screen_title_bar(
++        IsFullscreen() &&
++        WindowFeatureController::From(browser())->UsesImmersiveFullscreenMode());
++#endif
+     if (!row->IsVisible()) {
+       return false;
+     }
+diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
+index a2f2ad7e71fbc..caef9649afc4d 100644
+--- a/chrome/test/stedding/address_band_browsertest.cc
++++ b/chrome/test/stedding/address_band_browsertest.cc
+@@ -1579,18 +1579,15 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, EveryChipFitsTheField) {
+   page_actions::PageActionContainerView* const container =
+       bar()->page_action_container();
+   ASSERT_TRUE(container);
+-  // AI Mode's own action exists only where its button is offered; any page
+-  // action shows its chip the same way. Zoom's comes before Translate's: the
+-  // translate controller hides its action once the page's language is known,
+-  // which on a slow build arrives after the test showed it (BACKLOG S-280).
+-  actions::ActionId chip_id = kActionAiMode;
+-  for (const actions::ActionId id :
+-       {kActionAiMode, kActionShowZoomBubble, kActionShowTranslate}) {
+-    if (container->GetPageActionView(id)) {
+-      chip_id = id;
+-      break;
+-    }
+-  }
++  // Any page action shows its chip the same way; the debug one is in every
++  // container and no feature's controller shows or hides it. A feature's own
++  // action was not safe: AI Mode's controller hides its action on every
++  // update while its button is not offered, which in a test is always;
++  // Translate's once the page's language is known; Zoom's at the default
++  // zoom. On a slow build one of those updates landed after the test showed
++  // the chip, and it never came back (BACKLOG S-280, S-302). It stays shown
++  // through the keyword phase below, one more chip the field must fit.
++  const actions::ActionId chip_id = kActionFakePageActionForDebug;
+   ASSERT_TRUE(container->GetPageActionView(chip_id));
+   const actions::ActionId icon_id = kActionBookmarkThisTab;
+   ASSERT_NE(chip_id, icon_id);
+@@ -1606,6 +1603,9 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, EveryChipFitsTheField) {
+   actions->Show(chip_id);
+   actions->ShowSuggestionChip(chip_id, {.should_animate = false});
+   actions->Show(icon_id);
++  // The late toolbar update a slow build delivered, now on every build: the
++  // chip must survive it.
++  bar()->Update(nullptr);
+   page_actions::PageActionView* const chip =
+       container->GetPageActionView(chip_id);
+   page_actions::PageActionView* const icon =
+diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
+index 6cc0e6d674ede..546e9309a0804 100644
+--- a/chrome/test/stedding/settings_spaces_browsertest.cc
++++ b/chrome/test/stedding/settings_spaces_browsertest.cc
+@@ -584,6 +584,15 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, TheSliderLeavesADraggedWidthAlone) {
+     EXPECT_EQ(300, prefs->GetInteger(prefs::kVerticalTabsUncollapsedWidth))
+         << "the page rewrote the dragged width";
+   }
++  {
++    // GitHub issue 34: a drag of the knob applies when it is released. Live,
++    // each tick moved the sidebar, and with it the page and the slider under
++    // a pointer that had not moved, so the knob bounced between two widths.
++    SCOPED_TRACE("a drag applies on release, once the slider is drawn");
++    EXPECT_EQ(false, content::EvalJs(page, OnThePage(R"(
++      const slider = pick('settings-slider#sidebarWidth');
++      return slider ? slider.updateValueInstantly : null;)")));
++  }
+   {
+     SCOPED_TRACE("a width dragged while the page is open");
+     const int before =
+diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
+index 1c0f9dfc77668..5409ed7702dac 100644
+--- a/chrome/test/stedding/sidebar_click_browsertest.cc
++++ b/chrome/test/stedding/sidebar_click_browsertest.cc
+@@ -1407,6 +1407,11 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ACloseShowsTheRowUsedBefore) {
+ // the list stays where it was. It had shown the row used last and scrolled
+ // up to it.
+ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ACloseKeepsTheListWhereItIs) {
++  // A known height, whatever the display (BACKLOG S-291); the origin stays
++  // (docs/HANDOFF.md, trap 81).
++  views::Widget* const widget = browser_view()->GetWidget();
++  widget->SetBounds(gfx::Rect(widget->GetWindowBoundsInScreen().origin(),
++                              gfx::Size(1200, 900)));
+   for (int i = 0; i < 40; ++i) {
+     chrome::AddTabAt(browser(), GURL(url::kAboutBlankURL), -1,
+                      /*foreground=*/false);
+@@ -1417,17 +1422,41 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ACloseKeepsTheListWhereItIs) {
+   ASSERT_TRUE(strip);
+   views::ScrollView* const list = strip->unpinned_tabs_scroll_view();
+   ASSERT_TRUE(list);
++  // Whether the last activation asked the strip to scroll a row into view.
++  bool scroll_requested = false;
+   const auto use = [&](int index) {
+     tab_strip_model()->ActivateTabAt(
+         index, TabStripUserGestureDetails(
+                    TabStripUserGestureDetails::GestureType::kOther));
++    scroll_requested = strip->GetPrimaryScrollTargetForTesting() != nullptr;
+     WaitForRowsToSettle();
++    // The scroll into view finishes before the list is read (S-291).
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return !strip->GetPrimaryScrollTargetForTesting(); }))
++        << "the scroll into view never finished";
+     views::test::RunScheduledLayout(browser_view()->GetWidget());
+   };
+   // The second row used, then the 31st: the list scrolls down to show it.
+   ASSERT_NO_FATAL_FAILURE(use(1));
+   ASSERT_NO_FATAL_FAILURE(use(30));
+-  ASSERT_GT(list->GetVisibleRect().y(), 0) << "the premise: the list scrolled";
++  {
++    // S-291 failed here once; a failure says which case it was: a scroll
++    // never asked for, one dropped, or one undone.
++    TabView* const row = RowFor(30);
++    gfx::Rect row_bounds;
++    if (row) {
++      row_bounds = views::View::ConvertRectToTarget(row, list->contents(),
++                                                    row->GetLocalBounds());
++    }
++    ASSERT_GT(list->GetVisibleRect().y(), 0)
++        << "the premise: the list scrolled. Scroll asked for: "
++        << scroll_requested << "; window "
++        << widget->GetWindowBoundsInScreen().ToString() << "; visible "
++        << list->GetVisibleRect().ToString() << " of "
++        << list->contents()->height() << "; overflowing "
++        << list->IsVerticalContentOverflowing() << "; row 31 at "
++        << row_bounds.ToString();
++  }
+   TabView* const used_last = RowFor(1);
+   ASSERT_TRUE(used_last);
+   ASSERT_TRUE(used_last->GetVisibleBounds().IsEmpty())
+diff --git a/chrome/test/stedding/window_buttons_browsertest.mm b/chrome/test/stedding/window_buttons_browsertest.mm
+index 75017b29ba867..14838a2b88251 100644
+--- a/chrome/test/stedding/window_buttons_browsertest.mm
++++ b/chrome/test/stedding/window_buttons_browsertest.mm
+@@ -358,6 +358,44 @@ IN_PROC_BROWSER_TEST_F(WindowButtonsTest, FullScreenDrawsOneLineUnderTheRow) {
+   }));
+ }
+ 
++// toolbar T8: a row that hides with the collapsed sidebar stays in full
++// screen. macOS's full-screen title bar takes the top strip's height, and with
++// the row hidden it stayed as tall as the row: an empty grey band over the
++// page (the owner's screenshot, 2026-10-25). Out of full screen it hides again.
++IN_PROC_BROWSER_TEST_F(WindowButtonsTest,
++                       FullScreenKeepsTheRowThatHidesWithTheSidebar) {
++  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
++  BrowserView* const browser_view =
++      BrowserView::GetBrowserViewForBrowser(browser());
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      stedding::prefs::kToolbarHideWithSidebar, true);
++  tabs::VerticalTabStripStateController* const sidebar =
++      tabs::VerticalTabStripStateController::From(browser());
++  ASSERT_TRUE(sidebar);
++  sidebar->RequestCollapse(true);
++  ASSERT_TRUE(base::test::RunUntil([&] { return sidebar->IsCollapsed(); }));
++  views::test::RunScheduledLayout(browser_view->GetWidget());
++  ASSERT_FALSE(browser_view->IsToolbarVisible());
++
++  chrome::ToggleFullscreenMode(browser());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    views::test::RunScheduledLayout(browser_view->GetWidget());
++    return browser_view->GetWidget()->IsFullscreen();
++  }));
++  views::test::RunScheduledLayout(browser_view->GetWidget());
++  EXPECT_TRUE(browser_view->IsToolbarVisible())
++      << "the full-screen title bar keeps the row's height: an empty band";
++  EXPECT_FALSE(browser_view->top_container()->bounds().IsEmpty());
++
++  chrome::ToggleFullscreenMode(browser());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    views::test::RunScheduledLayout(browser_view->GetWidget());
++    return !browser_view->GetWidget()->IsFullscreen();
++  }));
++  views::test::RunScheduledLayout(browser_view->GetWidget());
++  EXPECT_FALSE(browser_view->IsToolbarVisible());
++}
++
+ // toolbar T31, T32 (docs/history/plan-2026-09-26.md WIN-9, BACKLOG S-154):
+ // in full screen a click on another tab's row gives the row in the overlay
+ // that page's colour, and its icons the colour that reads on it. The overlay

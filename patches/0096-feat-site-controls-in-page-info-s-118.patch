@@ -1,0 +1,4214 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 09:37:44 -0400
+Subject: feat: site controls in page info (S-118)
+
+Page info, opened from the site chip (toolbar T47) or the command bar's
+View Site Information (commandbar K33), now holds Stedding's site
+controls (docs/features/site-controls.md Si1-Si12), for a tab's page in a
+normal or private tabbed window only:
+- a strip with Copy link, Copy title, Mute tab, Picture in picture and
+  zoom, each running the window's own command (Si2-Si5); zoom steps hold
+  back Chromium's zoom bubble so the panel stays open;
+- camera and microphone always listed on a page that may use them
+  (https, localhost), through a new PageInfoDelegate hook (Si6);
+- the session row, named by the jar the page lives in (Si7);
+- Clear site data from the page's jar alone, after a question naming the
+  site and the jar, taken when asked and checked again on yes; the
+  embedder's storage bit stays out, so the profile-wide persistent-storage
+  permission is kept (Si8);
+- the dark pages switches (Si9);
+- Chromium's Extensions row, opening the extensions menu, inside the page
+  while the row is hidden (Si10).
+Toasts 67 and 68 confirm Clear site data and Copy title.
+
+Why: one home for a site's controls where the chip and K33 already lead,
+instead of a second panel or button (BACKLOG S-118).
+Removable when: never as a workaround; the hooks in page info move if
+Chromium's page info gains the same controls.
+---
+ chrome/app/stedding_strings.grdp              |  74 ++
+ .../ui/page_info/chrome_page_info_delegate.cc |  14 +
+ .../ui/page_info/chrome_page_info_delegate.h  |  10 +
+ chrome/browser/ui/stedding/BUILD.gn           |  25 +
+ chrome/browser/ui/stedding/copy_link.cc       |  30 +
+ chrome/browser/ui/stedding/copy_link.h        |  11 +
+ .../browser/ui/stedding/copy_link_unittest.cc |  24 +
+ chrome/browser/ui/stedding/site_controls.cc   | 123 +++
+ chrome/browser/ui/stedding/site_controls.h    | 121 +++
+ .../ui/stedding/site_controls_unittest.cc     | 162 ++++
+ chrome/browser/ui/stedding/site_cookies.cc    |  76 +-
+ chrome/browser/ui/stedding/site_cookies.h     |  30 +
+ .../ui/stedding/site_cookies_unittest.cc      |  65 ++
+ chrome/browser/ui/toasts/api/toast_id.cc      |   4 +
+ chrome/browser/ui/toasts/api/toast_id.h       |   5 +
+ chrome/browser/ui/toasts/toast_service.cc     |  20 +
+ .../views/commandbar/address_row_controls.cc  |  23 +
+ .../views/commandbar/address_row_controls.h   |   9 +
+ .../extensions/extensions_toolbar_button.cc   |  15 +-
+ .../views/location_bar/location_bar_view.cc   |   3 +
+ chrome/browser/ui/views/page_info/BUILD.gn    |  44 +
+ .../page_info_bubble_specification.cc         |  14 +
+ .../page_info_bubble_specification.h          |   8 +
+ .../views/page_info/page_info_bubble_view.cc  |  52 +-
+ .../views/page_info/page_info_bubble_view.h   |   3 +-
+ .../ui/views/page_info/page_info_main_view.cc |  29 +-
+ .../ui/views/page_info/page_info_main_view.h  |   3 +-
+ .../views/page_info/page_info_view_factory.cc |   2 +-
+ .../views/page_info/page_info_view_factory.h  |   6 +
+ .../page_info/stedding_site_controls_view.cc  | 883 ++++++++++++++++++
+ .../page_info/stedding_site_controls_view.h   | 235 +++++
+ .../stedding_site_controls_view_unittest.cc   | 274 ++++++
+ chrome/test/stedding/BUILD.gn                 |  11 +
+ .../hidden_row_controls_browsertest.cc        |  72 ++
+ .../stedding/isolation_mark_browsertest.cc    |  98 ++
+ .../stedding/site_controls_browsertest.cc     | 656 +++++++++++++
+ chrome/test/stedding/space_jar_browsertest.cc | 152 +++
+ components/page_info/page_info.cc             |  11 +
+ components/page_info/page_info_delegate.h     |   6 +
+ 39 files changed, 3369 insertions(+), 34 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/site_controls.cc
+ create mode 100644 chrome/browser/ui/stedding/site_controls.h
+ create mode 100644 chrome/browser/ui/stedding/site_controls_unittest.cc
+ create mode 100644 chrome/browser/ui/views/page_info/stedding_site_controls_view.cc
+ create mode 100644 chrome/browser/ui/views/page_info/stedding_site_controls_view.h
+ create mode 100644 chrome/browser/ui/views/page_info/stedding_site_controls_view_unittest.cc
+ create mode 100644 chrome/test/stedding/site_controls_browsertest.cc
+
+diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
+index 5c542cba99323..ac0cfbf2ed8b5 100644
+--- a/chrome/app/stedding_strings.grdp
++++ b/chrome/app/stedding_strings.grdp
+@@ -141,6 +141,80 @@
+     Cookies cleared for <ph name="SITE">$1<ex>example.com</ex></ph>
+   </message>
+ 
++  <!-- Site controls in page info (docs/features/site-controls.md, BACKLOG S-118). Sentence case on every platform, as page info's own rows are. -->
++  <message name="IDS_STEDDING_SITE_CONTROLS_COPY_LINK" desc="Accessible name and tooltip of the button in the page info panel that copies the page's link, as Shift+Cmd+C does.">
++    Copy link
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_COPY_TITLE" desc="Accessible name and tooltip of the button in the page info panel that copies the page's title as plain text.">
++    Copy title
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_MUTE" desc="Accessible name and tooltip of the button in the page info panel that mutes the tab, as the mute key does.">
++    Mute tab
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_UNMUTE" desc="Accessible name and tooltip of the button in the page info panel that unmutes the tab, shown while the tab is muted.">
++    Unmute tab
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_PICTURE_IN_PICTURE" desc="Accessible name and tooltip of the button in the page info panel that puts the page's video in a small floating window (picture in picture).">
++    Picture in picture
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_EXIT_PICTURE_IN_PICTURE" desc="Accessible name and tooltip of the button in the page info panel that closes the floating video window (picture in picture), shown while one is open.">
++    Exit picture in picture
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_ZOOM_OUT" desc="Accessible name and tooltip of the button in the page info panel that makes the page smaller.">
++    Zoom out
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_ZOOM_IN" desc="Accessible name and tooltip of the button in the page info panel that makes the page larger.">
++    Zoom in
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_RESET_ZOOM" desc="Tooltip of the button in the page info panel that shows the page's zoom as a percentage and resets it to the default when pressed.">
++    Reset zoom
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_RESET_ZOOM_NAME" desc="Accessible name of the button in the page info panel that shows the page's zoom and resets it. PERCENT is the zoom now, such as 110%.">
++    Reset zoom, <ph name="PERCENT">$1<ex>110%</ex></ph>
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_NAME_WITH_CHORD" desc="Tooltip of a button in the page info panel: the button's action, then the keyboard shortcut that does the same. ACTION is the action, CHORD the shortcut as the menus print it.">
++    <ph name="ACTION">$1<ex>Copy link</ex></ph> (<ph name="CHORD">$2<ex>Ctrl+Shift+C</ex></ph>)
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_SHARED_SESSION" desc="Row in the page info panel naming where the page's cookies live: the browser's shared session, which every Space without an Independent session uses.">
++    Shared session
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_PREVIOUS_SESSION" desc="Row in the page info panel naming where the page's cookies live: the Independent session of a Space whose session was turned off, which the page still uses until it is left. SPACE is the Space's name.">
++    <ph name="SPACE">$1<ex>Work</ex></ph> · Previous independent session
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_DATA" desc="Row in the page info panel that deletes the site's cookies, storage and cache from the session the page uses, after asking.">
++    Clear site data…
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_TITLE" desc="Title of the question asked before the site's data is deleted. SITE is the site's domain.">
++    Clear data for <ph name="SITE">$1<ex>example.com</ex></ph>?
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_OK" desc="Button of the question asked before the site's data is deleted: deletes it and reloads the page.">
++    Clear and Reload
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_SHARED" desc="Body of the question asked before the site's data is deleted, for a page in the browser's shared session. SITE is the site's domain.">
++    You will be signed out of <ph name="SITE">$1<ex>example.com</ex></ph>. Its cookies, site storage and cache in the shared session are deleted, and other tabs of <ph name="SITE">$1<ex>example.com</ex></ph> that use it are signed out without a reload. Spaces with an independent session keep theirs. Passwords, history and permissions stay.
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_SPACE" desc="Body of the question asked before the site's data is deleted, for a page in a Space's Independent session. SITE is the site's domain, SPACE the Space's name.">
++    You will be signed out of <ph name="SITE">$1<ex>example.com</ex></ph> in <ph name="SPACE">$2<ex>Work</ex></ph>. Its cookies, site storage and cache in the independent session of <ph name="SPACE">$2<ex>Work</ex></ph> are deleted, and other tabs of <ph name="SITE">$1<ex>example.com</ex></ph> that use it are signed out without a reload. Other Spaces keep theirs. Passwords, history and permissions stay.
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_INDEPENDENT" desc="Body of the question asked before the site's data is deleted, for a page in an Independent session no Space names any more (its Space was deleted). SITE is the site's domain.">
++    You will be signed out of <ph name="SITE">$1<ex>example.com</ex></ph> in this tab's independent session. Its cookies, site storage and cache there are deleted, and other tabs of <ph name="SITE">$1<ex>example.com</ex></ph> that use it are signed out without a reload. Other sessions keep theirs. Passwords, history and permissions stay.
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_PRIVATE" desc="Body of the question asked before the site's data is deleted, for a page in a private window. SITE is the site's domain.">
++    You will be signed out of <ph name="SITE">$1<ex>example.com</ex></ph> in this private session. Its cookies, site storage and cache there are deleted, and other private tabs of <ph name="SITE">$1<ex>example.com</ex></ph> are signed out without a reload. Passwords, history and permissions stay.
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_DARK_PAGES" desc="Switch in the page info panel that turns dark pages on or off for every page, as the moon button does.">
++    Dark pages
++  </message>
++  <message name="IDS_STEDDING_SITE_CONTROLS_DARKEN_SITE" desc="Switch in the page info panel, shown while dark pages is on, that darkens this site or keeps it light. SITE is the site's domain.">
++    Darken <ph name="SITE">$1<ex>example.com</ex></ph>
++  </message>
++  <message name="IDS_STEDDING_TITLE_COPIED_TOAST_BODY" desc="Toast text after the page's title was copied from the page info panel.">
++    Title copied
++  </message>
++  <message name="IDS_STEDDING_SITE_DATA_CLEARED_TOAST_BODY" desc="Toast text after the site's cookies, storage and cache were deleted from the page's session and the page reloaded. SITE is the site's domain.">
++    Site data cleared for <ph name="SITE">$1<ex>example.com</ex></ph>
++  </message>
++
+   <!-- The mark of a Space with an Independent session (docs/features/sessions.md S32-S34). -->
+   <message name="IDS_STEDDING_ISOLATION_MARK_NAME" desc="Short label shown after a Space's name, in a menu or on a chip, when the Space has an Independent session: its own cookies and site storage, apart from the browser's shared ones. Same words as the Space menu's check item.">
+     Independent session
+diff --git a/chrome/browser/ui/page_info/chrome_page_info_delegate.cc b/chrome/browser/ui/page_info/chrome_page_info_delegate.cc
+index 4cd463cda1cb5..faca7b1456c8a 100644
+--- a/chrome/browser/ui/page_info/chrome_page_info_delegate.cc
++++ b/chrome/browser/ui/page_info/chrome_page_info_delegate.cc
+@@ -4,6 +4,10 @@
+ 
+ #include "chrome/browser/ui/page_info/chrome_page_info_delegate.h"
+ 
++#include <algorithm>
++#include <utility>
++#include <vector>
++
+ #include "base/metrics/histogram_functions.h"
+ #include "build/build_config.h"
+ #include "build/buildflag.h"
+@@ -595,6 +599,16 @@ bool ChromePageInfoDelegate::HasAutoPictureInPictureBeenRegistered() {
+          auto_pip_tab_helper->HasAutoPictureInPictureBeenRegistered();
+ }
+ 
++void ChromePageInfoDelegate::SetAlwaysListedPermissions(
++    std::vector<ContentSettingsType> types) {
++  always_listed_permissions_ = std::move(types);
++}
++
++bool ChromePageInfoDelegate::AlwaysShowsPermission(ContentSettingsType type) {
++  return std::ranges::find(always_listed_permissions_, type) !=
++         always_listed_permissions_.end();
++}
++
+ bool ChromePageInfoDelegate::IsContentDisplayedInVrHeadset() {
+   return vr::VrTabHelper::IsContentDisplayedInHeadset(web_contents_);
+ }
+diff --git a/chrome/browser/ui/page_info/chrome_page_info_delegate.h b/chrome/browser/ui/page_info/chrome_page_info_delegate.h
+index 4c1526695b3c0..119a676f2da9b 100644
+--- a/chrome/browser/ui/page_info/chrome_page_info_delegate.h
++++ b/chrome/browser/ui/page_info/chrome_page_info_delegate.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_PAGE_INFO_CHROME_PAGE_INFO_DELEGATE_H_
+ #define CHROME_BROWSER_UI_PAGE_INFO_CHROME_PAGE_INFO_DELEGATE_H_
+ 
++#include <vector>
++
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "build/build_config.h"
+@@ -136,6 +138,13 @@ class ChromePageInfoDelegate : public PageInfoDelegate {
+   void OnSuspiciousSiteBackToSafety() override;
+   void OnSuspiciousSiteMarkAsSafe() override;
+ 
++  // Stedding (BACKLOG S-118, docs/features/site-controls.md Si6): the
++  // permissions page info lists for this page even when the site never
++  // asked. The site controls' page info sets the camera and the microphone
++  // for a page that may ask for them; every other page info lists none.
++  void SetAlwaysListedPermissions(std::vector<ContentSettingsType> types);
++  bool AlwaysShowsPermission(ContentSettingsType type) override;
++
+  private:
+   Profile* GetProfile() const;
+ 
+@@ -164,6 +173,7 @@ class ChromePageInfoDelegate : public PageInfoDelegate {
+   security_state::SecurityLevel security_level_for_tests_;
+   security_state::VisibleSecurityState visible_security_state_for_tests_;
+   bool security_state_for_tests_set_ = false;
++  std::vector<ContentSettingsType> always_listed_permissions_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_PAGE_INFO_CHROME_PAGE_INFO_DELEGATE_H_
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 76ce2b7d38f10..884847e27a38b 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -124,6 +124,28 @@ source_set("site_cookies") {
+   ]
+ }
+ 
++# Site controls (docs/features/site-controls.md, BACKLOG S-118): the rules of
++# Stedding's controls in page info -- which windows and pages get which rows,
++# the session a page lives in, the question Clear site data asks, the
++# permissions listed on every page that may use them. Pure, with no window
++# behind it, so page info's public target can take it; the views are in
++# chrome/browser/ui/views/page_info.
++source_set("site_controls") {
++  public = [ "site_controls.h" ]
++  sources = [ "site_controls.cc" ]
++  public_deps = [
++    "//components/content_settings/core/common",
++    "//url",
++  ]
++  deps = [
++    "//base",
++    "//chrome/app:generated_resources",
++    "//chrome/browser/ui/spaces:isolation_mark",
++    "//net",
++    "//ui/base",
++  ]
++}
++
+ # Dark pages (docs/features/dark-pages.md): which pages are darkened, the
+ # switch, the mode and the lists, and the watchers that keep open pages and
+ # the window's controls in step. It takes nothing of the window's, so the
+@@ -697,6 +719,7 @@ source_set("unit_tests") {
+     "privacy_defaults_unittest.cc",
+     "private_window_unittest.cc",
+     "screenshot/screenshot_file_unittest.cc",
++    "site_controls_unittest.cc",
+     "site_cookies_unittest.cc",
+     "sleep_tabs_unittest.cc",
+     "startup_load_unittest.cc",
+@@ -733,6 +756,8 @@ source_set("unit_tests") {
+     ":prefs",
+     ":privacy_defaults",
+     ":private_window",
++    ":site_controls",
++    "//chrome/browser/ui/spaces:isolation_mark",
+     ":site_cookies",
+     ":sleep_tabs",
+     ":startup_load",
+diff --git a/chrome/browser/ui/stedding/copy_link.cc b/chrome/browser/ui/stedding/copy_link.cc
+index 2047a157313f2..798526909cd78 100644
+--- a/chrome/browser/ui/stedding/copy_link.cc
++++ b/chrome/browser/ui/stedding/copy_link.cc
+@@ -219,4 +219,34 @@ void CopyLink(BrowserWindowInterface* browser,
+   }
+ }
+ 
++std::u16string WriteTitleToClipboard(content::WebContents* contents) {
++  if (!contents) {
++    return std::u16string();
++  }
++  const GURL url = contents->GetVisibleURL();
++  if (!url.is_valid()) {
++    return std::u16string();
++  }
++  // The title copy-link's Markdown label uses (L3): never the formatted
++  // address WebContents::GetTitle() falls back to.
++  const std::u16string title = TitleFor(contents, url);
++  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
++  if (AnyOffTheRecord({contents})) {
++    writer.MarkAsOffTheRecord();
++  }
++  writer.WriteText(title);
++  return title;
++}
++
++void CopyTitle(BrowserWindowInterface* browser,
++               content::WebContents* contents) {
++  if (WriteTitleToClipboard(contents).empty()) {
++    return;
++  }
++  if (ToastController* const toasts =
++          browser ? ToastController::From(browser) : nullptr) {
++    toasts->MaybeShowToast(ToastParams(ToastId::kSteddingTitleCopied));
++  }
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/copy_link.h b/chrome/browser/ui/stedding/copy_link.h
+index 49d40a6011310..19a91d333fab0 100644
+--- a/chrome/browser/ui/stedding/copy_link.h
++++ b/chrome/browser/ui/stedding/copy_link.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_STEDDING_COPY_LINK_H_
+ #define CHROME_BROWSER_UI_STEDDING_COPY_LINK_H_
+ 
++#include <string>
+ #include <vector>
+ 
+ #include "url/gurl.h"
+@@ -60,6 +61,16 @@ CopyLinkResult WriteLinksToClipboard(
+     const std::vector<content::WebContents*>& pages,
+     LinkFormat format);
+ 
++// Copy title (docs/features/site-controls.md Si3): the page's own title,
++// from its committed entry, as plain text -- else the address's host, else the
++// address -- written to the clipboard and returned; empty when nothing was
++// written. A page of an off-the-record profile is copied off the record, as
++// WriteLinksToClipboard does.
++std::u16string WriteTitleToClipboard(content::WebContents* contents);
++
++// The site controls' Copy title: the copy, then the "Title copied" toast.
++void CopyTitle(BrowserWindowInterface* browser, content::WebContents* contents);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_STEDDING_COPY_LINK_H_
+diff --git a/chrome/browser/ui/stedding/copy_link_unittest.cc b/chrome/browser/ui/stedding/copy_link_unittest.cc
+index d256bd754288b..b535fcab5a5ba 100644
+--- a/chrome/browser/ui/stedding/copy_link_unittest.cc
++++ b/chrome/browser/ui/stedding/copy_link_unittest.cc
+@@ -208,5 +208,29 @@ TEST_F(CopyLinkTest, PrivatePagesAreCopiedOffTheRecord) {
+   EXPECT_TRUE(clipboard()->last_write_off_the_record());
+ }
+ 
++// site-controls Si3: Copy title writes the page's own title as plain text;
++// a page with none gives its host, never the formatted address with its
++// query; a private window's copy is marked off the record.
++TEST_F(CopyLinkTest, CopyTitleWritesThePagesTitle) {
++  Load("https://a.test/page?utm_source=mail", u"  A Page\nTitle  ");
++  EXPECT_EQ(u"A Page Title", WriteTitleToClipboard(web_contents()));
++  EXPECT_EQ(u"A Page Title", ClipboardText());
++  EXPECT_TRUE(ClipboardHtml().empty()) << "plain text only";
++  EXPECT_FALSE(clipboard()->last_write_off_the_record());
++
++  Load("https://b.test/x?utm_source=mail&fbclid=abc", u"");
++  EXPECT_EQ(u"b.test", WriteTitleToClipboard(web_contents()));
++  EXPECT_EQ(u"b.test", ClipboardText());
++
++  std::unique_ptr<content::WebContents> private_page =
++      content::WebContentsTester::CreateTestWebContents(
++          profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true), nullptr);
++  Load(private_page.get(), "https://p.test/secret", u"Secret");
++  EXPECT_EQ(u"Secret", WriteTitleToClipboard(private_page.get()));
++  EXPECT_TRUE(clipboard()->last_write_off_the_record());
++
++  EXPECT_TRUE(WriteTitleToClipboard(nullptr).empty());
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/site_controls.cc b/chrome/browser/ui/stedding/site_controls.cc
+new file mode 100644
+index 0000000000000..7b205b86c0c39
+--- /dev/null
++++ b/chrome/browser/ui/stedding/site_controls.cc
+@@ -0,0 +1,123 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/site_controls.h"
++
++#include <algorithm>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "chrome/browser/ui/spaces/isolation_mark.h"
++#include "chrome/grit/generated_resources.h"
++#include "net/base/is_potentially_trustworthy.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "url/gurl.h"
++
++namespace stedding {
++
++namespace {
++
++bool InATab(SiteControlsWindow window) {
++  return window != SiteControlsWindow::kOther;
++}
++
++// The Space whose storage-partition token is `partition_name`, or null.
++const SpaceJarEntry* SpaceOwning(std::string_view partition_name,
++                                 const std::vector<SpaceJarEntry>& spaces) {
++  if (partition_name.empty()) {
++    return nullptr;
++  }
++  const auto it = std::ranges::find_if(
++      spaces, [partition_name](const SpaceJarEntry& space) {
++        return space.profile_id == partition_name;
++      });
++  return it == spaces.end() ? nullptr : &*it;
++}
++
++}  // namespace
++
++SiteControlsRows RowsFor(const SiteControlsContext& context) {
++  SiteControlsRows rows;
++  if (!InATab(context.window)) {
++    return rows;
++  }
++  const bool web = context.url.is_valid() && context.url.SchemeIsHTTPOrHTTPS();
++  rows.strip = true;
++  // sessions S32: only a window with the profile's Spaces has jars to name.
++  rows.session = context.window == SiteControlsWindow::kTab;
++  // commandbar K24's rule: a site is a web page's registrable domain.
++  rows.clear_data = web;
++  // dark-pages Dk9: the browser's own pages never reach this panel; page
++  // info shows them its internal bubble.
++  rows.dark_switch = true;
++  // Dk15, Dk19: a site's choice, while the switch is on, for a web page.
++  rows.dark_site = context.dark_pages_on && web;
++  return rows;
++}
++
++SessionName SessionNameFor(bool space_jar,
++                           std::string_view partition_name,
++                           const std::vector<SpaceJarEntry>& spaces) {
++  if (!space_jar) {
++    return {
++        l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_SHARED_SESSION),
++        /*marked=*/false};
++  }
++  const SpaceJarEntry* const space = SpaceOwning(partition_name, spaces);
++  if (!space) {
++    return {spaces::IsolationMarkName(), /*marked=*/false};
++  }
++  if (!space->isolated) {
++    return {l10n_util::GetStringFUTF16(
++                IDS_STEDDING_SITE_CONTROLS_PREVIOUS_SESSION, space->name),
++            /*marked=*/false};
++  }
++  return {spaces::NameWithIsolationMark(space->name), /*marked=*/true};
++}
++
++ClearSiteDataQuestion ClearSiteDataQuestionFor(
++    std::u16string_view domain,
++    bool off_the_record,
++    bool space_jar,
++    std::string_view partition_name,
++    const std::vector<SpaceJarEntry>& spaces) {
++  const std::u16string site(domain);
++  ClearSiteDataQuestion question;
++  question.title = l10n_util::GetStringFUTF16(
++      IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_TITLE, site);
++  question.action =
++      l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_OK);
++  if (off_the_record) {
++    question.body = l10n_util::GetStringFUTF16(
++        IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_PRIVATE, site);
++    return question;
++  }
++  if (!space_jar) {
++    question.body = l10n_util::GetStringFUTF16(
++        IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_SHARED, site);
++    return question;
++  }
++  // A Space's own jar is named by its Space whether or not its session is on
++  // now: the data goes from the jar the page lives in (Si7).
++  if (const SpaceJarEntry* const space = SpaceOwning(partition_name, spaces)) {
++    question.body = l10n_util::GetStringFUTF16(
++        IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_SPACE, site, space->name);
++    return question;
++  }
++  question.body = l10n_util::GetStringFUTF16(
++      IDS_STEDDING_SITE_CONTROLS_CLEAR_QUESTION_INDEPENDENT, site);
++  return question;
++}
++
++std::vector<ContentSettingsType> AlwaysListedPermissions(const GURL& url) {
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() ||
++      !net::IsUrlPotentiallyTrustworthy(url)) {
++    return {};
++  }
++  return {ContentSettingsType::MEDIASTREAM_CAMERA,
++          ContentSettingsType::MEDIASTREAM_MIC};
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/site_controls.h b/chrome/browser/ui/stedding/site_controls.h
+new file mode 100644
+index 0000000000000..2f50537d10f9e
+--- /dev/null
++++ b/chrome/browser/ui/stedding/site_controls.h
+@@ -0,0 +1,121 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_SITE_CONTROLS_H_
++#define CHROME_BROWSER_UI_STEDDING_SITE_CONTROLS_H_
++
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "url/gurl.h"
++
++namespace stedding {
++
++// Site controls (docs/features/site-controls.md, BACKLOG S-118): Stedding's
++// controls inside Chromium's page info, the one panel the site chip and the
++// command bar's View Site Information open. These are the panel's rules,
++// with no window and no view behind them, so they can be tested alone; the
++// views are chrome/browser/ui/views/page_info/stedding_site_controls_view.h.
++
++// Si1: where the page the panel describes is shown.
++enum class SiteControlsWindow {
++  // Not a tab of a normal tabbed window: a popup, an app window, a little
++  // window, a peek, the picture-in-picture window, a side panel's page, or
++  // the Stedding window style is off. Chromium's page info as it is.
++  kOther,
++  // A tab of a normal window that follows the profile's Spaces.
++  kTab,
++  // A tab of a private (or Guest) window: no Spaces, so no session row
++  // (sessions S32).
++  kPrivateTab,
++  // A tab of a normal window that does not follow the profile's Spaces, a
++  // Blank Window: no session row either (S32).
++  kTabWithoutSpaces,
++};
++
++// What decides which of the controls the panel holds.
++struct SiteControlsContext {
++  SiteControlsWindow window = SiteControlsWindow::kOther;
++  // The address page info describes (its entry's virtual URL).
++  GURL url;
++  // dark-pages Dk1: the profile's switch.
++  bool dark_pages_on = false;
++};
++
++// Which of the controls the panel holds (Si1-Si9).
++struct SiteControlsRows {
++  // Si2-Si5: copy link, copy title, mute, picture in picture and zoom.
++  bool strip = false;
++  // Si7: the session row.
++  bool session = false;
++  // Si8: Clear site data.
++  bool clear_data = false;
++  // Si9: the Dark pages switch, and Darken <site> while it is on.
++  bool dark_switch = false;
++  bool dark_site = false;
++};
++
++SiteControlsRows RowsFor(const SiteControlsContext& context);
++
++// Si7: one Space as the session row needs it: its name as the sidebar shows
++// it, its storage-partition token and whether its own session is on now.
++struct SpaceJarEntry {
++  std::u16string name;
++  std::string profile_id;
++  bool isolated = false;
++};
++
++// Si7: the session row's words, and whether the cookie mark follows them.
++struct SessionName {
++  std::u16string text;
++  bool marked = false;
++
++  bool operator==(const SessionName&) const = default;
++};
++
++// Si7: the session a page lives in, named by its jar, not by the Space on
++// screen. `space_jar` and `partition_name` are the jar's
++// (spaces::IsSpaceStoragePartition, StoragePartitionConfig::partition_name).
++//  - the profile's own jar: "Shared session", unmarked;
++//  - a Space's jar whose session is on: "<Space> · Independent session",
++//    marked (sessions S32);
++//  - the jar of a Space whose session was turned off, kept by a page that
++//    has not been left yet (S7, S21): "<Space> · Previous independent
++//    session", unmarked, since S32 marks a Space only while its session is
++//    on;
++//  - a jar no Space names any more (a deleted Space whose wipe waits):
++//    "Independent session", unmarked.
++SessionName SessionNameFor(bool space_jar,
++                           std::string_view partition_name,
++                           const std::vector<SpaceJarEntry>& spaces);
++
++// Si8: the question Clear site data asks first.
++struct ClearSiteDataQuestion {
++  std::u16string title;
++  std::u16string body;
++  std::u16string action;
++};
++
++// Si8: names `domain` and the jar its data goes from, the same jar
++// SessionNameFor names: the shared session, a Space's independent session,
++// an independent session no Space names now, or a private window's session.
++ClearSiteDataQuestion ClearSiteDataQuestionFor(
++    std::u16string_view domain,
++    bool off_the_record,
++    bool space_jar,
++    std::string_view partition_name,
++    const std::vector<SpaceJarEntry>& spaces);
++
++// Si6: the permissions the panel lists for a page at `url` even when the
++// site never asked: the camera and the microphone, on a page that may ask
++// for them -- an https page, or http on this machine (localhost), which
++// getUserMedia accepts as secure. Empty elsewhere: a toggle a page can never
++// use would mislead.
++std::vector<ContentSettingsType> AlwaysListedPermissions(const GURL& url);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_SITE_CONTROLS_H_
+diff --git a/chrome/browser/ui/stedding/site_controls_unittest.cc b/chrome/browser/ui/stedding/site_controls_unittest.cc
+new file mode 100644
+index 0000000000000..e8d4ba22cf2ac
+--- /dev/null
++++ b/chrome/browser/ui/stedding/site_controls_unittest.cc
+@@ -0,0 +1,162 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/site_controls.h"
++
++#include <string>
++#include <vector>
++
++#include "chrome/browser/ui/spaces/isolation_mark.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace stedding {
++namespace {
++
++// gtest wants every test of a suite on the same fixture.
++class SiteControlsRulesTest : public testing::Test {
++ protected:
++  // Work's session is on; Old's was turned off, its token kept (sessions
++  // S7).
++  const std::vector<SpaceJarEntry> spaces_ = {
++      {u"Home", "", false},
++      {u"Work", "5f0c2d1e9a7b4c3d", true},
++      {u"Old", "0a1b2c3d4e5f6a7b", false},
++  };
++};
++
++// site-controls Si1, Si7, Si8, Si9: a tab of a normal or private tabbed
++// window gets the controls, and nothing else does; the session row only
++// where the profile's Spaces are; Clear and Darken <site> only on a web page;
++// Darken <site> only while dark pages is on.
++TEST_F(SiteControlsRulesTest, WhichWindowsAndPagesGetWhichRows) {
++  const GURL web("https://www.example.com/a");
++  {
++    SCOPED_TRACE("popups, app windows, little windows, peeks, side panels");
++    const SiteControlsRows rows =
++        RowsFor({SiteControlsWindow::kOther, web, /*dark_pages_on=*/true});
++    EXPECT_FALSE(rows.strip);
++    EXPECT_FALSE(rows.session);
++    EXPECT_FALSE(rows.clear_data);
++    EXPECT_FALSE(rows.dark_switch);
++    EXPECT_FALSE(rows.dark_site);
++  }
++  {
++    SCOPED_TRACE("a tab of a window with Spaces");
++    const SiteControlsRows rows =
++        RowsFor({SiteControlsWindow::kTab, web, /*dark_pages_on=*/false});
++    EXPECT_TRUE(rows.strip);
++    EXPECT_TRUE(rows.session);
++    EXPECT_TRUE(rows.clear_data);
++    EXPECT_TRUE(rows.dark_switch);
++    EXPECT_FALSE(rows.dark_site) << "Darken <site> waits for the switch";
++    EXPECT_TRUE(RowsFor({SiteControlsWindow::kTab, web, /*dark_pages_on=*/true})
++                    .dark_site);
++  }
++  for (const SiteControlsWindow window :
++       {SiteControlsWindow::kPrivateTab,
++        SiteControlsWindow::kTabWithoutSpaces}) {
++    SCOPED_TRACE("a private window or a Blank Window");
++    const SiteControlsRows rows = RowsFor({window, web, true});
++    EXPECT_TRUE(rows.strip);
++    EXPECT_FALSE(rows.session) << "no Spaces, no jars to name (S32)";
++    EXPECT_TRUE(rows.clear_data);
++    EXPECT_TRUE(rows.dark_switch);
++    EXPECT_TRUE(rows.dark_site);
++  }
++  for (const char* spec :
++       {"data:text/html,<p>x</p>", "about:blank", "blob:https://a.test/0f6a"}) {
++    SCOPED_TRACE(spec);
++    const SiteControlsRows rows =
++        RowsFor({SiteControlsWindow::kTab, GURL(spec), true});
++    EXPECT_TRUE(rows.strip);
++    EXPECT_TRUE(rows.session);
++    EXPECT_FALSE(rows.clear_data) << "not a web page: no site to clear";
++    EXPECT_TRUE(rows.dark_switch);
++    EXPECT_FALSE(rows.dark_site) << "not a web page: no site to darken";
++  }
++}
++
++// site-controls Si7: the row names the jar the page lives in. The profile's
++// jar is the shared session; a Space's jar with its session on is that Space,
++// marked; one whose session was turned off is that Space's previous session,
++// unmarked, as S32 marks only a session that is on; a jar no Space names is
++// an independent session, unmarked.
++TEST_F(SiteControlsRulesTest, TheSessionIsTheJarThePageLivesIn) {
++  const SessionName shared = SessionNameFor(false, "", spaces_);
++  EXPECT_EQ(u"Shared session", shared.text);
++  EXPECT_FALSE(shared.marked);
++  EXPECT_EQ(shared, SessionNameFor(false, "5f0c2d1e9a7b4c3d", spaces_))
++      << "a jar that is not a Space's is the shared session, whatever it is "
++         "called";
++
++  const SessionName work = SessionNameFor(true, "5f0c2d1e9a7b4c3d", spaces_);
++  EXPECT_EQ(spaces::NameWithIsolationMark(u"Work"), work.text);
++  EXPECT_EQ(u"Work · Independent session", work.text);
++  EXPECT_TRUE(work.marked);
++
++  const SessionName old = SessionNameFor(true, "0a1b2c3d4e5f6a7b", spaces_);
++  EXPECT_EQ(u"Old · Previous independent session", old.text);
++  EXPECT_FALSE(old.marked) << "S32 marks only a session that is on";
++
++  const SessionName orphan = SessionNameFor(true, "ffffffffffffffff", spaces_);
++  EXPECT_EQ(spaces::IsolationMarkName(), orphan.text);
++  EXPECT_FALSE(orphan.marked);
++
++  EXPECT_FALSE(SessionNameFor(true, "", spaces_).marked)
++      << "Home's empty token names no jar";
++}
++
++// site-controls Si8: the question names the site and the jar its data goes
++// from, the same jar the session row names, and says the user is signed out.
++TEST_F(SiteControlsRulesTest, TheClearQuestionNamesTheSiteAndTheJar) {
++  const ClearSiteDataQuestion work = ClearSiteDataQuestionFor(
++      u"example.com", false, true, "5f0c2d1e9a7b4c3d", spaces_);
++  EXPECT_EQ(u"Clear data for example.com?", work.title);
++  EXPECT_EQ(u"Clear and Reload", work.action);
++  EXPECT_NE(std::u16string::npos, work.body.find(u"example.com"));
++  EXPECT_NE(std::u16string::npos, work.body.find(u"Work"));
++  EXPECT_NE(std::u16string::npos, work.body.find(u"signed out"));
++  EXPECT_NE(std::u16string::npos, work.body.find(u"permissions stay"));
++
++  const ClearSiteDataQuestion old = ClearSiteDataQuestionFor(
++      u"example.com", false, true, "0a1b2c3d4e5f6a7b", spaces_);
++  EXPECT_NE(std::u16string::npos, old.body.find(u"Old"))
++      << "the jar the page lives in, whether or not its session is on now";
++
++  const ClearSiteDataQuestion shared =
++      ClearSiteDataQuestionFor(u"example.com", false, false, "", spaces_);
++  EXPECT_NE(std::u16string::npos, shared.body.find(u"shared session"));
++  EXPECT_EQ(std::u16string::npos, shared.body.find(u"Work"));
++
++  const ClearSiteDataQuestion orphan = ClearSiteDataQuestionFor(
++      u"example.com", false, true, "ffffffffffffffff", spaces_);
++  EXPECT_NE(std::u16string::npos, orphan.body.find(u"independent session"));
++
++  const ClearSiteDataQuestion private_session =
++      ClearSiteDataQuestionFor(u"example.com", true, false, "", spaces_);
++  EXPECT_NE(std::u16string::npos,
++            private_session.body.find(u"private session"));
++  EXPECT_NE(std::u16string::npos, private_session.body.find(u"signed out"));
++}
++
++// site-controls Si6: camera and microphone are listed on a page that may ask
++// for them -- https, or http on this machine -- and nowhere else.
++TEST_F(SiteControlsRulesTest, CameraAndMicrophoneAreListedOnWebPagesOnly) {
++  const std::vector<ContentSettingsType> media = {
++      ContentSettingsType::MEDIASTREAM_CAMERA,
++      ContentSettingsType::MEDIASTREAM_MIC};
++  EXPECT_EQ(media, AlwaysListedPermissions(GURL("https://example.com/")));
++  EXPECT_EQ(media, AlwaysListedPermissions(GURL("http://localhost:8080/")));
++  EXPECT_EQ(media, AlwaysListedPermissions(GURL("http://127.0.0.1/x")));
++  for (const char* spec :
++       {"http://example.com/", "file:///tmp/a.html", "data:text/html,x",
++        "about:blank", "chrome://settings/", "not a url"}) {
++    EXPECT_TRUE(AlwaysListedPermissions(GURL(spec)).empty()) << spec;
++  }
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/site_cookies.cc b/chrome/browser/ui/stedding/site_cookies.cc
+index 163d67643208d..a1d2745eca06f 100644
+--- a/chrome/browser/ui/stedding/site_cookies.cc
++++ b/chrome/browser/ui/stedding/site_cookies.cc
+@@ -36,11 +36,29 @@ constexpr uint64_t kOnAPartition =
+     content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION;
+ static_assert((kSiteCookieRemoveMask & ~kOnAPartition) == 0,
+               "the site's cookies are removed from one StoragePartition");
++static_assert((kSiteDataRemoveMask & ~kOnAPartition) == 0,
++              "the site's data is removed from one StoragePartition");
++static_assert(
++    (kSiteDataRemoveMask &
++     content::BrowsingDataRemover::DATA_TYPE_EMBEDDER_DOM_STORAGE) == 0,
++    "the embedder's storage bit is read as a profile-wide permission");
++
++// What a removal must not have failed at for the page to reload: its cookies
++// and, for Clear site data, its storage. A reload of a page that kept them
++// would look as if nothing had been asked.
++bool Removed(uint64_t mask, uint64_t failed_data_types) {
++  const uint64_t needed =
++      mask & (content::BrowsingDataRemover::DATA_TYPE_COOKIES |
++              content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE);
++  return (failed_data_types & needed) == 0;
++}
+ 
+ // After the removal (commandbar K24): the toast, then the reload, for a tab
+ // that is still there, awake and on the site whose cookies went. A page that
+ // went to sleep or to another site in the meantime is left as it is.
+-void ShowAndReload(content::WebContents* contents, const std::string& domain) {
++void ShowAndReload(content::WebContents* contents,
++                   const std::string& domain,
++                   ToastId toast) {
+   if (!contents || contents->WasDiscarded() ||
+       SiteCookieDomain(contents->GetLastCommittedURL()) != domain) {
+     return;
+@@ -49,7 +67,7 @@ void ShowAndReload(content::WebContents* contents, const std::string& domain) {
+   // what happened, and to which domain. It stays through the reload.
+   if (ToastController* const toasts =
+           ToastController::MaybeGetForWebContents(contents)) {
+-    ToastParams params(ToastId::kSteddingSiteCookiesCleared);
++    ToastParams params(toast);
+     params.body_string_replacement_params = {
+         url_formatter::IDNToUnicode(domain)};
+     toasts->MaybeShowToast(std::move(params));
+@@ -60,14 +78,20 @@ void ShowAndReload(content::WebContents* contents, const std::string& domain) {
+                                    /*check_for_repost=*/true);
+ }
+ 
+-// One command's removal while it runs. It owns itself, as content's
+-// SiteDataClearer does, and is deleted when BrowsingDataRemover reports its
+-// task done; the remover reports every task still pending when the profile
+-// goes away, as failed.
++// One removal while it runs: the cookies of K24, or the site data of
++// site-controls Si8. It owns itself, as content's SiteDataClearer does, and
++// is deleted when BrowsingDataRemover reports its task done; the remover
++// reports every task still pending when the profile goes away, as failed.
+ class SiteCookieClearer : public content::BrowsingDataRemover::Observer {
+  public:
+-  SiteCookieClearer(content::WebContents* contents, std::string domain)
+-      : contents_(contents->GetWeakPtr()), domain_(std::move(domain)) {}
++  SiteCookieClearer(content::WebContents* contents,
++                    std::string domain,
++                    uint64_t mask,
++                    ToastId toast)
++      : contents_(contents->GetWeakPtr()),
++        domain_(std::move(domain)),
++        mask_(mask),
++        toast_(toast) {}
+   SiteCookieClearer(const SiteCookieClearer&) = delete;
+   SiteCookieClearer& operator=(const SiteCookieClearer&) = delete;
+   ~SiteCookieClearer() override = default;
+@@ -78,7 +102,7 @@ class SiteCookieClearer : public content::BrowsingDataRemover::Observer {
+     // the observation comes first.
+     observation_.Observe(remover);
+     remover->RemoveWithFilterAndReply(
+-        base::Time(), base::Time::Max(), kSiteCookieRemoveMask,
++        base::Time(), base::Time::Max(), mask_,
+         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+             content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+         SiteCookieFilter(domain_, config), this);
+@@ -89,17 +113,19 @@ class SiteCookieClearer : public content::BrowsingDataRemover::Observer {
+   void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+     const base::WeakPtr<content::WebContents> contents = contents_;
+     const std::string domain = domain_;
+-    const bool removed =
+-        !(failed_data_types & content::BrowsingDataRemover::DATA_TYPE_COOKIES);
++    const ToastId toast = toast_;
++    const bool removed = Removed(mask_, failed_data_types);
+     // Deleting ends the observation.
+     delete this;
+     if (removed) {
+-      ShowAndReload(contents.get(), domain);
++      ShowAndReload(contents.get(), domain, toast);
+     }
+   }
+ 
+   const base::WeakPtr<content::WebContents> contents_;
+   const std::string domain_;
++  const uint64_t mask_;
++  const ToastId toast_;
+   base::ScopedObservation<content::BrowsingDataRemover,
+                           content::BrowsingDataRemover::Observer>
+       observation_{this};
+@@ -161,9 +187,31 @@ void ClearSiteCookiesAndReload(content::WebContents* contents) {
+   // private profile's, kept in memory, in a private window.
+   const content::StoragePartitionConfig config =
+       spaces::StoragePartitionConfigForWebContents(contents);
+-  (new SiteCookieClearer(contents,
+-                         SiteCookieDomain(contents->GetLastCommittedURL())))
++  (new SiteCookieClearer(
++       contents, SiteCookieDomain(contents->GetLastCommittedURL()),
++       kSiteCookieRemoveMask, ToastId::kSteddingSiteCookiesCleared))
++      ->Start(remover, config);
++}
++
++bool ClearSiteDataAndReload(content::WebContents* contents,
++                            const std::string& domain,
++                            const content::StoragePartitionConfig& config) {
++  // What the question named, and nothing else (site-controls Si8): the same
++  // site, in the same jar, of the same page.
++  if (!contents || domain.empty() ||
++      SiteCookieDomain(contents->GetLastCommittedURL()) != domain ||
++      spaces::StoragePartitionConfigForWebContents(contents) != config) {
++    return false;
++  }
++  content::BrowsingDataRemover* const remover =
++      contents->GetBrowserContext()->GetBrowsingDataRemover();
++  if (!remover) {
++    return false;
++  }
++  (new SiteCookieClearer(contents, domain, kSiteDataRemoveMask,
++                         ToastId::kSteddingSiteDataCleared))
+       ->Start(remover, config);
++  return true;
+ }
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/site_cookies.h b/chrome/browser/ui/stedding/site_cookies.h
+index 4fd7313b93d34..29708c995bc19 100644
+--- a/chrome/browser/ui/stedding/site_cookies.h
++++ b/chrome/browser/ui/stedding/site_cookies.h
+@@ -34,6 +34,23 @@ inline constexpr uint64_t kSiteCookieRemoveMask =
+     content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+     content::BrowsingDataRemover::DATA_TYPE_DEVICE_BOUND_SESSIONS;
+ 
++// Clear site data (docs/features/site-controls.md Si8): what the site
++// controls' Clear removes, from the page's jar alone: the site's cookies and
++// device-bound sessions, its DOM storage -- local and session storage,
++// IndexedDB, file systems, service workers, cache storage, background
++// fetches -- and its HTTP cache. Not the embedder's DOM storage: Chromium's
++// browsing-data delegate reads that bit as the site's persistent-storage
++// permission, which lives in the profile's content settings, shared by every
++// Space, so it would go from all of them (the panel says "permissions
++// stay"). Every type here lives on a
++// StoragePartition, as a removal that names one requires.
++inline constexpr uint64_t kSiteDataRemoveMask =
++    content::BrowsingDataRemover::DATA_TYPE_COOKIES |
++    content::BrowsingDataRemover::DATA_TYPE_DEVICE_BOUND_SESSIONS |
++    content::BrowsingDataRemover::DATA_TYPE_CACHE |
++    (content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE &
++     ~content::BrowsingDataRemover::DATA_TYPE_EMBEDDER_DOM_STORAGE);
++
+ // The site whose cookies the command removes for a page at `url`: its
+ // registrable domain, private registries counted (www.news.example.co.uk
+ // gives example.co.uk, foo.github.io stays foo.github.io), or the host as it
+@@ -63,6 +80,19 @@ bool CanClearSiteCookies(content::WebContents* contents);
+ // to another site, or the cookies could not be removed.
+ void ClearSiteCookiesAndReload(content::WebContents* contents);
+ 
++// Clear site data (site-controls Si8), once the user has said yes to the
++// question that named `domain` and the jar `config`. Removes
++// kSiteDataRemoveMask for `domain` from that jar alone and, once
++// BrowsingDataRemover reports it done, shows the "Site data cleared for
++// <site>" toast and reloads the page. Returns false, and removes nothing,
++// when `contents` is gone, or its page is no longer on `domain` or in
++// `config`'s jar: what the question named is not what would go (the page
++// went elsewhere, or a jar change or a sleep replaced the tab's page, while
++// the question was open).
++bool ClearSiteDataAndReload(content::WebContents* contents,
++                            const std::string& domain,
++                            const content::StoragePartitionConfig& config);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_STEDDING_SITE_COOKIES_H_
+diff --git a/chrome/browser/ui/stedding/site_cookies_unittest.cc b/chrome/browser/ui/stedding/site_cookies_unittest.cc
+index 19ad5ea88ca12..a26839b86710b 100644
+--- a/chrome/browser/ui/stedding/site_cookies_unittest.cc
++++ b/chrome/browser/ui/stedding/site_cookies_unittest.cc
+@@ -10,16 +10,20 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/functional/callback.h"
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/test/base/testing_profile.h"
+ #include "content/public/browser/browsing_data_filter_builder.h"
+ #include "content/public/browser/browsing_data_remover.h"
++#include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/storage_partition_config.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "net/cookies/cookie_partition_key_collection.h"
+ #include "services/network/public/mojom/cookie_manager.mojom.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "url/gurl.h"
++#include "url/origin.h"
+ 
+ namespace stedding {
+ namespace {
+@@ -124,5 +128,66 @@ TEST_F(SiteCookiesTest, TheFilterNamesItsJarAndNothingElse) {
+       << "the cache stays";
+ }
+ 
++// site-controls Si8: Clear site data takes the site's cookies, device-bound
++// sessions, DOM storage and HTTP cache, all of which live on a partition, so
++// the removal can name the page's jar. It leaves the embedder's storage bit,
++// which Chromium's browsing-data delegate reads as the site's
++// persistent-storage permission in the profile's content settings, shared by
++// every Space ("permissions stay").
++TEST_F(SiteCookiesTest, TheSiteDataMaskStaysOnAPartition) {
++  using Remover = content::BrowsingDataRemover;
++  EXPECT_EQ(0u, kSiteDataRemoveMask & ~Remover::DATA_TYPE_ON_STORAGE_PARTITION)
++      << "a removal that names a jar takes only what lives in one";
++  EXPECT_TRUE(kSiteDataRemoveMask & Remover::DATA_TYPE_COOKIES);
++  EXPECT_TRUE(kSiteDataRemoveMask & Remover::DATA_TYPE_DEVICE_BOUND_SESSIONS);
++  EXPECT_TRUE(kSiteDataRemoveMask & Remover::DATA_TYPE_CACHE);
++  for (const uint64_t storage :
++       {Remover::DATA_TYPE_LOCAL_STORAGE, Remover::DATA_TYPE_INDEXED_DB,
++        Remover::DATA_TYPE_FILE_SYSTEMS, Remover::DATA_TYPE_SERVICE_WORKERS,
++        Remover::DATA_TYPE_CACHE_STORAGE,
++        Remover::DATA_TYPE_BACKGROUND_FETCH}) {
++    EXPECT_TRUE(kSiteDataRemoveMask & storage) << storage;
++  }
++  EXPECT_FALSE(kSiteDataRemoveMask & Remover::DATA_TYPE_EMBEDDER_DOM_STORAGE)
++      << "the persistent-storage permission is the profile's, every Space's";
++  EXPECT_FALSE(kSiteDataRemoveMask & Remover::DATA_TYPE_DOWNLOADS);
++  EXPECT_FALSE(kSiteDataRemoveMask & Remover::DATA_TYPE_MEDIA_LICENSES);
++  EXPECT_FALSE(kSiteDataRemoveMask & Remover::DATA_TYPE_PRIVACY_SANDBOX);
++  EXPECT_EQ(kSiteCookieRemoveMask, kSiteDataRemoveMask & kSiteCookieRemoveMask)
++      << "Clear site data takes what Clear Site Cookies takes, and more";
++}
++
++// site-controls Si8, sessions S27: Clear site data's removal names the page's
++// jar, the profile's or a Space's, so the S24 copy into every Space's jar does
++// not run, and its storage filter takes the site's storage keys, its
++// subdomains' included, and no other site's.
++TEST_F(SiteCookiesTest, TheSiteDataFilterNamesItsJar) {
++  const std::optional<content::StoragePartitionConfig> space_jar =
++      spaces::StoragePartitionConfigForProfileId(&profile_, "5f0c2d1e9a7b4c3d");
++  ASSERT_TRUE(space_jar.has_value());
++  const content::StoragePartitionConfig jars[] = {
++      content::StoragePartitionConfig::CreateDefault(&profile_), *space_jar};
++  for (const content::StoragePartitionConfig& jar : jars) {
++    SCOPED_TRACE(jar.partition_name());
++    std::unique_ptr<content::BrowsingDataFilterBuilder> filter =
++        SiteCookieFilter("example.com", jar);
++    ASSERT_TRUE(filter);
++    ASSERT_TRUE(filter->GetStoragePartitionConfig().has_value());
++    EXPECT_EQ(jar, *filter->GetStoragePartitionConfig());
++
++    const content::StoragePartition::StorageKeyMatcherFunction keys =
++        filter->BuildStorageKeyFilter();
++    const auto key = [](const char* spec) {
++      return blink::StorageKey::CreateFirstParty(
++          url::Origin::Create(GURL(spec)));
++    };
++    EXPECT_TRUE(keys.Run(key("https://example.com")));
++    EXPECT_TRUE(keys.Run(key("https://accounts.example.com")));
++    EXPECT_TRUE(keys.Run(key("http://example.com:8080")));
++    EXPECT_FALSE(keys.Run(key("https://example.org")));
++    EXPECT_FALSE(keys.Run(key("https://notexample.com")));
++  }
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/toasts/api/toast_id.cc b/chrome/browser/ui/toasts/api/toast_id.cc
+index 94d97d237fc3b..e6b4adb6ef06c 100644
+--- a/chrome/browser/ui/toasts/api/toast_id.cc
++++ b/chrome/browser/ui/toasts/api/toast_id.cc
+@@ -137,6 +137,10 @@ std::string_view GetToastName(ToastId toast_id) {
+       return "SteddingSiteCookiesCleared";
+     case ToastId::kSteddingTabsClosed:
+       return "SteddingTabsClosed";
++    case ToastId::kSteddingSiteDataCleared:
++      return "SteddingSiteDataCleared";
++    case ToastId::kSteddingTitleCopied:
++      return "SteddingTitleCopied";
+     case ToastId::kSteddingCaptureFailed:
+       return "SteddingCaptureFailed";
+   }
+diff --git a/chrome/browser/ui/toasts/api/toast_id.h b/chrome/browser/ui/toasts/api/toast_id.h
+index 8b10f22529f6c..c7db9fbec5a9c 100644
+--- a/chrome/browser/ui/toasts/api/toast_id.h
++++ b/chrome/browser/ui/toasts/api/toast_id.h
+@@ -98,6 +98,11 @@ enum class ToastId {
+   // 66 was kSteddingPinLeftSession (docs/features/sessions.md S33, withdrawn
+   // 2026-10-22: an essential pinned in a Space with its own session stays in
+   // it, ADR 0028).
++  // Site controls (docs/features/site-controls.md): the site's data cleared
++  // from the page's jar and the page reloaded (Si8); the page's title copied
++  // (Si3).
++  kSteddingSiteDataCleared = 67,
++  kSteddingTitleCopied = 68,
+   // A screenshot that was not taken, or taken and not saved
+   // (docs/features/screenshot.md C10).
+   kSteddingCaptureFailed = 69,
+diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
+index 97a7153cfc915..e12a87333e18f 100644
+--- a/chrome/browser/ui/toasts/toast_service.cc
++++ b/chrome/browser/ui/toasts/toast_service.cc
+@@ -469,6 +469,26 @@ void ToastService::RegisterToasts(
+           .SetPersistOnNavigation()
+           .Build());
+ 
++  // Stedding: the site controls' Clear site data (site-controls Si8): the
++  // site's data cleared from the page's jar and the page reloaded. No
++  // button; it stays through the reload it comes with.
++  toast_registry_->RegisterToast(
++      ToastId::kSteddingSiteDataCleared,
++      ToastSpecification::Builder(
++          features::IsRoundedIconsEnabled()
++              ? vector_icons::kCookieIcon
++              : vector_icons::kCookieChromeRefreshOldIcon,
++          IDS_STEDDING_SITE_DATA_CLEARED_TOAST_BODY)
++          .SetPersistOnNavigation()
++          .Build());
++
++  // Stedding: the site controls' Copy title (site-controls Si3).
++  toast_registry_->RegisterToast(
++      ToastId::kSteddingTitleCopied,
++      ToastSpecification::Builder(vector_icons::kContentCopyIcon,
++                                  IDS_STEDDING_TITLE_COPIED_TOAST_BODY)
++          .Build());
++
+   // Undo after closing tabs (docs/features/tabs.md R25, R27). Window-wide:
+   // the close itself changes the tab on screen, and the Undo must outlive a
+   // click on another row or a Space switch.
+diff --git a/chrome/browser/ui/views/commandbar/address_row_controls.cc b/chrome/browser/ui/views/commandbar/address_row_controls.cc
+index c624df1eda84d..000e1e97602c7 100644
+--- a/chrome/browser/ui/views/commandbar/address_row_controls.cc
++++ b/chrome/browser/ui/views/commandbar/address_row_controls.cc
+@@ -254,6 +254,29 @@ void ShowSiteInformation(BrowserWindowInterface* browser) {
+       browser->GetWeakPtr()));
+ }
+ 
++bool ExtensionsMenuAvailable(BrowserWindowInterface* browser) {
++  return browser && ExtensionsContainer::From(*browser);
++}
++
++void ShowExtensionsMenu(BrowserWindowInterface* browser) {
++  if (!browser) {
++    return;
++  }
++  // A turn later, once page info has closed: a menu shown first would lose
++  // the activation page info hands back to the window as it closes.
++  RunAfterTheBarCloses(base::BindOnce(
++      [](base::WeakPtr<BrowserWindowInterface> browser) {
++        ExtensionsContainer* const container =
++            browser ? ExtensionsContainer::From(*browser) : nullptr;
++        if (container) {
++          // The extensions button anchors the menu to itself while it is
++          // drawn and to the top container while the row is not (T40).
++          container->ToggleExtensionsMenu();
++        }
++      },
++      browser->GetWeakPtr()));
++}
++
+ views::BubbleAnchor PopupAnchorWithoutTheRow(BrowserWindowInterface* browser) {
+   BrowserView* const browser_view =
+       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+diff --git a/chrome/browser/ui/views/commandbar/address_row_controls.h b/chrome/browser/ui/views/commandbar/address_row_controls.h
+index 830164b683d9f..ed43488074b96 100644
+--- a/chrome/browser/ui/views/commandbar/address_row_controls.h
++++ b/chrome/browser/ui/views/commandbar/address_row_controls.h
+@@ -62,6 +62,15 @@ void ShowMediaControls(BrowserWindowInterface* browser);
+ bool SiteInformationAvailable(BrowserWindowInterface* browser);
+ void ShowSiteInformation(BrowserWindowInterface* browser);
+ 
++// site-controls Si10 (BACKLOG S-118): the extensions menu, as the site
++// controls' Extensions row opens it once page info has closed: from the
++// extensions button while the row is drawn, under the top container at the
++// page card's top left while it is not (toolbar T40). Available when the
++// window has an extensions container: not when extensions are turned off,
++// and not in a window without a toolbar of extensions.
++bool ExtensionsMenuAvailable(BrowserWindowInterface* browser);
++void ShowExtensionsMenu(BrowserWindowInterface* browser);
++
+ // A test window has no media button. While the returned value lives, the
+ // media controls are available as `media` says, and showing them runs its
+ // `show`.
+diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_button.cc b/chrome/browser/ui/views/extensions/extensions_toolbar_button.cc
+index a36455069d310..aa376b9c2a27c 100644
+--- a/chrome/browser/ui/views/extensions/extensions_toolbar_button.cc
++++ b/chrome/browser/ui/views/extensions/extensions_toolbar_button.cc
+@@ -161,22 +161,29 @@ void ExtensionsToolbarButton::ToggleExtensionsMenu() {
+   extensions_toolbar_->OnMenuOpening();
+   base::RecordAction(base::UserMetricsAction("Extensions.Toolbar.MenuOpened"));
+   views::Widget* menu;
++  // Stedding (BACKLOG S-118, site-controls Si10, toolbar T40): the menu
++  // hangs from what an extension's popup hangs from -- this button while the
++  // row is drawn, the top container at the page card's top left while it is
++  // not -- so the site controls' Extensions row opens it inside the page with
++  // the row hidden. No action has an empty id, so a drawn row gives this
++  // button.
++  const views::BubbleAnchor menu_anchor =
++      extensions_toolbar_->GetReferenceButtonForPopup(std::string());
+   if (base::FeatureList::IsEnabled(
+           extensions_features::kExtensionsMenuAccessControl)) {
+     if (extensions_toolbar_->GetRequestAccessButton()->GetVisible()) {
+       base::RecordAction(base::UserMetricsAction(
+           "Extensions.Toolbar.MenuOpenedWhenExtensionsAreRequestingAccess"));
+     }
+-    extensions_menu_coordinator_->Show(views::BubbleAnchor(this),
+-                                       extensions_toolbar_);
++    extensions_menu_coordinator_->Show(menu_anchor, extensions_toolbar_);
+     menu = extensions_menu_coordinator_->GetExtensionsMenuWidget();
+   } else {
+     // Desktop Android will use the
+     // extensions_features::kExtensionsMenuAccessControl menu, therefore we can
+     // use Browser for the other menu until the feature is rolled out.
+     menu = ExtensionsMenuView::ShowBubble(
+-        views::BubbleAnchor(this), browser_,
+-        extensions_toolbar_->GetToolbarViewModel(), extensions_toolbar_);
++        menu_anchor, browser_, extensions_toolbar_->GetToolbarViewModel(),
++        extensions_toolbar_);
+   }
+   extensions_menu_widget_ = menu->GetWeakPtr();
+   extension_menu_observation_.Observe(menu);
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 08255fa850608..5a538083182f1 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -2426,6 +2426,9 @@ bool LocationBarView::ShowPageInfoDialog() {
+           .AddPageInfoClosingCallback(
+               base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
+                              weak_factory_.GetWeakPtr()))
++          // Stedding (BACKLOG S-118, toolbar T47): the site chip's page info
++          // holds the site controls (docs/features/site-controls.md Si1).
++          .ShowSteddingSiteControls()
+           .Build();
+   views::BubbleDialogDelegateView* const bubble =
+       PageInfoBubbleView::CreatePageInfoBubble(std::move(specification));
+diff --git a/chrome/browser/ui/views/page_info/BUILD.gn b/chrome/browser/ui/views/page_info/BUILD.gn
+index 1f9bd481a371a..3faa59e7bb122 100644
+--- a/chrome/browser/ui/views/page_info/BUILD.gn
++++ b/chrome/browser/ui/views/page_info/BUILD.gn
+@@ -28,6 +28,10 @@ source_set("page_info") {
+     "safety_tip_page_info_bubble_view.h",
+     "security_information_view.h",
+     "star_rating_view.h",
++
++    # Stedding (BACKLOG S-118): the site controls in page info
++    # (docs/features/site-controls.md).
++    "stedding_site_controls_view.h",
+     "suspicious_site_bubble_view.h",
+     "web_view_side_panel_view.h",
+   ]
+@@ -37,6 +41,7 @@ source_set("page_info") {
+     "//chrome/browser/lookalikes",
+     "//chrome/browser/page_info",
+     "//chrome/browser/ui/page_info",
++    "//chrome/browser/ui/stedding:site_controls",
+     "//chrome/browser/ui/views/controls",
+     "//components/content_settings/core/common",
+     "//components/media_effects",
+@@ -76,11 +81,42 @@ source_set("impl") {
+     "safety_tip_page_info_bubble_view.cc",
+     "security_information_view.cc",
+     "star_rating_view.cc",
++    "stedding_site_controls_view.cc",
+     "web_view_side_panel_view.cc",
+   ]
+ 
+   deps = [
+     ":page_info",
++
++    # Stedding (BACKLOG S-118, docs/features/site-controls.md): the window's
++    # commands and functions the site controls run, the Spaces' jars they
++    # name, and the extensions menu they open.
++    "//base:i18n",
++    "//chrome/app:command_ids",
++    "//chrome/app:generated_resources",
++    "//chrome/app/vector_icons",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui:browser_commands",
++    "//chrome/browser/ui:bubble_anchor_util",
++    "//chrome/browser/ui:stedding_ui_metrics",
++    "//chrome/browser/ui/spaces",
++    "//chrome/browser/ui/spaces:isolation_mark",
++    "//chrome/browser/ui/stedding:address_row",
++    "//chrome/browser/ui/stedding:copy_link",
++    "//chrome/browser/ui/stedding:dark_pages",
++    "//chrome/browser/ui/stedding:little_window",
++    "//chrome/browser/ui/stedding:media_keys",
++    "//chrome/browser/ui/stedding:site_controls",
++    "//chrome/browser/ui/stedding:site_cookies",
++    "//chrome/browser/ui/views/commandbar",
++    "//chrome/browser/ui/views/spaces",
++    "//chrome/browser/ui/views/stedding:isolation_mark",
++    "//components/content_settings/core/common",
++    "//components/tabs:public",
++    "//components/url_formatter",
++    "//components/vector_icons",
++    "//components/zoom",
++
+     "//base",
+     "//chrome/browser:browser_public_dependencies",
+     "//chrome/browser:primitives",
+@@ -142,9 +178,17 @@ source_set("unit_tests") {
+     "page_info_security_content_view_unittest.cc",
+     "safety_tip_page_info_bubble_view_unittest.cc",
+     "star_rating_view_unittest.cc",
++    "stedding_site_controls_view_unittest.cc",
+   ]
+   deps = [
+     ":page_info",
++    "//chrome/app:command_ids",
++    "//chrome/browser/ui/spaces:isolation_mark",
++    "//chrome/browser/ui/stedding:address_row",
++    "//chrome/browser/ui/stedding:site_controls",
++    "//chrome/browser/ui/views/controls",
++    "//chrome/browser/ui/views/stedding:isolation_mark",
++    "//ui/events",
+     "//base/test:test_support",
+     "//chrome/browser/bluetooth",
+     "//chrome/browser/content_settings",
+diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc b/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc
+index 6007694fd1cd5..090eadf037d41 100644
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc
+@@ -83,6 +83,12 @@ PageInfoBubbleSpecification::Builder::SetOnExtensionsClickedCallback(
+   return *this;
+ }
+ 
++PageInfoBubbleSpecification::Builder&
++PageInfoBubbleSpecification::Builder::ShowSteddingSiteControls() {
++  page_info_bubble_specification_->ShowSteddingSiteControls();
++  return *this;
++}
++
+ void PageInfoBubbleSpecification::Builder::ValidateSpecification() {
+   CHECK(page_info_bubble_specification_->web_contents());
+ }
+@@ -142,6 +148,14 @@ void PageInfoBubbleSpecification::SetOnExtensionsClickedCallback(
+   open_extensions_menu_callback_ = std::move(callback);
+ }
+ 
++void PageInfoBubbleSpecification::ShowSteddingSiteControls() {
++  show_stedding_site_controls_ = true;
++}
++
++bool PageInfoBubbleSpecification::show_stedding_site_controls() const {
++  return show_stedding_site_controls_;
++}
++
+ bool PageInfoBubbleSpecification::should_show_extensions_menu() const {
+   return !open_extensions_menu_callback_.is_null();
+ }
+diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_specification.h b/chrome/browser/ui/views/page_info/page_info_bubble_specification.h
+index 3dc980bb1e985..a3bc995e1ff7b 100644
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_specification.h
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_specification.h
+@@ -66,6 +66,11 @@ class PageInfoBubbleSpecification {
+     // bubble is clicked, and enables showing the extensions menu item.
+     Builder& SetOnExtensionsClickedCallback(base::RepeatingClosure callback);
+ 
++    // Stedding (BACKLOG S-118, site-controls Si1): the bubble holds the site
++    // controls when its page is a tab of a normal or private tabbed window.
++    // Only the site chip and the command bar's View Site Information ask.
++    Builder& ShowSteddingSiteControls();
++
+     std::unique_ptr<PageInfoBubbleSpecification> Build();
+ 
+    private:
+@@ -90,6 +95,7 @@ class PageInfoBubbleSpecification {
+   void HideExtendedSiteInfo();
+   void ShowPermissionPage(ContentSettingsType type);
+   void SetOnExtensionsClickedCallback(base::RepeatingClosure callback);
++  void ShowSteddingSiteControls();
+ 
+   views::BubbleAnchor anchor();
+   gfx::NativeWindow parent_window();
+@@ -103,6 +109,7 @@ class PageInfoBubbleSpecification {
+   std::optional<ContentSettingsType> permission_page_type();
+   bool should_show_extensions_menu() const;
+   const base::RepeatingClosure& get_open_extensions_menu_callback() const;
++  bool show_stedding_site_controls() const;
+ 
+  private:
+   views::BubbleAnchor anchor_;
+@@ -117,6 +124,7 @@ class PageInfoBubbleSpecification {
+   bool show_extended_site_info_ = true;
+   std::optional<ContentSettingsType> permission_page_type_;
+   base::RepeatingClosure open_extensions_menu_callback_;
++  bool show_stedding_site_controls_ = false;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_BUBBLE_SPECIFICATION_H_
+diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
+index 3f36fc7c6838d..02e50f946cee0 100644
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
+@@ -10,9 +10,11 @@
+ #include "chrome/browser/platform_util.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/bubble_anchor_util.h"
+ #include "chrome/browser/ui/page_info/chrome_page_info_delegate.h"
+ #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
+ #include "chrome/browser/ui/page_info/page_info_dialog.h"
++#include "chrome/browser/ui/stedding/site_controls.h"
+ #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/controls/page_switcher_view.h"
+@@ -22,6 +24,7 @@
+ #include "chrome/browser/ui/views/page_info/page_info_merchant_trust_coordinator.h"
+ #include "chrome/browser/ui/views/page_info/page_info_security_content_view.h"
+ #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
+ #include "components/dom_distiller/core/url_constants.h"
+ #include "components/dom_distiller/core/url_utils.h"
+ #include "components/page_info/core/features.h"
+@@ -187,7 +190,8 @@ PageInfoBubbleView::PageInfoBubbleView(
+     PageInfoClosingCallback closing_callback,
+     bool allow_extended_site_info,
+     ChromePageInfoDelegate::GetBrowserCallback get_browser_callback,
+-    base::RepeatingClosure open_extensions_menu_callback)
++    base::RepeatingClosure open_extensions_menu_callback,
++    bool stedding_site_controls)
+     : PageInfoBubbleViewBase(anchor,
+                              anchor_rect,
+                              parent_window,
+@@ -205,13 +209,20 @@ PageInfoBubbleView::PageInfoBubbleView(
+   set_margins(gfx::Insets().set_top(top_margin));
+   ui_delegate_ =
+       std::make_unique<ChromePageInfoUiDelegate>(web_contents(), url);
+-  presenter_ = std::make_unique<PageInfo>(
+-      std::make_unique<ChromePageInfoDelegate>(web_contents(),
+-                                               std::move(get_browser_callback)),
+-      web_contents(), url);
++  auto page_info_delegate = std::make_unique<ChromePageInfoDelegate>(
++      web_contents(), std::move(get_browser_callback));
++  if (stedding_site_controls) {
++    // Stedding (BACKLOG S-118, site-controls Si6): camera and microphone are
++    // listed on a page that may ask for them, even when it never did.
++    page_info_delegate->SetAlwaysListedPermissions(
++        stedding::AlwaysListedPermissions(url));
++  }
++  presenter_ = std::make_unique<PageInfo>(std::move(page_info_delegate),
++                                          web_contents(), url);
+   view_factory_ = std::make_unique<PageInfoViewFactory>(
+       presenter_.get(), ui_delegate_.get(), this, allow_extended_site_info,
+       std::move(open_extensions_menu_callback));
++  view_factory_->SetSteddingSiteControls(stedding_site_controls);
+ 
+   SetShowTitle(false);
+   SetShowCloseButton(false);
+@@ -256,13 +267,25 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
+                                           web_contents, url);
+   }
+ 
+-  PageInfoBubbleView* const bubble = new PageInfoBubbleView(
+-      anchor, anchor_rect, parent_view, web_contents, url,
+-      specification->initialized_callback(),
+-      specification->page_info_closing_callback(),
+-      specification->show_extended_site_info(),
+-      specification->get_browser_callback(),
+-      specification->get_open_extensions_menu_callback());
++  // Stedding (BACKLOG S-118, site-controls Si1, Si10): the site chip's and
++  // the command bar's page info of a tab holds the site controls, and its
++  // Extensions row opens the window's extensions menu.
++  const bool site_controls = specification->show_stedding_site_controls() &&
++                             stedding::SiteControlsWindowFor(web_contents) !=
++                                 stedding::SiteControlsWindow::kOther;
++  base::RepeatingClosure open_extensions_menu =
++      specification->get_open_extensions_menu_callback();
++  if (site_controls && !open_extensions_menu) {
++    open_extensions_menu =
++        stedding::SiteControlsExtensionsCallback(web_contents);
++  }
++  PageInfoBubbleView* const bubble =
++      new PageInfoBubbleView(anchor, anchor_rect, parent_view, web_contents,
++                             url, specification->initialized_callback(),
++                             specification->page_info_closing_callback(),
++                             specification->show_extended_site_info(),
++                             specification->get_browser_callback(),
++                             std::move(open_extensions_menu), site_controls);
+   if (specification->permission_page_type().has_value()) {
+     bubble->OpenPermissionPage(specification->permission_page_type().value());
+   }
+@@ -413,6 +436,11 @@ void ShowPageInfoDialogImpl(BrowserWindowInterface* browser,
+       .AddPageInfoClosingCallback(std::move(closing_callback));
+   if (type.has_value()) {
+     page_info_bubble_builder.ShowPermissionPage(type.value());
++  } else if (anchor == bubble_anchor_util::Anchor::kLocationBar) {
++    // Stedding (BACKLOG S-118, site-controls Si1): the command bar's View
++    // Site Information (commandbar K33). App Info, a custom tab's bar and a
++    // permission's page keep Chromium's page info.
++    page_info_bubble_builder.ShowSteddingSiteControls();
+   }
+ 
+   views::BubbleDialogDelegateView* const bubble =
+diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view.h b/chrome/browser/ui/views/page_info/page_info_bubble_view.h
+index 6881e79d73675..7969ece89e13f 100644
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_view.h
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_view.h
+@@ -65,7 +65,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
+       bool allow_extended_site_info,
+       ChromePageInfoDelegate::GetBrowserCallback get_browser_callback,
+       base::RepeatingClosure open_extensions_menu_callback =
+-          base::RepeatingClosure());
++          base::RepeatingClosure(),
++      bool stedding_site_controls = false);
+ 
+   // PageInfoBubbleViewBase:
+   gfx::Size CalculatePreferredSize(
+diff --git a/chrome/browser/ui/views/page_info/page_info_main_view.cc b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+index 2c44be691f580..d8073aab72ac3 100644
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
+ #include "chrome/browser/ui/views/page_info/permission_toggle_row_view.h"
+ #include "chrome/browser/ui/views/page_info/star_rating_view.h"
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
+ #include "chrome/browser/ui/views/sub_apps_permission_explanation.h"
+ #include "chrome/browser/vr/vr_tab_helper.h"
+ #include "chrome/common/url_constants.h"
+@@ -145,7 +146,8 @@ PageInfoMainView::PageInfoMainView(
+     PageInfoNavigationHandler* navigation_handler,
+     base::OnceClosure initialized_callback,
+     bool allow_extended_site_info,
+-    base::RepeatingClosure open_extensions_menu_callback)
++    base::RepeatingClosure open_extensions_menu_callback,
++    bool stedding_site_controls)
+     : presenter_(presenter),
+       ui_delegate_(ui_delegate),
+       navigation_handler_(navigation_handler),
+@@ -166,6 +168,20 @@ PageInfoMainView::PageInfoMainView(
+       ->SetProperty(views::kMarginsKey,
+                     gfx::Insets::TLBR(0, 0, hover_list_spacing, 0));
+ 
++  // Stedding (BACKLOG S-118, toolbar T47, site-controls Si2-Si5): the strip
++  // under the header -- copy link, copy title, mute, picture in picture, zoom
++  // -- for the site chip's and the command bar's page info alone. This view
++  // is built again when the user comes back from a subpage, and so is it.
++  if (stedding_site_controls) {
++    if (std::unique_ptr<views::View> strip =
++            stedding::MaybeCreateSiteControlsStrip(
++                ui_delegate_->GetWebContents(), navigation_handler_.get())) {
++      AddChildView(std::move(strip))
++          ->SetProperty(views::kMarginsKey,
++                        gfx::Insets::TLBR(0, 0, hover_list_spacing, 0));
++    }
++  }
++
+ #if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_VR)
+   page_feature_info_view_ = AddChildView(std::make_unique<views::View>());
+ #endif
+@@ -202,6 +218,17 @@ PageInfoMainView::PageInfoMainView(
+         views::style::STYLE_BODY_4, kColorPageInfoSubtitleForeground);
+   }
+ 
++  // Stedding (BACKLOG S-118, site-controls Si7-Si9): the session row, Clear
++  // site data and the dark pages rows, after Chromium's cookies and
++  // extensions rows and before "Site settings".
++  if (stedding_site_controls) {
++    if (std::unique_ptr<views::View> rows =
++            stedding::MaybeCreateSiteControlsRows(
++                ui_delegate_->GetWebContents(), navigation_handler_.get())) {
++      AddChildView(std::move(rows));
++    }
++  }
++
+   int link_text_id = 0;
+   int tooltip_text_id = 0;
+   if (ui_delegate_->ShouldShowSiteSettings(&link_text_id, &tooltip_text_id)) {
+diff --git a/chrome/browser/ui/views/page_info/page_info_main_view.h b/chrome/browser/ui/views/page_info/page_info_main_view.h
+index d39123af62467..262695b868539 100644
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.h
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.h
+@@ -71,7 +71,8 @@ class PageInfoMainView : public views::View,
+                    base::OnceClosure initialized_callback,
+                    bool allow_extended_site_info,
+                    base::RepeatingClosure open_extensions_menu_callback =
+-                       base::RepeatingClosure());
++                       base::RepeatingClosure(),
++                   bool stedding_site_controls = false);
+   ~PageInfoMainView() override;
+ 
+   // PageInfoUI implementations.
+diff --git a/chrome/browser/ui/views/page_info/page_info_view_factory.cc b/chrome/browser/ui/views/page_info/page_info_view_factory.cc
+index 7f22647e5e881..7f9f8450ab289 100644
+--- a/chrome/browser/ui/views/page_info/page_info_view_factory.cc
++++ b/chrome/browser/ui/views/page_info/page_info_view_factory.cc
+@@ -144,7 +144,7 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateMainPageView(
+   return std::make_unique<PageInfoMainView>(
+       presenter_, ui_delegate_, navigation_handler_,
+       std::move(initialized_callback), allow_extended_site_info_,
+-      open_extensions_menu_callback_);
++      open_extensions_menu_callback_, stedding_site_controls_);
+ }
+ 
+ std::unique_ptr<views::View> PageInfoViewFactory::CreateSecurityPageView() {
+diff --git a/chrome/browser/ui/views/page_info/page_info_view_factory.h b/chrome/browser/ui/views/page_info/page_info_view_factory.h
+index f65908e54dea6..755bc13032ebc 100644
+--- a/chrome/browser/ui/views/page_info/page_info_view_factory.h
++++ b/chrome/browser/ui/views/page_info/page_info_view_factory.h
+@@ -135,6 +135,11 @@ class PageInfoViewFactory {
+   [[nodiscard]] std::unique_ptr<views::View> CreatePageView(
+       std::u16string title,
+       std::unique_ptr<views::View> content_view);
++  // Stedding (BACKLOG S-118, site-controls Si1): the main page holds the
++  // site controls. Set by PageInfoBubbleView for the site chip's and the
++  // command bar's page info of a tab.
++  void SetSteddingSiteControls(bool on) { stedding_site_controls_ = on; }
++
+   [[nodiscard]] std::unique_ptr<views::View> CreateMainPageView(
+       base::OnceClosure initialized_callback);
+   [[nodiscard]] std::unique_ptr<views::View> CreateSecurityPageView();
+@@ -163,6 +168,7 @@ class PageInfoViewFactory {
+   raw_ptr<PageInfoNavigationHandler> navigation_handler_;
+   const bool allow_extended_site_info_;
+   base::RepeatingClosure open_extensions_menu_callback_;
++  bool stedding_site_controls_ = false;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_VIEW_FACTORY_H_
+diff --git a/chrome/browser/ui/views/page_info/stedding_site_controls_view.cc b/chrome/browser/ui/views/page_info/stedding_site_controls_view.cc
+new file mode 100644
+index 0000000000000..bce03cdada2a0
+--- /dev/null
++++ b/chrome/browser/ui/views/page_info/stedding_site_controls_view.cc
+@@ -0,0 +1,883 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
++
++#include <iterator>
++#include <memory>
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/feature_list.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback.h"
++#include "base/i18n/number_formatting.h"
++#include "base/location.h"
++#include "base/memory/weak_ptr.h"
++#include "base/notreached.h"
++#include "base/scoped_observation.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/spaces/isolation_mark.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/spaces/space_registry.h"
++#include "chrome/browser/ui/spaces/space_registry_factory.h"
++#include "chrome/browser/ui/spaces/space_storage_partition.h"
++#include "chrome/browser/ui/stedding/copy_link.h"
++#include "chrome/browser/ui/stedding/dark_pages.h"
++#include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/media_keys.h"
++#include "chrome/browser/ui/stedding/peek.h"
++#include "chrome/browser/ui/stedding/site_cookies.h"
++#include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/stedding_ui_metrics.h"
++#include "chrome/browser/ui/views/commandbar/address_row_controls.h"
++#include "chrome/browser/ui/views/controls/rich_controls_container_view.h"
++#include "chrome/browser/ui/views/controls/rich_hover_button.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/page_info/page_info_navigation_handler.h"
++#include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
++#include "chrome/browser/ui/views/spaces/space_dialogs.h"
++#include "chrome/browser/ui/views/stedding/isolation_mark_view.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/content_settings/core/common/content_settings_pattern.h"
++#include "components/tabs/public/tab_interface.h"
++#include "components/url_formatter/url_formatter.h"
++#include "components/vector_icons/vector_icons.h"
++#include "components/zoom/page_zoom.h"
++#include "components/zoom/zoom_controller.h"
++#include "components/zoom/zoom_observer.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/common/page_zoom.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/image_model.h"
++#include "ui/base/ui_base_features.h"
++#include "ui/color/color_id.h"
++#include "ui/events/event.h"
++#include "ui/gfx/geometry/insets.h"
++#include "ui/gfx/geometry/size.h"
++#include "ui/gfx/vector_icon_types.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/image_button.h"
++#include "ui/views/controls/button/image_button_factory.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/button/toggle_button.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/view_class_properties.h"
++#include "url/gurl.h"
++
++namespace stedding {
++
++namespace {
++
++// The strip's buttons: page info's own icon size, so they read as its rows'.
++constexpr int kStripIconSize = 20;
++// Between the strip's buttons, and the strip's sides, which line its first
++// button up with the icons of the rows under it.
++constexpr int kStripSpacing = 4;
++constexpr int kStripSideInset = 16;
++
++// dark-pages Dk16: the moon, its outline; the toolbar's off icon.
++// clang-format off
++constexpr gfx::PathElement kMoonPath[] = {
++    gfx::CANVAS_DIMENSIONS, 20,
++    gfx::STROKE, 1.5f,
++    gfx::MOVE_TO, 8.98f, 3.83f,
++    gfx::ARC_TO, 6.25f, 6.25f, 0, 1, 0, 16.17f, 11.02f,
++    gfx::ARC_TO, 5.25f, 5.25f, 0, 0, 1, 8.98f, 3.83f,
++    gfx::CLOSE};
++// clang-format on
++constexpr gfx::VectorIconRep kMoonReps[] = {{kMoonPath}};
++constexpr gfx::VectorIcon kMoonIcon = {kMoonReps, std::size(kMoonReps),
++                                       "stedding_site_controls_moon"};
++
++BrowserWindowInterface* BrowserFor(content::WebContents* contents) {
++  tabs::TabInterface* const tab =
++      contents ? tabs::TabInterface::MaybeGetFromContents(contents) : nullptr;
++  return tab ? tab->GetBrowserWindowInterface() : nullptr;
++}
++
++Profile* ProfileFor(content::WebContents* contents) {
++  return contents ? Profile::FromBrowserContext(contents->GetBrowserContext())
++                  : nullptr;
++}
++
++// Si7: the profile's Spaces as the session row names them: the name the
++// sidebar shows, "Space N" for one never named (SpaceModel::DisplayName).
++std::vector<SpaceJarEntry> SpaceJarEntriesFor(Profile* profile) {
++  std::vector<SpaceJarEntry> entries;
++  spaces::SpaceRegistry* const registry =
++      profile && !profile->IsOffTheRecord()
++          ? spaces::SpaceRegistryFactory::GetForProfile(profile)
++          : nullptr;
++  if (!registry) {
++    return entries;
++  }
++  int position = 0;
++  for (const spaces::RegistryEntry& entry : registry->entries()) {
++    ++position;
++    entries.push_back({entry.name.empty()
++                           ? u"Space " + base::NumberToString16(position)
++                           : base::UTF8ToUTF16(entry.name),
++                       entry.profile_id, entry.isolated});
++  }
++  return entries;
++}
++
++SiteControlsContext ContextFor(content::WebContents* contents) {
++  SiteControlsContext context;
++  context.window = SiteControlsWindowFor(contents);
++  if (contents) {
++    context.url = contents->GetLastCommittedURL();
++    context.dark_pages_on = DarkPagesOn(ProfileFor(contents));
++  }
++  return context;
++}
++
++// The words and the icon of a strip button for `action`.
++std::u16string NameFor(SiteControlsStripView::Action action,
++                       const SiteControlsStripView::State& state) {
++  switch (action) {
++    case SiteControlsStripView::Action::kCopyLink:
++    case SiteControlsStripView::Action::kCopyMarkdownLink:
++      return l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_COPY_LINK);
++    case SiteControlsStripView::Action::kCopyTitle:
++      return l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_COPY_TITLE);
++    case SiteControlsStripView::Action::kToggleMute:
++      return l10n_util::GetStringUTF16(state.mute_would_mute
++                                           ? IDS_STEDDING_SITE_CONTROLS_MUTE
++                                           : IDS_STEDDING_SITE_CONTROLS_UNMUTE);
++    case SiteControlsStripView::Action::kTogglePictureInPicture:
++      return l10n_util::GetStringUTF16(
++          state.picture_in_picture ==
++                  SiteControlsStripView::PictureInPicture::kExit
++              ? IDS_STEDDING_SITE_CONTROLS_EXIT_PICTURE_IN_PICTURE
++              : IDS_STEDDING_SITE_CONTROLS_PICTURE_IN_PICTURE);
++    case SiteControlsStripView::Action::kZoomOut:
++      return l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_ZOOM_OUT);
++    case SiteControlsStripView::Action::kZoomReset:
++      return l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_RESET_ZOOM);
++    case SiteControlsStripView::Action::kZoomIn:
++      return l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_ZOOM_IN);
++  }
++  NOTREACHED();
++}
++
++const gfx::VectorIcon& IconFor(SiteControlsStripView::Action action,
++                               const SiteControlsStripView::State& state) {
++  switch (action) {
++    case SiteControlsStripView::Action::kCopyLink:
++    case SiteControlsStripView::Action::kCopyMarkdownLink:
++      return vector_icons::kLinkIcon;
++    case SiteControlsStripView::Action::kCopyTitle:
++      return vector_icons::kContentCopyIcon;
++    case SiteControlsStripView::Action::kToggleMute:
++      // The sound as it would be after the press, as a tab's speaker shows.
++      return state.mute_would_mute ? vector_icons::kVolumeOffIcon
++                                   : vector_icons::kVolumeUpIcon;
++    case SiteControlsStripView::Action::kTogglePictureInPicture:
++      return state.picture_in_picture ==
++                     SiteControlsStripView::PictureInPicture::kExit
++                 ? vector_icons::kPipExitIcon
++                 : vector_icons::kPictureInPictureIcon;
++    case SiteControlsStripView::Action::kZoomOut:
++      return kZoomOutIcon;
++    case SiteControlsStripView::Action::kZoomReset:
++    case SiteControlsStripView::Action::kZoomIn:
++      return kZoomInIcon;
++  }
++  NOTREACHED();
++}
++
++// The window command whose chord a strip button shows, or 0 for none.
++int CommandFor(SiteControlsStripView::Action action) {
++  switch (action) {
++    case SiteControlsStripView::Action::kCopyLink:
++      return IDC_COPY_URL;
++    case SiteControlsStripView::Action::kCopyMarkdownLink:
++      return IDC_STEDDING_COPY_MARKDOWN_LINK;
++    case SiteControlsStripView::Action::kCopyTitle:
++      return 0;
++    case SiteControlsStripView::Action::kToggleMute:
++      return IDC_STEDDING_TOGGLE_TAB_MUTED;
++    case SiteControlsStripView::Action::kTogglePictureInPicture:
++      return IDC_STEDDING_TOGGLE_PICTURE_IN_PICTURE;
++    case SiteControlsStripView::Action::kZoomOut:
++      return IDC_ZOOM_MINUS;
++    case SiteControlsStripView::Action::kZoomReset:
++      return IDC_ZOOM_NORMAL;
++    case SiteControlsStripView::Action::kZoomIn:
++      return IDC_ZOOM_PLUS;
++  }
++  NOTREACHED();
++}
++
++void SetIcon(views::ImageButton* button, const gfx::VectorIcon& icon) {
++  views::SetImageFromVectorIconWithColor(
++      button, icon, kStripIconSize,
++      views::IconColors(ui::kColorIcon, ui::kColorIconDisabled));
++}
++
++// The strip's delegate for a page in a tab: the window's own commands and
++// functions, as its keys run them, and the page's state, watched while the
++// panel is open.
++class PageStripDelegate : public SiteControlsStripView::Delegate,
++                          public content::WebContentsObserver,
++                          public zoom::ZoomObserver {
++ public:
++  PageStripDelegate(content::WebContents* contents,
++                    PageInfoNavigationHandler* navigation_handler)
++      : content::WebContentsObserver(contents),
++        navigation_handler_(navigation_handler) {
++    if (zoom::ZoomController* const controller =
++            zoom::ZoomController::FromWebContents(contents)) {
++      zoom_observation_.Observe(controller);
++    }
++  }
++  PageStripDelegate(const PageStripDelegate&) = delete;
++  PageStripDelegate& operator=(const PageStripDelegate&) = delete;
++  ~PageStripDelegate() override = default;
++
++  // SiteControlsStripView::Delegate:
++  void SetStrip(SiteControlsStripView* strip) override { strip_ = strip; }
++
++  SiteControlsStripView::State GetState() override {
++    SiteControlsStripView::State state;
++    BrowserWindowInterface* const browser = BrowserFor(web_contents());
++    if (!browser) {
++      return state;
++    }
++    state.copy_link_enabled = chrome::IsCommandEnabled(browser, IDC_COPY_URL);
++    state.mute_would_mute = MuteKeyWouldMute(browser);
++    switch (PictureInPictureKeyFor(browser)) {
++      case PictureInPictureKey::kNothing:
++        state.picture_in_picture =
++            SiteControlsStripView::PictureInPicture::kNothing;
++        break;
++      case PictureInPictureKey::kEnter:
++        state.picture_in_picture =
++            SiteControlsStripView::PictureInPicture::kEnter;
++        break;
++      case PictureInPictureKey::kExit:
++        state.picture_in_picture =
++            SiteControlsStripView::PictureInPicture::kExit;
++        break;
++    }
++    if (zoom::ZoomController* const controller =
++            zoom::ZoomController::FromWebContents(web_contents())) {
++      state.zoom_percent = controller->GetZoomPercent();
++    }
++    return state;
++  }
++
++  std::u16string ChordFor(int command_id) override {
++    BrowserWindowInterface* const browser = BrowserFor(web_contents());
++    BrowserView* const browser_view =
++        browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++    ui::Accelerator accelerator;
++    return browser_view && browser_view->GetAcceleratorForCommandId(
++                               command_id, &accelerator)
++               ? accelerator.GetShortcutText()
++               : std::u16string();
++  }
++
++  void Run(SiteControlsStripView::Action action) override {
++    content::WebContents* const contents = web_contents();
++    BrowserWindowInterface* const browser = BrowserFor(contents);
++    if (!browser) {
++      return;
++    }
++    switch (action) {
++      // Si2: the copies and picture in picture close the panel, as the
++      // keys leave none open; mute and zoom leave it open.
++      case SiteControlsStripView::Action::kCopyLink:
++        // What IDC_COPY_URL runs (browser_commands.cc CopyURL).
++        CopyLink(browser, contents, LinkFormat::kPlain);
++        Close();
++        return;
++      case SiteControlsStripView::Action::kCopyMarkdownLink:
++        CopyLink(browser, contents, LinkFormat::kMarkdown);
++        Close();
++        return;
++      case SiteControlsStripView::Action::kCopyTitle:
++        CopyTitle(browser, contents);
++        Close();
++        return;
++      case SiteControlsStripView::Action::kToggleMute:
++        ToggleMuteOnSelectedTabs(browser);
++        Refresh();
++        return;
++      case SiteControlsStripView::Action::kTogglePictureInPicture:
++        TogglePictureInPicture(browser);
++        Close();
++        return;
++      case SiteControlsStripView::Action::kZoomOut:
++        Zoom(content::PAGE_ZOOM_OUT);
++        return;
++      case SiteControlsStripView::Action::kZoomReset:
++        Zoom(content::PAGE_ZOOM_RESET);
++        return;
++      case SiteControlsStripView::Action::kZoomIn:
++        Zoom(content::PAGE_ZOOM_IN);
++        return;
++    }
++  }
++
++  // content::WebContentsObserver: Si2, Si4, the mute and picture-in-picture
++  // buttons follow the page while the panel is open.
++  void DidUpdateAudioMutingState(bool muted) override { Refresh(); }
++  void OnAudioStateChanged(bool audible) override { Refresh(); }
++  void MediaPictureInPictureChanged(bool is_picture_in_picture) override {
++    Refresh();
++  }
++  void MediaStartedPlaying(const MediaPlayerInfo& video_type,
++                           const content::MediaPlayerId& id) override {
++    RefreshSoon();
++  }
++  void MediaStoppedPlaying(
++      const MediaPlayerInfo& video_type,
++      const content::MediaPlayerId& id,
++      WebContentsObserver::MediaStoppedReason reason) override {
++    RefreshSoon();
++  }
++
++  // zoom::ZoomObserver: Si5, the zoom follows Cmd-plus and the rest.
++  void OnZoomControllerDestroyed(zoom::ZoomController* controller) override {
++    zoom_observation_.Reset();
++  }
++  void OnZoomChanged(
++      const zoom::ZoomController::ZoomChangedEventData& data) override {
++    Refresh();
++  }
++
++ private:
++  void Refresh() {
++    if (strip_) {
++      strip_->Update();
++    }
++  }
++
++  // The media session learns what a page can do a moment after the page
++  // starts or stops playing; picture in picture is read once it has.
++  void RefreshSoon() {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&PageStripDelegate::Refresh,
++                                  weak_factory_.GetWeakPtr()));
++  }
++
++  void Close() {
++    if (navigation_handler_) {
++      navigation_handler_->CloseBubble();
++    }
++  }
++
++  // Si5: Chromium's zoom steps, without Chromium's zoom bubble, which would
++  // open over the panel and take its activation, closing it. The bubble is
++  // held back for this one change only: a change from the keys still shows
++  // it.
++  void Zoom(content::PageZoom step) {
++    content::WebContents* const contents = web_contents();
++    zoom::ZoomController* const controller =
++        contents ? zoom::ZoomController::FromWebContents(contents) : nullptr;
++    if (!controller) {
++      return;
++    }
++    controller->SetShowsNotificationBubble(false);
++    zoom::PageZoom::Zoom(contents, step);
++    controller->SetShowsNotificationBubble(true);
++    Refresh();
++  }
++
++  raw_ptr<SiteControlsStripView> strip_ = nullptr;
++  const raw_ptr<PageInfoNavigationHandler> navigation_handler_;
++  base::ScopedObservation<zoom::ZoomController, zoom::ZoomObserver>
++      zoom_observation_{this};
++  base::WeakPtrFactory<PageStripDelegate> weak_factory_{this};
++};
++
++// Si8: asks the question over `browser`, once page info has closed, and on
++// Clear removes what it named, if the page is still where it was.
++void AskToClearSiteData(base::WeakPtr<BrowserWindowInterface> browser,
++                        base::WeakPtr<content::WebContents> contents,
++                        std::string domain,
++                        content::StoragePartitionConfig config,
++                        ClearSiteDataQuestion question) {
++  if (!browser || !contents) {
++    return;
++  }
++  spaces::ConfirmInWindow(
++      browser.get(), std::move(question.title), std::move(question.body),
++      std::move(question.action),
++      base::BindOnce(
++          [](base::WeakPtr<content::WebContents> contents,
++             const std::string& domain,
++             const content::StoragePartitionConfig& config) {
++            // Nothing goes when the page left the site or the jar the
++            // question named while it was open.
++            ClearSiteDataAndReload(contents.get(), domain, config);
++          },
++          std::move(contents), std::move(domain), std::move(config)));
++}
++
++// The rows' delegate for a page in a tab.
++class PageRowsDelegate : public SiteControlsRowsView::Delegate,
++                         public content::WebContentsObserver,
++                         public spaces::SpaceRegistry::Observer {
++ public:
++  PageRowsDelegate(content::WebContents* contents,
++                   PageInfoNavigationHandler* navigation_handler)
++      : content::WebContentsObserver(contents),
++        navigation_handler_(navigation_handler),
++        // Si9: the switch and the site's choice, changed elsewhere -- the
++        // moon, the chord, Settings -- while the panel is open.
++        dark_pages_watcher_(ProfileFor(contents),
++                            base::BindRepeating(&PageRowsDelegate::Refresh,
++                                                base::Unretained(this))) {
++    Profile* const profile = ProfileFor(contents);
++    if (spaces::SpaceRegistry* const registry =
++            profile && !profile->IsOffTheRecord()
++                ? spaces::SpaceRegistryFactory::GetForProfile(profile)
++                : nullptr) {
++      // Si7: a Space renamed, or its session turned off, while it is open.
++      registry_observation_.Observe(registry);
++    }
++  }
++  PageRowsDelegate(const PageRowsDelegate&) = delete;
++  PageRowsDelegate& operator=(const PageRowsDelegate&) = delete;
++  ~PageRowsDelegate() override = default;
++
++  // SiteControlsRowsView::Delegate:
++  void SetRows(SiteControlsRowsView* rows) override { rows_ = rows; }
++
++  SiteControlsRowsView::State GetState() override {
++    SiteControlsRowsView::State state;
++    content::WebContents* const contents = web_contents();
++    if (!contents) {
++      return state;
++    }
++    const SiteControlsRows rows = RowsFor(ContextFor(contents));
++    if (rows.session) {
++      const content::StoragePartitionConfig jar =
++          spaces::StoragePartitionConfigForWebContents(contents);
++      state.session = SessionNameFor(spaces::IsSpaceStoragePartition(jar),
++                                     jar.partition_name(),
++                                     SpaceJarEntriesFor(ProfileFor(contents)));
++    }
++    state.clear_data = rows.clear_data && CanClearSiteCookies(contents);
++    state.dark_switch = rows.dark_switch;
++    state.dark_pages_on = DarkPagesOn(ProfileFor(contents));
++    if (rows.dark_site && CanChooseDarkPagesForSite(contents)) {
++      if (const std::optional<ContentSettingsPattern> pattern =
++              DarkPagesSitePatternFor(DarkPagesUrlFor(contents))) {
++        state.dark_site =
++            url_formatter::IDNToUnicode(DarkPagesSiteName(*pattern));
++        state.site_darkened = IsSiteDarkened(contents);
++      }
++    }
++    return state;
++  }
++
++  void ClearSiteData() override {
++    content::WebContents* const contents = web_contents();
++    BrowserWindowInterface* const browser = BrowserFor(contents);
++    if (!browser) {
++      return;
++    }
++    const std::string domain =
++        SiteCookieDomain(contents->GetLastCommittedURL());
++    if (domain.empty()) {
++      return;
++    }
++    // The site and the jar are taken now, as the question names them; the
++    // removal checks they are still the page's when the user says yes.
++    content::StoragePartitionConfig config =
++        spaces::StoragePartitionConfigForWebContents(contents);
++    ClearSiteDataQuestion question = ClearSiteDataQuestionFor(
++        url_formatter::IDNToUnicode(domain),
++        contents->GetBrowserContext()->IsOffTheRecord(),
++        spaces::IsSpaceStoragePartition(config), config.partition_name(),
++        SpaceJarEntriesFor(ProfileFor(contents)));
++    // Page info closes before the window-modal question opens over the
++    // window; a turn later, so this view is not under the question.
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&AskToClearSiteData, browser->GetWeakPtr(),
++                                  contents->GetWeakPtr(), domain,
++                                  std::move(config), std::move(question)));
++    if (navigation_handler_) {
++      navigation_handler_->CloseBubble();
++    }
++  }
++
++  void SetDarkPagesOn(bool on) override {
++    stedding::SetDarkPagesOn(ProfileFor(web_contents()), on);
++    Refresh();
++  }
++
++  void SetSiteDarkened(bool darkened) override {
++    if (web_contents()) {
++      stedding::SetSiteDarkened(web_contents(), darkened);
++    }
++    Refresh();
++  }
++
++  // spaces::SpaceRegistry::Observer:
++  void OnRegistryChanged() override { Refresh(); }
++
++ private:
++  void Refresh() {
++    if (rows_) {
++      rows_->Update();
++    }
++  }
++
++  raw_ptr<SiteControlsRowsView> rows_ = nullptr;
++  const raw_ptr<PageInfoNavigationHandler> navigation_handler_;
++  DarkPagesWatcher dark_pages_watcher_;
++  base::ScopedObservation<spaces::SpaceRegistry,
++                          spaces::SpaceRegistry::Observer>
++      registry_observation_{this};
++};
++
++RichControlsContainerView* AddToggleRow(views::View* parent,
++                                        const gfx::VectorIcon& icon,
++                                        ui::ElementIdentifier id,
++                                        base::RepeatingClosure on_pressed,
++                                        raw_ptr<views::ToggleButton>* toggle) {
++  auto row = std::make_unique<RichControlsContainerView>();
++  row->SetIcon(PageInfoViewFactory::GetImageModel(icon));
++  row->SetTitleTextStyleAndColor(views::style::STYLE_BODY_3_MEDIUM,
++                                 kColorPageInfoForeground);
++  auto button = std::make_unique<views::ToggleButton>(std::move(on_pressed));
++  button->SetProperty(views::kElementIdentifierKey, id);
++  *toggle = row->AddControl(std::move(button));
++  return parent->AddChildView(std::move(row));
++}
++
++}  // namespace
++
++SiteControlsWindow SiteControlsWindowFor(content::WebContents* contents) {
++  if (!contents || !base::FeatureList::IsEnabled(kArcStyleWindow)) {
++    return SiteControlsWindow::kOther;
++  }
++  BrowserWindowInterface* const browser = BrowserFor(contents);
++  // A popup, an app window and the picture-in-picture window are windows of
++  // other types; a little window and a peek are normal windows marked as
++  // theirs; a side panel's page is not a tab at all.
++  if (!browser || browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      IsLittleWindow(browser) || IsPeekWindow(browser)) {
++    return SiteControlsWindow::kOther;
++  }
++  if (contents->GetBrowserContext()->IsOffTheRecord()) {
++    return SiteControlsWindow::kPrivateTab;
++  }
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser);
++  return model && model->follows_registry()
++             ? SiteControlsWindow::kTab
++             : SiteControlsWindow::kTabWithoutSpaces;
++}
++
++base::RepeatingClosure SiteControlsExtensionsCallback(
++    content::WebContents* contents) {
++  BrowserWindowInterface* const browser = BrowserFor(contents);
++  if (SiteControlsWindowFor(contents) == SiteControlsWindow::kOther ||
++      !ExtensionsMenuAvailable(browser)) {
++    return base::RepeatingClosure();
++  }
++  // Page info closes after running it (PageInfoMainView's Extensions row);
++  // the window may close first.
++  return base::BindRepeating(
++      [](base::WeakPtr<BrowserWindowInterface> browser) {
++        if (browser) {
++          ShowExtensionsMenu(browser.get());
++        }
++      },
++      browser->GetWeakPtr());
++}
++
++// SiteControlsStripView -------------------------------------------------------
++
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView, kElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView,
++                                      kCopyLinkElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView,
++                                      kCopyTitleElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView, kMuteElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView,
++                                      kPictureInPictureElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView, kZoomOutElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView,
++                                      kZoomResetElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsStripView, kZoomInElementId);
++
++SiteControlsStripView::SiteControlsStripView(std::unique_ptr<Delegate> delegate)
++    : delegate_(std::move(delegate)) {
++  SetProperty(views::kElementIdentifierKey, kElementId);
++  auto* const layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal,
++      gfx::Insets::VH(0, kStripSideInset), kStripSpacing));
++  layout->set_cross_axis_alignment(
++      views::BoxLayout::CrossAxisAlignment::kCenter);
++
++  // Si11: the order Tab goes through them is the order they are drawn in.
++  copy_link_ = AddIconButton(Action::kCopyLink, kCopyLinkElementId, this);
++  copy_title_ = AddIconButton(Action::kCopyTitle, kCopyTitleElementId, this);
++  mute_ = AddIconButton(Action::kToggleMute, kMuteElementId, this);
++  picture_in_picture_ = AddIconButton(Action::kTogglePictureInPicture,
++                                      kPictureInPictureElementId, this);
++
++  views::View* const gap = AddChildView(std::make_unique<views::View>());
++  layout->SetFlexForView(gap, 1);
++
++  zoom_out_ = AddIconButton(Action::kZoomOut, kZoomOutElementId, this);
++  zoom_reset_ = AddChildView(std::make_unique<views::LabelButton>(
++      base::BindRepeating(&SiteControlsStripView::OnPressed,
++                          base::Unretained(this), Action::kZoomReset),
++      std::u16string()));
++  zoom_reset_->SetProperty(views::kElementIdentifierKey, kZoomResetElementId);
++  zoom_reset_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++  // Wide enough for "500%", so the stepper does not shift as it zooms.
++  zoom_reset_->SetMinSize(gfx::Size(48, 0));
++  zoom_in_ = AddIconButton(Action::kZoomIn, kZoomInElementId, this);
++
++  delegate_->SetStrip(this);
++  Update();
++}
++
++SiteControlsStripView::~SiteControlsStripView() {
++  // The delegate observes the page and calls back into this view.
++  delegate_->SetStrip(nullptr);
++}
++
++views::ImageButton* SiteControlsStripView::AddIconButton(
++    Action action,
++    ui::ElementIdentifier id,
++    views::View* parent) {
++  const State state;
++  std::unique_ptr<views::ImageButton> button =
++      views::CreateVectorImageButtonWithNativeTheme(
++          base::BindRepeating(&SiteControlsStripView::OnPressed,
++                              base::Unretained(this), action),
++          IconFor(action, state), kStripIconSize);
++  button->SetProperty(views::kElementIdentifierKey, id);
++  const std::u16string name = NameFor(action, state);
++  button->GetViewAccessibility().SetName(name);
++  button->SetTooltipText(Tooltip(name, CommandFor(action)));
++  return parent->AddChildView(std::move(button));
++}
++
++std::u16string SiteControlsStripView::Tooltip(const std::u16string& name,
++                                              int command_id) {
++  const std::u16string chord =
++      command_id ? delegate_->ChordFor(command_id) : std::u16string();
++  return chord.empty()
++             ? name
++             : l10n_util::GetStringFUTF16(
++                   IDS_STEDDING_SITE_CONTROLS_NAME_WITH_CHORD, name, chord);
++}
++
++void SiteControlsStripView::OnPressed(Action action, const ui::Event& event) {
++  // Si2, copy-link L7: an Option-click (Alt-click) on Copy link copies the
++  // Markdown link.
++  if (action == Action::kCopyLink && event.IsAltDown()) {
++    action = Action::kCopyMarkdownLink;
++  }
++  // The delegate may close the panel, which deletes this view a turn later;
++  // nothing of it is read after the call.
++  delegate_->Run(action);
++}
++
++void SiteControlsStripView::Update() {
++  const State state = delegate_->GetState();
++
++  copy_link_->SetEnabled(state.copy_link_enabled);
++
++  const std::u16string mute = NameFor(Action::kToggleMute, state);
++  SetIcon(mute_, IconFor(Action::kToggleMute, state));
++  mute_->GetViewAccessibility().SetName(mute);
++  mute_->SetTooltipText(Tooltip(mute, CommandFor(Action::kToggleMute)));
++
++  const std::u16string pip = NameFor(Action::kTogglePictureInPicture, state);
++  SetIcon(picture_in_picture_, IconFor(Action::kTogglePictureInPicture, state));
++  picture_in_picture_->GetViewAccessibility().SetName(pip);
++  picture_in_picture_->SetTooltipText(
++      Tooltip(pip, CommandFor(Action::kTogglePictureInPicture)));
++  picture_in_picture_->SetEnabled(state.picture_in_picture !=
++                                  PictureInPicture::kNothing);
++
++  const std::u16string percent = base::FormatPercent(state.zoom_percent);
++  zoom_reset_->SetText(percent);
++  zoom_reset_->GetViewAccessibility().SetName(l10n_util::GetStringFUTF16(
++      IDS_STEDDING_SITE_CONTROLS_RESET_ZOOM_NAME, percent));
++  zoom_reset_->SetTooltipText(Tooltip(NameFor(Action::kZoomReset, state),
++                                      CommandFor(Action::kZoomReset)));
++}
++
++BEGIN_METADATA(SiteControlsStripView)
++END_METADATA
++
++// SiteControlsRowsView --------------------------------------------------------
++
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsRowsView, kElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsRowsView, kSessionElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsRowsView,
++                                      kClearDataElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsRowsView,
++                                      kDarkPagesElementId);
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SiteControlsRowsView, kDarkSiteElementId);
++
++SiteControlsRowsView::State::State() = default;
++SiteControlsRowsView::State::State(const State&) = default;
++SiteControlsRowsView::State& SiteControlsRowsView::State::operator=(
++    const State&) = default;
++SiteControlsRowsView::State::~State() = default;
++
++SiteControlsRowsView::SiteControlsRowsView(std::unique_ptr<Delegate> delegate)
++    : delegate_(std::move(delegate)) {
++  SetProperty(views::kElementIdentifierKey, kElementId);
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical));
++
++  // Si7: the session row, its words and its mark set by Update(). Its
++  // tooltip and accessible description are the mark's (sessions S32): the
++  // mark itself is drawn and never named, so a screen reader hears the row's
++  // name and the description once.
++  auto session = std::make_unique<RichControlsContainerView>();
++  session->SetProperty(views::kElementIdentifierKey, kSessionElementId);
++  session->SetIcon(PageInfoViewFactory::GetImageModel(kGridViewIcon));
++  session->SetTitleTextStyleAndColor(views::style::STYLE_BODY_3_MEDIUM,
++                                     kColorPageInfoForeground);
++  session->GetViewAccessibility().SetRole(ax::mojom::Role::kStaticText);
++  session->GetViewAccessibility().SetIsLeaf(true);
++  session_mark_ = session->AddControl(std::make_unique<IsolationMarkView>(
++      IsolationMarkView::Form::kGlyph, kColorPageInfoForeground,
++      ui::kColorDialogBackground));
++  session_mark_->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(0, IsolationMarkView::kGapAfterText, 0, 0));
++  session_row_ = AddChildView(std::move(session));
++
++  // Si8: Clear site data, a row that opens a question, as Chromium's rows
++  // that open a subpage are buttons.
++  auto clear = std::make_unique<RichHoverButton>(
++      base::BindRepeating(
++          [](SiteControlsRowsView* rows) { rows->delegate_->ClearSiteData(); },
++          base::Unretained(this)),
++      PageInfoViewFactory::GetImageModel(
++          features::IsRoundedIconsEnabled() ? kDeleteIcon : kDeleteOldIcon),
++      l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_CLEAR_DATA),
++      std::u16string());
++  clear->SetProperty(views::kElementIdentifierKey, kClearDataElementId);
++  clear->SetTitleTextStyleAndColor(views::style::STYLE_BODY_3_MEDIUM,
++                                   kColorPageInfoForeground);
++  clear_data_ = AddChildView(std::move(clear));
++
++  // Si9: the switch, and the site's choice under it.
++  dark_pages_row_ = AddToggleRow(
++      this, kMoonIcon, kDarkPagesElementId,
++      base::BindRepeating(
++          [](SiteControlsRowsView* rows) {
++            rows->delegate_->SetDarkPagesOn(rows->dark_pages_->GetIsOn());
++          },
++          base::Unretained(this)),
++      &dark_pages_);
++  dark_pages_row_->SetTitle(
++      l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_DARK_PAGES));
++  dark_pages_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STEDDING_SITE_CONTROLS_DARK_PAGES));
++
++  dark_site_row_ = AddToggleRow(
++      this, kMoonIcon, kDarkSiteElementId,
++      base::BindRepeating(
++          [](SiteControlsRowsView* rows) {
++            rows->delegate_->SetSiteDarkened(rows->dark_site_->GetIsOn());
++          },
++          base::Unretained(this)),
++      &dark_site_);
++
++  delegate_->SetRows(this);
++  Update();
++}
++
++SiteControlsRowsView::~SiteControlsRowsView() {
++  delegate_->SetRows(nullptr);
++}
++
++void SiteControlsRowsView::Update() {
++  const State state = delegate_->GetState();
++
++  session_row_->SetVisible(state.session.has_value());
++  if (state.session) {
++    session_row_->SetTitle(state.session->text);
++    session_mark_->SetVisible(state.session->marked);
++    const std::u16string description = state.session->marked
++                                           ? spaces::IsolationMarkDescription()
++                                           : std::u16string();
++    session_row_->SetTooltipText(description);
++    session_row_->GetViewAccessibility().SetName(state.session->text);
++    if (description.empty()) {
++      session_row_->GetViewAccessibility().RemoveDescription();
++    } else {
++      session_row_->GetViewAccessibility().SetDescription(description);
++    }
++  }
++
++  clear_data_->SetVisible(state.clear_data);
++
++  dark_pages_row_->SetVisible(state.dark_switch);
++  dark_pages_->SetIsOn(state.dark_pages_on);
++
++  dark_site_row_->SetVisible(state.dark_switch && state.dark_site.has_value());
++  if (state.dark_site) {
++    const std::u16string title = l10n_util::GetStringFUTF16(
++        IDS_STEDDING_SITE_CONTROLS_DARKEN_SITE, *state.dark_site);
++    dark_site_row_->SetTitle(title);
++    dark_site_->GetViewAccessibility().SetName(title);
++    dark_site_->SetIsOn(state.site_darkened);
++  }
++
++  // A row shown or hidden changes the panel's height.
++  PreferredSizeChanged();
++}
++
++BEGIN_METADATA(SiteControlsRowsView)
++END_METADATA
++
++std::unique_ptr<views::View> MaybeCreateSiteControlsStrip(
++    content::WebContents* contents,
++    PageInfoNavigationHandler* navigation_handler) {
++  if (!RowsFor(ContextFor(contents)).strip) {
++    return nullptr;
++  }
++  return std::make_unique<SiteControlsStripView>(
++      std::make_unique<PageStripDelegate>(contents, navigation_handler));
++}
++
++std::unique_ptr<views::View> MaybeCreateSiteControlsRows(
++    content::WebContents* contents,
++    PageInfoNavigationHandler* navigation_handler) {
++  const SiteControlsRows rows = RowsFor(ContextFor(contents));
++  if (!rows.session && !rows.clear_data && !rows.dark_switch) {
++    return nullptr;
++  }
++  return std::make_unique<SiteControlsRowsView>(
++      std::make_unique<PageRowsDelegate>(contents, navigation_handler));
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/page_info/stedding_site_controls_view.h b/chrome/browser/ui/views/page_info/stedding_site_controls_view.h
+new file mode 100644
+index 0000000000000..5a5a678b13994
+--- /dev/null
++++ b/chrome/browser/ui/views/page_info/stedding_site_controls_view.h
+@@ -0,0 +1,235 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_PAGE_INFO_STEDDING_SITE_CONTROLS_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_PAGE_INFO_STEDDING_SITE_CONTROLS_VIEW_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/functional/callback_forward.h"
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/ui/stedding/site_controls.h"
++#include "ui/base/interaction/element_identifier.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/view.h"
++
++class PageInfoNavigationHandler;
++class RichControlsContainerView;
++class RichHoverButton;
++
++namespace content {
++class WebContents;
++}
++
++namespace ui {
++class Event;
++}
++
++namespace views {
++class Button;
++class ImageButton;
++class LabelButton;
++class ToggleButton;
++}  // namespace views
++
++namespace stedding {
++
++class IsolationMarkView;
++
++// Site controls (docs/features/site-controls.md, BACKLOG S-118; toolbar
++// T47): Stedding's controls in Chromium's page info, which the site chip
++// (toolbar T5) and the command bar's View Site Information (commandbar K33)
++// open. PageInfoMainView adds the strip under its header and the rows before
++// "Site settings"; it is built again each time the user comes back from a
++// subpage, and so are they.
++
++// Si1: which window the page `contents` shows is in, as the panel's rules
++// read it: a tab of a normal tabbed window -- not a little window, not a
++// peek -- in a normal or a private profile, with or without the profile's
++// Spaces; anything else is kOther, as it is while the Stedding window style
++// is off.
++SiteControlsWindow SiteControlsWindowFor(content::WebContents* contents);
++
++// Si10: what Chromium's Extensions row in page info runs for `contents`'s
++// window: the extensions menu, once page info has closed. Null when the
++// window has no extensions container (extensions turned off) or is not a
++// tabbed window the controls are for, so Chromium draws no row that does
++// nothing.
++base::RepeatingClosure SiteControlsExtensionsCallback(
++    content::WebContents* contents);
++
++// Si2-Si5: copy link, copy title, mute and picture in picture on the left;
++// zoom out, the zoom (a button that resets it) and zoom in on the right.
++class SiteControlsStripView : public views::View {
++  METADATA_HEADER(SiteControlsStripView, views::View)
++
++ public:
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kCopyLinkElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kCopyTitleElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kMuteElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPictureInPictureElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kZoomOutElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kZoomResetElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kZoomInElementId);
++
++  enum class Action {
++    kCopyLink,
++    // An Option-click (Alt-click) on Copy link: the Markdown link (L7).
++    kCopyMarkdownLink,
++    kCopyTitle,
++    kToggleMute,
++    kTogglePictureInPicture,
++    kZoomOut,
++    kZoomReset,
++    kZoomIn,
++  };
++
++  // Si4: what the picture-in-picture key would do (media_keys.h).
++  enum class PictureInPicture { kNothing, kEnter, kExit };
++
++  struct State {
++    // Si2: whether the window's Copy link command is on: the sharing policy
++    // that turns off Shift-Cmd-C turns this off too (copy-link L7).
++    bool copy_link_enabled = true;
++    // Si4: whether the mute key would mute (MuteKeyWouldMute).
++    bool mute_would_mute = true;
++    PictureInPicture picture_in_picture = PictureInPicture::kNothing;
++    // Si5: the tab's zoom, in percent.
++    int zoom_percent = 100;
++  };
++
++  // The page and the window the strip acts on. A test gives its own.
++  class Delegate {
++   public:
++    virtual ~Delegate() = default;
++    // Called once, before the first GetState(): the strip to keep current
++    // when the page's state changes.
++    virtual void SetStrip(SiteControlsStripView* strip) {}
++    virtual State GetState() = 0;
++    // The window's chord for `command_id` as its menus print it (the Mac's
++    // or Windows' own accelerator tables), or empty when it has none.
++    virtual std::u16string ChordFor(int command_id) = 0;
++    virtual void Run(Action action) = 0;
++  };
++
++  explicit SiteControlsStripView(std::unique_ptr<Delegate> delegate);
++  SiteControlsStripView(const SiteControlsStripView&) = delete;
++  SiteControlsStripView& operator=(const SiteControlsStripView&) = delete;
++  ~SiteControlsStripView() override;
++
++  // Reads the state again: Mute's words and icon, Picture in picture's
++  // words and whether it is enabled, the zoom.
++  void Update();
++
++  views::ImageButton* copy_link() { return copy_link_; }
++  views::ImageButton* copy_title() { return copy_title_; }
++  views::ImageButton* mute() { return mute_; }
++  views::ImageButton* picture_in_picture() { return picture_in_picture_; }
++  views::ImageButton* zoom_out() { return zoom_out_; }
++  views::LabelButton* zoom_reset() { return zoom_reset_; }
++  views::ImageButton* zoom_in() { return zoom_in_; }
++
++ private:
++  views::ImageButton* AddIconButton(Action action,
++                                    ui::ElementIdentifier id,
++                                    views::View* parent);
++  void OnPressed(Action action, const ui::Event& event);
++  // The tooltip: the action's name, and its chord after it when it has one.
++  std::u16string Tooltip(const std::u16string& name, int command_id);
++
++  std::unique_ptr<Delegate> delegate_;
++  raw_ptr<views::ImageButton> copy_link_ = nullptr;
++  raw_ptr<views::ImageButton> copy_title_ = nullptr;
++  raw_ptr<views::ImageButton> mute_ = nullptr;
++  raw_ptr<views::ImageButton> picture_in_picture_ = nullptr;
++  raw_ptr<views::ImageButton> zoom_out_ = nullptr;
++  raw_ptr<views::LabelButton> zoom_reset_ = nullptr;
++  raw_ptr<views::ImageButton> zoom_in_ = nullptr;
++};
++
++// Si7-Si9: the session row, Clear site data, and the dark pages rows.
++class SiteControlsRowsView : public views::View {
++  METADATA_HEADER(SiteControlsRowsView, views::View)
++
++ public:
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kSessionElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kClearDataElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kDarkPagesElementId);
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kDarkSiteElementId);
++
++  struct State {
++    State();
++    State(const State&);
++    State& operator=(const State&);
++    ~State();
++
++    // Si7: the session row's words, or none (no row).
++    std::optional<SessionName> session;
++    // Si8: whether Clear site data is offered.
++    bool clear_data = false;
++    // Si9: the Dark pages switch, and its state.
++    bool dark_switch = false;
++    bool dark_pages_on = false;
++    // Si9: the site Darken <site> names, or none (no row), and its state.
++    std::optional<std::u16string> dark_site;
++    bool site_darkened = false;
++  };
++
++  class Delegate {
++   public:
++    virtual ~Delegate() = default;
++    // Called once, before the first GetState(): the rows to keep current
++    // when the state changes elsewhere.
++    virtual void SetRows(SiteControlsRowsView* rows) {}
++    virtual State GetState() = 0;
++    virtual void ClearSiteData() = 0;
++    virtual void SetDarkPagesOn(bool on) = 0;
++    virtual void SetSiteDarkened(bool darkened) = 0;
++  };
++
++  explicit SiteControlsRowsView(std::unique_ptr<Delegate> delegate);
++  SiteControlsRowsView(const SiteControlsRowsView&) = delete;
++  SiteControlsRowsView& operator=(const SiteControlsRowsView&) = delete;
++  ~SiteControlsRowsView() override;
++
++  // Reads the state again: the session's words and mark, which rows show,
++  // and the switches.
++  void Update();
++
++  RichControlsContainerView* session_row() { return session_row_; }
++  IsolationMarkView* session_mark() { return session_mark_; }
++  RichHoverButton* clear_data() { return clear_data_; }
++  RichControlsContainerView* dark_pages_row() { return dark_pages_row_; }
++  views::ToggleButton* dark_pages() { return dark_pages_; }
++  RichControlsContainerView* dark_site_row() { return dark_site_row_; }
++  views::ToggleButton* dark_site() { return dark_site_; }
++
++ private:
++  std::unique_ptr<Delegate> delegate_;
++  raw_ptr<RichControlsContainerView> session_row_ = nullptr;
++  raw_ptr<IsolationMarkView> session_mark_ = nullptr;
++  raw_ptr<RichHoverButton> clear_data_ = nullptr;
++  raw_ptr<RichControlsContainerView> dark_pages_row_ = nullptr;
++  raw_ptr<views::ToggleButton> dark_pages_ = nullptr;
++  raw_ptr<RichControlsContainerView> dark_site_row_ = nullptr;
++  raw_ptr<views::ToggleButton> dark_site_ = nullptr;
++};
++
++// The strip and the rows for the page info of `contents`, or null when
++// RowsFor() says nothing of them applies (Si1). `navigation_handler` is the
++// page info bubble, which the strip and Clear close.
++std::unique_ptr<views::View> MaybeCreateSiteControlsStrip(
++    content::WebContents* contents,
++    PageInfoNavigationHandler* navigation_handler);
++std::unique_ptr<views::View> MaybeCreateSiteControlsRows(
++    content::WebContents* contents,
++    PageInfoNavigationHandler* navigation_handler);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_VIEWS_PAGE_INFO_STEDDING_SITE_CONTROLS_VIEW_H_
+diff --git a/chrome/browser/ui/views/page_info/stedding_site_controls_view_unittest.cc b/chrome/browser/ui/views/page_info/stedding_site_controls_view_unittest.cc
+new file mode 100644
+index 0000000000000..d96f6a6c3dac3
+--- /dev/null
++++ b/chrome/browser/ui/views/page_info/stedding_site_controls_view_unittest.cc
+@@ -0,0 +1,274 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
++
++#include <memory>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/ui/spaces/isolation_mark.h"
++#include "chrome/browser/ui/stedding/site_controls.h"
++#include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/views/controls/rich_controls_container_view.h"
++#include "chrome/browser/ui/views/controls/rich_hover_button.h"
++#include "chrome/browser/ui/views/stedding/isolation_mark_view.h"
++#include "chrome/test/views/chrome_views_test_base.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/types/event_type.h"
++#include "ui/gfx/geometry/point.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/image_button.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/button/toggle_button.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/test/button_test_api.h"
++#include "ui/views/widget/widget.h"
++
++namespace stedding {
++namespace {
++
++using Action = SiteControlsStripView::Action;
++using PictureInPicture = SiteControlsStripView::PictureInPicture;
++
++// The window's chords as a test sets them, and every action run.
++class FakeStripDelegate : public SiteControlsStripView::Delegate {
++ public:
++  explicit FakeStripDelegate(SiteControlsStripView::State* state,
++                             std::vector<Action>* runs)
++      : state_(state), runs_(runs) {}
++
++  SiteControlsStripView::State GetState() override { return *state_; }
++  std::u16string ChordFor(int command_id) override {
++    switch (command_id) {
++      case IDC_COPY_URL:
++        return u"Shift+Ctrl+C";
++      case IDC_STEDDING_TOGGLE_TAB_MUTED:
++        return u"Ctrl+M";
++      case IDC_STEDDING_TOGGLE_PICTURE_IN_PICTURE:
++        return u"Ctrl+Alt+Shift+P";
++      case IDC_ZOOM_MINUS:
++        return u"Ctrl+Minus";
++      case IDC_ZOOM_NORMAL:
++        return u"Ctrl+0";
++      case IDC_ZOOM_PLUS:
++        return u"Ctrl+Plus";
++      default:
++        return std::u16string();
++    }
++  }
++  void Run(Action action) override { runs_->push_back(action); }
++
++ private:
++  raw_ptr<SiteControlsStripView::State> state_;
++  raw_ptr<std::vector<Action>> runs_;
++};
++
++class FakeRowsDelegate : public SiteControlsRowsView::Delegate {
++ public:
++  explicit FakeRowsDelegate(SiteControlsRowsView::State* state)
++      : state_(state) {}
++
++  SiteControlsRowsView::State GetState() override { return *state_; }
++  void ClearSiteData() override { ++clears_; }
++  void SetDarkPagesOn(bool on) override { state_->dark_pages_on = on; }
++  void SetSiteDarkened(bool darkened) override {
++    state_->site_darkened = darkened;
++  }
++
++  int clears_ = 0;
++
++ private:
++  raw_ptr<SiteControlsRowsView::State> state_;
++};
++
++class SiteControlsViewTest : public ChromeViewsTestBase {
++ protected:
++  void SetUp() override {
++    ChromeViewsTestBase::SetUp();
++    widget_ = CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++    auto panel = std::make_unique<views::View>();
++    panel->SetLayoutManager(std::make_unique<views::BoxLayout>(
++        views::BoxLayout::Orientation::kVertical));
++    strip_ = panel->AddChildView(std::make_unique<SiteControlsStripView>(
++        std::make_unique<FakeStripDelegate>(&strip_state_, &runs_)));
++    rows_state_.session = SessionName{u"Work · Independent session", true};
++    rows_state_.clear_data = true;
++    rows_state_.dark_switch = true;
++    rows_state_.dark_pages_on = true;
++    rows_state_.dark_site = u"example.com";
++    auto rows_delegate = std::make_unique<FakeRowsDelegate>(&rows_state_);
++    rows_delegate_ = rows_delegate.get();
++    rows_ = panel->AddChildView(
++        std::make_unique<SiteControlsRowsView>(std::move(rows_delegate)));
++    widget_->SetContentsView(std::move(panel));
++    widget_->SetBounds(gfx::Rect(0, 0, 360, 400));
++    widget_->Show();
++  }
++
++  void TearDown() override {
++    strip_ = nullptr;
++    rows_ = nullptr;
++    rows_delegate_ = nullptr;
++    widget_.reset();
++    ChromeViewsTestBase::TearDown();
++  }
++
++  static std::u16string NameOf(views::View* view) {
++    return view->GetViewAccessibility().GetCachedName();
++  }
++
++  SiteControlsStripView::State strip_state_;
++  std::vector<Action> runs_;
++  SiteControlsRowsView::State rows_state_;
++  std::unique_ptr<views::Widget> widget_;
++  raw_ptr<SiteControlsStripView> strip_ = nullptr;
++  raw_ptr<SiteControlsRowsView> rows_ = nullptr;
++  raw_ptr<FakeRowsDelegate> rows_delegate_ = nullptr;
++};
++
++// site-controls Si2, Si4, Si5, Si11: every control is named for its action,
++// and its tooltip adds the window's chord when it has one; Mute and Picture
++// in picture take the words of what they would do; the zoom is a button
++// named for the reset with the percentage; an Option-click (Alt-click) on
++// Copy link asks for the Markdown link.
++TEST_F(SiteControlsViewTest, EveryControlIsNamedAndShowsItsChord) {
++  EXPECT_EQ(u"Copy link", NameOf(strip_->copy_link()));
++  EXPECT_EQ(u"Copy link (Shift+Ctrl+C)", strip_->copy_link()->GetTooltipText());
++  EXPECT_EQ(u"Copy title", NameOf(strip_->copy_title()));
++  EXPECT_EQ(u"Copy title", strip_->copy_title()->GetTooltipText())
++      << "Copy title has no chord";
++  EXPECT_EQ(u"Mute tab", NameOf(strip_->mute()));
++  EXPECT_EQ(u"Mute tab (Ctrl+M)", strip_->mute()->GetTooltipText());
++  EXPECT_EQ(u"Picture in picture", NameOf(strip_->picture_in_picture()));
++  EXPECT_FALSE(strip_->picture_in_picture()->GetEnabled())
++      << "nothing to put in picture in picture";
++  EXPECT_EQ(u"Zoom out", NameOf(strip_->zoom_out()));
++  EXPECT_EQ(u"Zoom out (Ctrl+Minus)", strip_->zoom_out()->GetTooltipText());
++  EXPECT_EQ(u"Zoom in (Ctrl+Plus)", strip_->zoom_in()->GetTooltipText());
++  EXPECT_EQ(u"100%", strip_->zoom_reset()->GetText());
++  EXPECT_EQ(u"Reset zoom, 100%", NameOf(strip_->zoom_reset()));
++  EXPECT_EQ(u"Reset zoom (Ctrl+0)", strip_->zoom_reset()->GetTooltipText());
++
++  strip_state_.mute_would_mute = false;
++  strip_state_.picture_in_picture = PictureInPicture::kExit;
++  strip_state_.zoom_percent = 110;
++  strip_state_.copy_link_enabled = false;
++  strip_->Update();
++  EXPECT_EQ(u"Unmute tab", NameOf(strip_->mute()));
++  EXPECT_EQ(u"Unmute tab (Ctrl+M)", strip_->mute()->GetTooltipText());
++  EXPECT_EQ(u"Exit picture in picture", NameOf(strip_->picture_in_picture()));
++  EXPECT_TRUE(strip_->picture_in_picture()->GetEnabled());
++  EXPECT_EQ(u"110%", strip_->zoom_reset()->GetText());
++  EXPECT_EQ(u"Reset zoom, 110%", NameOf(strip_->zoom_reset()));
++  EXPECT_FALSE(strip_->copy_link()->GetEnabled())
++      << "the policy that turns off the command turns off the button";
++  strip_state_.copy_link_enabled = true;
++  strip_->Update();
++
++  const ui::MouseEvent click(
++      ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
++      base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
++  const ui::MouseEvent alt_click(ui::EventType::kMousePressed, gfx::Point(),
++                                 gfx::Point(), base::TimeTicks(),
++                                 ui::EF_LEFT_MOUSE_BUTTON | ui::EF_ALT_DOWN,
++                                 ui::EF_LEFT_MOUSE_BUTTON);
++  views::test::ButtonTestApi(strip_->copy_link()).NotifyClick(click);
++  views::test::ButtonTestApi(strip_->copy_link()).NotifyClick(alt_click);
++  views::test::ButtonTestApi(strip_->copy_title()).NotifyClick(click);
++  views::test::ButtonTestApi(strip_->mute()).NotifyClick(click);
++  views::test::ButtonTestApi(strip_->zoom_in()).NotifyClick(click);
++  views::test::ButtonTestApi(strip_->zoom_reset()).NotifyClick(click);
++  EXPECT_EQ((std::vector<Action>{Action::kCopyLink, Action::kCopyMarkdownLink,
++                                 Action::kCopyTitle, Action::kToggleMute,
++                                 Action::kZoomIn, Action::kZoomReset}),
++            runs_);
++
++  // Si7, Si9: the rows' names.
++  EXPECT_EQ(u"Work · Independent session",
++            rows_->session_row()->GetTitleForTesting());
++  EXPECT_EQ(u"Work · Independent session", NameOf(rows_->session_row()));
++  EXPECT_EQ(spaces::IsolationMarkDescription(),
++            rows_->session_row()->GetViewAccessibility().GetCachedDescription())
++      << "the mark's meaning, read once with the row";
++  EXPECT_EQ(spaces::IsolationMarkDescription(),
++            rows_->session_row()->GetTooltipText());
++  EXPECT_TRUE(rows_->session_mark()->GetVisible());
++  EXPECT_EQ(u"Clear site data…", rows_->clear_data()->GetTitleText());
++  EXPECT_EQ(u"Dark pages", NameOf(rows_->dark_pages()));
++  EXPECT_TRUE(rows_->dark_pages()->GetIsOn());
++  EXPECT_EQ(u"Darken example.com", NameOf(rows_->dark_site()));
++  EXPECT_EQ(u"Darken example.com",
++            rows_->dark_site_row()->GetTitleForTesting());
++}
++
++// site-controls Si7-Si9: the rows follow their state: the shared session has
++// no mark and no description; Clear goes on a page with no site; Darken
++// <site> goes when dark pages is off and comes back when it is on; the
++// switches report what they were turned to.
++TEST_F(SiteControlsViewTest, TheRowsFollowTheirState) {
++  rows_state_.session = SessionName{u"Shared session", false};
++  rows_state_.clear_data = false;
++  rows_state_.dark_pages_on = false;
++  rows_state_.dark_site.reset();
++  rows_->Update();
++  EXPECT_EQ(u"Shared session", rows_->session_row()->GetTitleForTesting());
++  EXPECT_FALSE(rows_->session_mark()->GetVisible());
++  EXPECT_TRUE(rows_->session_row()
++                  ->GetViewAccessibility()
++                  .GetCachedDescription()
++                  .empty());
++  EXPECT_FALSE(rows_->clear_data()->GetVisible());
++  EXPECT_TRUE(rows_->dark_pages_row()->GetVisible());
++  EXPECT_FALSE(rows_->dark_pages()->GetIsOn());
++  EXPECT_FALSE(rows_->dark_site_row()->GetVisible());
++
++  views::test::ButtonTestApi(rows_->dark_pages())
++      .NotifyClick(ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(),
++                                  gfx::Point(), base::TimeTicks(),
++                                  ui::EF_LEFT_MOUSE_BUTTON,
++                                  ui::EF_LEFT_MOUSE_BUTTON));
++  EXPECT_TRUE(rows_state_.dark_pages_on) << "the switch turned on reports on";
++
++  rows_state_.session.reset();
++  rows_->Update();
++  EXPECT_FALSE(rows_->session_row()->GetVisible())
++      << "a private window and a Blank Window have no session row";
++}
++
++// site-controls Si11: Tab goes through the strip in order -- the copies,
++// mute, picture in picture, then the zoom -- and on to the rows: Clear site
++// data, then the switches.
++TEST_F(SiteControlsViewTest, TabOrderFollowsThePanel) {
++  strip_state_.picture_in_picture = PictureInPicture::kEnter;
++  strip_->Update();
++  views::FocusManager* const focus = widget_->GetFocusManager();
++  focus->SetKeyboardAccessible(true);
++  std::vector<views::View*> order;
++  views::View* view = nullptr;
++  for (int i = 0; i < 20; ++i) {
++    view = focus->GetNextFocusableView(view, widget_.get(), /*reverse=*/false,
++                                       /*dont_loop=*/true);
++    if (!view) {
++      break;
++    }
++    order.push_back(view);
++  }
++  const std::vector<views::View*> expected = {
++      strip_->copy_link(), strip_->copy_title(),
++      strip_->mute(),      strip_->picture_in_picture(),
++      strip_->zoom_out(),  strip_->zoom_reset(),
++      strip_->zoom_in(),   rows_->clear_data(),
++      rows_->dark_pages(), rows_->dark_site()};
++  EXPECT_EQ(expected, order);
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 1bb5f36e6b869..44d041622979b 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -67,6 +67,7 @@ test("stedding_browser_tests") {
+     "sidebar_rail_browsertest.cc",
+     "sidebar_test_util.cc",
+     "sidebar_test_util.h",
++    "site_controls_browsertest.cc",
+     "sleep_gate_browsertest.cc",
+     "sleep_in_use_browsertest.cc",
+     "sleep_timer_browsertest.cc",
+@@ -204,6 +205,16 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/views/infobars",
+     "//chrome/browser/ui/views/interaction",
+     "//chrome/browser/ui/views/page_action",
++    # site-controls (BACKLOG S-118): page info, the location bar that opens
++    # it, and the zoom it steps.
++    "//chrome/browser/ui:bubble_anchor_util",
++    "//chrome/browser/ui/page_info",
++    "//chrome/browser/ui/stedding:site_controls",
++    "//chrome/browser/ui/views/controls",
++    "//chrome/browser/ui/views/location_bar",
++    "//chrome/browser/ui/views/page_info",
++    "//components/page_info",
++    "//components/zoom",
+     "//chrome/browser/ui/views/session_restore_infobar",
+     "//chrome/browser/ui/views/spaces",
+     "//chrome/browser/ui/views/tabs:tab_strip",
+diff --git a/chrome/test/stedding/hidden_row_controls_browsertest.cc b/chrome/test/stedding/hidden_row_controls_browsertest.cc
+index 0a0fde1557f9a..14664cadb6d59 100644
+--- a/chrome/test/stedding/hidden_row_controls_browsertest.cc
++++ b/chrome/test/stedding/hidden_row_controls_browsertest.cc
+@@ -44,6 +44,7 @@
+ #include "chrome/browser/ui/views/commandbar/address_row_controls.h"
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
+ #include "chrome/browser/ui/views/controls/hover_button.h"
++#include "chrome/browser/ui/views/extensions/extensions_menu_coordinator.h"
+ #include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
+ #include "chrome/browser/ui/views/extensions/extensions_menu_view.h"
+ #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
+@@ -52,6 +53,7 @@
+ #include "chrome/browser/ui/views/global_media_controls/media_dialog_view.h"
+ #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button.h"
+ #include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
++#include "chrome/browser/ui/views/page_info/page_info_main_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+@@ -83,12 +85,15 @@
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/image/image_skia.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
++#include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/controls/webview/webview.h"
+ #include "ui/views/focus/focus_manager.h"
+ #include "ui/views/layout/animating_layout_manager.h"
+ #include "ui/views/test/button_test_api.h"
+ #include "ui/views/test/views_test_utils.h"
++#include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/widget/widget_utils.h"
+ #include "url/gurl.h"
+@@ -817,4 +822,71 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
+       << "the button went with the page";
+ }
+ 
++// site-controls Si10 (BACKLOG S-118), toolbar T40: with the row hidden, the
++// Extensions row of the site controls' page info, opened from the command
++// bar's View Site Information, closes page info and opens the extensions
++// menu inside the window, in the page card's top half at its left, from the
++// top container; the row stays hidden.
++IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest,
++                       TheSiteControlsExtensionsRowOpensInsideThePage) {
++  ASSERT_TRUE(LoadAction("Stedding Popup Probe", /*popup=*/true));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("site.test", "/title1.html")));
++  ExtensionsToolbarDesktop* const container =
++      browser_view()->toolbar()->extensions_container();
++  ASSERT_TRUE(container);
++  ASSERT_NO_FATAL_FAILURE(HideTheRow());
++
++  ASSERT_NO_FATAL_FAILURE(RunRow(u"View Site Information"));
++  views::BubbleDialogDelegateView* panel = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    panel = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++    return panel && panel->GetWidget() && panel->GetWidget()->IsVisible();
++  })) << "no page info";
++  views::View* row = nullptr;
++  std::vector<views::View*> stack = {panel};
++  while (!stack.empty() && !row) {
++    views::View* const view = stack.back();
++    stack.pop_back();
++    if (view->GetProperty(views::kElementIdentifierKey) ==
++        PageInfoMainView::kSeeExtensionsButtonElementId) {
++      row = view;
++    }
++    for (views::View* child : view->children()) {
++      stack.push_back(child);
++    }
++  }
++  ASSERT_TRUE(row) << "the site controls' page info has no Extensions row";
++  views::test::ButtonTestApi(views::AsViewClass<views::Button>(row))
++      .NotifyClick(ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(),
++                                  gfx::Point(), base::TimeTicks::Now(),
++                                  ui::EF_LEFT_MOUSE_BUTTON,
++                                  ui::EF_LEFT_MOUSE_BUTTON));
++  EXPECT_TRUE(base::test::RunUntil([]() {
++    return !PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++  })) << "page info stayed";
++
++  views::Widget* menu = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    if (!container->IsExtensionsMenuShowing()) {
++      return false;
++    }
++    menu =
++        ExtensionsMenuView::IsShowing()
++            ? ExtensionsMenuView::GetExtensionsMenuViewForTesting()->GetWidget()
++            : container->GetExtensionsMenuCoordinatorForTesting()
++                  ->GetExtensionsMenuWidget();
++    return menu && menu->IsVisible();
++  })) << "no extensions menu";
++  ExpectInTheCardsTopHalf(menu->GetWindowBoundsInScreen(), "the menu");
++  const gfx::Rect card =
++      browser_view()->contents_container()->GetBoundsInScreen();
++  EXPECT_LE(menu->GetWindowBoundsInScreen().x(), card.x() + 16)
++      << "the menu is not at the card's left";
++  ExpectTheRowHidden();
++  container->CloseExtensionsMenuIfOpen();
++  EXPECT_TRUE(base::test::RunUntil(
++      [&]() { return !container->IsExtensionsMenuShowing(); }));
++}
++
+ }  // namespace
+diff --git a/chrome/test/stedding/isolation_mark_browsertest.cc b/chrome/test/stedding/isolation_mark_browsertest.cc
+index 23b9cd0fc6096..50f01927f759e 100644
+--- a/chrome/test/stedding/isolation_mark_browsertest.cc
++++ b/chrome/test/stedding/isolation_mark_browsertest.cc
+@@ -21,6 +21,7 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/functional/function_ref.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/run_loop.h"
+ #include "base/strings/strcat.h"
+@@ -55,7 +56,11 @@
+ #include "chrome/browser/ui/toasts/toast_view.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
++#include "chrome/browser/ui/views/controls/rich_controls_container_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_rules.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
+@@ -94,7 +99,9 @@
+ #include "ui/views/controls/label.h"
+ #include "ui/views/test/button_test_api.h"
+ #include "ui/views/test/views_test_utils.h"
++#include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/view.h"
++#include "ui/views/view_class_properties.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+ #include "url/gurl.h"
+@@ -979,4 +986,95 @@ IN_PROC_BROWSER_TEST_F(IsolationMarkTest,
+   }
+ }
+ 
++// site-controls Si7 (BACKLOG S-118), sessions S32: the site controls' session
++// row names the jar the page lives in. A page in Work with its session on
++// reads "Work · Independent session" with the cookie mark, its description
++// the mark's; a page in Home reads "Shared session", unmarked; with Work's
++// session turned off, its page moves to the shared jar and reads "Shared
++// session" too.
++IN_PROC_BROWSER_TEST_F(IsolationMarkTest, TheSiteControlsNameTheJar) {
++  // The site controls' rows for the active tab, from the site chip; the
++  // panel closes when `check` has run.
++  const auto with_rows =
++      [&](base::FunctionRef<void(stedding::SiteControlsRowsView*)> check) {
++        ASSERT_TRUE(
++            browser_view()->GetLocationBarView()->ShowPageInfoDialog());
++        views::BubbleDialogDelegateView* panel = nullptr;
++        ASSERT_TRUE(base::test::RunUntil([&]() {
++          panel = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++          return panel && panel->GetWidget() &&
++                 panel->GetWidget()->IsVisible();
++        })) << "no page info";
++        std::vector<views::View*> stack = {panel};
++        stedding::SiteControlsRowsView* rows = nullptr;
++        while (!stack.empty() && !rows) {
++          views::View* const view = stack.back();
++          stack.pop_back();
++          rows = views::AsViewClass<stedding::SiteControlsRowsView>(view);
++          for (views::View* child : view->children()) {
++            stack.push_back(child);
++          }
++        }
++        ASSERT_TRUE(rows) << "no site controls in page info";
++        check(rows);
++        panel->GetWidget()->CloseNow();
++        ASSERT_TRUE(base::test::RunUntil([]() {
++          return !PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++        }));
++      };
++
++  model()->SetSpaceIsolated(work_, true);
++  ASSERT_TRUE(model()->SetActiveSpace(work_));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), Url("a.test"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  tabs::TabInterface* const work_tab = tabs()->GetActiveTab();
++  ASSERT_TRUE(spaces::IsSpaceStoragePartition(
++      spaces::StoragePartitionConfigForWebContents(work_tab->GetContents())));
++  {
++    SCOPED_TRACE("Work, its session on");
++    with_rows([&](stedding::SiteControlsRowsView* rows) {
++      ASSERT_TRUE(rows->session_row()->GetVisible());
++      EXPECT_EQ(spaces::NameWithIsolationMark(u"Work"),
++                rows->session_row()->GetTitleForTesting());
++      EXPECT_TRUE(rows->session_mark()->GetVisible()) << "no cookie mark";
++      EXPECT_EQ(
++          Says(),
++          rows->session_row()->GetViewAccessibility().GetCachedDescription());
++      EXPECT_EQ(Says(), rows->session_row()->GetTooltipText());
++    });
++  }
++
++  ASSERT_TRUE(model()->SetActiveSpace(home_));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), Url("a.test"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  {
++    SCOPED_TRACE("Home");
++    with_rows([&](stedding::SiteControlsRowsView* rows) {
++      ASSERT_TRUE(rows->session_row()->GetVisible());
++      EXPECT_EQ(u"Shared session", rows->session_row()->GetTitleForTesting());
++      EXPECT_FALSE(rows->session_mark()->GetVisible());
++    });
++  }
++
++  model()->SetSpaceIsolated(work_, false);
++  ASSERT_TRUE(model()->SetActiveSpace(work_));
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    content::WebContents* const contents =
++        tabs()->GetActiveTab()->GetContents();
++    return !spaces::IsSpaceStoragePartition(
++               spaces::StoragePartitionConfigForWebContents(contents)) &&
++           !contents->IsLoading();
++  })) << "Work's page did not move to the shared jar";
++  {
++    SCOPED_TRACE("Work, its session off");
++    with_rows([&](stedding::SiteControlsRowsView* rows) {
++      EXPECT_EQ(u"Shared session", rows->session_row()->GetTitleForTesting());
++      EXPECT_FALSE(rows->session_mark()->GetVisible())
++          << "S32 marks only a session that is on";
++    });
++  }
++}
++
+ }  // namespace
+diff --git a/chrome/test/stedding/site_controls_browsertest.cc b/chrome/test/stedding/site_controls_browsertest.cc
+new file mode 100644
+index 0000000000000..99291a162656c
+--- /dev/null
++++ b/chrome/test/stedding/site_controls_browsertest.cc
+@@ -0,0 +1,656 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Site controls (docs/features/site-controls.md, BACKLOG S-118): Stedding's
++// controls in Chromium's page info, opened from the site chip and from the
++// command bar's View Site Information. The strip runs the window's own
++// commands; the rows name the page's session, clear its site's data after
++// asking, and turn dark pages on and off for it; camera and microphone are
++// listed on a page that may ask for them; Chromium's Extensions row opens
++// the extensions menu.
++//
++// The panel is a bubble that must show and keep its activation, so the
++// fixture runs in the serial leg (tooling/dev, SERIAL_BROWSER_TESTS).
++
++#include "chrome/browser/ui/stedding/site_controls.h"
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "build/build_config.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/extensions/chrome_test_extension_loader.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/bubble_anchor_util.h"
++#include "chrome/browser/ui/page_info/page_info_dialog.h"
++#include "chrome/browser/ui/stedding/dark_pages.h"
++#include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/stedding_command_ids.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/toasts/api/toast_id.h"
++#include "chrome/browser/ui/toasts/toast_controller.h"
++#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
++#include "chrome/browser/ui/views/commandbar/address_row_controls.h"
++#include "chrome/browser/ui/views/controls/rich_hover_button.h"
++#include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/location_bar/zoom_bubble_coordinator.h"
++#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
++#include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
++#include "chrome/browser/ui/views/page_info/page_info_main_view.h"
++#include "chrome/browser/ui/views/page_info/permission_toggle_row_view.h"
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/page_info/page_info_ui.h"
++#include "components/zoom/zoom_controller.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/media_start_stop_observer.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "extensions/common/extension.h"
++#include "extensions/test/test_extension_dir.h"
++#include "media/base/media_switches.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "third_party/blink/public/common/web_preferences/web_preferences.h"
++#include "ui/base/clipboard/clipboard.h"
++#include "ui/base/clipboard/clipboard_buffer.h"
++#include "ui/base/clipboard/test/test_clipboard.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/types/event_type.h"
++#include "ui/gfx/geometry/point.h"
++#include "ui/views/bubble/bubble_dialog_delegate_view.h"
++#include "ui/views/controls/button/image_button.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/button/toggle_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/styled_label.h"
++#include "ui/views/test/button_test_api.h"
++#include "ui/views/test/dialog_test.h"
++#include "ui/views/test/views_test_utils.h"
++#include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
++#include "ui/views/widget/any_widget_observer.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/widget/widget_delegate.h"
++#include "url/gurl.h"
++
++namespace {
++
++using stedding::SiteControlsRowsView;
++using stedding::SiteControlsStripView;
++using stedding::SiteControlsWindow;
++
++// The view under `root` that carries `id`, or null.
++views::View* FindView(views::View* root, ui::ElementIdentifier id) {
++  if (!root) {
++    return nullptr;
++  }
++  if (root->GetProperty(views::kElementIdentifierKey) == id) {
++    return root;
++  }
++  for (views::View* child : root->children()) {
++    if (views::View* const found = FindView(child, id)) {
++      return found;
++    }
++  }
++  return nullptr;
++}
++
++// Every text a label under `root` shows, run together.
++std::u16string TextUnder(views::View* root) {
++  std::u16string text;
++  if (auto* const label = views::AsViewClass<views::Label>(root)) {
++    text += std::u16string(label->GetText()) + u"\n";
++  }
++  if (auto* const styled = views::AsViewClass<views::StyledLabel>(root)) {
++    text += std::u16string(styled->GetText()) + u"\n";
++  }
++  for (views::View* child : root->children()) {
++    text += TextUnder(child);
++  }
++  return text;
++}
++
++// The permission row under `root` titled for `type`, or null.
++PermissionToggleRowView* PermissionRow(views::View* root,
++                                       ContentSettingsType type) {
++  if (!root) {
++    return nullptr;
++  }
++  if (auto* const row = views::AsViewClass<PermissionToggleRowView>(root)) {
++    if (row->GetRowTitleForTesting() ==
++        PageInfoUI::PermissionTypeToUIString(type)) {
++      return row;
++    }
++  }
++  for (views::View* child : root->children()) {
++    if (PermissionToggleRowView* const found = PermissionRow(child, type)) {
++      return found;
++    }
++  }
++  return nullptr;
++}
++
++class SiteControlsTest : public InProcessBrowserTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    // Picture in picture follows a video that plays without a gesture.
++    command_line->AppendSwitchASCII(
++        switches::kAutoplayPolicy,
++        switches::autoplay::kNoUserGestureRequiredPolicy);
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ui::TestClipboard::CreateForCurrentThread();
++  }
++
++  void TearDownOnMainThread() override {
++    ui::Clipboard::DestroyClipboardForCurrentThread();
++    InProcessBrowserTest::TearDownOnMainThread();
++  }
++
++  BrowserView* browser_view(BrowserWindowInterface* window = nullptr) {
++    return BrowserView::GetBrowserViewForBrowser(window ? window : browser());
++  }
++  content::WebContents* page() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++  GURL Url(const std::string& host, const std::string& path = "/title2.html") {
++    return embedded_test_server()->GetURL(host, path);
++  }
++
++  // The panel, once shown.
++  static views::BubbleDialogDelegateView* WaitForPanel() {
++    views::BubbleDialogDelegateView* panel = nullptr;
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      panel = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++      return panel && panel->GetWidget() && panel->GetWidget()->IsVisible();
++    })) << "no page info";
++    return panel;
++  }
++
++  // The site chip's click (toolbar T5).
++  views::BubbleDialogDelegateView* OpenFromTheChip(
++      BrowserWindowInterface* window = nullptr) {
++    EXPECT_TRUE(
++        browser_view(window)->GetLocationBarView()->ShowPageInfoDialog());
++    return WaitForPanel();
++  }
++
++  static bool PanelGoes() {
++    return base::test::RunUntil([]() {
++      return !PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++    });
++  }
++
++  static void ClosePanel() {
++    if (views::BubbleDialogDelegateView* const panel =
++            PageInfoBubbleViewBase::GetPageInfoBubbleForTesting()) {
++      panel->GetWidget()->CloseNow();
++    }
++    ASSERT_TRUE(PanelGoes());
++  }
++
++  static SiteControlsStripView* Strip(views::View* panel) {
++    return views::AsViewClass<SiteControlsStripView>(
++        FindView(panel, SiteControlsStripView::kElementId));
++  }
++  static SiteControlsRowsView* Rows(views::View* panel) {
++    return views::AsViewClass<SiteControlsRowsView>(
++        FindView(panel, SiteControlsRowsView::kElementId));
++  }
++
++  static void Click(views::Button* button, int flags = ui::EF_NONE) {
++    ASSERT_TRUE(button);
++    views::test::ButtonTestApi(button).NotifyClick(
++        ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
++                       base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON | flags,
++                       ui::EF_LEFT_MOUSE_BUTTON));
++  }
++
++  static std::u16string ClipboardText() {
++    base::test::TestFuture<std::u16string> text;
++    ui::Clipboard::GetForCurrentThread()->ReadText(
++        ui::ClipboardBuffer::kCopyPaste, std::nullopt, text.GetCallback());
++    return text.Get();
++  }
++
++  // The window-modal question the next step asks, and the step.
++  static views::Widget* QuestionAfter(base::OnceClosure step) {
++    views::Widget* question = nullptr;
++    views::AnyWidgetObserver shown(views::test::AnyWidgetTestPasskey{});
++    shown.set_shown_callback(
++        base::BindLambdaForTesting([&question](views::Widget* widget) {
++          views::WidgetDelegate* const delegate = widget->widget_delegate();
++          if (delegate && delegate->AsDialogDelegate() &&
++              delegate->GetModalType() == ui::mojom::ModalType::kWindow) {
++            question = widget;
++          }
++        }));
++    std::move(step).Run();
++    EXPECT_TRUE(base::test::RunUntil([&]() { return question != nullptr; }))
++        << "nothing was asked";
++    return question;
++  }
++
++  std::string CookieHeader(content::WebContents* contents,
++                           const std::string& host) {
++    EXPECT_TRUE(
++        content::NavigateToURL(contents, Url(host, "/echoheader?Cookie")));
++    return content::EvalJs(contents, "document.body.innerText").ExtractString();
++  }
++
++  // An extension with a popup action, loaded.
++  scoped_refptr<const extensions::Extension> LoadAction(
++      const std::string& name) {
++    extensions::TestExtensionDir& dir = dirs_.emplace_back();
++    dir.WriteManifest(R"({"manifest_version": 3, "name": ")" + name +
++                      R"(", "version": "1", "action": {"default_title": ")" +
++                      name + R"(", "default_popup": "popup.html"}})");
++    dir.WriteFile(FILE_PATH_LITERAL("popup.html"), "<!doctype html>Popup");
++    extensions::ChromeTestExtensionLoader loader(browser()->GetProfile());
++    return loader.LoadExtension(dir.UnpackedPath());
++  }
++
++  std::vector<extensions::TestExtensionDir> dirs_;
++};
++
++// site-controls Si1: the site chip and the command bar's View Site
++// Information, the latter with the row hidden, open the same panel, the
++// strip and the rows in it; coming back from the Cookies subpage brings them
++// back.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, TheChipAndTheBarOpenTheSamePanel) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("site.test")));
++  {
++    SCOPED_TRACE("the site chip");
++    views::BubbleDialogDelegateView* const panel = OpenFromTheChip();
++    ASSERT_TRUE(panel);
++    EXPECT_TRUE(Strip(panel));
++    EXPECT_TRUE(Rows(panel));
++    ASSERT_EQ(PageInfoBubbleViewBase::BUBBLE_PAGE_INFO,
++              PageInfoBubbleViewBase::GetShownBubbleType());
++    auto* const bubble = static_cast<PageInfoBubbleView*>(panel);
++    bubble->OpenCookiesPage();
++    EXPECT_FALSE(Strip(panel)) << "the Cookies subpage has no strip";
++    bubble->OpenMainPage(base::DoNothing());
++    EXPECT_TRUE(Strip(panel)) << "back from Cookies, the strip is back";
++    EXPECT_TRUE(Rows(panel)) << "back from Cookies, the rows are back";
++    ClosePanel();
++  }
++  {
++    SCOPED_TRACE("View Site Information with the row hidden");
++    ASSERT_TRUE(
++        chrome::ExecuteCommand(browser(), IDC_STEDDING_TOGGLE_ADDRESS_ROW));
++    views::test::RunScheduledLayout(browser_view()->GetWidget());
++    ASSERT_FALSE(browser_view()->toolbar()->IsDrawn());
++    stedding::ShowSiteInformation(browser());
++    views::BubbleDialogDelegateView* const panel = WaitForPanel();
++    ASSERT_TRUE(panel);
++    EXPECT_TRUE(Strip(panel));
++    EXPECT_TRUE(Rows(panel));
++    ClosePanel();
++    ASSERT_TRUE(
++        chrome::ExecuteCommand(browser(), IDC_STEDDING_TOGGLE_ADDRESS_ROW));
++  }
++  {
++    SCOPED_TRACE("App Info's page info keeps Chromium's");
++    ASSERT_TRUE(ShowPageInfoDialog(page(), base::DoNothing(),
++                                   bubble_anchor_util::Anchor::kAppMenuButton));
++    views::BubbleDialogDelegateView* const panel = WaitForPanel();
++    ASSERT_TRUE(panel);
++    EXPECT_FALSE(Strip(panel));
++    EXPECT_FALSE(Rows(panel));
++    ClosePanel();
++  }
++}
++
++// site-controls Si1: a tab of a normal window, a private window and a Blank
++// Window get the controls; a popup, an app window and a little window keep
++// Chromium's page info.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, OnlyTabbedWindowsGetTheControls) {
++  const GURL url = Url("site.test");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
++  EXPECT_EQ(SiteControlsWindow::kTab, stedding::SiteControlsWindowFor(page()));
++
++  const auto window_of = [&](BrowserWindowInterface* window) {
++    EXPECT_TRUE(ui_test_utils::NavigateToURL(window, url));
++    return stedding::SiteControlsWindowFor(
++        window->GetTabStripModel()->GetActiveWebContents());
++  };
++  EXPECT_EQ(SiteControlsWindow::kPrivateTab,
++            window_of(CreateIncognitoBrowser()));
++  {
++    ui_test_utils::BrowserCreatedObserver opened;
++    chrome::ExecuteCommand(browser(), IDC_STEDDING_NEW_BLANK_WINDOW);
++    BrowserWindowInterface* const blank = opened.Wait();
++    ASSERT_TRUE(blank);
++    EXPECT_EQ(SiteControlsWindow::kTabWithoutSpaces, window_of(blank));
++  }
++  EXPECT_EQ(SiteControlsWindow::kOther,
++            window_of(CreateBrowserForPopup(browser()->GetProfile())));
++  EXPECT_EQ(SiteControlsWindow::kOther,
++            window_of(CreateBrowserForApp("stedding_test_app",
++                                          browser()->GetProfile())));
++  BrowserWindowInterface* const little = stedding::OpenLittleWindow(
++      browser()->GetProfile(), url, browser(), /*untrusted_launch=*/false);
++  ASSERT_TRUE(little);
++  ASSERT_TRUE(stedding::IsLittleWindow(little));
++  content::WebContents* little_page = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    little_page = little->GetTabStripModel()->GetActiveWebContents();
++    return little_page != nullptr;
++  }));
++  ASSERT_TRUE(content::WaitForLoadStop(little_page));
++  EXPECT_EQ(SiteControlsWindow::kOther,
++            stedding::SiteControlsWindowFor(little_page));
++
++  {
++    SCOPED_TRACE("a private window's panel");
++    BrowserWindowInterface* const incognito = CreateIncognitoBrowser();
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(incognito, url));
++    views::BubbleDialogDelegateView* const panel = OpenFromTheChip(incognito);
++    ASSERT_TRUE(panel);
++    EXPECT_TRUE(Strip(panel));
++    SiteControlsRowsView* const rows = Rows(panel);
++    ASSERT_TRUE(rows);
++    EXPECT_FALSE(rows->session_row()->GetVisible())
++        << "a private window has no session row (sessions S32)";
++    EXPECT_TRUE(rows->clear_data()->GetVisible());
++    ClosePanel();
++  }
++}
++
++// site-controls Si2, Si3: Copy link copies the clean link, an Option-click
++// (Alt-click) the Markdown link, Copy title the page's title with its toast;
++// each closes the panel.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, TheStripRunsTheWindowsCommands) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("site.test", "/title2.html?utm_source=mail")));
++  const std::string clean = Url("site.test", "/title2.html").spec();
++  const std::u16string title = page()->GetTitle();
++  ASSERT_FALSE(title.empty());
++  {
++    SCOPED_TRACE("Copy link");
++    SiteControlsStripView* const strip = Strip(OpenFromTheChip());
++    ASSERT_TRUE(strip);
++    Click(strip->copy_link());
++    EXPECT_EQ(base::UTF8ToUTF16(clean), ClipboardText());
++    EXPECT_TRUE(PanelGoes());
++  }
++  {
++    SCOPED_TRACE("Copy link with Option (Alt)");
++    SiteControlsStripView* const strip = Strip(OpenFromTheChip());
++    ASSERT_TRUE(strip);
++    Click(strip->copy_link(), ui::EF_ALT_DOWN);
++    EXPECT_EQ(u"[" + title + u"](" + base::UTF8ToUTF16(clean) + u")",
++              ClipboardText());
++    EXPECT_TRUE(PanelGoes());
++  }
++  {
++    SCOPED_TRACE("Copy title");
++    SiteControlsStripView* const strip = Strip(OpenFromTheChip());
++    ASSERT_TRUE(strip);
++    Click(strip->copy_title());
++    EXPECT_EQ(title, ClipboardText());
++    ToastController* const toasts = ToastController::From(browser());
++    ASSERT_TRUE(toasts);
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return toasts->GetCurrentToastId() == ToastId::kSteddingTitleCopied;
++    })) << "no Title copied toast";
++    EXPECT_TRUE(PanelGoes());
++  }
++}
++
++// site-controls Si4: Mute is the mute key: it mutes the tab, its words flip,
++// the panel stays, and the key pressed with the panel open flips them back.
++// Picture in picture is off on a page with nothing to play, comes on while
++// the panel is open once a video plays, and opens the window.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, MuteAndPictureInPictureFollowTheKeys) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("site.test", "/media/session/video-with-metadata.html")));
++  views::BubbleDialogDelegateView* const panel = OpenFromTheChip();
++  SiteControlsStripView* const strip = Strip(panel);
++  ASSERT_TRUE(strip);
++  EXPECT_EQ(u"Mute tab", strip->mute()->GetViewAccessibility().GetCachedName());
++  EXPECT_FALSE(strip->picture_in_picture()->GetEnabled())
++      << "nothing plays yet";
++
++  Click(strip->mute());
++  EXPECT_TRUE(page()->IsAudioMuted());
++  EXPECT_EQ(u"Unmute tab",
++            strip->mute()->GetViewAccessibility().GetCachedName());
++  EXPECT_EQ(panel, PageInfoBubbleViewBase::GetPageInfoBubbleForTesting())
++      << "Mute leaves the panel open";
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_STEDDING_TOGGLE_TAB_MUTED));
++  EXPECT_FALSE(page()->IsAudioMuted());
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return strip->mute()->GetViewAccessibility().GetCachedName() == u"Mute tab";
++  })) << "the key pressed with the panel open, the words did not follow";
++
++  content::MediaStartStopObserver started(
++      page(), content::MediaStartStopObserver::Type::kStart);
++  ASSERT_TRUE(content::ExecJs(page(), "play()"));
++  started.Wait();
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return strip->picture_in_picture()->GetEnabled();
++  })) << "a playing video did not turn Picture in picture on";
++  Click(strip->picture_in_picture());
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return page()->HasPictureInPictureVideo();
++  })) << "no picture in picture";
++  EXPECT_TRUE(PanelGoes());
++}
++
++// site-controls Si5: plus gives 110% on the label and on the tab, with no
++// zoom bubble over the panel, which stays; the percentage resets to 100%;
++// Cmd-plus pressed with the panel open shows at once.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, ZoomStepsAndFollowsTheKeys) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("site.test")));
++  views::BubbleDialogDelegateView* const panel = OpenFromTheChip();
++  SiteControlsStripView* const strip = Strip(panel);
++  ASSERT_TRUE(strip);
++  zoom::ZoomController* const zoom =
++      zoom::ZoomController::FromWebContents(page());
++  ASSERT_TRUE(zoom);
++  EXPECT_EQ(u"100%", strip->zoom_reset()->GetText());
++
++  Click(strip->zoom_in());
++  EXPECT_EQ(110, zoom->GetZoomPercent());
++  EXPECT_EQ(u"110%", strip->zoom_reset()->GetText());
++  EXPECT_EQ(u"Reset zoom, 110%",
++            strip->zoom_reset()->GetViewAccessibility().GetCachedName());
++  base::RunLoop().RunUntilIdle();
++  ZoomBubbleCoordinator* const zoom_bubble =
++      ZoomBubbleCoordinator::From(browser());
++  EXPECT_FALSE(zoom_bubble && zoom_bubble->IsShowing())
++      << "the zoom bubble opened over the panel";
++  EXPECT_EQ(panel, PageInfoBubbleViewBase::GetPageInfoBubbleForTesting())
++      << "the panel closed";
++
++  Click(strip->zoom_reset());
++  EXPECT_EQ(100, zoom->GetZoomPercent());
++  EXPECT_EQ(u"100%", strip->zoom_reset()->GetText());
++
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_ZOOM_PLUS));
++  EXPECT_EQ(u"110%", strip->zoom_reset()->GetText())
++      << "the key pressed with the panel open, the zoom did not follow";
++  ClosePanel();
++  chrome::ExecuteCommand(browser(), IDC_ZOOM_NORMAL);
++}
++
++// site-controls Si6: on a page that may ask for them -- http on this
++// machine here -- camera and microphone are listed though the site never
++// asked, and a choice there is written to the site's settings; on an http
++// page elsewhere they are not.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, CameraAndMicrophoneAreAlwaysListed) {
++  const GURL local = Url("localhost");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), local));
++  {
++    views::BubbleDialogDelegateView* const panel = OpenFromTheChip();
++    PermissionToggleRowView* const camera =
++        PermissionRow(panel, ContentSettingsType::MEDIASTREAM_CAMERA);
++    ASSERT_TRUE(camera) << "no camera row";
++    EXPECT_TRUE(PermissionRow(panel, ContentSettingsType::MEDIASTREAM_MIC))
++        << "no microphone row";
++    HostContentSettingsMap* const settings =
++        HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile());
++    ASSERT_EQ(CONTENT_SETTING_ASK,
++              settings->GetContentSetting(
++                  local, local, ContentSettingsType::MEDIASTREAM_CAMERA));
++    Click(camera->toggle_button_for_testing());
++    EXPECT_NE(CONTENT_SETTING_ASK,
++              settings->GetContentSetting(
++                  local, local, ContentSettingsType::MEDIASTREAM_CAMERA))
++        << "the choice was not written to the site's settings";
++    ClosePanel();
++  }
++  {
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("site.test")));
++    views::BubbleDialogDelegateView* const panel = OpenFromTheChip();
++    EXPECT_FALSE(PermissionRow(panel, ContentSettingsType::MEDIASTREAM_CAMERA))
++        << "a plain http page can never use the camera";
++    ClosePanel();
++  }
++}
++
++// site-controls Si8: Clear asks first, page info gone, the question naming
++// the site; Cancel keeps the cookie. A page that left the site while the
++// question was open is not cleared: the question named another site.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest,
++                       ClearAsksFirstAndCancelKeepsEverything) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("site.test", "/set-cookie?kept=1")));
++  ASSERT_EQ("kept=1", CookieHeader(page(), "site.test"));
++  {
++    SCOPED_TRACE("Cancel");
++    SiteControlsRowsView* const rows = Rows(OpenFromTheChip());
++    ASSERT_TRUE(rows);
++    views::Widget* const question = QuestionAfter(
++        base::BindLambdaForTesting([&]() { Click(rows->clear_data()); }));
++    ASSERT_TRUE(question);
++    EXPECT_TRUE(PanelGoes()) << "page info stays under the question";
++    EXPECT_EQ(u"Clear data for site.test?",
++              question->widget_delegate()->GetWindowTitle());
++    EXPECT_NE(std::u16string::npos,
++              TextUnder(question->GetRootView()).find(u"signed out"));
++    views::test::CancelDialog(question);
++    EXPECT_EQ("kept=1", CookieHeader(page(), "site.test"))
++        << "Cancel cleared the site";
++  }
++  {
++    SCOPED_TRACE("the page left the site while the question was open");
++    SiteControlsRowsView* const rows = Rows(OpenFromTheChip());
++    ASSERT_TRUE(rows);
++    views::Widget* const question = QuestionAfter(
++        base::BindLambdaForTesting([&]() { Click(rows->clear_data()); }));
++    ASSERT_TRUE(question);
++    ASSERT_TRUE(content::NavigateToURL(page(), Url("other.test")));
++    views::test::AcceptDialog(question);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_EQ("kept=1", CookieHeader(page(), "site.test"))
++        << "the question named site.test in this page; it had left";
++  }
++}
++
++// site-controls Si9: the Dark pages switch turns the profile's switch on and
++// brings Darken <site>; turning that off keeps the page light; the chord
++// pressed with the panel open flips the switch row and takes Darken <site>
++// away.
++IN_PROC_BROWSER_TEST_F(SiteControlsTest, TheDarkRowsFollowTheSwitchAndTheSite) {
++  Profile* const profile = browser()->GetProfile();
++  ASSERT_FALSE(stedding::DarkPagesOn(profile));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("site.test")));
++  SiteControlsRowsView* const rows = Rows(OpenFromTheChip());
++  ASSERT_TRUE(rows);
++  EXPECT_TRUE(rows->dark_pages_row()->GetVisible());
++  EXPECT_FALSE(rows->dark_pages()->GetIsOn());
++  EXPECT_FALSE(rows->dark_site_row()->GetVisible());
++
++  Click(rows->dark_pages());
++  EXPECT_TRUE(stedding::DarkPagesOn(profile)) << "the switch is the moon's";
++  EXPECT_TRUE(rows->dark_site_row()->GetVisible());
++  EXPECT_EQ(u"Darken site.test", rows->dark_site_row()->GetTitleForTesting());
++  EXPECT_TRUE(rows->dark_site()->GetIsOn());
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return page()->GetOrCreateWebPreferences().force_dark_mode_enabled;
++  })) << "the page is not darkened";
++
++  Click(rows->dark_site());
++  EXPECT_FALSE(stedding::IsSiteDarkened(page()));
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return !page()->GetOrCreateWebPreferences().force_dark_mode_enabled;
++  })) << "the site kept light is still darkened";
++
++  ASSERT_TRUE(
++      chrome::ExecuteCommand(browser(), IDC_STEDDING_TOGGLE_DARK_PAGES));
++  EXPECT_FALSE(stedding::DarkPagesOn(profile));
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return !rows->dark_pages()->GetIsOn() &&
++           !rows->dark_site_row()->GetVisible();
++  })) << "the chord pressed with the panel open, the rows did not follow";
++  ClosePanel();
++}
++
++// site-controls Si10: Chromium's Extensions row is in the panel; it closes
++// the panel and opens the extensions menu; pinned, the extension's button
++// shows in the row within 2 s (toolbar T43).
++IN_PROC_BROWSER_TEST_F(SiteControlsTest,
++                       TheExtensionsRowOpensTheMenuAndAPinShows) {
++  const scoped_refptr<const extensions::Extension> extension =
++      LoadAction("Stedding Site Controls Probe");
++  ASSERT_TRUE(extension);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Url("site.test")));
++  ExtensionsToolbarDesktop* const container =
++      browser_view()->toolbar()->extensions_container();
++  ASSERT_TRUE(container);
++  views::BubbleDialogDelegateView* const panel = OpenFromTheChip();
++  views::View* const row =
++      FindView(panel, PageInfoMainView::kSeeExtensionsButtonElementId);
++  ASSERT_TRUE(row) << "no Extensions row";
++  Click(views::AsViewClass<views::Button>(row));
++  EXPECT_TRUE(PanelGoes());
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return container->IsExtensionsMenuShowing();
++  })) << "no extensions menu";
++  container->CloseExtensionsMenuIfOpen();
++  const base::TimeTicks pinned = base::TimeTicks::Now();
++  ToolbarActionsModel::Get(browser()->GetProfile())
++      ->SetActionVisibility(extension->id(), true);
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    views::test::RunScheduledLayout(browser_view()->GetWidget());
++    ToolbarActionView* const button = container->GetViewForId(extension->id());
++    return button && button->IsDrawn() && !button->size().IsEmpty();
++  })) << "the pinned extension's button never showed";
++  EXPECT_LT(base::TimeTicks::Now() - pinned, base::Seconds(2));
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/space_jar_browsertest.cc b/chrome/test/stedding/space_jar_browsertest.cc
+index 326c29e639aa7..649ef0a8bd70f 100644
+--- a/chrome/test/stedding/space_jar_browsertest.cc
++++ b/chrome/test/stedding/space_jar_browsertest.cc
+@@ -27,6 +27,7 @@
+ #include "base/test/test_future.h"
+ #include "base/thread_annotations.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -48,11 +49,18 @@
+ #include "chrome/browser/ui/toasts/api/toast_id.h"
+ #include "chrome/browser/ui/toasts/toast_controller.h"
+ #include "chrome/browser/ui/views/commandbar/command_bar_view.h"
++#include "chrome/browser/ui/views/controls/rich_hover_button.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
++#include "chrome/browser/ui/views/page_info/stedding_site_controls_view.h"
+ #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/browsing_data_remover.h"
+@@ -77,10 +85,21 @@
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/types/event_type.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/menus/simple_menu_model.h"
++#include "ui/views/bubble/bubble_dialog_delegate_view.h"
++#include "ui/views/controls/button/button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/styled_label.h"
+ #include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/test/button_test_api.h"
+ #include "ui/views/test/dialog_test.h"
+ #include "ui/views/test/views_test_utils.h"
++#include "ui/views/view_class_properties.h"
++#include "ui/views/view_utils.h"
+ #include "ui/views/widget/any_widget_observer.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/widget/widget_delegate.h"
+@@ -896,6 +915,139 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest, ClearingASitesCookiesStaysInThatJar) {
+   }
+ }
+ 
++// site-controls Si8 (BACKLOG S-118): Clear site data in the site controls of
++// a page in Work asks first, naming the site and Work, then deletes the
++// site's cookie and its local storage from Work's jar alone and reloads the
++// page, with the toast; the profile's jar keeps both. The site's
++// persistent-storage permission, which is the profile's and every Space's,
++// stays.
++IN_PROC_BROWSER_TEST_F(SpaceJarTest, ClearingASitesDataStaysInThatJar) {
++  const auto find_view = [](views::View* root, ui::ElementIdentifier id) {
++    std::vector<views::View*> stack = {root};
++    while (!stack.empty()) {
++      views::View* const view = stack.back();
++      stack.pop_back();
++      if (!view) {
++        continue;
++      }
++      if (view->GetProperty(views::kElementIdentifierKey) == id) {
++        return view;
++      }
++      for (views::View* child : view->children()) {
++        stack.push_back(child);
++      }
++    }
++    return static_cast<views::View*>(nullptr);
++  };
++  const auto text_under = [](views::View* root) {
++    std::u16string text;
++    std::vector<views::View*> stack = {root};
++    while (!stack.empty()) {
++      views::View* const view = stack.back();
++      stack.pop_back();
++      if (auto* const label = views::AsViewClass<views::Label>(view)) {
++        text += std::u16string(label->GetText()) + u"\n";
++      }
++      if (auto* const styled = views::AsViewClass<views::StyledLabel>(view)) {
++        text += std::u16string(styled->GetText()) + u"\n";
++      }
++      for (views::View* child : view->children()) {
++        stack.push_back(child);
++      }
++    }
++    return text;
++  };
++
++  // The site's storage in both jars, beside the fixture's cookies.
++  ASSERT_TRUE(model_->SetActiveSpace(home_));
++  content::WebContents* const shared = home_tab_.Get()->GetContents();
++  ASSERT_TRUE(content::NavigateToURL(shared, Url("b.test", "/title1.html")));
++  ASSERT_TRUE(content::ExecJs(shared, "localStorage.setItem('jar', 'shared')"));
++  ASSERT_TRUE(model_->SetActiveSpace(work_));
++  ASSERT_EQ(work_tab_.Get(), tabs()->GetActiveTab());
++  content::WebContents* const page = work_tab_.Get()->GetContents();
++  ASSERT_TRUE(content::NavigateToURL(page, Url("b.test", "/title1.html")));
++  ASSERT_TRUE(content::ExecJs(page, "localStorage.setItem('jar', 'work')"));
++  HostContentSettingsMap* const settings =
++      HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile());
++  const GURL site = Url("b.test", "/");
++  settings->SetContentSettingDefaultScope(
++      site, site, ContentSettingsType::PERSISTENT_STORAGE,
++      CONTENT_SETTING_ALLOW);
++
++  // The site controls, from the site chip, and their Clear.
++  ASSERT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
++                  ->GetLocationBarView()
++                  ->ShowPageInfoDialog());
++  views::BubbleDialogDelegateView* panel = nullptr;
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    panel = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
++    return panel && panel->GetWidget() && panel->GetWidget()->IsVisible();
++  })) << "no page info";
++  views::View* const clear =
++      find_view(panel, stedding::SiteControlsRowsView::kClearDataElementId);
++  ASSERT_TRUE(clear && clear->GetVisible()) << "no Clear site data";
++
++  views::Widget* question = nullptr;
++  views::AnyWidgetObserver shown(views::test::AnyWidgetTestPasskey{});
++  shown.set_shown_callback(
++      base::BindLambdaForTesting([&question](views::Widget* widget) {
++        views::WidgetDelegate* const delegate = widget->widget_delegate();
++        if (delegate && delegate->AsDialogDelegate() &&
++            delegate->GetModalType() == ui::mojom::ModalType::kWindow) {
++          question = widget;
++        }
++      }));
++  views::test::ButtonTestApi(views::AsViewClass<views::Button>(clear))
++      .NotifyClick(ui::MouseEvent(ui::EventType::kMousePressed, gfx::Point(),
++                                  gfx::Point(), base::TimeTicks(),
++                                  ui::EF_LEFT_MOUSE_BUTTON,
++                                  ui::EF_LEFT_MOUSE_BUTTON));
++  ASSERT_TRUE(base::test::RunUntil([&]() { return question != nullptr; }))
++      << "Clear asked nothing";
++  EXPECT_EQ(u"Clear data for b.test?",
++            question->widget_delegate()->GetWindowTitle());
++  EXPECT_NE(std::u16string::npos,
++            text_under(question->GetRootView()).find(u"Work"))
++      << "the question does not name the jar";
++
++  content::TestNavigationObserver reloaded(page);
++  views::test::AcceptDialog(question);
++  reloaded.Wait();
++  ToastController* const toasts = ToastController::From(browser());
++  ASSERT_TRUE(toasts);
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return toasts->GetCurrentToastId() == ToastId::kSteddingSiteDataCleared;
++  })) << "no toast";
++  toasts->GetToastCloseTimerForTesting()->Stop();
++  EXPECT_EQ(page, work_tab_.Get()->GetContents());
++  EXPECT_EQ("null",
++            content::EvalJs(page, "String(localStorage.getItem('jar'))"))
++      << "Work's storage for the site stays";
++  ASSERT_TRUE(
++      content::NavigateToURL(page, Url("b.test", "/echoheader?Cookie")));
++  EXPECT_EQ("None", content::EvalJs(page, "document.body.innerText"))
++      << "Work's cookie for the site stays";
++  ASSERT_TRUE(
++      content::NavigateToURL(page, Url("routed.test", "/echoheader?Cookie")));
++  EXPECT_EQ("jar=work", content::EvalJs(page, "document.body.innerText"))
++      << "Work's cookie for another site went too";
++
++  EXPECT_EQ(CONTENT_SETTING_ALLOW,
++            settings->GetContentSetting(
++                site, site, ContentSettingsType::PERSISTENT_STORAGE))
++      << "the site's persistent-storage permission went, in every Space";
++
++  ASSERT_TRUE(model_->SetActiveSpace(home_));
++  EXPECT_EQ("shared",
++            content::EvalJs(shared, "String(localStorage.getItem('jar'))"))
++      << "the profile's jar lost the site's storage";
++  ASSERT_TRUE(
++      content::NavigateToURL(shared, Url("b.test", "/echoheader?Cookie")));
++  EXPECT_EQ("jar=shared", content::EvalJs(shared, "document.body.innerText"))
++      << "the profile's jar lost the site's cookie";
++}
++
+ // With Work open in two windows, turning its independent session off and on
+ // moves Work's tabs in both, and clearing the session signs both out. The
+ // toggle reloads. It does not delete the partition's cookies.
+diff --git a/components/page_info/page_info.cc b/components/page_info/page_info.cc
+index 81954bda08be0..1e60fe9d2e0d1 100644
+--- a/components/page_info/page_info.cc
++++ b/components/page_info/page_info.cc
+@@ -964,6 +964,10 @@ void PageInfo::OnSuspiciousSiteBackToSafety() {
+   delegate_->OnSuspiciousSiteBackToSafety();
+ }
+ 
++bool PageInfoDelegate::AlwaysShowsPermission(ContentSettingsType type) {
++  return false;
++}
++
+ void PageInfo::OnSuspiciousSiteMarkAsSafe() {
+   delegate_->OnSuspiciousSiteMarkAsSafe();
+ }
+@@ -1505,6 +1509,13 @@ bool PageInfo::ShouldShowPermission(
+   // TODO(crbug.com/40064079): Filter out FPS related STORAGE_ACCESS
+   // permissions.
+ 
++  // Stedding (BACKLOG S-118, site-controls Si6): a permission the embedder
++  // lists even when the site never asked, such as the camera and the
++  // microphone in Stedding's site controls.
++  if (delegate_->AlwaysShowsPermission(info.type)) {
++    return true;
++  }
++
+   // ---
+   // Note: Put type-specific extra checks above this line.
+   // ---
+diff --git a/components/page_info/page_info_delegate.h b/components/page_info/page_info_delegate.h
+index a2b7183749e2d..6fddaa45b6fb9 100644
+--- a/components/page_info/page_info_delegate.h
++++ b/components/page_info/page_info_delegate.h
+@@ -148,6 +148,12 @@ class PageInfoDelegate {
+   // safe" on a Suspicious Site Warning.
+   virtual void OnSuspiciousSiteBackToSafety() {}
+   virtual void OnSuspiciousSiteMarkAsSafe() {}
++
++  // Stedding (BACKLOG S-118, docs/features/site-controls.md Si6): whether
++  // page info lists the permission `type` even when the site never asked for
++  // it and its setting is the default. None by default; Stedding's site
++  // controls list the camera and the microphone on a page that may use them.
++  virtual bool AlwaysShowsPermission(ContentSettingsType type);
+ };
+ 
+ #endif  // COMPONENTS_PAGE_INFO_PAGE_INFO_DELEGATE_H_

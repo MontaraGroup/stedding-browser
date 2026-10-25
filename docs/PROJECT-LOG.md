@@ -10,6 +10,24 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-25, day -- the owner's notes on Peek and the sidebar, wave 1 built
+
+The owner's notes after trying the Peek build, each fixed in the series:
+
+- Peek can be turned off and tuned: Settings › Stedding › "Open a peek with" offers a click,
+  a press held 0.3 s or one held 0.5 s (peek P18); with a hold, a plain click follows the link
+  in the pinned tab. The welcome flow asks the same question (welcome W16).
+- The sidebar's text is 14 unless the user picks another size (sidebar Y2), offered on the
+  welcome flow's appearance step too (W17).
+- macOS full screen with the address row hidden with a collapsed sidebar showed an empty grey
+  band at the top: the row now stays in full screen (toolbar T8).
+
+Wave 1 of the features chosen that morning (S-89, S-282 slices 1 and 2, S-96, S-118, S-156,
+S-101, S-88, S-98, S-91, and the Peek review's fixes) went through its first build: compile
+and lint faults fixed in their own patches. A review of S-96 and S-282 found three faults,
+fixed: the right-hand reveal edge under Windows' caption buttons, older sidebar files imported
+again in full, and a Space's own essentials overfilling the shared row. The test runs found more, fixed in their patches: a broken list download crashed the browser in the blocker's converter; Last-Modified read in a way that DCHECKs; tabs an import makes (unloaded) were never written to the session, so a quit soon after an import lost them; a History or Downloads panel closed with the focus in the sidebar left a rail slid out; Windows' shipped Alt binding could not be stored; five tests that could never pass as written (a key SimulateKeyPress drops when the page leaves it, a count of navigations, a check before the page drew its slider, a page without the focus, a test sidebar with tabs at the top). Unit tests on the Mac: 1238 of 1238. Browser tests on the Mac: all but seven: six of the blocker's (a listed image still loads, a third list request, a launch test that times out; cause not found) and the right-hand sidebar's toggle, 3 DIP above the address row. Windows: TBD. Not released.
+
 ## 2026-10-25, morning -- Peek on by default
 
 The owner chose Peek on by default (`PLAN.md` decision 2). A fresh profile's pinned tab now

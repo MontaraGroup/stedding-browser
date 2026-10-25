@@ -1,0 +1,2261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 08:00:14 -0400
+Subject: feat: Export all Spaces, and sidebar files merged by lasting ids
+
+Settings > Stedding > Spaces gets "Export all Spaces...": every Space of
+the window, its pins, pinned folders and essentials, as one file in
+Downloads (sidebar-file Sf6). A file Stedding writes now names a pin, tab
+or essential by its tab token and a folder by its FolderId, so Import
+sidebar... merges by ids that survive a restart (Sf2; BACKLOG S-61, S-282
+step 1; docs/history/plan-2026-09-26.md WEB-19): nothing open in any
+window of the profile is added twice, a tab closed since an import comes
+back, a Space-pinned folder comes back pinned, a Space keeps its exact
+colour pair and its own session, and no id of a Stedding file is kept in
+the profile's list of Arc's ids. The file is read and parsed off the UI
+thread, and written atomically under a name of its own.
+
+Why: a file exported before a restart and imported after it added every
+pin, folder and essential again, because its ids were session ids and
+memory addresses; the folder sync of S-282 needs ids that last.
+Removable when: not removable; the folder sync of S-282 is built on it.
+---
+ .../stedding_page/stedding_page.html.ts       |   1 +
+ .../settings/stedding_page/stedding_page.ts   |   8 +
+ .../browser/ui/spaces/arc_sidebar_importer.cc | 388 +++++++++++--
+ .../browser/ui/spaces/arc_sidebar_importer.h  |  24 +-
+ chrome/browser/ui/spaces/sidebar_backup.cc    | 289 ++++++---
+ chrome/browser/ui/spaces/sidebar_backup.h     |  32 +-
+ .../ui/spaces/sidebar_backup_unittest.cc      | 548 +++++++++++++++++-
+ chrome/browser/ui/stedding/tab_parents.cc     |  33 ++
+ chrome/browser/ui/stedding/tab_parents.h      |  17 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |   6 +-
+ .../webui/settings/stedding_spaces_handler.cc |  32 +
+ .../webui/settings/stedding_spaces_handler.h  |   3 +
+ chrome/test/stedding/BUILD.gn                 |   1 +
+ .../test/stedding/sidebar_file_browsertest.cc | 272 +++++++++
+ 14 files changed, 1490 insertions(+), 164 deletions(-)
+ create mode 100644 chrome/test/stedding/sidebar_file_browsertest.cc
+
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 68c3c6736f887..5023143d68005 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -613,6 +613,7 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       <div class="secondary">${this.exportStatus_ || '$i18n{steddingSidebarFilesSubLabel}'}</div>
+     </div>
+     <cr-button @click="${this.onExportSpaceClick_}">$i18n{steddingExportSpace}</cr-button>
++    <cr-button @click="${this.onExportAllClick_}">$i18n{steddingExportAllSpaces}</cr-button>
+     <cr-button @click="${this.onImportSidebarClick_}">$i18n{steddingImportSidebar}</cr-button>
+   </div>
+   ${this.arcSummary_ ? html`
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+index 93cc13fca256f..6d2da6a0fcba9 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+@@ -451,6 +451,14 @@ export class SettingsSteddingPageElement extends
+     });
+   }
+ 
++  protected onExportAllClick_() {
++    // sidebar-file Sf6: every Space of the window, with its pins, pinned
++    // folders and essentials, as one file.
++    sendWithPromise('steddingExportAllSpaces').then((path: unknown) => {
++      this.exportStatus_ = path ? loadTimeData.getStringF('steddingExported', String(path)) :
++                                  loadTimeData.getString('steddingExportFailed');
++    });
++  }
+   protected onImportSidebarClick_() {
+     chrome.send('steddingImportSidebarFile');
+   }
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+index 030592426b008..6fd52f83b1f58 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
+@@ -24,23 +24,26 @@
+ #include "base/process/process_iterator.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/thread_pool.h"
+ #include "base/token.h"
++#include "base/uuid.h"
+ #include "base/values.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/spaces/arc_data_importer.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_colors.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tabs/tab_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/prefs/scoped_user_pref_update.h"
+-#include "components/sessions/content/session_tab_helper.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_collection_types.h"
+@@ -256,7 +259,9 @@ std::vector<Node> BuildChildren(const ArcItem& parent,
+   return out;
+ }
+ 
+-std::optional<SkColor> ThemeColor(const base::DictValue& space) {
++// The Space's theme colour: Arc's snapped to the nearest swatch (I10); one
++// a file Stedding wrote, `exact`, as it is (sidebar-file Sf2).
++std::optional<SkColor> ThemeColor(const base::DictValue& space, bool exact) {
+   const base::DictValue* tone = space.FindDictByDottedPath(
+       "customInfo.windowTheme.primaryColorPalette.midTone");
+   if (!tone) {
+@@ -267,8 +272,48 @@ std::optional<SkColor> ThemeColor(const base::DictValue& space) {
+     return static_cast<int>(std::clamp(value.value_or(0.0), 0.0, 1.0) * 255.0 +
+                             0.5);
+   };
+-  return NearestSpaceColor(
+-      SkColorSetRGB(channel("red"), channel("green"), channel("blue")));
++  const SkColor color =
++      SkColorSetRGB(channel("red"), channel("green"), channel("blue"));
++  return exact ? color : NearestSpaceColor(color);
++}
++
++// "#RRGGBB", as a file Stedding wrote gives a colour; none for anything
++// else.
++std::optional<SkColor> ColorFromText(std::string_view text) {
++  uint32_t rgb = 0;
++  if (text.size() != 7 || text[0] != '#' ||
++      !base::IsHexDigit(text[1]) ||
++      !base::HexStringToUInt(text.substr(1), &rgb) || rgb > 0xFFFFFF) {
++    return std::nullopt;
++  }
++  return SkColorSetA(rgb, SK_AlphaOPAQUE);
++}
++
++// sidebar-file Sf2: the token of a tab id a file Stedding wrote,
++// "tab:<tab token>"; empty for any other id, an Arc id or an id from before
++// tokens ("tab:<session id>").
++std::string TokenOf(const std::string& id) {
++  constexpr std::string_view kPrefix = "tab:";
++  if (!base::StartsWith(id, kPrefix)) {
++    return std::string();
++  }
++  std::string token = id.substr(kPrefix.size());
++  return base::Uuid::ParseLowercase(token).is_valid() ? token : std::string();
++}
++
++// Sf2: the folder a file Stedding wrote names, "folder:<FolderId>"; none for
++// any other id, an Arc list or a folder from before the ids (an address).
++std::optional<tabs::FolderId> FolderIdOf(const std::string& id) {
++  constexpr std::string_view kPrefix = "folder:";
++  if (!base::StartsWith(id, kPrefix)) {
++    return std::nullopt;
++  }
++  const std::optional<base::Token> token =
++      base::Token::FromString(std::string_view(id).substr(kPrefix.size()));
++  if (!token) {
++    return std::nullopt;
++  }
++  return tabs::FolderId::FromRawToken(*token);
+ }
+ 
+ // The folder with id `id` anywhere under `collection`, empty ones included.
+@@ -294,6 +339,35 @@ tabs::FolderTabCollection* FindFolderById(const tabs::TabCollection& collection,
+   return nullptr;
+ }
+ 
++// Every folder's id under `collection`, as a file Stedding writes it.
++void AddFolderIds(const tabs::TabCollection& collection,
++                  std::set<std::string>* ids) {
++  for (const tabs::Child& child : collection.GetChildren()) {
++    const std::unique_ptr<tabs::TabCollection>* const sub =
++        std::get_if<std::unique_ptr<tabs::TabCollection>>(&child);
++    if (!sub || !*sub) {
++      continue;
++    }
++    const tabs::TabCollection* const node = sub->get();
++    if (node->type() == tabs::TabCollection::Type::FOLDER) {
++      ids->insert(
++          "folder:" +
++          static_cast<const tabs::FolderTabCollection*>(node)->id().ToString());
++    }
++    AddFolderIds(*node, ids);
++  }
++}
++
++// The outermost folder `folder` sits in, or itself.
++tabs::FolderTabCollection* TopFolder(tabs::FolderTabCollection* folder) {
++  for (tabs::TabCollection* up = folder->GetParentCollection();
++       up && up->type() == tabs::TabCollection::Type::FOLDER;
++       up = up->GetParentCollection()) {
++    folder = static_cast<tabs::FolderTabCollection*>(up);
++  }
++  return folder;
++}
++
+ // Arc's item ids already brought over (I12).
+ class ImportedIds {
+  public:
+@@ -419,23 +493,97 @@ struct ApplyContext {
+   raw_ptr<Profile> profile;
+   raw_ptr<ImportedIds> ids;
+   raw_ptr<ArcImportResult> result;
+-  // I19: the ids of the tabs open now ("tab:<session id>"), which a
+-  // snapshot of this window would insert twice.
+-  std::set<std::string> open_tabs;
++  // sidebar-file Sf2: the plan is a file Stedding wrote, merged by its
++  // durable ids, none of which is remembered in the profile.
++  bool durable = false;
++  // I19, Sf2: the ids open now in every window of the profile ("tab:<tab
++  // token>", "folder:<FolderId>"), and those this import has made since. A
++  // file Stedding wrote is never inserted twice beside what it names.
++  std::set<std::string> open;
++  // Sf2: the folder made for each of the file's folders.
++  std::map<std::string, tabs::FolderId> made_folders;
+ };
+ 
+-std::set<std::string> OpenTabIds(TabStripModel* tabs) {
+-  std::set<std::string> ids;
+-  for (int i = 0; i < tabs->count(); ++i) {
+-    if (content::WebContents* const contents = tabs->GetWebContentsAt(i)) {
+-      ids.insert("tab:" +
+-                 base::NumberToString(
+-                     sessions::SessionTabHelper::IdForTab(contents).id()));
++void AddOpenIds(const TabStripModel& strip, std::set<std::string>* ids) {
++  for (int i = 0; i < strip.count(); ++i) {
++    if (const std::string token =
++            stedding::TabToken(strip.GetWebContentsAt(i));
++        !token.empty()) {
++      ids->insert("tab:" + token);
+     }
+   }
++  if (strip.Root()) {
++    AddFolderIds(*strip.Root(), ids);
++  }
++}
++
++// Sf2: what `browser`'s profile has open under a durable id, in this window
++// and every other one of the profile. A pin in a second window was
++// otherwise inserted again into the first. The ids were the tabs' session
++// ids, a number that is new at every launch.
++std::set<std::string> OpenIds(BrowserWindowInterface* browser) {
++  std::set<std::string> ids;
++  AddOpenIds(*browser->GetTabStripModel(), &ids);
++  Profile* const profile = browser->GetProfile();
++  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
++      [&](BrowserWindowInterface* window) {
++        if (window != browser && window->GetProfile() == profile &&
++            window->GetTabStripModel()) {
++          AddOpenIds(*window->GetTabStripModel(), &ids);
++        }
++        return true;
++      });
+   return ids;
+ }
+ 
++// Whether the item `id` is here already: open now, or, for Arc's ids,
++// brought over by an earlier import (I12). A file Stedding wrote is merged
++// against what is open alone, so a tab closed since comes back (Sf2,
++// docs/history/plan-2026-09-26.md WEB-19).
++bool Present(const ApplyContext& ctx, const std::string& id) {
++  return ctx.open.contains(id) || (!ctx.durable && ctx.ids->Contains(id));
++}
++
++// Records that the item `id` is here now: for Arc's ids in the profile too.
++void Remember(ApplyContext& ctx, const std::string& id) {
++  ctx.open.insert(id);
++  if (!ctx.durable) {
++    ctx.ids->Add(id);
++  }
++}
++
++// Sf2: a tab made from a file Stedding wrote keeps the file's id, so the
++// next import of that file, here or after a restart, finds it.
++void AdoptToken(const ApplyContext& ctx,
++                tabs::TabInterface* tab,
++                const std::string& id) {
++  if (!ctx.durable) {
++    return;
++  }
++  if (const std::string token = TokenOf(id); !token.empty()) {
++    stedding::SetTabToken(tab, token);
++  }
++}
++
++// The folder the item `id` names in this window: one an earlier import made
++// for Arc's list (I12), or one whose own id a file Stedding wrote (Sf2), or
++// one this import made for it. Null for a folder that is not here.
++tabs::FolderTabCollection* KnownFolder(ApplyContext& ctx,
++                                       const std::string& id) {
++  if (!ctx.durable) {
++    return ctx.ids->FolderFor(id, *ctx.tabs);
++  }
++  if (!ctx.tabs->Root()) {
++    return nullptr;
++  }
++  std::optional<tabs::FolderId> folder = FolderIdOf(id);
++  if (const auto made = ctx.made_folders.find(id);
++      made != ctx.made_folders.end()) {
++    folder = made->second;
++  }
++  return folder ? FindFolderById(*ctx.tabs->Root(), *folder) : nullptr;
++}
++
+ // The Space of the tabs in `folder`, or `fallback` for a folder with none: a
+ // folder the user moved to another Space takes what Arc adds to it there.
+ SpaceId SpaceOfFolder(ApplyContext& ctx,
+@@ -463,8 +611,7 @@ std::vector<tabs::TabInterface*> InsertDirectTabs(ApplyContext& ctx,
+     if (child.kind == Node::Kind::kFolder) {
+       continue;
+     }
+-    if (ctx.ids->Contains(child.arc_id) ||
+-        ctx.open_tabs.contains(child.arc_id)) {
++    if (Present(ctx, child.arc_id)) {
+       ++ctx.result->skipped;
+       continue;
+     }
+@@ -477,7 +624,8 @@ std::vector<tabs::TabInterface*> InsertDirectTabs(ApplyContext& ctx,
+       continue;
+     }
+     ctx.model->SetSpaceForTab(tab, space);
+-    ctx.ids->Add(child.arc_id);
++    AdoptToken(ctx, tab, child.arc_id);
++    Remember(ctx, child.arc_id);
+     ++ctx.result->tabs;
+     inserted.push_back(tab);
+   }
+@@ -503,12 +651,20 @@ tabs::FolderTabCollection* MakeFolder(
+     return nullptr;
+   }
+   std::ranges::sort(indices);
++  // Sf2: a folder a file Stedding wrote takes the file's id, which nothing
++  // open has (the caller found it absent), so the next import finds it.
++  const std::optional<tabs::FolderId> id =
++      ctx.durable ? FolderIdOf(node.arc_id) : std::nullopt;
+   tabs::FolderTabCollection* const folder =
+-      ctx.tabs->AddToNewFolder(indices, parent);
++      ctx.tabs->AddToNewFolder(indices, parent, id);
+   if (folder) {
+     folder->SetTitle(base::UTF16ToUTF8(node.title));
+-    ctx.ids->Add(node.arc_id);
+-    ctx.ids->RememberFolder(node.arc_id, folder->id());
++    Remember(ctx, node.arc_id);
++    if (ctx.durable) {
++      ctx.made_folders.insert_or_assign(node.arc_id, folder->id());
++    } else {
++      ctx.ids->RememberFolder(node.arc_id, folder->id());
++    }
+     ++ctx.result->folders;
+   }
+   return folder;
+@@ -523,15 +679,27 @@ std::vector<tabs::TabInterface*> InsertNodes(
+     tabs::FolderTabCollection* parent_folder) {
+   std::vector<tabs::TabInterface*> loose;
+   for (const Node& node : nodes) {
+-    if (ctx.ids->Contains(node.arc_id) || ctx.open_tabs.contains(node.arc_id)) {
+-      // A list an earlier import made a folder of: what Arc added to it since
+-      // goes into that folder, where Arc has it (I12). The whole list was
+-      // skipped, and a tab Arc added inside a known folder never came in.
++    if (Present(ctx, node.arc_id)) {
++      // A list an earlier import made a folder of, or a folder a file
++      // Stedding wrote names that is here: what was added to it since goes
++      // into that folder, where the file has it (I12, Sf2). The whole list
++      // was skipped, and a tab added inside a known folder never came in.
+       if (node.kind == Node::Kind::kFolder) {
+         if (tabs::FolderTabCollection* const known =
+-                ctx.ids->FolderFor(node.arc_id, *ctx.tabs)) {
++                KnownFolder(ctx, node.arc_id)) {
++          // A folder in the pinned run stays one: what joins it is pinned in
++          // place (folders F38), or the folder fell under the Clear line.
++          tabs::FolderTabCollection* const top = TopFolder(known);
++          const bool was_pinned = ctx.model->IsFolderSpacePinned(top);
+           InsertNodes(ctx, node.children, SpaceOfFolder(ctx, known, space),
+                       known);
++          if (was_pinned) {
++            for (tabs::TabInterface* const tab : top->GetTabsRecursive()) {
++              if (!ctx.model->IsSpacePinned(tab)) {
++                ctx.model->SetSpacePinnedInPlace(tab, true);
++              }
++            }
++          }
+           continue;
+         }
+       }
+@@ -549,7 +717,8 @@ std::vector<tabs::TabInterface*> InsertNodes(
+         continue;
+       }
+       ctx.model->SetSpaceForTab(tab, space);
+-      ctx.ids->Add(node.arc_id);
++      AdoptToken(ctx, tab, node.arc_id);
++      Remember(ctx, node.arc_id);
+       ++ctx.result->tabs;
+       if (parent_folder) {
+         const int index = ctx.tabs->GetIndexOfTab(tab);
+@@ -580,8 +749,7 @@ std::vector<tabs::TabInterface*> InsertNodes(
+     // import, 2026-10-21: a folder of thirteen folders and one of two).
+     for (size_t i = 0; !folder && i < subfolders.size(); ++i) {
+       const Node& first = *subfolders[i];
+-      if (ctx.ids->Contains(first.arc_id) ||
+-          ctx.open_tabs.contains(first.arc_id)) {
++      if (Present(ctx, first.arc_id)) {
+         continue;
+       }
+       const std::vector<tabs::TabInterface*> first_tabs =
+@@ -608,6 +776,67 @@ std::vector<tabs::TabInterface*> InsertNodes(
+   return loose;
+ }
+ 
++// I11, spaces B6: `nodes` as essentials, unloaded, after those already
++// here: the shared row's when `own` is none, else the ones Space `own` has
++// as its own -- which it keeps only while it has its own session. Twelve at
++// most in a row (I11). Nothing open now under an id comes in twice: an
++// essential open in the window was inserted again at every import of a
++// file that held it (docs/history/plan-2026-09-26.md WEB-F29).
++void InsertEssentials(ApplyContext& ctx,
++                      const std::vector<Node>& nodes,
++                      const std::optional<SpaceId>& own) {
++  if (nodes.empty()) {
++    return;
++  }
++  size_t in_row = 0;
++  for (int i = 0; i < ctx.tabs->count(); ++i) {
++    const tabs::TabInterface* const tab = ctx.tabs->GetTabAtIndex(i);
++    const bool counts =
++        own ? (ctx.model->IsOwnEssential(tab) &&
++               ctx.model->FindSpaceForTab(tab) == *own)
++            : ctx.model->IsSharedEssential(tab);
++    if (counts) {
++      ++in_row;
++    }
++  }
++  for (const Node& node : nodes) {
++    if (node.kind != Node::Kind::kTab) {
++      continue;
++    }
++    if (Present(ctx, node.arc_id)) {
++      ++ctx.result->skipped;
++      continue;
++    }
++    if (!IsImportablePage(node.url)) {
++      continue;
++    }
++    if (in_row >= kMaxEssentials) {
++      break;
++    }
++    tabs::TabInterface* const tab =
++        InsertUnloaded(ctx.tabs, ctx.profile, node);
++    if (!tab) {
++      continue;
++    }
++    // A tab pinned in a Space with its own session is that Space's own
++    // essential (spaces B6): a shared one is pinned from a Space without
++    // one, when there is such a Space.
++    if (own) {
++      ctx.model->SetSpaceForTab(tab, *own);
++    } else if (const std::optional<SpaceId> shared =
++                   ctx.model->SpaceForSharedEssentials();
++               shared &&
++               ctx.model->SpaceIsIsolated(ctx.model->SpaceForTab(tab))) {
++      ctx.model->SetSpaceForTab(tab, *shared);
++    }
++    AdoptToken(ctx, tab, node.arc_id);
++    ctx.tabs->SetTabPinned(ctx.tabs->GetIndexOfTab(tab), true);
++    Remember(ctx, node.arc_id);
++    ++ctx.result->essentials;
++    ++in_row;
++  }
++}
++
+ }  // namespace
+ 
+ size_t ArcImportPlan::pinned_tab_count() const {
+@@ -680,6 +909,9 @@ std::optional<ArcImportPlan> ParseArcSidebar(std::string_view json) {
+   }
+ 
+   ArcImportPlan plan;
++  // Sf2: a file Stedding wrote (Export Space..., Export all Spaces...) is
++  // merged by its durable ids and keeps its exact colours.
++  plan.written_by_stedding = StringAt(root->GetDict(), "writer") == "Stedding";
+   for (const base::DictValue* dict : DictsOf(sidebar->FindList("spaces"))) {
+     ArcImportPlan::Space space;
+     space.arc_id = StringAt(*dict, "id");
+@@ -694,7 +926,27 @@ std::optional<ArcImportPlan> ParseArcSidebar(std::string_view json) {
+         space.emoji = StringAt(*icon, "emoji");
+       }
+     }
+-    space.color = ThemeColor(*dict);
++    space.color = ThemeColor(*dict, /*exact=*/plan.written_by_stedding);
++    // Sf2, Sf6: what Stedding writes beside Arc's shape -- the Space's
++    // exact colour and its dark one, whether it has its own session, and
++    // the essentials that are its own.
++    if (const base::DictValue* own =
++            plan.written_by_stedding ? dict->FindDict("stedding") : nullptr) {
++      if (const std::optional<SkColor> color =
++              ColorFromText(StringAt(*own, "color"))) {
++        space.color = color;
++      }
++      space.dark_color = ColorFromText(StringAt(*own, "darkColor"));
++      space.isolated = own->FindBool("isolated").value_or(false);
++      if (const auto it = items.find(StringAt(*own, "essentials"));
++          it != items.end()) {
++        for (Node& node : BuildChildren(it->second, items, 0)) {
++          if (node.kind == Node::Kind::kTab) {
++            space.essentials.push_back(std::move(node));
++          }
++        }
++      }
++    }
+     if (const base::Value* profile = dict->Find("profile")) {
+       const base::DictValue* bound = profile->GetIfDict();
+       if (bound && !bound->contains("default")) {
+@@ -897,33 +1149,14 @@ ArcImportResult ApplyArcImport(BrowserWindowInterface* browser,
+   }
+   ImportedIds ids(profile->GetPrefs());
+   ApplyContext ctx{browser, model, tabs, profile, &ids, &result};
+-  ctx.open_tabs = OpenTabIds(tabs);
++  ctx.durable = plan.written_by_stedding;
++  ctx.open = OpenIds(browser);
+   // Every tab here knows its Space; no route moves it (routing D2).
+   SpaceModel::ScopedRoutingPause no_routing(model);
+ 
+   // The essentials row first; it is in every Space (I11 caps it).
+   if (options.pinned) {
+-    size_t pinned_now = static_cast<size_t>(tabs->IndexOfFirstNonPinnedTab());
+-    for (const Node& node : plan.essentials) {
+-      if (ids.Contains(node.arc_id)) {
+-        ++result.skipped;
+-        continue;
+-      }
+-      if (!IsImportablePage(node.url)) {
+-        continue;
+-      }
+-      if (pinned_now >= kMaxEssentials) {
+-        break;
+-      }
+-      tabs::TabInterface* const tab = InsertUnloaded(tabs, profile, node);
+-      if (!tab) {
+-        continue;
+-      }
+-      tabs->SetTabPinned(tabs->GetIndexOfTab(tab), true);
+-      ids.Add(node.arc_id);
+-      ++result.essentials;
+-      ++pinned_now;
+-    }
++    InsertEssentials(ctx, plan.essentials, std::nullopt);
+   }
+ 
+   if (options.spaces) {
+@@ -954,8 +1187,9 @@ ArcImportResult ApplyArcImport(BrowserWindowInterface* browser,
+       }
+       if (!space) {
+         // A lone unnamed default Space is the first Space's to take.
+-        if (!default_taken && model->size() == 1 &&
+-            model->spaces().front()->name().empty()) {
++        const bool take_default = !default_taken && model->size() == 1 &&
++                                  model->spaces().front()->name().empty();
++        if (take_default) {
+           space = model->spaces().front().get();
+           model->SetSpaceName(space->id(), arc_space.title);
+           default_taken = true;
+@@ -969,9 +1203,23 @@ ArcImportResult ApplyArcImport(BrowserWindowInterface* browser,
+           model->SetSpaceIcon(space->id(), arc_space.emoji);
+         }
+         if (arc_space.color) {
+-          model->SetSpaceColor(space->id(), *arc_space.color);
++          // spaces B43: a pair comes back a pair (Sf2).
++          model->SetSpaceColors(space->id(), *arc_space.color,
++                                arc_space.dark_color);
++        }
++        // sessions S32 (Sf6): a Space made here with its own session takes
++        // a jar of its own, new and empty, before any tab is in it: what
++        // was signed in does not travel. The default Space taken may hold
++        // tabs already, and a jar change asks first (PLAN.md SPC-9), so it
++        // keeps the jar it has.
++        if (arc_space.isolated && !take_default) {
++          model->SetSpaceIsolated(space->id(), true);
++        }
++        // A file Stedding wrote leaves no id in the profile's list (Sf2):
++        // the Space is found again by the token it is remembered under.
++        if (!ctx.durable) {
++          ids.Add(arc_space.arc_id);
+         }
+-        ids.Add(arc_space.arc_id);
+         ids.RememberSpace(arc_space.arc_id, space->id());
+         ++result.spaces;
+       } else {
+@@ -979,11 +1227,29 @@ ArcImportResult ApplyArcImport(BrowserWindowInterface* browser,
+       }
+       const SpaceId id = space->id();
+       if (options.pinned) {
+-        // The loose tabs of the pinned run are Space-pinned in order, since
+-        // a pin joins the end of the run (pins H14).
+-        for (tabs::TabInterface* const tab :
+-             InsertNodes(ctx, arc_space.pinned, id, nullptr)) {
+-          model->SetSpacePinned(tab, true);
++        // spaces B6: the Space's own essentials, in its jar.
++        InsertEssentials(ctx, arc_space.essentials, id);
++        // The pinned run in its order, one row at a time: a pin joins the
++        // end of the run (pins H14), and so does a folder pinned (folders
++        // F38).
++        for (const Node& node : arc_space.pinned) {
++          for (tabs::TabInterface* const tab :
++               InsertNodes(ctx, {node}, id, nullptr)) {
++            model->SetSpacePinned(tab, true);
++          }
++          // Sf2: a folder of a file Stedding wrote's pinned run comes back
++          // in the run. Arc's lists there come in under the Clear line, as
++          // they always have; a folder that was here already keeps its
++          // place.
++          if (ctx.durable && node.kind == Node::Kind::kFolder &&
++              ctx.made_folders.contains(node.arc_id)) {
++            tabs::FolderTabCollection* const folder =
++                KnownFolder(ctx, node.arc_id);
++            if (folder && model->CanPinFolder(folder) &&
++                !model->IsFolderSpacePinned(folder)) {
++              model->SetFolderSpacePinned(folder, true);
++            }
++          }
+         }
+       }
+       if (options.unpinned) {
+@@ -1007,7 +1273,7 @@ ArcImportResult ImportNodesAsPins(
+   }
+   ImportedIds ids(profile->GetPrefs());
+   ApplyContext ctx{browser, model, tabs, profile, &ids, &result};
+-  ctx.open_tabs = OpenTabIds(tabs);
++  ctx.open = OpenIds(browser);
+   SpaceModel::ScopedRoutingPause no_routing(model);
+   const SpaceId space = model->active_id();
+   for (tabs::TabInterface* const tab : InsertNodes(ctx, nodes, space, nullptr)) {
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.h b/chrome/browser/ui/spaces/arc_sidebar_importer.h
+index 3c9fca3d2b2d2..9cf496d894c43 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer.h
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer.h
+@@ -51,12 +51,22 @@ struct ArcImportPlan {
+     std::string arc_id;
+     std::string title;
+     std::string emoji;
+-    // I10: the nearest Stedding swatch, when Arc had a theme.
++    // I10: the nearest Stedding swatch, when Arc had a theme. A file Stedding
++    // wrote keeps the Space's own colour exactly (sidebar-file Sf2).
+     std::optional<SkColor> color;
++    // spaces B43: the dark look's colour of a pair, from a file Stedding
++    // wrote; none for one colour.
++    std::optional<SkColor> dark_color;
++    // sessions S32: the Space has its own session. A Space an import makes
++    // takes a jar of its own, empty: what was signed in does not travel.
++    bool isolated = false;
+     // I8: Arc's per-Space profile, which Stedding does not carry over.
+     std::string profile;
+     std::vector<Node> pinned;
+     std::vector<Node> unpinned;
++    // spaces B6: the essentials that are this Space's own (sidebar-file
++    // Sf6), tabs only.
++    std::vector<Node> essentials;
+   };
+ 
+   ArcImportPlan();
+@@ -67,7 +77,14 @@ struct ArcImportPlan {
+   ~ArcImportPlan();
+ 
+   std::vector<Space> spaces;
++  // The shared essentials row.
+   std::vector<Node> essentials;
++  // sidebar-file Sf2: the file says Stedding wrote it. Its ids are durable
++  // (a Space's token, "tab:<tab token>", "folder:<FolderId>"): an import
++  // skips what is open now under those ids and remembers none of them, so a
++  // tab closed since comes back at the next import. Arc's ids are remembered
++  // in the profile (I12).
++  bool written_by_stedding = false;
+ 
+   // The counts the summary shows (I2).
+   size_t pinned_tab_count() const;
+@@ -137,7 +154,10 @@ struct ArcImportResult {
+ // Applies `plan` to `browser`'s window (I3): Spaces, essentials (capped at
+ // twelve, I11), the pinned runs, folders, every tab inserted unloaded. A
+ // second run adds nothing already present: Arc's ids are remembered in the
+-// profile (I12).
++// profile (I12). A file Stedding wrote is merged by its durable ids instead
++// (sidebar-file Sf2): nothing open now in any window of the profile under
++// one of them is added again, a folder of the pinned run comes back pinned,
++// and a tab or folder made takes the file's id.
+ ArcImportResult ApplyArcImport(BrowserWindowInterface* browser,
+                                const ArcImportPlan& plan,
+                                const ArcImportOptions& options);
+diff --git a/chrome/browser/ui/spaces/sidebar_backup.cc b/chrome/browser/ui/spaces/sidebar_backup.cc
+index 8332fcbee229e..143c4c03d14da 100644
+--- a/chrome/browser/ui/spaces/sidebar_backup.cc
++++ b/chrome/browser/ui/spaces/sidebar_backup.cc
+@@ -4,25 +4,31 @@
+ 
+ #include "chrome/browser/ui/spaces/sidebar_backup.h"
+ 
+-#include <map>
++#include <memory>
++#include <optional>
++#include <set>
++#include <string>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
+ #include "base/functional/bind.h"
+ #include "base/i18n/file_util_icu.h"
+ #include "base/json/json_writer.h"
+-#include "base/strings/string_number_conversions.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/thread_pool.h"
++#include "base/uuid.h"
+ #include "base/values.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/stedding/pin_home.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+-#include "components/sessions/content/session_tab_helper.h"
+ #include "components/tabs/public/folder_tab_collection.h"
+ #include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -34,20 +40,46 @@ namespace {
+ 
+ using Node = ArcImportPlan::Node;
+ 
+-std::string TabId(content::WebContents* contents) {
+-  return "tab:" + base::NumberToString(
+-                      sessions::SessionTabHelper::IdForTab(contents).id());
++// One snapshot's state: the window's model and strip, and the tab tokens
++// written so far, so that no two tabs are written under one id (Sf2).
++struct Snapshot {
++  raw_ptr<SpaceModel> model;
++  raw_ptr<TabStripModel> tabs;
++  std::set<std::string> tokens;
++};
++
++// sidebar-file Sf2: "tab:<tab token>", which the session keeps across a
++// restart. It was "tab:<session id>", a number that is new at every launch,
++// so a file exported before a restart and imported after it added every tab
++// again (docs/history/plan-2026-09-26.md WEB-F16). A token is made for a tab
++// that has none. A second tab holding a token already written -- a tab an
++// import made from a file, and the closed tab it stood for reopened beside
++// it -- takes a new one, so the file never names two tabs alike.
++std::string TabId(Snapshot& snapshot, tabs::TabInterface* tab) {
++  std::string token = stedding::EnsureTabToken(tab);
++  if (!snapshot.tokens.insert(token).second) {
++    token = base::Uuid::GenerateRandomV4().AsLowercaseString();
++    stedding::SetTabToken(tab, token);
++    snapshot.tokens.insert(token);
++  }
++  return "tab:" + token;
+ }
+ 
++// Sf2: "folder:<FolderId>". The id is the folder's own, kept in every tab's
++// folder path in the session (stedding_folder_session.cc). It was the
++// folder's address in memory.
+ std::string ContainerId(const tabs::TabCollection* collection) {
+-  return base::StringPrintf("folder:%p", static_cast<const void*>(collection));
++  return "folder:" +
++         static_cast<const tabs::FolderTabCollection*>(collection)
++             ->id()
++             .ToString();
+ }
+ 
+-Node TabNode(SpaceModel* model, tabs::TabInterface* tab) {
++Node TabNode(Snapshot& snapshot, tabs::TabInterface* tab) {
+   content::WebContents* const contents = tab->GetContents();
+   Node node;
+   node.kind = Node::Kind::kTab;
+-  node.arc_id = TabId(contents);
++  node.arc_id = TabId(snapshot, tab);
+   // The user's name for the tab first (tabs R15), then the page title.
+   node.title = stedding::TabName(contents);
+   if (node.title.empty()) {
+@@ -56,7 +88,7 @@ Node TabNode(SpaceModel* model, tabs::TabInterface* tab) {
+   // A pin's home is what it comes back as (pins H1), when that is a web page
+   // (H13). A pin with any other home is written as the page it shows, so the
+   // file never carries a javascript: or file: home to the next import.
+-  const std::optional<GURL> home = model->HomeUrl(tab);
++  const std::optional<GURL> home = snapshot.model->HomeUrl(tab);
+   node.url = home && stedding::IsAllowedPinHome(*home)
+                  ? *home
+                  : contents->GetLastCommittedURL();
+@@ -78,66 +110,79 @@ std::vector<const tabs::TabCollection*> FolderChain(tabs::TabInterface* tab) {
+   return chain;
+ }
+ 
+-// Builds one Space's pinned and unpinned nodes: folders nest under the
+-// pinned run (the importer keeps them there), loose Space-pinned tabs join
+-// it, loose plain tabs are the unpinned run.
+-void FillSpace(SpaceModel* model,
+-               TabStripModel* tabs,
+-               ArcImportPlan::Space* space,
+-               const SpaceId& id) {
+-  std::map<const tabs::TabCollection*, size_t> folder_index;
+-  std::vector<Node> folders;
+-  const auto folder_for =
+-      [&](const std::vector<const tabs::TabCollection*>& chain) -> Node* {
+-    Node* parent = nullptr;
+-    std::vector<Node>* siblings = &folders;
+-    for (const tabs::TabCollection* collection : chain) {
+-      Node* found = nullptr;
+-      for (Node& candidate : *siblings) {
+-        if (candidate.kind == Node::Kind::kFolder &&
+-            candidate.arc_id == ContainerId(collection)) {
+-          found = &candidate;
+-          break;
+-        }
++// The node of the innermost folder of `chain` in `run`, made with its
++// parents where this snapshot has not met them yet. Folders and tabs share a
++// run, in the order the strip has them.
++Node* FolderNodeFor(std::vector<Node>* run,
++                    const std::vector<const tabs::TabCollection*>& chain) {
++  Node* parent = nullptr;
++  std::vector<Node>* siblings = run;
++  for (const tabs::TabCollection* collection : chain) {
++    const std::string id = ContainerId(collection);
++    Node* found = nullptr;
++    for (Node& candidate : *siblings) {
++      if (candidate.kind == Node::Kind::kFolder && candidate.arc_id == id) {
++        found = &candidate;
++        break;
+       }
+-      if (!found) {
+-        Node folder;
+-        folder.kind = Node::Kind::kFolder;
+-        folder.arc_id = ContainerId(collection);
+-        folder.title = base::UTF8ToUTF16(
+-            static_cast<const tabs::FolderTabCollection*>(collection)->title());
+-        siblings->push_back(std::move(folder));
+-        found = &siblings->back();
+-      }
+-      parent = found;
+-      siblings = &found->children;
+     }
+-    return parent;
+-  };
+-  std::vector<Node> loose_pinned;
+-  std::vector<Node> loose_plain;
++    if (!found) {
++      Node folder;
++      folder.kind = Node::Kind::kFolder;
++      folder.arc_id = id;
++      folder.title = base::UTF8ToUTF16(
++          static_cast<const tabs::FolderTabCollection*>(collection)->title());
++      siblings->push_back(std::move(folder));
++      found = &siblings->back();
++    }
++    parent = found;
++    siblings = &found->children;
++  }
++  return parent;
++}
++
++// Builds one Space's runs, in the strip's order. The pinned run holds the
++// loose Space-pinned tabs and the Space-pinned folders (folders F38) with
++// their nesting; the other run holds the loose tabs and the folders under
++// the Clear line. It had put every folder in the pinned run, and an import
++// then made each an unpinned folder there. The essentials that are this
++// Space's own (spaces B6) are written with it.
++void FillSpace(Snapshot& snapshot,
++               ArcImportPlan::Space* space,
++               const SpaceId& id) {
++  SpaceModel* const model = snapshot.model;
++  TabStripModel* const tabs = snapshot.tabs;
++  std::vector<Node> pinned;
++  std::vector<Node> unpinned;
++  std::vector<Node> own_essentials;
+   for (int i = 0; i < tabs->count(); ++i) {
+     tabs::TabInterface* const tab = tabs->GetTabAtIndex(i);
+-    if (tab->IsPinned() || model->SpaceForTab(tab) != id) {
++    if (tab->IsPinned()) {
++      if (model->IsOwnEssential(tab) && model->FindSpaceForTab(tab) == id) {
++        own_essentials.push_back(TabNode(snapshot, tab));
++      }
++      continue;
++    }
++    if (model->SpaceForTab(tab) != id) {
+       continue;
+     }
+     const std::vector<const tabs::TabCollection*> chain = FolderChain(tab);
+-    if (!chain.empty()) {
+-      folder_for(chain)->children.push_back(TabNode(model, tab));
+-    } else if (model->IsSpacePinned(tab)) {
+-      loose_pinned.push_back(TabNode(model, tab));
+-    } else {
+-      loose_plain.push_back(TabNode(model, tab));
++    if (chain.empty()) {
++      (model->IsSpacePinned(tab) ? pinned : unpinned)
++          .push_back(TabNode(snapshot, tab));
++      continue;
+     }
++    const bool pinned_folder = model->IsFolderSpacePinned(
++        static_cast<const tabs::FolderTabCollection*>(chain.front()));
++    FolderNodeFor(pinned_folder ? &pinned : &unpinned, chain)
++        ->children.push_back(TabNode(snapshot, tab));
+   }
+-  space->pinned = std::move(loose_pinned);
+-  for (Node& folder : folders) {
+-    space->pinned.push_back(std::move(folder));
+-  }
+-  space->unpinned = std::move(loose_plain);
++  space->pinned = std::move(pinned);
++  space->unpinned = std::move(unpinned);
++  space->essentials = std::move(own_essentials);
+ }
+ 
+-ArcImportPlan::Space SpaceEntry(const Space& space) {
++ArcImportPlan::Space SpaceEntry(const SpaceModel& model, const Space& space) {
+   ArcImportPlan::Space entry;
+   entry.arc_id = space.id().ToString();
+   // The Space's own name, none for an unnamed Space (archive A8 keeps the
+@@ -146,9 +191,26 @@ ArcImportPlan::Space SpaceEntry(const Space& space) {
+   entry.title = space.name();
+   entry.emoji = space.icon();
+   entry.color = space.color();
++  entry.dark_color = space.dark_color();
++  // Whether it has its own session, never the jar: sign-ins do not travel.
++  entry.isolated = model.SpaceIsIsolated(space.id());
+   return entry;
+ }
+ 
++std::optional<Snapshot> SnapshotOf(BrowserWindowInterface* browser) {
++  SpaceModel* const model = browser ? SpaceModel::From(browser) : nullptr;
++  TabStripModel* const tabs = browser ? browser->GetTabStripModel() : nullptr;
++  if (!model || !tabs) {
++    return std::nullopt;
++  }
++  return Snapshot{model, tabs, {}};
++}
++
++std::string ColorText(SkColor color) {
++  return base::StringPrintf("#%02X%02X%02X", SkColorGetR(color),
++                            SkColorGetG(color), SkColorGetB(color));
++}
++
+ base::DictValue ItemContainer(const std::string& id,
+                               const std::vector<std::string>& children,
+                               const char* type) {
+@@ -221,18 +283,48 @@ double Channel(unsigned channel) {
+ ArcImportPlan SnapshotSpace(BrowserWindowInterface* browser,
+                             const SpaceId& id) {
+   ArcImportPlan plan;
+-  SpaceModel* const model = browser ? SpaceModel::From(browser) : nullptr;
+-  TabStripModel* const tabs = browser ? browser->GetTabStripModel() : nullptr;
+-  Space* const space = model ? model->GetSpace(id) : nullptr;
+-  if (!space || !tabs) {
++  plan.written_by_stedding = true;
++  std::optional<Snapshot> snapshot = SnapshotOf(browser);
++  Space* const space = snapshot ? snapshot->model->GetSpace(id) : nullptr;
++  if (!space) {
+     return plan;
+   }
+-  ArcImportPlan::Space entry = SpaceEntry(*space);
+-  FillSpace(model, tabs, &entry, id);
++  ArcImportPlan::Space entry = SpaceEntry(*snapshot->model, *space);
++  FillSpace(*snapshot, &entry, id);
+   plan.spaces.push_back(std::move(entry));
+   return plan;
+ }
+ 
++ArcImportPlan SnapshotWindow(BrowserWindowInterface* browser) {
++  ArcImportPlan plan;
++  plan.written_by_stedding = true;
++  std::optional<Snapshot> snapshot = SnapshotOf(browser);
++  if (!snapshot) {
++    return plan;
++  }
++  SpaceModel* const model = snapshot->model;
++  for (const std::unique_ptr<Space>& space : model->spaces()) {
++    ArcImportPlan::Space entry = SpaceEntry(*model, *space);
++    FillSpace(*snapshot, &entry, space->id());
++    plan.spaces.push_back(std::move(entry));
++  }
++  // The shared row, in its order. An essential that is a Space's own went
++  // with its Space.
++  TabStripModel* const tabs = snapshot->tabs;
++  for (int i = 0; i < tabs->count(); ++i) {
++    tabs::TabInterface* const tab = tabs->GetTabAtIndex(i);
++    if (!tab->IsPinned()) {
++      continue;
++    }
++    const std::optional<SpaceId> owner = model->FindSpaceForTab(tab);
++    if (model->IsOwnEssential(tab) && owner && model->GetSpace(*owner)) {
++      continue;
++    }
++    plan.essentials.push_back(TabNode(*snapshot, tab));
++  }
++  return plan;
++}
++
+ std::string PlanToJson(const ArcImportPlan& plan) {
+   base::ListValue spaces;
+   base::ListValue items;
+@@ -268,6 +360,25 @@ std::string PlanToJson(const ArcImportPlan& plan) {
+       custom.Set("windowTheme", std::move(theme));
+     }
+     entry.Set("customInfo", std::move(custom));
++    // sidebar-file Sf2, Sf6: what Arc's shape has no place for. A reader of
++    // Arc's shape skips the key.
++    const std::string essentials_id = space.arc_id + ":essentials";
++    base::DictValue stedding;
++    if (space.color) {
++      stedding.Set("color", ColorText(*space.color));
++    }
++    if (space.dark_color) {
++      stedding.Set("darkColor", ColorText(*space.dark_color));
++    }
++    if (space.isolated) {
++      stedding.Set("isolated", true);
++    }
++    if (!space.essentials.empty()) {
++      stedding.Set("essentials", essentials_id);
++    }
++    if (!stedding.empty()) {
++      entry.Set("stedding", std::move(stedding));
++    }
+     spaces.Append(space.arc_id);
+     spaces.Append(std::move(entry));
+ 
+@@ -283,6 +394,17 @@ std::string PlanToJson(const ArcImportPlan& plan) {
+     for (const Node& node : space.unpinned) {
+       AppendItem(node, unpinned_id, &items);
+     }
++    // The Space's own essentials: a top-apps container the Space's block
++    // names, and not the shared row's list, so a reader that knows only
++    // Arc's shape does not make them shared.
++    if (!space.essentials.empty()) {
++      items.Append(essentials_id);
++      items.Append(
++          ItemContainer(essentials_id, ChildIds(space.essentials), "topApps"));
++      for (const Node& node : space.essentials) {
++        AppendItem(node, essentials_id, &items);
++      }
++    }
+   }
+   const std::string top_id = "essentials";
+   items.Append(top_id);
+@@ -319,23 +441,24 @@ std::string PlanToJson(const ArcImportPlan& plan) {
+ 
+ namespace {
+ 
+-std::optional<std::string> ReadFileOnPool(const base::FilePath& path) {
++// A sidebar is a few hundred kilobytes; a file far past that is not one,
++// and is not read whole into memory.
++constexpr size_t kMaxSidebarFileBytes = 64 * 1024 * 1024;
++
++// Read and parsed off the UI thread: the file is not trusted, and a large
++// one held the window up while it parsed (BACKLOG S-160).
++std::optional<ArcImportPlan> ReadSidebarOnPool(const base::FilePath& path) {
+   std::string json;
+-  if (!base::ReadFileToString(path, &json)) {
++  if (!base::ReadFileToStringWithMaxSize(path, &json, kMaxSidebarFileBytes)) {
+     return std::nullopt;
+   }
+-  return json;
++  return ParseArcSidebar(json);
+ }
+ 
+ void ApplyRestore(base::WeakPtr<BrowserWindowInterface> browser,
+                   ImportSidebarDoneCallback done,
+-                  std::optional<std::string> json) {
+-  if (!browser || !json) {
+-    std::move(done).Run(std::nullopt);
+-    return;
+-  }
+-  const std::optional<ArcImportPlan> plan = ParseArcSidebar(*json);
+-  if (!plan) {
++                  std::optional<ArcImportPlan> plan) {
++  if (!browser || !plan) {
+     std::move(done).Run(std::nullopt);
+     return;
+   }
+@@ -360,11 +483,19 @@ base::FilePath WriteExportOnPool(const base::FilePath& directory,
+                              exploded.minute))
+           .value();
+   base::i18n::ReplaceIllegalCharactersInPath(&name, '_');
+-  const base::FilePath path = directory.Append(name);
+-  if (path.DirName() != directory.StripTrailingSeparators()) {
++  const base::FilePath wanted = directory.Append(name);
++  if (wanted.DirName() != directory.StripTrailingSeparators() ||
++      !base::CreateDirectory(directory)) {
++    return base::FilePath();
++  }
++  // Sf6: a second export in the same minute is a file of its own, not the
++  // first one written over; and the file is whole or absent, never half
++  // written (WEB-25, WEB-18).
++  const base::FilePath path = base::GetUniquePath(wanted);
++  if (path.empty() || path.DirName() != wanted.DirName()) {
+     return base::FilePath();
+   }
+-  return base::CreateDirectory(directory) && base::WriteFile(path, json)
++  return base::ImportantFileWriter::WriteFileAtomically(path, json)
+              ? path
+              : base::FilePath();
+ }
+@@ -380,7 +511,7 @@ void ImportSidebarFileAsync(BrowserWindowInterface* browser,
+   }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+-      base::BindOnce(&ReadFileOnPool, path),
++      base::BindOnce(&ReadSidebarOnPool, path),
+       base::BindOnce(&ApplyRestore, browser->GetWeakPtr(), std::move(done)));
+ }
+ 
+diff --git a/chrome/browser/ui/spaces/sidebar_backup.h b/chrome/browser/ui/spaces/sidebar_backup.h
+index 82a3d67723a35..441ca573130c0 100644
+--- a/chrome/browser/ui/spaces/sidebar_backup.h
++++ b/chrome/browser/ui/spaces/sidebar_backup.h
+@@ -17,25 +17,41 @@ class BrowserWindowInterface;
+ 
+ namespace spaces {
+ 
+-// docs/features/import.md I20: one Space as a plan -- its name, icon, colour,
+-// its pinned run with homes, its folders with their nesting, its loose tabs.
+-// Ids: the Space's own id, "tab:<session id>" for a tab.
++// docs/features/import.md I20: one Space as a plan -- its name, icon, colour
++// or colour pair, whether it has its own session, its pinned run with homes
++// (loose pins and Space-pinned folders, in order), its other tabs and
++// folders, and the essentials that are its own.
++//
++// docs/features/sidebar-file.md Sf2: every id survives a restart. A Space is
++// its registry token, a tab "tab:<tab token>" (the token kept in the
++// session, made here for a tab that has none), a folder
++// "folder:<FolderId>". A second tab found holding a token already written
++// is given a new one.
+ ArcImportPlan SnapshotSpace(BrowserWindowInterface* browser, const SpaceId& id);
+ 
+-// The plan in Arc's file shape, which ParseArcSidebar reads back.
++// sidebar-file Sf6: every Space of the window, in the switcher's order, as
++// SnapshotSpace writes each, and the shared essentials row.
++ArcImportPlan SnapshotWindow(BrowserWindowInterface* browser);
++
++// The plan in Arc's file shape, which ParseArcSidebar reads back, written by
++// Stedding ("writer": "Stedding"): a Space's exact colours, its dark colour,
++// whether it has its own session and its own essentials ride in a
++// "stedding" block that Arc's shape does not have.
+ std::string PlanToJson(const ArcImportPlan& plan);
+ 
+ using ImportSidebarDoneCallback =
+     base::OnceCallback<void(std::optional<ArcImportResult>)>;
+ 
+-// Reads a sidebar file on the thread pool and applies it to the window
+-// through the importer: a merge, which never closes an open tab.
++// Reads and parses a sidebar file on the thread pool and applies it to the
++// window through the importer: a merge by id, which never closes an open tab
++// (import I18, sidebar-file Sf2).
+ void ImportSidebarFileAsync(BrowserWindowInterface* browser,
+                             const base::FilePath& path,
+                             ImportSidebarDoneCallback done);
+ 
+-// I20: writes `plan` to `directory` as "<stem> <time>.json" on the thread
+-// pool and answers with the path.
++// I20: writes `plan` to `directory` as "<stem> <date> <time>.json" on the
++// thread pool, atomically and never over an earlier file, and answers with
++// the path, or an empty one when nothing was written.
+ void ExportPlanAsync(const ArcImportPlan& plan,
+                      const base::FilePath& directory,
+                      const std::string& stem,
+diff --git a/chrome/browser/ui/spaces/sidebar_backup_unittest.cc b/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
+index 375242bac1228..71241ea897129 100644
+--- a/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
++++ b/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
+@@ -4,30 +4,94 @@
+ 
+ #include "chrome/browser/ui/spaces/sidebar_backup.h"
+ 
++#include <algorithm>
++#include <map>
++#include <memory>
++#include <optional>
+ #include <string>
++#include <utility>
+ #include <vector>
+ 
+ #include "base/files/file_enumerator.h"
+ #include "base/files/file_util.h"
+ #include "base/files/scoped_temp_dir.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "base/test/task_environment.h"
+ #include "base/test/test_future.h"
+ #include "base/time/time.h"
++#include "base/uuid.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/spaces/space.h"
+ #include "chrome/browser/ui/spaces/space_colors.h"
+ #include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
++#include "chrome/browser/ui/tabs/tab_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/test/base/browser_with_test_window_test.h"
++#include "chrome/test/base/testing_profile.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tabs/public/folder_tab_collection.h"
++#include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/restore_type.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/common/referrer.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/page_transition_types.h"
+ 
+ namespace spaces {
+ namespace {
+ 
++using Node = ArcImportPlan::Node;
++
++// The node of `kind` whose url (a tab) or title (a folder) is `key` among
++// `nodes`, or null.
++const Node* FindNode(const std::vector<Node>& nodes,
++                     Node::Kind kind,
++                     const std::string& key) {
++  for (const Node& node : nodes) {
++    if (node.kind != kind) {
++      continue;
++    }
++    if (kind == Node::Kind::kTab ? node.url == GURL(key)
++                                 : node.title == base::UTF8ToUTF16(key)) {
++      return &node;
++    }
++  }
++  return nullptr;
++}
++
++// The titles of the folders `tab` sits in, outermost first, "/" between.
++std::string FolderPath(const tabs::TabInterface* tab) {
++  std::string path;
++  for (const tabs::TabCollection* collection = tab->GetParentCollection();
++       collection; collection = collection->GetParentCollection()) {
++    if (collection->type() == tabs::TabCollection::Type::FOLDER) {
++      const std::string& title =
++          static_cast<const tabs::FolderTabCollection*>(collection)->title();
++      path = path.empty() ? title : title + "/" + path;
++    }
++  }
++  return path;
++}
++
++// Every tab of `strip` by the page it shows, with its token.
++std::map<GURL, std::string> TokensByPage(TabStripModel& strip) {
++  std::map<GURL, std::string> tokens;
++  for (int i = 0; i < strip.count(); ++i) {
++    content::WebContents* const contents = strip.GetWebContentsAt(i);
++    tokens[contents->GetVisibleURL()] = stedding::TabToken(contents);
++  }
++  return tokens;
++}
++
+ class SidebarBackupTest : public BrowserWithTestWindowTest {
+  protected:
+   SpaceModel& model() { return *SpaceModel::From(browser()); }
+@@ -36,10 +100,53 @@ class SidebarBackupTest : public BrowserWithTestWindowTest {
+     AddTab(browser(), GURL(url));
+     return tabs().GetActiveTab();
+   }
++  // The tab showing `url`, or null.
++  static tabs::TabInterface* TabShowing(TabStripModel& strip,
++                                        const char* url) {
++    for (int i = 0; i < strip.count(); ++i) {
++      if (strip.GetWebContentsAt(i)->GetVisibleURL() == GURL(url)) {
++        return strip.GetTabAtIndex(i);
++      }
++    }
++    return nullptr;
++  }
++  // A tab inserted as session restore makes one, unloaded, with the token
++  // the session kept for it (stedding.tab_token).
++  tabs::TabInterface* RestoreWithToken(const char* url,
++                                       const std::string& token) {
++    std::unique_ptr<content::WebContents> contents =
++        content::WebContents::Create(
++            content::WebContents::CreateParams(profile()));
++    std::vector<std::unique_ptr<content::NavigationEntry>> entries;
++    entries.push_back(content::NavigationController::CreateNavigationEntry(
++        GURL(url), content::Referrer(), std::nullopt, std::nullopt,
++        ui::PAGE_TRANSITION_TYPED, false, std::string(), profile(), nullptr));
++    contents->GetController().Restore(0, content::RestoreType::kRestored,
++                                      &entries);
++    stedding::RestoreTabParentFromExtraData(
++        contents.get(), {{stedding::kSessionTabTokenKey, token}});
++    content::WebContents* const raw = contents.get();
++    tabs().AppendTab(
++        std::make_unique<tabs::TabModel>(std::move(contents), &tabs()),
++        /*foreground=*/false);
++    return tabs().GetTabForWebContents(raw);
++  }
++  // Closes every tab that is not a web page: the New Tab page a switch to a
++  // Space with no tab of its own opens there. A test then counts only the
++  // tabs it opened itself.
++  void CloseTabsThatAreNotWebPages() {
++    for (int i = tabs().count() - 1; i >= 0; --i) {
++      if (!tabs().GetWebContentsAt(i)->GetVisibleURL().SchemeIsHTTPOrHTTPS()) {
++        tabs().CloseWebContentsAt(i, TabCloseTypes::CLOSE_NONE);
++      }
++    }
++  }
+ };
+ 
+-// I20: every field an exported Space has. Essentials belong to no Space and
+-// are not exported.
++// I20, sidebar-file Sf2: every field an exported Space has. The pinned run
++// holds the pin and the Space-pinned folder, in order; a folder under the
++// Clear line is with the other tabs. The shared essentials belong to no
++// Space and are not in one Space's export.
+ TEST_F(SidebarBackupTest, SnapshotCarriesEveryField) {
+   Space* const work = model().AddSpace("Work", kSpaceColors[1].color);
+   model().SetSpaceIcon(work->id(), "💼");
+@@ -53,12 +160,21 @@ TEST_F(SidebarBackupTest, SnapshotCarriesEveryField) {
+   tabs::FolderTabCollection* const folder =
+       tabs().AddToNewFolder({tabs().GetIndexOfTab(in_folder)});
+   folder->SetTitle("Docs");
++  tabs::TabInterface* const in_pinned_folder = Open("https://pf.example/");
++  tabs::FolderTabCollection* const pinned_folder =
++      tabs().AddToNewFolder({tabs().GetIndexOfTab(in_pinned_folder)});
++  ASSERT_TRUE(pinned_folder);
++  pinned_folder->SetTitle("Reading");
++  model().SetFolderSpacePinned(pinned_folder, true);
++  ASSERT_TRUE(model().IsFolderSpacePinned(pinned_folder));
+ 
+   const ArcImportPlan styled = SnapshotSpace(browser(), work->id());
++  EXPECT_TRUE(styled.written_by_stedding);
+   ASSERT_EQ(1u, styled.spaces.size());
+   EXPECT_EQ("Work", styled.spaces[0].title);
+   EXPECT_EQ("💼", styled.spaces[0].emoji);
+   EXPECT_EQ(kSpaceColors[1].color, *styled.spaces[0].color);
++  EXPECT_FALSE(styled.spaces[0].isolated);
+ 
+   const ArcImportPlan plan = SnapshotSpace(browser(), model().active_id());
+   EXPECT_TRUE(plan.essentials.empty());
+@@ -67,15 +183,386 @@ TEST_F(SidebarBackupTest, SnapshotCarriesEveryField) {
+       << "an unnamed Space is exported with no name, not the one the "
+          "switcher shows for its place";
+   const ArcImportPlan::Space& home = plan.spaces[0];
+-  ASSERT_EQ(2u, home.pinned.size()) << "the pin, then the folder";
+-  EXPECT_EQ(ArcImportPlan::Node::Kind::kTab, home.pinned[0].kind);
+-  EXPECT_EQ(GURL("https://pin.example/"), home.pinned[0].url) << "its home";
+-  EXPECT_EQ(ArcImportPlan::Node::Kind::kFolder, home.pinned[1].kind);
+-  EXPECT_EQ(u"Docs", home.pinned[1].title);
+-  ASSERT_EQ(1u, home.pinned[1].children.size());
+-  EXPECT_EQ(u"My name", home.pinned[1].children[0].title) << "tabs R15";
+-  ASSERT_EQ(1u, home.unpinned.size());
+-  EXPECT_EQ(GURL("https://plain.example/"), home.unpinned[0].url);
++  // The run in the strip's order. Each tab here opens at the top of the
++  // list, above the pin, so the folder pinned after it joins the run before
++  // the first row that is no pin: ahead of the pin.
++  ASSERT_EQ(2u, home.pinned.size()) << "the pinned folder, then the pin";
++  EXPECT_EQ(Node::Kind::kFolder, home.pinned[0].kind);
++  EXPECT_EQ(u"Reading", home.pinned[0].title);
++  ASSERT_EQ(1u, home.pinned[0].children.size());
++  EXPECT_EQ(GURL("https://pf.example/"), home.pinned[0].children[0].url);
++  EXPECT_EQ(Node::Kind::kTab, home.pinned[1].kind);
++  EXPECT_EQ(GURL("https://pin.example/"), home.pinned[1].url) << "its home";
++
++  ASSERT_EQ(2u, home.unpinned.size()) << "the loose tab and the folder";
++  const Node* const docs = FindNode(home.unpinned, Node::Kind::kFolder, "Docs");
++  ASSERT_TRUE(docs) << "a folder under the Clear line is not in the run";
++  ASSERT_EQ(1u, docs->children.size());
++  EXPECT_EQ(u"My name", docs->children[0].title) << "tabs R15";
++  EXPECT_TRUE(
++      FindNode(home.unpinned, Node::Kind::kTab, "https://plain.example/"));
++}
++
++// sidebar-file Sf2: a pin is "tab:<tab token>" and a folder
++// "folder:<FolderId>": no session id, no address. Written twice, the window
++// gives the same ids; and after a restart, which brings the token and the
++// folder's id back from the session, the same ids again.
++TEST_F(SidebarBackupTest, IdsSurviveARestart) {
++  // The window keeps a tab of its own throughout.
++  Open("https://anchor.example/");
++  tabs::TabInterface* const pin = Open("https://pin.example/");
++  model().SetSpacePinned(pin, true);
++  tabs::TabInterface* const in_folder = Open("https://f.example/");
++  tabs::FolderTabCollection* const folder =
++      tabs().AddToNewFolder({tabs().GetIndexOfTab(in_folder)});
++  ASSERT_TRUE(folder);
++  folder->SetTitle("Docs");
++  const tabs::FolderId folder_id = folder->id();
++
++  const ArcImportPlan first = SnapshotSpace(browser(), model().active_id());
++  ASSERT_EQ(1u, first.spaces.size());
++  const std::string token = stedding::TabToken(pin->GetContents());
++  ASSERT_TRUE(base::Uuid::ParseLowercase(token).is_valid())
++      << "the export made the pin a token: " << token;
++  const Node* const pin_node = FindNode(first.spaces[0].pinned,
++                                        Node::Kind::kTab, "https://pin.example/");
++  ASSERT_TRUE(pin_node);
++  EXPECT_EQ("tab:" + token, pin_node->arc_id);
++  const Node* const folder_node =
++      FindNode(first.spaces[0].unpinned, Node::Kind::kFolder, "Docs");
++  ASSERT_TRUE(folder_node);
++  EXPECT_EQ("folder:" + folder_id.ToString(), folder_node->arc_id);
++  ASSERT_EQ(1u, folder_node->children.size());
++  const std::string folder_tab_id = folder_node->children[0].arc_id;
++  const std::string folder_tab_token =
++      stedding::TabToken(in_folder->GetContents());
++  EXPECT_EQ("tab:" + folder_tab_token, folder_tab_id);
++
++  const ArcImportPlan again = SnapshotSpace(browser(), model().active_id());
++  EXPECT_EQ(PlanToJson(first), PlanToJson(again)) << "the ids are stable";
++
++  // The restart: the tabs and the folder go, and come back with what the
++  // session kept.
++  tabs().MoveTabsOutOfFolder(folder);
++  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(in_folder),
++                            TabCloseTypes::CLOSE_NONE);
++  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(pin),
++                            TabCloseTypes::CLOSE_NONE);
++  ASSERT_EQ(1, tabs().count());
++  tabs::TabInterface* const restored_pin =
++      RestoreWithToken("https://pin.example/", token);
++  model().SetSpacePinned(restored_pin, true);
++  tabs::TabInterface* const restored_in_folder =
++      RestoreWithToken("https://f.example/", folder_tab_token);
++  tabs::FolderTabCollection* const restored_folder = tabs().AddToNewFolder(
++      {tabs().GetIndexOfTab(restored_in_folder)}, nullptr, folder_id);
++  ASSERT_TRUE(restored_folder);
++  restored_folder->SetTitle("Docs");
++
++  const ArcImportPlan after = SnapshotSpace(browser(), model().active_id());
++  ASSERT_EQ(1u, after.spaces.size());
++  const Node* const pin_after = FindNode(
++      after.spaces[0].pinned, Node::Kind::kTab, "https://pin.example/");
++  ASSERT_TRUE(pin_after);
++  EXPECT_EQ(pin_node->arc_id, pin_after->arc_id);
++  const Node* const folder_after =
++      FindNode(after.spaces[0].unpinned, Node::Kind::kFolder, "Docs");
++  ASSERT_TRUE(folder_after);
++  EXPECT_EQ(folder_node->arc_id, folder_after->arc_id);
++  ASSERT_EQ(1u, folder_after->children.size());
++  EXPECT_EQ(folder_tab_id, folder_after->children[0].arc_id);
++}
++
++// Sf2, tabs R57: the token an export gives a tab makes it no one's parent:
++// every row stays at the left, and no tab names another as its parent.
++TEST_F(SidebarBackupTest, ATokenMakesNoParent) {
++  tabs::TabInterface* const a = Open("https://a.example/");
++  tabs::TabInterface* const b = Open("https://b.example/");
++  model().SetSpacePinned(a, true);
++  SnapshotSpace(browser(), model().active_id());
++  task_environment()->RunUntilIdle();
++  EXPECT_FALSE(stedding::TabToken(a->GetContents()).empty());
++  EXPECT_FALSE(stedding::TabToken(b->GetContents()).empty());
++  std::vector<stedding::NestRow> rows;
++  for (int i = 0; i < tabs().count(); ++i) {
++    content::WebContents* const contents = tabs().GetWebContentsAt(i);
++    EXPECT_EQ("", stedding::TabParentToken(contents));
++    rows.push_back({stedding::TabToken(contents),
++                    stedding::TabParentToken(contents), 0,
++                    stedding::kMaxNestDepth});
++  }
++  for (const int depth : stedding::NestDepths(rows)) {
++    EXPECT_EQ(0, depth);
++  }
++}
++
++// Sf2: two tabs found holding one token -- a tab an import made, and the
++// closed tab it stood for reopened beside it -- are written under two ids,
++// and the first keeps its own.
++TEST_F(SidebarBackupTest, TwoTabsAreNeverWrittenUnderOneId) {
++  tabs::TabInterface* const a = Open("https://a.example/");
++  tabs::TabInterface* const b = Open("https://b.example/");
++  const std::string token = stedding::EnsureTabToken(a);
++  stedding::SetTabToken(b, token);
++  const ArcImportPlan plan = SnapshotSpace(browser(), model().active_id());
++  ASSERT_EQ(1u, plan.spaces.size());
++  ASSERT_EQ(2u, plan.spaces[0].unpinned.size());
++  EXPECT_NE(plan.spaces[0].unpinned[0].arc_id,
++            plan.spaces[0].unpinned[1].arc_id);
++  EXPECT_NE(stedding::TabToken(a->GetContents()),
++            stedding::TabToken(b->GetContents()));
++  EXPECT_TRUE(stedding::TabToken(a->GetContents()) == token ||
++              stedding::TabToken(b->GetContents()) == token)
++      << "one of them keeps the token it had";
++}
++
++// Sf2 (docs/history/plan-2026-09-26.md WEB-19): a pin closed after an
++// export comes back from the file, as itself, with the file's id; imported
++// again, the file adds nothing. No id of a file Stedding wrote is kept in
++// the profile's list of Arc's ids.
++TEST_F(SidebarBackupTest, AClosedPinComesBackFromTheFile) {
++  Open("https://kept.example/");
++  tabs::TabInterface* const pin = Open("https://pin.example/");
++  model().SetSpacePinned(pin, true);
++  const std::string json =
++      PlanToJson(SnapshotSpace(browser(), model().active_id()));
++  const std::string token = stedding::TabToken(pin->GetContents());
++  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(pin),
++                            TabCloseTypes::CLOSE_NONE);
++  ASSERT_EQ(1, tabs().count());
++
++  const std::optional<ArcImportPlan> plan = ParseArcSidebar(json);
++  ASSERT_TRUE(plan.has_value());
++  EXPECT_TRUE(plan->written_by_stedding);
++  const ArcImportResult first =
++      ApplyArcImport(browser(), *plan, ArcImportOptions());
++  EXPECT_EQ(1u, first.tabs) << "the closed pin came back";
++  ASSERT_EQ(2, tabs().count());
++  tabs::TabInterface* const back = TabShowing(tabs(), "https://pin.example/");
++  ASSERT_TRUE(back);
++  EXPECT_TRUE(model().IsSpacePinned(back));
++  EXPECT_EQ(token, stedding::TabToken(back->GetContents()))
++      << "it keeps the file's id";
++  EXPECT_TRUE(back->GetContents()->WasDiscarded()) << "unloaded";
++
++  const ArcImportResult second =
++      ApplyArcImport(browser(), *plan, ArcImportOptions());
++  EXPECT_EQ(0u, second.tabs);
++  EXPECT_EQ(2, tabs().count()) << "nothing open is added twice";
++  EXPECT_TRUE(profile()
++                  ->GetPrefs()
++                  ->GetList(stedding::prefs::kArcImportedIds)
++                  .empty());
++}
++
++// Sf6: the shared essentials are the file's row; an essential a Space with
++// its own session has as its own is written with that Space, which is
++// written as having its own session. One Space's export carries its own
++// essentials too.
++TEST_F(SidebarBackupTest, ExportAllCarriesTheEssentials) {
++  const SpaceId home = model().active_id();
++  tabs::TabInterface* const shared = Open("https://shared.example/");
++  tabs().SetTabPinned(tabs().GetIndexOfTab(shared), true);
++  Space* const work = model().AddSpace("Work", kSpaceColors[2].color);
++  model().SetSpaceIsolated(work->id(), true);
++  model().SetActiveSpace(work->id());
++  tabs::TabInterface* const own = Open("https://own.example/");
++  tabs().SetTabPinned(tabs().GetIndexOfTab(own), true);
++  task_environment()->RunUntilIdle();
++  ASSERT_TRUE(model().IsOwnEssential(own));
++  ASSERT_TRUE(model().IsSharedEssential(shared));
++
++  const ArcImportPlan plan = SnapshotWindow(browser());
++  ASSERT_EQ(2u, plan.spaces.size());
++  EXPECT_EQ(home.ToString(), plan.spaces[0].arc_id) << "the switcher's order";
++  EXPECT_EQ(work->id().ToString(), plan.spaces[1].arc_id);
++  ASSERT_EQ(1u, plan.essentials.size());
++  EXPECT_EQ(GURL("https://shared.example/"), plan.essentials[0].url);
++  EXPECT_TRUE(plan.spaces[0].essentials.empty());
++  ASSERT_EQ(1u, plan.spaces[1].essentials.size());
++  EXPECT_EQ(GURL("https://own.example/"), plan.spaces[1].essentials[0].url);
++  EXPECT_TRUE(plan.spaces[1].isolated);
++  EXPECT_FALSE(plan.spaces[0].isolated);
++
++  const std::optional<ArcImportPlan> back = ParseArcSidebar(PlanToJson(plan));
++  ASSERT_TRUE(back.has_value());
++  ASSERT_EQ(1u, back->essentials.size()) << "the own one is not made shared";
++  EXPECT_EQ(GURL("https://shared.example/"), back->essentials[0].url);
++  ASSERT_EQ(2u, back->spaces.size());
++  ASSERT_EQ(1u, back->spaces[1].essentials.size());
++  EXPECT_EQ(GURL("https://own.example/"), back->spaces[1].essentials[0].url);
++  EXPECT_TRUE(back->spaces[1].isolated);
++
++  const ArcImportPlan one = SnapshotSpace(browser(), work->id());
++  ASSERT_EQ(1u, one.spaces.size());
++  EXPECT_EQ(1u, one.spaces[0].essentials.size());
++  EXPECT_TRUE(one.essentials.empty());
++}
++
++// Sf6: everything Export all Spaces... writes comes in on another install
++// (a second profile), unloaded: every Space with its name, icon, exact
++// colour pair and own session; the pins, a pinned folder with a folder in
++// it, still pinned; the loose tabs; both kinds of essential. Every tab and
++// folder takes the file's id, and the same file imported again adds
++// nothing.
++TEST_F(SidebarBackupTest, ExportAllSpacesImportsBack) {
++  const SpaceId home = model().active_id();
++  tabs::TabInterface* const shared = Open("https://shared.example/");
++  tabs().SetTabPinned(tabs().GetIndexOfTab(shared), true);
++  tabs::TabInterface* const pin = Open("https://pin.example/");
++  model().SetSpacePinned(pin, true);
++  tabs::TabInterface* const outer_tab = Open("https://outer.example/");
++  tabs::TabInterface* const inner_tab = Open("https://inner.example/");
++  std::vector<int> both = {tabs().GetIndexOfTab(outer_tab),
++                           tabs().GetIndexOfTab(inner_tab)};
++  std::ranges::sort(both);
++  tabs::FolderTabCollection* const outer = tabs().AddToNewFolder(both);
++  ASSERT_TRUE(outer);
++  outer->SetTitle("Reading");
++  tabs::FolderTabCollection* const inner =
++      tabs().AddToNewFolder({tabs().GetIndexOfTab(inner_tab)});
++  ASSERT_TRUE(inner);
++  inner->SetTitle("Deep");
++  ASSERT_EQ("Reading/Deep", FolderPath(inner_tab));
++  model().SetFolderSpacePinned(outer, true);
++  ASSERT_TRUE(model().IsFolderSpacePinned(outer));
++  Open("https://loose.example/");
++
++  const SkColor light = SkColorSetRGB(0x12, 0x34, 0x56);
++  const SkColor dark = SkColorSetRGB(0x65, 0x43, 0x21);
++  Space* const work = model().AddSpace("Work", kSpaceColors[4].color);
++  model().SetSpaceIcon(work->id(), "💼");
++  model().SetSpaceColors(work->id(), light, dark);
++  model().SetSpaceIsolated(work->id(), true);
++  model().SetActiveSpace(work->id());
++  tabs::TabInterface* const work_pin = Open("https://work-pin.example/");
++  model().SetSpacePinned(work_pin, true);
++  tabs::TabInterface* const own = Open("https://own.example/");
++  tabs().SetTabPinned(tabs().GetIndexOfTab(own), true);
++  Space* const play = model().AddSpace("Play", kSpaceColors[6].color);
++  model().SetActiveSpace(play->id());
++  Open("https://play.example/");
++  model().SetActiveSpace(home);
++  // The switch to Work, which shows no shared essential and had no tab,
++  // opened a New Tab page there; the counts below are of this test's pages.
++  CloseTabsThatAreNotWebPages();
++  task_environment()->RunUntilIdle();
++  ASSERT_EQ(8, tabs().count());
++  ASSERT_TRUE(model().IsOwnEssential(own));
++
++  const std::string json = PlanToJson(SnapshotWindow(browser()));
++  task_environment()->RunUntilIdle();
++  const std::map<GURL, std::string> tokens = TokensByPage(tabs());
++
++  TestingProfile* const other = CreateProfile("other");
++  ASSERT_TRUE(other);
++  std::unique_ptr<BrowserWindowInterface> window =
++      CreateBrowser(other, Browser::TYPE_NORMAL, /*hosted_app=*/false);
++  SpaceModel* const there = SpaceModel::From(window.get());
++  ASSERT_TRUE(there);
++  TabStripModel& strip = *window->GetTabStripModel();
++
++  const std::optional<ArcImportPlan> plan = ParseArcSidebar(json);
++  ASSERT_TRUE(plan.has_value());
++  const ArcImportResult result =
++      ApplyArcImport(window.get(), *plan, ArcImportOptions());
++  task_environment()->RunUntilIdle();
++  EXPECT_EQ(3u, result.spaces);
++  EXPECT_EQ(2u, result.essentials);
++  EXPECT_EQ(2u, result.folders);
++  EXPECT_EQ(6u, result.tabs);
++
++  ASSERT_EQ(3u, there->size());
++  const Space& home_there = *there->spaces()[0];
++  const Space& work_there = *there->spaces()[1];
++  const Space& play_there = *there->spaces()[2];
++  EXPECT_EQ("", home_there.name());
++  EXPECT_EQ("Work", work_there.name());
++  EXPECT_EQ("Play", play_there.name());
++  EXPECT_EQ("💼", work_there.icon());
++  EXPECT_EQ(light, work_there.color()) << "the exact colour, not a swatch";
++  EXPECT_EQ(dark, work_there.dark_color());
++  EXPECT_TRUE(there->SpaceIsIsolated(work_there.id()));
++  EXPECT_FALSE(there->SpaceIsIsolated(home_there.id()));
++
++  ASSERT_EQ(8, strip.count());
++  for (int i = 0; i < strip.count(); ++i) {
++    content::WebContents* const contents = strip.GetWebContentsAt(i);
++    SCOPED_TRACE(contents->GetVisibleURL().spec());
++    EXPECT_TRUE(contents->WasDiscarded()) << "unloaded";
++    const auto it = tokens.find(contents->GetVisibleURL());
++    ASSERT_NE(tokens.end(), it);
++    EXPECT_EQ(it->second, stedding::TabToken(contents)) << "the file's id";
++  }
++  tabs::TabInterface* const pin_there = TabShowing(strip, "https://pin.example/");
++  ASSERT_TRUE(pin_there);
++  EXPECT_TRUE(there->IsSpacePinned(pin_there));
++  EXPECT_EQ(home_there.id(), there->SpaceForTab(pin_there));
++  tabs::TabInterface* const inner_there =
++      TabShowing(strip, "https://inner.example/");
++  ASSERT_TRUE(inner_there);
++  EXPECT_EQ("Reading/Deep", FolderPath(inner_there)) << "the nesting";
++  EXPECT_TRUE(there->IsSpacePinned(inner_there)) << "the folder is pinned";
++  tabs::TabInterface* const outer_there =
++      TabShowing(strip, "https://outer.example/");
++  ASSERT_TRUE(outer_there);
++  EXPECT_EQ("Reading", FolderPath(outer_there));
++  const auto* const reading = static_cast<const tabs::FolderTabCollection*>(
++      outer_there->GetParentCollection());
++  EXPECT_EQ(outer->id(), reading->id()) << "the folder takes the file's id";
++  EXPECT_TRUE(there->IsFolderSpacePinned(reading));
++  tabs::TabInterface* const loose_there =
++      TabShowing(strip, "https://loose.example/");
++  ASSERT_TRUE(loose_there);
++  EXPECT_FALSE(there->IsSpacePinned(loose_there));
++  tabs::TabInterface* const work_pin_there =
++      TabShowing(strip, "https://work-pin.example/");
++  ASSERT_TRUE(work_pin_there);
++  EXPECT_EQ(work_there.id(), there->SpaceForTab(work_pin_there));
++  EXPECT_TRUE(there->IsSpacePinned(work_pin_there));
++  tabs::TabInterface* const play_there_tab =
++      TabShowing(strip, "https://play.example/");
++  ASSERT_TRUE(play_there_tab);
++  EXPECT_EQ(play_there.id(), there->SpaceForTab(play_there_tab));
++  tabs::TabInterface* const shared_there =
++      TabShowing(strip, "https://shared.example/");
++  ASSERT_TRUE(shared_there);
++  EXPECT_TRUE(there->IsSharedEssential(shared_there));
++  tabs::TabInterface* const own_there = TabShowing(strip, "https://own.example/");
++  ASSERT_TRUE(own_there);
++  EXPECT_TRUE(there->IsOwnEssential(own_there));
++  EXPECT_EQ(work_there.id(), there->FindSpaceForTab(own_there));
++
++  const ArcImportResult again =
++      ApplyArcImport(window.get(), *plan, ArcImportOptions());
++  EXPECT_EQ(0u, again.spaces);
++  EXPECT_EQ(0u, again.tabs);
++  EXPECT_EQ(0u, again.folders);
++  EXPECT_EQ(0u, again.essentials);
++  EXPECT_EQ(8, strip.count()) << "the same file adds nothing twice";
++  EXPECT_EQ(3u, there->size());
++
++  strip.CloseAllTabs();
++  window.reset();
++}
++
++// I10, Sf2: a colour from Arc's own file still takes the nearest swatch;
++// only a file Stedding wrote keeps its colour exactly.
++TEST_F(SidebarBackupTest, AnArcFilesColourStillTakesASwatch) {
++  constexpr char kArc[] = R"json({
++    "sidebar": {"containers": [{"global": {}}, {
++      "spaces": ["s", {"id": "s", "title": "Arc",
++        "customInfo": {"windowTheme": {"primaryColorPalette": {"midTone":
++          {"red": 0.25, "green": 0.5, "blue": 0.75, "alpha": 1}}}}}],
++      "items": []}]}
++  })json";
++  const std::optional<ArcImportPlan> plan = ParseArcSidebar(kArc);
++  ASSERT_TRUE(plan.has_value());
++  EXPECT_FALSE(plan->written_by_stedding);
++  ASSERT_EQ(1u, plan->spaces.size());
++  ASSERT_TRUE(plan->spaces[0].color.has_value());
++  EXPECT_EQ(NearestSpaceColor(SkColorSetRGB(64, 128, 191)),
++            *plan->spaces[0].color);
+ }
+ 
+ // I20: the file is the importer's format; what is written is read back
+@@ -83,6 +570,9 @@ TEST_F(SidebarBackupTest, SnapshotCarriesEveryField) {
+ TEST_F(SidebarBackupTest, RoundTripIsIdentity) {
+   Space* const work = model().AddSpace("Work", kSpaceColors[2].color);
+   model().SetSpaceIcon(work->id(), "💼");
++  // Sf2: an exact colour and its dark pair come back as they are.
++  model().SetSpaceColors(model().active_id(), SkColorSetRGB(0x12, 0x34, 0x56),
++                         SkColorSetRGB(0x65, 0x43, 0x21));
+   Open("https://a.example/");
+   tabs::TabInterface* const pinned = Open("https://pin.example/");
+   model().SetSpacePinned(pinned, true);
+@@ -93,11 +583,14 @@ TEST_F(SidebarBackupTest, RoundTripIsIdentity) {
+       ParseArcSidebar(PlanToJson(before));
+   ASSERT_TRUE(after.has_value());
+   ASSERT_EQ(before.spaces.size(), after->spaces.size());
++  EXPECT_TRUE(after->written_by_stedding);
+   for (size_t i = 0; i < before.spaces.size(); ++i) {
+     EXPECT_EQ(before.spaces[i].arc_id, after->spaces[i].arc_id);
+     EXPECT_EQ(before.spaces[i].title, after->spaces[i].title);
+     EXPECT_EQ(before.spaces[i].emoji, after->spaces[i].emoji);
+     EXPECT_EQ(before.spaces[i].color, after->spaces[i].color);
++    EXPECT_EQ(before.spaces[i].dark_color, after->spaces[i].dark_color);
++    EXPECT_EQ(before.spaces[i].isolated, after->spaces[i].isolated);
+     ASSERT_EQ(before.spaces[i].pinned.size(), after->spaces[i].pinned.size());
+     ASSERT_EQ(before.spaces[i].unpinned.size(),
+               after->spaces[i].unpinned.size());
+@@ -112,6 +605,14 @@ TEST_F(SidebarBackupTest, RoundTripIsIdentity) {
+       EXPECT_EQ(before.spaces[i].pinned[j].children.size(),
+                 after->spaces[i].pinned[j].children.size());
+     }
++    for (size_t j = 0; j < before.spaces[i].unpinned.size(); ++j) {
++      EXPECT_EQ(before.spaces[i].unpinned[j].kind,
++                after->spaces[i].unpinned[j].kind);
++      EXPECT_EQ(before.spaces[i].unpinned[j].arc_id,
++                after->spaces[i].unpinned[j].arc_id);
++      EXPECT_EQ(before.spaces[i].unpinned[j].children.size(),
++                after->spaces[i].unpinned[j].children.size());
++    }
+   }
+   EXPECT_EQ(before.essentials.size(), after->essentials.size());
+ }
+@@ -153,6 +654,31 @@ TEST_F(SidebarBackupTest, AnExportStaysInItsFolder) {
+   EXPECT_TRUE(base::PathExists(path));
+ }
+ 
++// Sf6: a second export in the same minute is a file of its own; the first
++// is not written over. Each is whole: it reads back as a sidebar.
++TEST_F(SidebarBackupTest, ASecondExportIsAFileOfItsOwn) {
++  Open("https://a.example/");
++  base::ScopedTempDir dir;
++  ASSERT_TRUE(dir.CreateUniqueTempDir());
++  const ArcImportPlan plan = SnapshotWindow(browser());
++  base::test::TestFuture<base::FilePath> first;
++  ExportPlanAsync(plan, dir.GetPath(), "Stedding sidebar",
++                  first.GetCallback());
++  // The first is written before the second is asked for, as two clicks are.
++  ASSERT_FALSE(first.Get().empty());
++  base::test::TestFuture<base::FilePath> second;
++  ExportPlanAsync(plan, dir.GetPath(), "Stedding sidebar",
++                  second.GetCallback());
++  ASSERT_FALSE(first.Get().empty());
++  ASSERT_FALSE(second.Get().empty());
++  EXPECT_NE(first.Get(), second.Get());
++  for (const base::FilePath& path : {first.Get(), second.Get()}) {
++    std::string json;
++    ASSERT_TRUE(base::ReadFileToString(path, &json));
++    EXPECT_TRUE(ParseArcSidebar(json).has_value()) << path;
++  }
++}
++
+ TEST_F(SidebarBackupTest, ExportOneSpaceImportsBack) {
+   Space* const work = model().AddSpace("Work", kSpaceColors[3].color);
+   model().SetActiveSpace(work->id());
+diff --git a/chrome/browser/ui/stedding/tab_parents.cc b/chrome/browser/ui/stedding/tab_parents.cc
+index 144b1604afd62..492d5d1f79797 100644
+--- a/chrome/browser/ui/stedding/tab_parents.cc
++++ b/chrome/browser/ui/stedding/tab_parents.cc
+@@ -93,6 +93,14 @@ void WritePlaces(tabs::TabHandle child, tabs::TabHandle parent) {
+   }
+ }
+ 
++// Writes the token `tab` has by then to its window's session (Sf2).
++void WriteToken(tabs::TabHandle handle) {
++  if (tabs::TabInterface* const tab = handle.Get()) {
++    Write(tab->GetBrowserWindowInterface(), tab->GetContents(),
++          kSessionTabTokenKey, TabToken(tab->GetContents()));
++  }
++}
++
+ void AppendRebuildCommands(BrowserWindowInterface* browser,
+                            SessionRebuildCommands* commands) {
+   TabStripModel* const tabs = browser->GetTabStripModel();
+@@ -127,6 +135,31 @@ std::string TabParentToken(const content::WebContents* contents) {
+   return data ? data->parent() : std::string();
+ }
+ 
++std::string EnsureTabToken(tabs::TabInterface* tab) {
++  content::WebContents* const contents = tab ? tab->GetContents() : nullptr;
++  if (!contents) {
++    return std::string();
++  }
++  if (std::string token = TabToken(contents); !token.empty()) {
++    return token;
++  }
++  const std::string token = base::Uuid::GenerateRandomV4().AsLowercaseString();
++  SetTabToken(tab, token);
++  return token;
++}
++
++void SetTabToken(tabs::TabInterface* tab, const std::string& token) {
++  content::WebContents* const contents = tab ? tab->GetContents() : nullptr;
++  if (!contents || token.empty() || TabToken(contents) == token) {
++    return;
++  }
++  DataFor(contents).set_token(token);
++  // A turn later, as SetTabParent writes: a tab an import has just inserted
++  // is not yet known to the session's own observer of the insertion.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&WriteToken, tab->GetHandle()));
++}
++
+ tabs::TabInterface* ParentOfNewTab(const TabStripModel& model, int index) {
+   if (index < 0 || index >= model.count() || model.IsTabPinned(index)) {
+     return nullptr;
+diff --git a/chrome/browser/ui/stedding/tab_parents.h b/chrome/browser/ui/stedding/tab_parents.h
+index 1f4d5d9daeb33..b14d12bcf3f37 100644
+--- a/chrome/browser/ui/stedding/tab_parents.h
++++ b/chrome/browser/ui/stedding/tab_parents.h
+@@ -34,9 +34,24 @@ inline constexpr char kSessionTabParentKey[] = "stedding.parent";
+ // The deepest a row nests, folders and children together (R57).
+ inline constexpr int kMaxNestDepth = 5;
+ 
+-// The tab's own token, empty while it has never had a child.
++// The tab's own token, empty while it has never had a child and has never
++// been written to a sidebar file (docs/features/sidebar-file.md Sf2).
+ std::string TabToken(const content::WebContents* contents);
+ 
++// sidebar-file Sf2: the tab's token, made now when it has none, so a pin or
++// an essential written to a sidebar file has an id that survives a restart
++// ("tab:<token>"). The token goes to the session a turn later, as a
++// parent's does. A token makes no tab a parent: a row nests only under the
++// tab its own parent token names (R57), and ParentOfNewTab is unchanged.
++std::string EnsureTabToken(tabs::TabInterface* tab);
++
++// sidebar-file Sf2: gives `tab` `token` as its own and writes it to the
++// session a turn later. For a tab an import makes from a sidebar file that
++// names it, so the file and the tab keep one id, and for a second tab found
++// holding a token another tab already has. Children that named the old token
++// keep it: the tab is not their parent by this.
++void SetTabToken(tabs::TabInterface* tab, const std::string& token);
++
+ // The token of the tab `contents` was opened from, empty for a tab with no
+ // parent.
+ std::string TabParentToken(const content::WebContents* contents);
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 88ff618386090..8ccff90428294 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -796,9 +796,11 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingSidebarFilesLabel", "Export and import");
+   html_source->AddString(
+       "steddingSidebarFilesSubLabel",
+-      "Export the active Space as a file, or import a sidebar file: the "
+-      "answer to sync, with no account.");
++      "Export the active Space, or every Space with its pins, folders and "
++      "essentials, as a file, and import it on any computer. No account.");
+   html_source->AddString("steddingExportSpace", "Export Space\u2026");
++  // sidebar-file Sf6.
++  html_source->AddString("steddingExportAllSpaces", "Export all Spaces\u2026");
+   html_source->AddString("steddingImportSidebar", "Import sidebar\u2026");
+   html_source->AddString("steddingExported", "Written to $1");
+   html_source->AddString("steddingExportFailed", "Nothing was written.");
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+index 1c697a62e671d..43c5b79572c97 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+@@ -73,6 +73,10 @@ void SteddingSpacesHandler::RegisterMessages() {
+       "steddingExportSpace",
+       base::BindRepeating(&SteddingSpacesHandler::HandleExportSpace,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingExportAllSpaces",
++      base::BindRepeating(&SteddingSpacesHandler::HandleExportAllSpaces,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "steddingImportSidebarFile",
+       base::BindRepeating(&SteddingSpacesHandler::HandleImportSidebarFile,
+@@ -282,6 +286,34 @@ void SteddingSpacesHandler::HandleExportSpace(const base::ListValue& args) {
+                      weak_factory_.GetWeakPtr(), callback_id));
+ }
+ 
++// sidebar-file Sf6: every Space of the window this page is in, its pins,
++// pinned folders and essentials, as one file in Downloads.
++void SteddingSpacesHandler::HandleExportAllSpaces(
++    const base::ListValue& args) {
++  if (args.size() != 1U) {
++    return;
++  }
++  AllowJavascript();
++  if (!args[0].is_string()) {
++    return;
++  }
++  const std::string& callback_id = args[0].GetString();
++  BrowserWindowInterface* const browser =
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
++          web_ui()->GetWebContents());
++  if (!browser || !spaces::SpaceModel::From(browser)) {
++    ResolveJavascriptCallback(base::Value(callback_id),
++                              base::Value(std::string()));
++    return;
++  }
++  base::FilePath downloads;
++  base::PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &downloads);
++  spaces::ExportPlanAsync(
++      spaces::SnapshotWindow(browser), downloads, "Stedding sidebar",
++      base::BindOnce(&SteddingSpacesHandler::OnExportDone,
++                     weak_factory_.GetWeakPtr(), callback_id));
++}
++
+ void SteddingSpacesHandler::OnExportDone(const std::string& callback_id,
+                                          base::FilePath path) {
+   if (IsJavascriptAllowed()) {
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.h b/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
+index bdf2550a2936b..0ec90d829c246 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
+@@ -60,6 +60,9 @@ class SteddingSpacesHandler : public settings::SettingsPageUIHandler,
+   // steddingImportSidebarFile() (a file dialog; the result is pushed as
+   // "stedding-sidebar-imported").
+   void HandleExportSpace(const base::ListValue& args);
++  // sidebar-file Sf6: steddingExportAllSpaces(callback) -> path of the file
++  // holding every Space of the window, or "" when nothing was written.
++  void HandleExportAllSpaces(const base::ListValue& args);
+   void OnExportDone(const std::string& callback_id, base::FilePath path);
+   void HandleImportSidebarFile(const base::ListValue& args);
+   // ui::SelectFileDialog::Listener:
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 5ed5874302580..72ccbe0913e86 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -62,6 +62,7 @@ test("stedding_browser_tests") {
+     "settings_security_browsertest.cc",
+     "settings_spaces_browsertest.cc",
+     "sidebar_click_browsertest.cc",
++    "sidebar_file_browsertest.cc",
+     "sidebar_forms_browsertest.cc",
+     "sidebar_rail_browsertest.cc",
+     "sidebar_test_util.cc",
+diff --git a/chrome/test/stedding/sidebar_file_browsertest.cc b/chrome/test/stedding/sidebar_file_browsertest.cc
+new file mode 100644
+index 0000000000000..7c2cfea5671fe
+--- /dev/null
++++ b/chrome/test/stedding/sidebar_file_browsertest.cc
+@@ -0,0 +1,272 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// The sidebar file (docs/features/sidebar-file.md), as a person uses it.
++//
++// Sf2 (docs/history/plan-2026-09-26.md WEB-19): a file exported before a
++// restart and imported after it adds nothing. Its ids were the tabs' session
++// ids, new at every launch, and the folders' addresses in memory, so every
++// pin, folder and essential came in a second time.
++//
++// Sf6: Settings' "Export all Spaces..." writes one file to Downloads that
++// holds every Space of the window, its pins, its pinned folders and the
++// essentials.
++
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include <algorithm>
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/run_loop.h"
++#include "base/strings/string_util.h"
++#include "base/test/scoped_path_override.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "base/token.h"
++#include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/arc_sidebar_importer.h"
++#include "chrome/browser/ui/spaces/sidebar_backup.h"
++#include "chrome/browser/ui/spaces/space.h"
++#include "chrome/browser/ui/spaces/space_id.h"
++#include "chrome/browser/ui/spaces/space_model.h"
++#include "chrome/browser/ui/stedding/tab_parents.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/chrome_paths.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/tabs/public/folder_tab_collection.h"
++#include "components/tabs/public/tab_collection.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/window_open_disposition.h"
++#include "url/gurl.h"
++
++namespace {
++
++using Node = spaces::ArcImportPlan::Node;
++
++// Where the first run keeps its export for the second: the profile's own
++// folder, which the restart keeps.
++constexpr char kExportName[] = "Exported sidebar.json";
++
++// The page's own request, as the row's "Export all Spaces..." makes it.
++constexpr char kExportAll[] = R"(
++  import('chrome://resources/js/cr.js')
++      .then(cr => cr.sendWithPromise('steddingExportAllSpaces'))
++)";
++
++Node Tab(const char* id, const char* url) {
++  Node node;
++  node.kind = Node::Kind::kTab;
++  node.arc_id = id;
++  node.url = GURL(url);
++  return node;
++}
++
++Node Folder(const char* id, const char16_t* title, std::vector<Node> children) {
++  Node node;
++  node.kind = Node::Kind::kFolder;
++  node.arc_id = id;
++  node.title = title;
++  node.children = std::move(children);
++  return node;
++}
++
++// The ids of every tab and folder `nodes` hold, nested ones too.
++void CollectIds(const std::vector<Node>& nodes,
++                std::vector<std::string>* tabs,
++                std::vector<std::string>* folders) {
++  for (const Node& node : nodes) {
++    (node.kind == Node::Kind::kTab ? tabs : folders)->push_back(node.arc_id);
++    CollectIds(node.children, tabs, folders);
++  }
++}
++
++class SidebarFileTest : public InProcessBrowserTest {
++ protected:
++  spaces::SpaceModel& model() {
++    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++    CHECK(model) << "a normal window has Spaces";
++    return *model;
++  }
++  TabStripModel& tabs() { return *browser()->GetTabStripModel(); }
++  base::FilePath ExportPath() {
++    return browser()->GetProfile()->GetPath().AppendASCII(kExportName);
++  }
++};
++
++// The first run: a sidebar as a person has one, brought in unloaded (no
++// page needs a server): in the first Space a pin, a pinned folder with a
++// folder in it and a loose tab; a second Space with a pin of its own; an
++// essential. Then the window is exported, and the run ends.
++IN_PROC_BROWSER_TEST_F(SidebarFileTest,
++                       PRE_TheSameFileAfterARestartAddsNothing) {
++  SessionStartupPref::SetStartupPref(
++      browser()->GetProfile(), SessionStartupPref(SessionStartupPref::LAST));
++  spaces::ArcImportPlan start;
++  spaces::ArcImportPlan::Space home;
++  home.arc_id = "start-home";
++  home.pinned.push_back(Tab("start-pin", "https://pin.example/"));
++  home.pinned.push_back(Folder(
++      "start-reading", u"Reading",
++      {Tab("start-outer", "https://outer.example/"),
++       Folder("start-deep", u"Deep",
++              {Tab("start-inner", "https://inner.example/")})}));
++  home.unpinned.push_back(Tab("start-loose", "https://loose.example/"));
++  start.spaces.push_back(std::move(home));
++  spaces::ArcImportPlan::Space work;
++  work.arc_id = "start-work";
++  work.title = "Work";
++  work.pinned.push_back(Tab("start-work-pin", "https://work-pin.example/"));
++  start.spaces.push_back(std::move(work));
++  start.essentials.push_back(
++      Tab("start-essential", "https://essential.example/"));
++  spaces::ArcImportOptions options;
++  options.history = false;
++  options.passwords = false;
++  const spaces::ArcImportResult made =
++      spaces::ApplyArcImport(browser(), start, options);
++  ASSERT_EQ(5u, made.tabs);
++  ASSERT_EQ(1u, made.essentials);
++  ASSERT_EQ(2u, made.folders);
++
++  // The Reading folder goes into the pinned run (folders F38).
++  tabs::FolderTabCollection* reading = nullptr;
++  for (int i = 0; i < tabs().count() && !reading; ++i) {
++    tabs::TabInterface* const tab = tabs().GetTabAtIndex(i);
++    if (tab->GetContents()->GetVisibleURL() == GURL("https://outer.example/")) {
++      const tabs::TabCollection* const parent = tab->GetParentCollection();
++      ASSERT_EQ(tabs::TabCollection::Type::FOLDER, parent->type());
++      reading = const_cast<tabs::FolderTabCollection*>(
++          static_cast<const tabs::FolderTabCollection*>(parent));
++    }
++  }
++  ASSERT_TRUE(reading);
++  model().SetFolderSpacePinned(reading, true);
++  ASSERT_TRUE(model().IsFolderSpacePinned(reading));
++
++  const std::string json =
++      spaces::PlanToJson(spaces::SnapshotWindow(browser()));
++  {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(base::WriteFile(ExportPath(), json));
++  }
++  // The tokens the export made reach the session a turn later.
++  base::RunLoop().RunUntilIdle();
++}
++
++// The second run: the window came back from the session, and the file
++// written before the restart names what is open now, by the same ids.
++// Imported, it adds no Space, tab, folder or essential.
++IN_PROC_BROWSER_TEST_F(SidebarFileTest, TheSameFileAfterARestartAddsNothing) {
++  std::string json;
++  {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(base::ReadFileToString(ExportPath(), &json));
++  }
++  const std::optional<spaces::ArcImportPlan> plan =
++      spaces::ParseArcSidebar(json);
++  ASSERT_TRUE(plan.has_value());
++  ASSERT_TRUE(plan->written_by_stedding);
++  ASSERT_EQ(2u, plan->spaces.size());
++
++  // Every id the file gives a tab is a tab open now; every folder's, a
++  // folder here.
++  std::vector<std::string> tab_ids;
++  std::vector<std::string> folder_ids;
++  for (const spaces::ArcImportPlan::Space& space : plan->spaces) {
++    const std::optional<spaces::SpaceId> id =
++        spaces::SpaceId::FromOptionalToken(
++            base::Token::FromString(space.arc_id));
++    ASSERT_TRUE(id.has_value()) << space.arc_id;
++    EXPECT_TRUE(model().GetSpace(*id))
++        << "the Space's id survived the restart";
++    CollectIds(space.pinned, &tab_ids, &folder_ids);
++    CollectIds(space.unpinned, &tab_ids, &folder_ids);
++  }
++  CollectIds(plan->essentials, &tab_ids, &folder_ids);
++  EXPECT_EQ(2u, folder_ids.size());
++  std::vector<std::string> open_ids;
++  for (int i = 0; i < tabs().count(); ++i) {
++    open_ids.push_back("tab:" +
++                       stedding::TabToken(tabs().GetWebContentsAt(i)));
++  }
++  for (const std::string& id : tab_ids) {
++    EXPECT_TRUE(std::ranges::find(open_ids, id) != open_ids.end()) << id << " is not open";
++  }
++
++  const int before = tabs().count();
++  const size_t spaces_before = model().size();
++  base::test::TestFuture<std::optional<spaces::ArcImportResult>> done;
++  spaces::ImportSidebarFileAsync(browser(), ExportPath(), done.GetCallback());
++  const std::optional<spaces::ArcImportResult> result = done.Get();
++  ASSERT_TRUE(result.has_value());
++  EXPECT_EQ(0u, result->spaces);
++  EXPECT_EQ(0u, result->tabs);
++  EXPECT_EQ(0u, result->folders);
++  EXPECT_EQ(0u, result->essentials);
++  EXPECT_EQ(before, tabs().count()) << "no tab came in twice";
++  EXPECT_EQ(spaces_before, model().size());
++}
++
++// Sf6: the page's "Export all Spaces..." writes "Stedding sidebar <date>
++// <time>.json" to Downloads, holding every Space of the window in the
++// switcher's order, with their pins and the essentials.
++IN_PROC_BROWSER_TEST_F(SidebarFileTest, ExportAllSpacesWritesEverySpace) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir downloads;
++  ASSERT_TRUE(downloads.CreateUniqueTempDir());
++  base::ScopedPathOverride downloads_override(chrome::DIR_DEFAULT_DOWNLOADS,
++                                              downloads.GetPath());
++  spaces::ArcImportPlan start;
++  start.essentials.push_back(
++      Tab("start-essential", "https://essential.example/"));
++  spaces::ArcImportOptions options;
++  options.spaces = false;
++  options.history = false;
++  options.passwords = false;
++  spaces::ApplyArcImport(browser(), start, options);
++  spaces::Space* const work = model().AddSpace("Work", SK_ColorBLUE);
++  ASSERT_TRUE(work);
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), GURL("chrome://settings/stedding"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  content::WebContents* const page = tabs().GetActiveWebContents();
++  const std::string written = content::EvalJs(page, kExportAll).ExtractString();
++  ASSERT_FALSE(written.empty()) << "nothing was written";
++  const base::FilePath path = base::FilePath::FromUTF8Unsafe(written);
++  // The path service resolves the folder it is given (on the Mac, /var is
++  // /private/var), so both sides are compared resolved.
++  EXPECT_EQ(base::MakeAbsoluteFilePath(downloads.GetPath()),
++            base::MakeAbsoluteFilePath(path.DirName()));
++  EXPECT_TRUE(base::StartsWith(path.BaseName().AsUTF8Unsafe(),
++                               "Stedding sidebar "));
++
++  std::string json;
++  ASSERT_TRUE(base::ReadFileToString(path, &json));
++  const std::optional<spaces::ArcImportPlan> plan =
++      spaces::ParseArcSidebar(json);
++  ASSERT_TRUE(plan.has_value());
++  EXPECT_TRUE(plan->written_by_stedding);
++  ASSERT_EQ(model().size(), plan->spaces.size());
++  for (size_t i = 0; i < model().size(); ++i) {
++    EXPECT_EQ(model().spaces()[i]->id().ToString(), plan->spaces[i].arc_id);
++  }
++  EXPECT_EQ("Work", plan->spaces.back().title);
++  ASSERT_EQ(1u, plan->essentials.size());
++  EXPECT_EQ(GURL("https://essential.example/"), plan->essentials[0].url);
++}
++
++}  // namespace

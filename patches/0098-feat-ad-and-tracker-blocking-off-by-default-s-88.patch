@@ -1,0 +1,4621 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 09:38:52 -0400
+Subject: feat: ad and tracker blocking, off by default (S-88)
+
+Request blocking built on Chromium's own subresource filter, behind
+ADR 0030 (Proposed). docs/features/blocker.md rows:
+
+- Bk1: one switch, stedding.blocker.enabled in local state, off. While
+  it is on, a Stedding throttle decides each top-level page's
+  activation through SubresourceFilterObserverManager; while off,
+  Chromium's ad-tagging dry run is left as it is.
+- Bk2, Bk3, Bk12: EasyList and EasyPrivacy are fetched from easylist.to
+  only while blocking is on, each when its own Expires line says, with
+  a conditional request carrying no cookies, cache or query; converted
+  in the browser by Chromium's EasyList parser into one ruleset of URL
+  rules handed to RulesetService, with a LICENSE file naming each list.
+  A download that is not a filter list keeps the previous ruleset; a
+  version the service never indexed is made again under a new salt.
+- Bk4: Google's Subresource Filter Rules component is not registered.
+- Bk5, Bk6, Bk10: the switch for a site is the ADS content setting
+  (user entries only, the default is not read), from a shield in the
+  address row, command bar rows and Settings; a private window's choice
+  stays in its session.
+- Bk7: while Stedding decides, the throttle manager shows no "ads
+  blocked" icon and triggers no ads intervention, so no ADS_DATA is
+  written for the sites visited.
+- Bk8: sign-in steps are let through. Bk9: Settings rows. Bk11: the
+  activation is in place before the first window loads a page.
+
+Why: built-in blocking is on the M10 list (S-88); the subresource
+filter is BSD code already in every binary, matches in the renderer
+from one shared index, and needs one small embedder hook instead of a
+second engine in the network path.
+Removable when: the throttle manager hunk goes once upstream offers an
+embedder hook for page activation; the feature itself stays.
+---
+ chrome/browser/BUILD.gn                       |   2 +
+ chrome/browser/chrome_browser_main.cc         |  13 +
+ .../browser/component_updater/registration.cc |   4 +-
+ .../api/settings_private/prefs_util.cc        |  10 +
+ .../stedding_page/stedding_page.html.ts       |  62 ++
+ .../settings/stedding_page/stedding_page.ts   | 114 ++++
+ chrome/browser/ui/stedding/blocker/BUILD.gn   |  90 +++
+ chrome/browser/ui/stedding/blocker/DEPS       |   6 +
+ chrome/browser/ui/stedding/blocker/blocker.cc | 106 ++++
+ chrome/browser/ui/stedding/blocker/blocker.h  |  33 +
+ .../blocker/blocker_activation_throttle.cc    |  71 +++
+ .../blocker/blocker_activation_throttle.h     |  52 ++
+ .../ui/stedding/blocker/blocker_convert.cc    | 222 +++++++
+ .../ui/stedding/blocker/blocker_convert.h     |  79 +++
+ .../blocker/blocker_convert_unittest.cc       | 168 +++++
+ .../ui/stedding/blocker/blocker_lists.cc      | 599 ++++++++++++++++++
+ .../ui/stedding/blocker/blocker_lists.h       | 226 +++++++
+ .../blocker/blocker_lists_unittest.cc         | 250 ++++++++
+ .../ui/stedding/blocker/blocker_rules.cc      | 216 +++++++
+ .../ui/stedding/blocker/blocker_rules.h       | 107 ++++
+ .../blocker/blocker_rules_unittest.cc         | 160 +++++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   7 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |  12 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   8 +-
+ chrome/browser/ui/views/commandbar/BUILD.gn   |   1 +
+ .../ui/views/commandbar/command_bar_view.cc   |  33 +
+ chrome/browser/ui/views/toolbar/BUILD.gn      |   3 +
+ .../views/toolbar/stedding_blocker_button.cc  | 196 ++++++
+ .../views/toolbar/stedding_blocker_button.h   |  94 +++
+ .../browser/ui/views/toolbar/toolbar_view.cc  |   5 +
+ chrome/browser/ui/webui/settings/BUILD.gn     |   5 +
+ .../browser/ui/webui/settings/settings_ui.cc  |  44 ++
+ .../settings/stedding_blocker_handler.cc      | 160 +++++
+ .../webui/settings/stedding_blocker_handler.h |  66 ++
+ chrome/test/BUILD.gn                          |   1 +
+ chrome/test/DEPS                              |   1 +
+ .../stedding/blocker/blocker-ad-fetch.json    |   1 +
+ .../stedding/blocker/blocker-ad-frame.html    |   2 +
+ .../stedding/blocker/blocker-ad-image.svg     |   1 +
+ .../stedding/blocker/blocker-ad-script.js     |   1 +
+ .../stedding/blocker/blocker-ok-fetch.json    |   1 +
+ .../stedding/blocker/blocker-ok-frame.html    |   2 +
+ .../stedding/blocker/blocker-ok-image.svg     |   1 +
+ .../stedding/blocker/blocker-ok-script.js     |   1 +
+ .../data/stedding/blocker/blocker-tracker.js  |   1 +
+ .../test/data/stedding/blocker/easylist.txt   |  10 +
+ .../data/stedding/blocker/easyprivacy.txt     |   6 +
+ chrome/test/data/stedding/blocker/page.html   |  42 ++
+ chrome/test/stedding/BUILD.gn                 |  10 +
+ chrome/test/stedding/blocker_browsertest.cc   | 580 +++++++++++++++++
+ ...ent_subresource_filter_throttle_manager.cc |  46 +-
+ ...tent_subresource_filter_throttle_manager.h |  15 +
+ 52 files changed, 3941 insertions(+), 5 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/blocker/BUILD.gn
+ create mode 100644 chrome/browser/ui/stedding/blocker/DEPS
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker.h
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_activation_throttle.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_activation_throttle.h
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_convert.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_convert.h
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_convert_unittest.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_lists.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_lists.h
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_lists_unittest.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_rules.cc
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_rules.h
+ create mode 100644 chrome/browser/ui/stedding/blocker/blocker_rules_unittest.cc
+ create mode 100644 chrome/browser/ui/views/toolbar/stedding_blocker_button.cc
+ create mode 100644 chrome/browser/ui/views/toolbar/stedding_blocker_button.h
+ create mode 100644 chrome/browser/ui/webui/settings/stedding_blocker_handler.cc
+ create mode 100644 chrome/browser/ui/webui/settings/stedding_blocker_handler.h
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ad-fetch.json
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ad-frame.html
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ad-image.svg
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ad-script.js
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ok-fetch.json
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ok-frame.html
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ok-image.svg
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-ok-script.js
+ create mode 100644 chrome/test/data/stedding/blocker/blocker-tracker.js
+ create mode 100644 chrome/test/data/stedding/blocker/easylist.txt
+ create mode 100644 chrome/test/data/stedding/blocker/easyprivacy.txt
+ create mode 100644 chrome/test/data/stedding/blocker/page.html
+ create mode 100644 chrome/test/stedding/blocker_browsertest.cc
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 6b20c3435b4a6..f3f4afd89156c 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1309,6 +1309,8 @@ source_set("core") {
+       # clean links Cl1: the throttle CreateURLLoaderThrottles makes.
+       "//chrome/browser/ui/stedding:clean_links",
+       "//chrome/browser/ui/stedding:dark_pages",
++      # blocker Bk1, Bk11: started with the browser.
++      "//chrome/browser/ui/stedding/blocker",
+       "//chrome/browser/ui/tabs/tab_drag_api/desktop_tab_drag_impl",
+       "//chrome/browser/ui/views/frame:glass_frame_service",
+       "//chrome/browser/ui/views/tabs/organizer",
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index b2619baa8f61d..68b275965c571 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -35,6 +35,9 @@
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/browser_process_impl.h"
+ #include "chrome/browser/chrome_browser_main_extra_parts.h"
++#if !BUILDFLAG(IS_ANDROID)
++#include "chrome/browser/ui/stedding/blocker/blocker.h"
++#endif
+ #include "chrome/browser/component_updater/registration.h"
+ #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
+ #include "chrome/browser/enterprise/chrome_browser_main_extra_parts_enterprise.h"
+@@ -1717,6 +1720,16 @@ void ChromeBrowserMainParts::PreBrowserStart() {
+   // subresource filtering, if needed, also for page loads on start-up.
+   g_browser_process->subresource_filter_ruleset_service();
+ 
++#if !BUILDFLAG(IS_ANDROID)
++  // Stedding: ad and tracker blocking (docs/features/blocker.md, ADR 0030),
++  // beside the ruleset service and before the first window loads a page, so
++  // the page activation Stedding gives the subresource filter while blocking
++  // is on reaches the pages opened at start-up (Bk11). Off by default, it
++  // fetches nothing until the user turns it on.
++  stedding::StartBlocker(g_browser_process->local_state(),
++                         g_browser_process->shared_url_loader_factory());
++#endif
++
+ #if BUILDFLAG(IS_WIN)
+   StartupLaunchManager::From(g_browser_process)->CommitLaunchOnStartupState();
+ #endif  // BUILDFLAG(IS_WIN)
+diff --git a/chrome/browser/component_updater/registration.cc b/chrome/browser/component_updater/registration.cc
+index 9cf5a226c7f74..8ddd4e1da91e5 100644
+--- a/chrome/browser/component_updater/registration.cc
++++ b/chrome/browser/component_updater/registration.cc
+@@ -152,7 +152,9 @@ void RegisterComponentsForUpdate() {
+   RegisterWidevineCdmComponent(cus);
+ #endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
+ 
+-  RegisterSubresourceFilterComponent(cus);
++  // Stedding (docs/features/blocker.md Bk4, ADR 0030): Google's Subresource
++  // Filter Rules component is not registered; the ruleset is made from the
++  // lists Stedding fetches while the user's blocking is on.
+   RegisterOnDeviceHeadSuggestComponent(
+       cus, g_browser_process->GetApplicationLocale());
+   RegisterOptimizationHintsComponent(cus);
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 6835c472f0e02..165eca9fb89e1 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -362,6 +362,16 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+   // switch is Chromium's own web preference, bound in Stedding's section.
+   (*s_allowlist)[::prefs::kWebKitForceDarkModeEnabled] =
+       settings_api::PrefType::kBoolean;
++  // blocker Bk9: the switch and the two lists, in local state like GPC;
++  // the shield's setting, in the profile.
++  (*s_allowlist)[stedding::prefs::kBlockerEnabled] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kBlockerEasyList] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kBlockerEasyPrivacy] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kBlockerButton] =
++      settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kDarkPagesButton] =
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kPinsCloseSleeps] =
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index d3ae2fd481981..8caa76d3a0852 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -455,6 +455,68 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         @change="${this.onCleanLinksAddChange_}">
+     </cr-input>
+   </div>
++  <settings-toggle-button
++      id="blocker"
++      class="hr"
++      pref-key="stedding.blocker.enabled"
++      label="$i18n{steddingBlockerLabel}"
++      sub-label="$i18n{steddingBlockerSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="blockerEasyList"
++      class="hr blocker-list"
++      pref-key="stedding.blocker.list.easylist"
++      label="EasyList"
++      sub-label="${this.blockerListLine_('easylist')}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="blockerEasyPrivacy"
++      class="hr blocker-list"
++      pref-key="stedding.blocker.list.easyprivacy"
++      label="EasyPrivacy"
++      sub-label="${this.blockerListLine_('easyprivacy')}">
++  </settings-toggle-button>
++  <div class="hr settings-box" id="blockerStatusRow">
++    <div class="start">
++      <div class="label" id="blockerStatus">${this.blockerStatusLine_()}</div>
++      <div class="secondary">$i18n{steddingBlockerStatusSubLabel}</div>
++    </div>
++    <cr-button id="blockerUpdateNow" ?disabled="${this.blocker_.busy}"
++        @click="${this.onBlockerUpdateNowClick_}">
++      $i18n{steddingBlockerUpdateNow}
++    </cr-button>
++  </div>
++  <div class="settings-box continuation route-row" id="blockerExceptions">
++    <div class="flex route-list">
++      <span class="secondary">$i18n{steddingBlockerExceptionsList}</span>
++      ${this.blocker_.exceptions.length === 0 ? html`
++        <span class="secondary" id="blockerExceptionsEmpty">
++          $i18n{steddingBlockerExceptionsEmpty}
++        </span>` : ''}
++      ${this.blocker_.exceptions.map(site => html`
++        <span class="route-chip blocker-site">${site.name}
++          <cr-icon-button class="icon-clear" data-pattern="${site.pattern}"
++              title="$i18n{steddingBlockerRemove}"
++              aria-label="${this.removeBlockerSiteLabel_(site)}"
++              @click="${this.onRemoveBlockerSiteClick_}">
++          </cr-icon-button>
++        </span>`)}
++    </div>
++    <cr-input id="blockerAdd" class="route-add"
++        placeholder="$i18n{steddingBlockerAddPlaceholder}"
++        aria-label="$i18n{steddingBlockerAddPlaceholder}"
++        .invalid="${!!this.blockerError_}"
++        .errorMessage="${this.blockerError_}"
++        @change="${this.onBlockerAddChange_}">
++    </cr-input>
++  </div>
++  <settings-toggle-button
++      id="blockerButton"
++      class="hr"
++      pref-key="stedding.page.blocker_button"
++      label="$i18n{steddingBlockerButtonLabel}"
++      sub-label="$i18n{steddingBlockerButtonSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="quietNotifications"
+       class="hr"
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+index 6d2da6a0fcba9..59a6d7003aba9 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+@@ -77,6 +77,29 @@ export interface SteddingDarkPages {
+   only: SteddingDarkPagesSite[];
+ }
+ 
++// blocker Bk9: one list as Settings shows it.
++export interface SteddingBlockerList {
++  id: string;
++  name: string;
++  homepage: string;
++  licence: string;
++  // When it was last fetched, as the browser formats it; '' before then.
++  fetched: string;
++  failing: boolean;
++}
++
++// blocker Bk9: the lists, the ruleset made from them and the sites where
++// blocking is off (named and kept as dark pages' sites are).
++export interface SteddingBlocker {
++  busy: boolean;
++  hasRuleset: boolean;
++  updated: string;
++  urlRules: number;
++  skippedLines: number;
++  lists: SteddingBlockerList[];
++  exceptions: SteddingDarkPagesSite[];
++}
++
+ /** One line of the shortcut reference (docs/features/shortcuts.md). */
+ export interface SteddingShortcutRow {
+   chord: string;
+@@ -120,6 +143,8 @@ export class SettingsSteddingPageElement extends
+       darkPagesError_: {type: String},
+       cleanLinksKeptSites_: {type: Array},
+       cleanLinksError_: {type: String},
++      blocker_: {type: Object},
++      blockerError_: {type: String},
+     };
+   }
+ 
+@@ -148,6 +173,19 @@ export class SettingsSteddingPageElement extends
+   // add field when what was typed is no site.
+   protected accessor cleanLinksKeptSites_: string[] = [];
+   protected accessor cleanLinksError_: string = '';
++  // blocker Bk9: the lists' state and the sites where blocking is off, from
++  // the browser; the line under the add field when what was typed is no
++  // site.
++  protected accessor blocker_: SteddingBlocker = {
++    busy: false,
++    hasRuleset: false,
++    updated: '',
++    urlRules: 0,
++    skippedLines: 0,
++    lists: [],
++    exceptions: [],
++  };
++  protected accessor blockerError_: string = '';
+   // settings T11: the rail's pause on hover, 0 for Chromium's own. A name
+   // written into the template is escaped for markup, and the menu draws its
+   // names as plain text, so "Chromium's" read "Chromium&#39;s"; the names
+@@ -195,6 +233,14 @@ export class SettingsSteddingPageElement extends
+     sendWithPromise('steddingGetCleanLinksKeptSites').then((sites: unknown) => {
+       this.cleanLinksKeptSites_ = sites as string[];
+     });
++    // blocker Bk9: the lists' state and the sites where blocking is off, and
++    // every change to them, from the shield and the command bar too.
++    this.addWebUiListener(
++        'stedding-blocker-changed',
++        (state: SteddingBlocker) => this.blocker_ = state);
++    sendWithPromise('steddingGetBlocker').then((state: unknown) => {
++      this.blocker_ = state as SteddingBlocker;
++    });
+   }
+ 
+   // dark-pages Dk12: the list of the mode shown, and its heading.
+@@ -277,6 +323,74 @@ export class SettingsSteddingPageElement extends
+       chrome.send('steddingRemoveCleanLinksKeptSite', [site]);
+     }
+   }
++
++  // blocker Bk2, Bk9: what a list blocks, where it comes from and under what
++  // licence, and when it was last fetched.
++  protected blockerListLine_(id: string): string {
++    const what = loadTimeData.getString(
++        id === 'easylist' ? 'steddingBlockerEasyListWhat' :
++                            'steddingBlockerEasyPrivacyWhat');
++    const list = this.blocker_.lists.find(entry => entry.id === id);
++    if (!list) {
++      return what;
++    }
++    const parts = [
++      what,
++      loadTimeData.getStringF(
++          'steddingBlockerListSource', list.homepage, list.licence),
++    ];
++    if (list.failing) {
++      parts.push(loadTimeData.getString('steddingBlockerListFailing'));
++    } else if (list.fetched) {
++      parts.push(
++          loadTimeData.getStringF('steddingBlockerListFetched', list.fetched));
++    }
++    return parts.join(' ');
++  }
++
++  // blocker Bk9: when the ruleset was last made, and from how many rules.
++  protected blockerStatusLine_(): string {
++    if (!this.blocker_.hasRuleset) {
++      return loadTimeData.getString('steddingBlockerNoLists');
++    }
++    return loadTimeData.getStringF(
++        'steddingBlockerUpdated', this.blocker_.updated,
++        this.blocker_.urlRules.toLocaleString(),
++        this.blocker_.skippedLines.toLocaleString());
++  }
++
++  protected onBlockerUpdateNowClick_() {
++    chrome.send('steddingUpdateBlockerLists');
++  }
++
++  // blocker Bk9: the browser cuts what was typed to a site; what is no site
++  // is refused, nothing is written, and the field says why.
++  protected async onBlockerAddChange_(e: Event) {
++    const input = e.target as CrInputElement;
++    const typed = input.value.trim();
++    if (!typed) {
++      this.blockerError_ = '';
++      return;
++    }
++    const added = await sendWithPromise('steddingAddBlockerException', typed);
++    if (added) {
++      input.value = '';
++      this.blockerError_ = '';
++    } else {
++      this.blockerError_ = loadTimeData.getString('steddingBlockerAddInvalid');
++    }
++  }
++
++  protected removeBlockerSiteLabel_(site: SteddingDarkPagesSite): string {
++    return loadTimeData.getStringF('steddingBlockerRemoveSite', site.name);
++  }
++
++  protected onRemoveBlockerSiteClick_(e: Event) {
++    const pattern = (e.currentTarget as HTMLElement).dataset['pattern'];
++    if (pattern) {
++      chrome.send('steddingRemoveBlockerException', [pattern]);
++    }
++  }
+   protected onSpaceNameChange_(e: Event) {
+     const input = e.target as CrInputElement;
+     chrome.send('steddingRenameSpace', [input.dataset['id'], input.value]);
+diff --git a/chrome/browser/ui/stedding/blocker/BUILD.gn b/chrome/browser/ui/stedding/blocker/BUILD.gn
+new file mode 100644
+index 0000000000000..c23b8c9f548cd
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/BUILD.gn
+@@ -0,0 +1,90 @@
++# Copyright 2026 The Stedding Authors
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++assert(!is_android)
++
++# Ad and tracker blocking (docs/features/blocker.md,
++# docs/decisions/0030-ad-and-tracker-blocking.md): the switch and the
++# exceptions for a site, the filter lists fetched at run time and converted
++# into Chromium's subresource filter ruleset, and the throttle that turns the
++# filter on for each page. Nothing of the window's, so the toolbar, the
++# command bar, Settings and the browser's start can all use it.
++source_set("blocker") {
++  public = [
++    "blocker.h",
++    "blocker_activation_throttle.h",
++    "blocker_convert.h",
++    "blocker_lists.h",
++    "blocker_rules.h",
++  ]
++  sources = [
++    "blocker.cc",
++    "blocker_activation_throttle.cc",
++    "blocker_convert.cc",
++    "blocker_lists.cc",
++    "blocker_rules.cc",
++  ]
++  public_deps = [
++    "//base",
++    "//components/content_settings/core/browser",
++    "//components/content_settings/core/common",
++    "//components/prefs",
++    "//components/subresource_filter/core/browser",
++    "//content/public/browser",
++    "//services/network/public/cpp",
++    "//url",
++  ]
++  deps = [
++    "//chrome/browser:browser_process",
++    "//chrome/browser/content_settings:content_settings_factory",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/stedding:dark_pages",
++    "//chrome/browser/ui/stedding:prefs",
++    "//chrome/common",
++    "//components/subresource_filter/content/browser",
++    "//components/subresource_filter/core/common",
++    "//components/subresource_filter/core/mojom",
++    "//components/subresource_filter/tools/rule_parser",
++    "//components/url_pattern_index",
++    "//crypto",
++    "//net",
++    "//services/network/public/mojom",
++    "//third_party/protobuf:protobuf_lite",
++  ]
++}
++
++# The rules, the lists' schedule and the converter, without a browser: a
++# test URL loader factory and a scratch folder stand in for the network and
++# the profile's folder (blocker Bk1-Bk3, Bk5, Bk8).
++source_set("unit_tests") {
++  testonly = true
++  sources = [
++    "blocker_convert_unittest.cc",
++    "blocker_lists_unittest.cc",
++    "blocker_rules_unittest.cc",
++  ]
++  deps = [
++    ":blocker",
++    "//base",
++    "//base/test:test_support",
++    "//chrome/browser/content_settings:content_settings_factory",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/stedding:prefs",
++    "//chrome/test:test_support",
++    "//components/content_settings/core/browser",
++    "//components/content_settings/core/common",
++    "//components/prefs:test_support",
++    "//components/subresource_filter/core/browser",
++    "//components/subresource_filter/core/common",
++    "//components/url_pattern_index",
++    "//content/test:test_support",
++    "//net",
++    "//services/network:test_support",
++    "//services/network/public/cpp",
++    "//services/network/public/mojom",
++    "//testing/gtest",
++    "//third_party/protobuf:protobuf_lite",
++    "//url",
++  ]
++}
+diff --git a/chrome/browser/ui/stedding/blocker/DEPS b/chrome/browser/ui/stedding/blocker/DEPS
+new file mode 100644
+index 0000000000000..9372ea386fa8c
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/DEPS
+@@ -0,0 +1,6 @@
++include_rules = [
++  # blocker Bk3: Chromium's EasyList parser, a plain source set the
++  # converter uses to turn a downloaded list into the subresource filter's
++  # unindexed ruleset (docs/decisions/0030-ad-and-tracker-blocking.md).
++  "+components/subresource_filter/tools/rule_parser",
++]
+diff --git a/chrome/browser/ui/stedding/blocker/blocker.cc b/chrome/browser/ui/stedding/blocker/blocker.cc
+new file mode 100644
+index 0000000000000..d961a12be5ef6
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker.cc
+@@ -0,0 +1,106 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker.h"
++
++#include <memory>
++#include <string>
++#include <utility>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/no_destructor.h"
++#include "base/path_service.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_activation_throttle.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/common/chrome_paths.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
++#include "components/subresource_filter/content/browser/ruleset_service.h"
++#include "components/subresource_filter/core/browser/ruleset_version.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "url/gurl.h"
++
++namespace stedding {
++
++namespace {
++
++constexpr char kListBase[] = "https://easylist.to/easylist/";
++constexpr base::FilePath::CharType kBlockerDirName[] =
++    FILE_PATH_LITERAL("Stedding Blocker");
++
++// Bk1: while blocking is on, Stedding's throttle decides each page's
++// activation; while it is off, Chromium's own path is left as it is.
++void UpdatePageActivation(PrefService* local_state) {
++  using Manager = subresource_filter::ContentSubresourceFilterThrottleManager;
++  Manager::SetPageActivationThrottleFactory(
++      BlockerOn(local_state)
++          ? base::BindRepeating(&BlockerActivationThrottle::MaybeAdd)
++          : Manager::PageActivationThrottleFactory());
++}
++
++void Publish(const subresource_filter::UnindexedRulesetInfo& info) {
++  if (subresource_filter::RulesetService* const service =
++          g_browser_process->subresource_filter_ruleset_service()) {
++    service->IndexAndStoreAndPublishRulesetIfNeeded(info);
++  }
++}
++
++std::string IndexedVersion() {
++  subresource_filter::RulesetService* const service =
++      g_browser_process->subresource_filter_ruleset_service();
++  return service ? service->GetMostRecentlyIndexedVersion().content_version
++                 : std::string();
++}
++
++}  // namespace
++
++void StartBlocker(PrefService* local_state,
++                  scoped_refptr<network::SharedURLLoaderFactory> factory) {
++  if (BlockerLists::Get() || !local_state || !factory) {
++    return;
++  }
++  base::FilePath user_data;
++  if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data)) {
++    return;
++  }
++  const base::CommandLine& command_line =
++      *base::CommandLine::ForCurrentProcess();
++
++  BlockerLists::Environment environment;
++  environment.local_state = local_state;
++  environment.dir = user_data.Append(kBlockerDirName);
++  environment.url_loader_factory = std::move(factory);
++  environment.list_base = GURL(kListBase);
++  if (command_line.HasSwitch(kBlockerListBaseSwitch)) {
++    environment.list_base =
++        GURL(command_line.GetSwitchValueASCII(kBlockerListBaseSwitch));
++    environment.minimum_rules = 1;
++    environment.launch_delay = base::TimeDelta();
++  }
++  environment.publish = base::BindRepeating(&Publish);
++  environment.indexed_version = base::BindRepeating(&IndexedVersion);
++
++  // Owned by the process, as the updater is: it lives until the browser
++  // quits.
++  BlockerLists* const lists =
++      std::make_unique<BlockerLists>(std::move(environment)).release();
++  BlockerLists::SetInstance(lists);
++  lists->Start();
++
++  UpdatePageActivation(local_state);
++  static base::NoDestructor<PrefChangeRegistrar> registrar;
++  registrar->Init(local_state);
++  const base::RepeatingClosure update = base::BindRepeating(
++      &UpdatePageActivation, base::Unretained(local_state));
++  registrar->Add(prefs::kBlockerEnabled, update);
++  registrar->Add(prefs::kBlockerEasyList, update);
++  registrar->Add(prefs::kBlockerEasyPrivacy, update);
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker.h b/chrome/browser/ui/stedding/blocker/blocker.h
+new file mode 100644
+index 0000000000000..813cb4769f170
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker.h
+@@ -0,0 +1,33 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_H_
++#define CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_H_
++
++#include "base/memory/scoped_refptr.h"
++
++class PrefService;
++
++namespace network {
++class SharedURLLoaderFactory;
++}  // namespace network
++
++namespace stedding {
++
++// Tests serve their own lists: the folder the lists are fetched from instead
++// of https://easylist.to/easylist/ (docs/features/blocker.md Bk12). With it,
++// a list of any size is taken and a due fetch does not wait after launch.
++inline constexpr char kBlockerListBaseSwitch[] = "stedding-blocker-list-base";
++
++// Ad and tracker blocking (docs/features/blocker.md), started once per
++// process after the browser has started: the lists' schedule, which fetches
++// nothing while blocking is off, and the page activation that the
++// subresource filter takes from Stedding while it is on. Owned by the
++// process from then on.
++void StartBlocker(PrefService* local_state,
++                  scoped_refptr<network::SharedURLLoaderFactory> factory);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_H_
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_activation_throttle.cc b/chrome/browser/ui/stedding/blocker/blocker_activation_throttle.cc
+new file mode 100644
+index 0000000000000..900290aa689ab
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_activation_throttle.cc
+@@ -0,0 +1,71 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_activation_throttle.h"
++
++#include <memory>
++
++#include "base/feature_list.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++#include "components/subresource_filter/content/browser/devtools_interaction_tracker.h"
++#include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
++#include "components/subresource_filter/core/common/common_features.h"
++#include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/navigation_throttle_registry.h"
++#include "content/public/browser/web_contents.h"
++
++namespace stedding {
++
++// static
++void BlockerActivationThrottle::MaybeAdd(
++    content::NavigationThrottleRegistry& registry) {
++  registry.AddThrottle(std::make_unique<BlockerActivationThrottle>(registry));
++}
++
++BlockerActivationThrottle::BlockerActivationThrottle(
++    content::NavigationThrottleRegistry& registry)
++    : content::NavigationThrottle(registry) {}
++
++BlockerActivationThrottle::~BlockerActivationThrottle() = default;
++
++content::NavigationThrottle::ThrottleCheckResult
++BlockerActivationThrottle::WillProcessResponse() {
++  content::NavigationHandle* const navigation = navigation_handle();
++  content::WebContents* const contents = navigation->GetWebContents();
++  auto* const observers =
++      subresource_filter::SubresourceFilterObserverManager::FromWebContents(
++          contents);
++  if (!observers) {
++    return PROCEED;
++  }
++  auto* const devtools =
++      subresource_filter::DevtoolsInteractionTracker::FromWebContents(
++          contents);
++  const bool blocking =
++      BlockerAppliesTo(
++          Profile::FromBrowserContext(contents->GetBrowserContext()),
++          navigation->GetURL()) ||
++      (devtools && devtools->activated_via_devtools());
++  subresource_filter::mojom::ActivationState state;
++  if (blocking) {
++    state.activation_level =
++        subresource_filter::mojom::ActivationLevel::kEnabled;
++  } else if (base::FeatureList::IsEnabled(subresource_filter::kAdTagging)) {
++    state.activation_level =
++        subresource_filter::mojom::ActivationLevel::kDryRun;
++  } else {
++    state.activation_level =
++        subresource_filter::mojom::ActivationLevel::kDisabled;
++  }
++  observers->NotifyPageActivationComputed(navigation, state);
++  return PROCEED;
++}
++
++const char* BlockerActivationThrottle::GetNameForLogging() {
++  return "SteddingBlockerActivationThrottle";
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_activation_throttle.h b/chrome/browser/ui/stedding/blocker/blocker_activation_throttle.h
+new file mode 100644
+index 0000000000000..e7bfb48d395f9
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_activation_throttle.h
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_ACTIVATION_THROTTLE_H_
++#define CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_ACTIVATION_THROTTLE_H_
++
++#include "content/public/browser/navigation_throttle.h"
++
++namespace content {
++class NavigationThrottleRegistry;
++}  // namespace content
++
++namespace stedding {
++
++// docs/features/blocker.md Bk1: decides, for each top-level page, whether
++// Chromium's subresource filter blocks what the lists name. While blocking
++// is on, the subresource filter's throttle manager adds this throttle to a
++// page's navigation in place of its Safe Browsing activation throttle
++// (ContentSubresourceFilterThrottleManager::SetPageActivationThrottleFactory,
++// docs/decisions/0030-ad-and-tracker-blocking.md). At WillProcessResponse,
++// once the final address is known, it hands the decision over the way the
++// Safe Browsing throttle does, through the tab's
++// SubresourceFilterObserverManager:
++//   - kEnabled where blocking applies (BlockerAppliesTo), or where DevTools
++//     forced the filter on, as the Safe Browsing throttle allowed;
++//   - otherwise Chromium's ad-tagging dry run while kAdTagging is on, which
++//     tags ad frames and blocks nothing, and no activation when it is off.
++// It writes nothing for the site visited (Bk7): Chromium's own path through
++// ProfileInteractionManager, which records the site's activation in its
++// ADS_DATA metadata, is not taken.
++class BlockerActivationThrottle : public content::NavigationThrottle {
++ public:
++  // The factory the throttle manager runs for each subresource filter root
++  // navigation.
++  static void MaybeAdd(content::NavigationThrottleRegistry& registry);
++
++  explicit BlockerActivationThrottle(
++      content::NavigationThrottleRegistry& registry);
++  BlockerActivationThrottle(const BlockerActivationThrottle&) = delete;
++  BlockerActivationThrottle& operator=(const BlockerActivationThrottle&) =
++      delete;
++  ~BlockerActivationThrottle() override;
++
++  // content::NavigationThrottle:
++  ThrottleCheckResult WillProcessResponse() override;
++  const char* GetNameForLogging() override;
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_ACTIVATION_THROTTLE_H_
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_convert.cc b/chrome/browser/ui/stedding/blocker/blocker_convert.cc
+new file mode 100644
+index 0000000000000..52fb61157c35f
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_convert.cc
+@@ -0,0 +1,222 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_convert.h"
++
++#include <algorithm>
++#include <string>
++#include <vector>
++
++#include "base/files/file_enumerator.h"
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "components/subresource_filter/core/common/unindexed_ruleset.h"
++#include "components/subresource_filter/tools/rule_parser/rule.h"
++#include "components/subresource_filter/tools/rule_parser/rule_parser.h"
++#include "crypto/hash.h"
++#include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
++
++namespace stedding {
++
++namespace {
++
++constexpr base::TimeDelta kShortestExpiry = base::Days(1);
++constexpr base::TimeDelta kLongestExpiry = base::Days(14);
++constexpr base::TimeDelta kExpiryWhenMissing = base::Days(4);
++
++// The header of a list is its first lines; the Expires line sits there.
++constexpr size_t kHeaderLines = 60;
++
++constexpr std::string_view kUtf8Bom = "\xEF\xBB\xBF";
++
++std::string_view WithoutBom(std::string_view text) {
++  if (text.starts_with(kUtf8Bom)) {
++    text.remove_prefix(kUtf8Bom.size());
++  }
++  return text;
++}
++
++void DeleteOtherVersions(const base::FilePath& dir,
++                         const base::FilePath& keep_ruleset,
++                         const base::FilePath& keep_license) {
++  for (const base::FilePath::StringType& pattern :
++       {base::FilePath::StringType(FILE_PATH_LITERAL("rules-*.dat")),
++        base::FilePath::StringType(FILE_PATH_LITERAL("LICENSE-*.txt"))}) {
++    base::FileEnumerator files(dir, /*recursive=*/false,
++                               base::FileEnumerator::FILES, pattern);
++    for (base::FilePath file = files.Next(); !file.empty();
++         file = files.Next()) {
++      if (file != keep_ruleset && file != keep_license) {
++        // A file the ruleset service still reads may not go on Windows; it
++        // goes with the next conversion.
++        base::DeleteFile(file);
++      }
++    }
++  }
++}
++
++}  // namespace
++
++ConvertResult::ConvertResult() = default;
++ConvertResult::ConvertResult(const ConvertResult&) = default;
++ConvertResult& ConvertResult::operator=(const ConvertResult&) = default;
++ConvertResult::~ConvertResult() = default;
++
++base::TimeDelta ListExpiry(std::string_view text) {
++  size_t lines = 0;
++  for (std::string_view line :
++       base::SplitStringPiece(WithoutBom(text), "\n", base::TRIM_WHITESPACE,
++                              base::SPLIT_WANT_NONEMPTY)) {
++    if (++lines > kHeaderLines) {
++      break;
++    }
++    if (!line.starts_with("!")) {
++      continue;
++    }
++    line.remove_prefix(1);
++    line = base::TrimWhitespaceASCII(line, base::TRIM_LEADING);
++    constexpr std::string_view kExpires = "expires:";
++    if (line.size() < kExpires.size() ||
++        !base::EqualsCaseInsensitiveASCII(line.substr(0, kExpires.size()),
++                                          kExpires)) {
++      continue;
++    }
++    line.remove_prefix(kExpires.size());
++    const std::vector<std::string_view> words = base::SplitStringPiece(
++        line, " \t", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
++    int amount = 0;
++    if (words.size() < 2 || !base::StringToInt(words[0], &amount) ||
++        amount <= 0) {
++      return kExpiryWhenMissing;
++    }
++    const std::string unit = base::ToLowerASCII(words[1]);
++    base::TimeDelta expiry = kExpiryWhenMissing;
++    if (unit.starts_with("day")) {
++      expiry = base::Days(amount);
++    } else if (unit.starts_with("hour")) {
++      expiry = base::Hours(amount);
++    }
++    return std::clamp(expiry, kShortestExpiry, kLongestExpiry);
++  }
++  return kExpiryWhenMissing;
++}
++
++bool LooksLikeFilterList(std::string_view text) {
++  text = base::TrimWhitespaceASCII(WithoutBom(text), base::TRIM_LEADING);
++  return text.starts_with("[Adblock");
++}
++
++ConvertResult ConvertLists(const std::vector<ListSource>& lists,
++                           const base::FilePath& out_dir,
++                           std::string_view salt,
++                           size_t minimum_rules) {
++  ConvertResult result;
++  if (lists.empty() || !base::CreateDirectory(out_dir)) {
++    return result;
++  }
++
++  std::string ruleset;
++  // The StringOutputStream must outlive the writer, and the string is whole
++  // once the writer has finished.
++  std::string fingerprint;
++  {
++    google::protobuf::io::StringOutputStream output(&ruleset);
++    subresource_filter::UnindexedRulesetWriter writer(&output);
++    subresource_filter::RuleParser parser;
++    // Bk11: a list that fails stops the conversion, but the writer is
++    // finished all the same below: it CHECKs, on its way out, that no rule it
++    // took is left unwritten, and a broken download crashed the browser.
++    bool failed = false;
++    for (const ListSource& list : lists) {
++      std::string text;
++      if (!base::ReadFileToString(list.path, &text) ||
++          !LooksLikeFilterList(text)) {
++        failed = true;
++        break;
++      }
++      base::StrAppend(
++          &fingerprint,
++          {list.id, ":", base::HexEncodeLower(crypto::hash::Sha256(text)),
++           "\n"});
++      size_t list_rules = 0;
++      for (std::string_view line :
++           base::SplitStringPiece(WithoutBom(text), "\n",
++                                  base::TRIM_WHITESPACE,
++                                  base::SPLIT_WANT_NONEMPTY)) {
++        // The header line and comments carry no rule.
++        if (line.starts_with("[") || line.starts_with("!")) {
++          continue;
++        }
++        switch (parser.Parse(line)) {
++          case url_pattern_index::proto::RULE_TYPE_URL:
++            if (!writer.AddUrlRule(parser.url_rule().ToProtobuf())) {
++              failed = true;
++              break;
++            }
++            ++list_rules;
++            break;
++          case url_pattern_index::proto::RULE_TYPE_STYLE:
++            ++result.cosmetic_rules;
++            break;
++          case url_pattern_index::proto::RULE_TYPE_COMMENT:
++            break;
++          default:
++            if (parser.parse_error().error_code !=
++                subresource_filter::RuleParser::ParseError::EMPTY_RULE) {
++              ++result.skipped_lines;
++            }
++            break;
++        }
++        if (failed) {
++          break;
++        }
++      }
++      // A list cut short, or one that is something else under the right
++      // header, gives far fewer rules than the real one.
++      if (failed || list_rules < minimum_rules) {
++        failed = true;
++        break;
++      }
++      result.url_rules += static_cast<int>(list_rules);
++    }
++    // A writer that met an error has nothing pending, and may not be
++    // finished.
++    const bool finished = !writer.had_error() && writer.Finish();
++    if (failed || !finished) {
++      return result;
++    }
++  }
++
++  base::StrAppend(&fingerprint, {"salt:", salt});
++  result.content_version =
++      base::HexEncodeLower(crypto::hash::Sha256(fingerprint)).substr(0, 16);
++  result.ruleset_path = out_dir.AppendASCII(
++      base::StrCat({"rules-", result.content_version, ".dat"}));
++  result.license_path = out_dir.AppendASCII(
++      base::StrCat({"LICENSE-", result.content_version, ".txt"}));
++
++  std::string license =
++      "The rules in this folder were converted on this computer from the "
++      "filter lists below, fetched from their own homepages. Each list keeps "
++      "its own licence.\n\n";
++  for (const ListSource& list : lists) {
++    base::StrAppend(&license, {list.name, "\n  Homepage: ", list.homepage,
++                               "\n  Licence: ", list.licence, "\n\n"});
++  }
++  if (!base::ImportantFileWriter::WriteFileAtomically(result.ruleset_path,
++                                                      ruleset) ||
++      !base::ImportantFileWriter::WriteFileAtomically(result.license_path,
++                                                      license)) {
++    return result;
++  }
++  DeleteOtherVersions(out_dir, result.ruleset_path, result.license_path);
++  result.ok = true;
++  return result;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_convert.h b/chrome/browser/ui/stedding/blocker/blocker_convert.h
+new file mode 100644
+index 0000000000000..5d05d4fec53ae
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_convert.h
+@@ -0,0 +1,79 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_CONVERT_H_
++#define CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_CONVERT_H_
++
++#include <cstddef>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/files/file_path.h"
++#include "base/time/time.h"
++
++namespace stedding {
++
++// docs/features/blocker.md Bk2, Bk3: turning the downloaded filter lists into
++// the unindexed ruleset Chromium's subresource filter indexes. Pure functions
++// over files, run on a background sequence; no network and no profile.
++
++// Bk2: how long a list stays fresh, from its own "! Expires: N days" or
++// "! Expires: N hours" line, clamped to between one and fourteen days; four
++// days when the list has no such line in its header.
++base::TimeDelta ListExpiry(std::string_view text);
++
++// Bk3: whether `text` is a filter list at all: its first line that is not
++// empty starts with "[Adblock". A captive portal's page, an error page or an
++// empty answer is not.
++bool LooksLikeFilterList(std::string_view text);
++
++// One downloaded list, as the converter reads it and the licence file names
++// it.
++struct ListSource {
++  std::string id;
++  std::string name;
++  std::string homepage;
++  std::string licence;
++  base::FilePath path;
++};
++
++struct ConvertResult {
++  ConvertResult();
++  ConvertResult(const ConvertResult&);
++  ConvertResult& operator=(const ConvertResult&);
++  ~ConvertResult();
++
++  // False when a list could not be read, is not a filter list, holds fewer
++  // than the minimum of URL rules, or the ruleset could not be written; the
++  // ruleset published before stays (Bk3).
++  bool ok = false;
++  // The ruleset's content version: hex digits from the SHA-256 of the lists'
++  // contents and `salt`, so a list that changed gives a new version and the
++  // same lists give the same one.
++  std::string content_version;
++  base::FilePath ruleset_path;
++  base::FilePath license_path;
++  // URL rules kept (blocking and allowing).
++  int url_rules = 0;
++  // Element-hiding rules, read and dropped: this slice blocks requests only.
++  int cosmetic_rules = 0;
++  // Lines Chromium's parser could not read (rules with options it does not
++  // know), skipped and counted, never logged.
++  int skipped_lines = 0;
++};
++
++// Bk3: reads every list in `lists`, keeps their URL rules and writes one
++// unindexed ruleset and a LICENSE file naming each list, its homepage and its
++// licence into `out_dir`, both named for the content version. Earlier
++// versions' files in `out_dir` are deleted. `minimum_rules` is the fewest URL
++// rules a list must give to be taken as whole (1000 in the product).
++ConvertResult ConvertLists(const std::vector<ListSource>& lists,
++                           const base::FilePath& out_dir,
++                           std::string_view salt,
++                           size_t minimum_rules);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_CONVERT_H_
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_convert_unittest.cc b/chrome/browser/ui/stedding/blocker/blocker_convert_unittest.cc
+new file mode 100644
+index 0000000000000..f4a9e28f03579
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_convert_unittest.cc
+@@ -0,0 +1,168 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_convert.h"
++
++#include <string>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/strings/strcat.h"
++#include "components/subresource_filter/core/common/unindexed_ruleset.h"
++#include "components/url_pattern_index/proto/rules.pb.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
++
++namespace stedding {
++
++namespace {
++
++// A small list in EasyList's format, written for these tests: three URL
++// rules (one of them an allow rule), two element-hiding rules, comments.
++constexpr char kSmallList[] =
++    "[Adblock Plus 2.0]\n"
++    "! Title: A test list\n"
++    "! Expires: 2 days (update frequency)\n"
++    "||ads.example^\n"
++    "||track.example^$script,third-party\n"
++    "@@||fine.example^$document\n"
++    "example.com##.advert\n"
++    "##.banner-ad\n"
++    "\n";
++
++class BlockerConvertTest : public testing::Test {
++ protected:
++  void SetUp() override { ASSERT_TRUE(dir_.CreateUniqueTempDir()); }
++
++  ListSource WriteList(std::string_view id, std::string_view text) {
++    const base::FilePath path =
++        dir_.GetPath().AppendASCII(base::StrCat({id, ".txt"}));
++    EXPECT_TRUE(base::WriteFile(path, text));
++    return {std::string(id), std::string(id) + " list",
++            "https://lists.test/" + std::string(id),
++            "CC BY-SA 3.0", path};
++  }
++
++  base::FilePath OutDir() const { return dir_.GetPath().AppendASCII("out"); }
++
++  // The URL and style rules the written ruleset holds.
++  static std::pair<int, int> CountRules(const base::FilePath& ruleset) {
++    std::string data;
++    EXPECT_TRUE(base::ReadFileToString(ruleset, &data));
++    google::protobuf::io::ArrayInputStream input(
++        data.data(), static_cast<int>(data.size()));
++    subresource_filter::UnindexedRulesetReader reader(&input);
++    url_pattern_index::proto::FilteringRules chunk;
++    int url_rules = 0;
++    int style_rules = 0;
++    while (reader.ReadNextChunk(&chunk)) {
++      url_rules += chunk.url_rules_size();
++      style_rules += chunk.style_rules_size();
++    }
++    return {url_rules, style_rules};
++  }
++
++  base::ScopedTempDir dir_;
++};
++
++}  // namespace
++
++// Bk2: the list's own Expires line sets when it is fetched next, clamped to
++// one to fourteen days; four days when it has none.
++TEST_F(BlockerConvertTest, TheExpiresLineSetsTheExpiry) {
++  EXPECT_EQ(base::Days(2), ListExpiry(kSmallList));
++  EXPECT_EQ(base::Days(4), ListExpiry("[Adblock Plus 2.0]\n||a.example^\n"));
++  EXPECT_EQ(base::Days(1),
++            ListExpiry("[Adblock Plus 2.0]\n! Expires: 6 hours\n"));
++  EXPECT_EQ(base::Days(14),
++            ListExpiry("[Adblock Plus 2.0]\n! Expires: 30 days\n"));
++  EXPECT_EQ(base::Days(4),
++            ListExpiry("[Adblock Plus 2.0]\n! Expires: soon\n"));
++}
++
++// Bk3: URL rules go into the ruleset; element-hiding rules are read and
++// dropped, so the ruleset holds none.
++TEST_F(BlockerConvertTest, UrlRulesAreKeptAndCosmeticRulesDropped) {
++  const ConvertResult result =
++      ConvertLists({WriteList("small", kSmallList)}, OutDir(), "0",
++                   /*minimum_rules=*/1);
++  ASSERT_TRUE(result.ok);
++  EXPECT_EQ(3, result.url_rules);
++  EXPECT_EQ(2, result.cosmetic_rules);
++  EXPECT_EQ(0, result.skipped_lines);
++  EXPECT_EQ(std::make_pair(3, 0), CountRules(result.ruleset_path));
++  EXPECT_EQ(16u, result.content_version.size());
++
++  // The same lists give the same version; another salt gives another.
++  const ConvertResult again =
++      ConvertLists({WriteList("small", kSmallList)}, OutDir(), "0", 1);
++  ASSERT_TRUE(again.ok);
++  EXPECT_EQ(result.content_version, again.content_version);
++  const ConvertResult salted =
++      ConvertLists({WriteList("small", kSmallList)}, OutDir(), "1", 1);
++  ASSERT_TRUE(salted.ok);
++  EXPECT_NE(result.content_version, salted.content_version);
++  // Only the newest version's files are kept.
++  EXPECT_FALSE(base::PathExists(result.ruleset_path));
++  EXPECT_TRUE(base::PathExists(salted.ruleset_path));
++}
++
++// Bk3: rules with options Chromium's parser does not know are skipped and
++// counted; the others in the same list are kept.
++TEST_F(BlockerConvertTest, UnreadableLinesAreCounted) {
++  const std::string list = base::StrCat(
++      {kSmallList,
++       "||redirected.example^$redirect=noop.js\n"
++       "||params.example^$removeparam=utm_source\n"
++       "||policy.example^$csp=script-src 'none'\n"});
++  const ConvertResult result =
++      ConvertLists({WriteList("odd", list)}, OutDir(), "0", 1);
++  ASSERT_TRUE(result.ok);
++  EXPECT_EQ(3, result.url_rules);
++  EXPECT_EQ(3, result.skipped_lines);
++}
++
++// Bk3: a download that is not a filter list, or one far smaller than the
++// minimum, is refused; nothing is written, so the ruleset made before stays.
++TEST_F(BlockerConvertTest, ABrokenDownloadKeepsThePreviousRuleset) {
++  const ConvertResult good =
++      ConvertLists({WriteList("good", kSmallList)}, OutDir(), "0", 1);
++  ASSERT_TRUE(good.ok);
++
++  EXPECT_FALSE(LooksLikeFilterList("<html><body>Sign in to the Wi-Fi"));
++  EXPECT_TRUE(LooksLikeFilterList("\xEF\xBB\xBF[Adblock Plus 2.0]\n"));
++  const ConvertResult portal = ConvertLists(
++      {WriteList("portal", "<html><body>Sign in to the Wi-Fi</body></html>")},
++      OutDir(), "0", 1);
++  EXPECT_FALSE(portal.ok);
++  const ConvertResult short_list =
++      ConvertLists({WriteList("short", kSmallList)}, OutDir(), "0",
++                   /*minimum_rules=*/1000);
++  EXPECT_FALSE(short_list.ok);
++  EXPECT_TRUE(base::PathExists(good.ruleset_path));
++  EXPECT_TRUE(base::PathExists(good.license_path));
++}
++
++// Bk3: the LICENSE file beside the ruleset names every list, its homepage
++// and its licence.
++TEST_F(BlockerConvertTest, TheLicenceFileNamesEveryList) {
++  const ConvertResult result = ConvertLists(
++      {WriteList("first", kSmallList), WriteList("second", kSmallList)},
++      OutDir(), "0", 1);
++  ASSERT_TRUE(result.ok);
++  EXPECT_EQ(6, result.url_rules);
++  std::string license;
++  ASSERT_TRUE(base::ReadFileToString(result.license_path, &license));
++  for (std::string_view expected :
++       {"first list", "https://lists.test/first", "second list",
++        "https://lists.test/second", "CC BY-SA 3.0"}) {
++    EXPECT_NE(std::string::npos, license.find(expected)) << expected;
++  }
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_lists.cc b/chrome/browser/ui/stedding/blocker/blocker_lists.cc
+new file mode 100644
+index 0000000000000..82a408c959f50
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_lists.cc
+@@ -0,0 +1,599 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++
++#include <algorithm>
++#include <optional>
++#include <string>
++#include <utility>
++
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/functional/bind.h"
++#include "base/json/values_util.h"
++#include "base/no_destructor.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/task/thread_pool.h"
++#include "base/task/updateable_sequenced_task_runner.h"
++#include "base/values.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_convert.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "components/subresource_filter/core/browser/ruleset_version.h"
++#include "net/base/load_flags.h"
++#include "net/base/net_errors.h"
++#include "net/base/request_priority.h"
++#include "net/http/http_request_headers.h"
++#include "net/http/http_response_headers.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
++
++namespace stedding {
++
++namespace {
++
++// The lists are a few megabytes; anything far larger is not one.
++constexpr int64_t kMaxListBytes = 16 * 1024 * 1024;
++
++constexpr base::TimeDelta kFirstRetry = base::Hours(1);
++constexpr base::TimeDelta kExpiryWhenUnknown = base::Days(4);
++constexpr base::TimeDelta kFetchTimeout = base::Minutes(2);
++
++// Keys of the state in prefs::kBlockerLists.
++constexpr char kEtagKey[] = "etag";
++constexpr char kLastModifiedKey[] = "last_modified";
++constexpr char kFetchedKey[] = "fetched";
++constexpr char kNextKey[] = "next";
++constexpr char kExpiryHoursKey[] = "expiry_hours";
++constexpr char kFailuresKey[] = "failures";
++constexpr char kStoredKey[] = "stored";
++constexpr char kRulesetKey[] = "ruleset";
++constexpr char kVersionKey[] = "version";
++constexpr char kTimeKey[] = "time";
++constexpr char kUrlRulesKey[] = "url_rules";
++constexpr char kSkippedKey[] = "skipped";
++constexpr char kSaltKey[] = "salt";
++
++constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
++    net::DefineNetworkTrafficAnnotation("stedding_blocker_lists", R"(
++        semantics {
++          sender: "Stedding ad and tracker blocking"
++          description:
++            "While the user has turned on Block ads and trackers, Stedding "
++            "downloads the filter lists that are on (EasyList, EasyPrivacy) "
++            "from their own homepage, each when the list's own expiry says, "
++            "and converts them on this computer into the rules the browser "
++            "blocks requests by."
++          trigger:
++            "Turning blocking on, a list's expiry (between one and fourteen "
++            "days), and the user's Update lists now."
++          data:
++            "None: a plain conditional GET with no cookies, no cache and no "
++            "query string."
++          destination: OTHER
++          destination_other: "easylist.to"
++          # Contact: the repository's Security tab (SECURITY.md).
++          user_data { type: NONE }
++          last_reviewed: "2026-10-25"
++        }
++        policy {
++          cookies_allowed: NO
++          setting:
++            "Settings > Stedding > Privacy > Block ads and trackers, off by "
++            "default."
++          policy_exception_justification:
++            "Not implemented: the setting is off by default and turns it off."
++        })");
++
++base::TimeDelta ExpiryFrom(const base::DictValue* state) {
++  if (!state) {
++    return kExpiryWhenUnknown;
++  }
++  const std::optional<int> hours = state->FindInt(kExpiryHoursKey);
++  return hours && *hours > 0 ? base::Hours(*hours) : kExpiryWhenUnknown;
++}
++
++// Off the UI thread: the download checked and put in its place. Nothing,
++// and the stored list kept, when it is not a filter list (Bk3).
++std::optional<base::TimeDelta> StoreList(const base::FilePath& download,
++                                         const base::FilePath& path) {
++  std::string text;
++  const bool read =
++      base::ReadFileToStringWithMaxSize(download, &text, kMaxListBytes);
++  base::DeleteFile(download);
++  if (!read || !LooksLikeFilterList(text) ||
++      !base::CreateDirectory(path.DirName()) ||
++      !base::ImportantFileWriter::WriteFileAtomically(path, text)) {
++    return std::nullopt;
++  }
++  return ListExpiry(text);
++}
++
++BlockerLists* g_lists = nullptr;
++
++}  // namespace
++
++BlockerLists::Environment::Environment() = default;
++BlockerLists::Environment::Environment(Environment&&) = default;
++BlockerLists::Environment& BlockerLists::Environment::operator=(
++    Environment&&) = default;
++BlockerLists::Environment::~Environment() = default;
++
++BlockerLists::Status::Status() = default;
++BlockerLists::Status::Status(const Status&) = default;
++BlockerLists::Status& BlockerLists::Status::operator=(const Status&) = default;
++BlockerLists::Status::~Status() = default;
++
++// static
++const std::vector<BlockerLists::ListSpec>& BlockerLists::Specs() {
++  static const base::NoDestructor<std::vector<ListSpec>> specs(
++      std::vector<ListSpec>{
++          {"easylist", "EasyList", "easylist.txt", "https://easylist.to/",
++           "GPL-3.0-or-later or CC BY-SA 3.0", prefs::kBlockerEasyList},
++          {"easyprivacy", "EasyPrivacy", "easyprivacy.txt",
++           "https://easylist.to/", "GPL-3.0-or-later or CC BY-SA 3.0",
++           prefs::kBlockerEasyPrivacy},
++      });
++  return *specs;
++}
++
++BlockerLists::BlockerLists(Environment environment)
++    : env_(std::move(environment)),
++      file_task_runner_(base::ThreadPool::CreateUpdateableSequencedTaskRunner(
++          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
++           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {}
++
++BlockerLists::~BlockerLists() {
++  if (g_lists == this) {
++    g_lists = nullptr;
++  }
++}
++
++// static
++BlockerLists* BlockerLists::Get() {
++  return g_lists;
++}
++
++// static
++void BlockerLists::SetInstance(BlockerLists* lists) {
++  g_lists = lists;
++}
++
++void BlockerLists::Start() {
++  if (!env_.local_state) {
++    return;
++  }
++  registrar_.Init(env_.local_state);
++  const base::RepeatingClosure changed = base::BindRepeating(
++      &BlockerLists::OnPrefsChanged, base::Unretained(this));
++  registrar_.Add(prefs::kBlockerEnabled, changed);
++  for (const ListSpec& spec : Specs()) {
++    registrar_.Add(spec.pref, changed);
++  }
++  start_time_ = base::Time::Now();
++  was_on_ = BlockerOn(env_.local_state);
++  if (!was_on_) {
++    return;
++  }
++  // A ruleset recorded here that the service never indexed (a quit during
++  // indexing, or a crash in it, which leaves that version barred) is made
++  // again under a new salt.
++  if (RulesetMissing()) {
++    BumpSaltIfRecorded();
++    Convert();
++  }
++  Schedule();
++}
++
++void BlockerLists::UpdateNow() {
++  if (!BlockerOn(env_.local_state)) {
++    return;
++  }
++  at_launch_ = false;
++  file_task_runner_->UpdatePriority(base::TaskPriority::USER_VISIBLE);
++  if (RulesetMissing()) {
++    BumpSaltIfRecorded();
++  }
++  for (const ListSpec& spec : Specs()) {
++    if (ListOn(spec)) {
++      Fetch(spec, /*user_visible=*/true);
++    }
++  }
++  NotifyChanged();
++}
++
++BlockerLists::Status BlockerLists::GetStatus() const {
++  Status status;
++  status.on = BlockerOn(env_.local_state);
++  status.busy = !loaders_.empty() || converting_;
++  if (const base::DictValue* ruleset = State().FindDict(kRulesetKey)) {
++    const std::string* version = ruleset->FindString(kVersionKey);
++    status.has_ruleset = version && !version->empty();
++    status.content_version = version ? *version : std::string();
++    status.updated =
++        base::ValueToTime(ruleset->Find(kTimeKey)).value_or(base::Time());
++    status.url_rules = ruleset->FindInt(kUrlRulesKey).value_or(0);
++    status.skipped_lines = ruleset->FindInt(kSkippedKey).value_or(0);
++  }
++  for (const ListSpec& spec : Specs()) {
++    ListStatus list;
++    list.id = std::string(spec.id);
++    list.name = std::string(spec.name);
++    list.homepage = std::string(spec.homepage);
++    list.licence = std::string(spec.licence);
++    list.enabled = env_.local_state &&
++                   env_.local_state->GetBoolean(spec.pref);
++    if (const base::DictValue* state = ListState(spec)) {
++      list.fetched =
++          base::ValueToTime(state->Find(kFetchedKey)).value_or(base::Time());
++      list.failing = state->FindInt(kFailuresKey).value_or(0) > 0;
++    }
++    status.lists.push_back(std::move(list));
++  }
++  return status;
++}
++
++void BlockerLists::AddObserver(Observer* observer) {
++  observers_.AddObserver(observer);
++}
++
++void BlockerLists::RemoveObserver(Observer* observer) {
++  observers_.RemoveObserver(observer);
++}
++
++base::Time BlockerLists::NextFetchForTesting(std::string_view id) const {
++  const ListSpec* const spec = SpecFor(id);
++  if (!spec) {
++    return base::Time();
++  }
++  const base::DictValue* const state = ListState(*spec);
++  return state ? base::ValueToTime(state->Find(kNextKey)).value_or(base::Time())
++               : base::Time();
++}
++
++const base::DictValue& BlockerLists::State() const {
++  static const base::NoDestructor<base::DictValue> empty;
++  return env_.local_state ? env_.local_state->GetDict(prefs::kBlockerLists)
++                          : *empty;
++}
++
++const base::DictValue* BlockerLists::ListState(const ListSpec& spec) const {
++  return State().FindDict(spec.id);
++}
++
++const BlockerLists::ListSpec* BlockerLists::SpecFor(std::string_view id) const {
++  for (const ListSpec& spec : Specs()) {
++    if (spec.id == id) {
++      return &spec;
++    }
++  }
++  return nullptr;
++}
++
++bool BlockerLists::ListOn(const ListSpec& spec) const {
++  return BlockerOn(env_.local_state) && env_.local_state->GetBoolean(spec.pref);
++}
++
++bool BlockerLists::HasStoredList(const ListSpec& spec) const {
++  const base::DictValue* const state = ListState(spec);
++  return state && state->FindBool(kStoredKey).value_or(false);
++}
++
++base::FilePath BlockerLists::ListPath(const ListSpec& spec) const {
++  return env_.dir.AppendASCII(spec.file);
++}
++
++std::string BlockerLists::RecordedVersion() const {
++  if (const base::DictValue* ruleset = State().FindDict(kRulesetKey)) {
++    if (const std::string* version = ruleset->FindString(kVersionKey)) {
++      return *version;
++    }
++  }
++  return std::string();
++}
++
++bool BlockerLists::RulesetMissing() const {
++  const std::string recorded = RecordedVersion();
++  if (recorded.empty()) {
++    // None made yet: one is due as soon as a list is stored.
++    return std::ranges::any_of(Specs(), [this](const ListSpec& spec) {
++      return ListOn(spec) && HasStoredList(spec);
++    });
++  }
++  return env_.indexed_version.is_null() ||
++         env_.indexed_version.Run() != recorded;
++}
++
++void BlockerLists::BumpSaltIfRecorded() {
++  if (RecordedVersion().empty()) {
++    return;
++  }
++  ScopedDictPrefUpdate update(env_.local_state, prefs::kBlockerLists);
++  update->Set(kSaltKey, update->FindInt(kSaltKey).value_or(0) + 1);
++}
++
++void BlockerLists::OnPrefsChanged() {
++  const bool on = BlockerOn(env_.local_state);
++  if (!on) {
++    // Bk2: nothing is fetched while the switch is off; a fetch under way is
++    // cancelled.
++    timer_.Stop();
++    loaders_.clear();
++    was_on_ = false;
++    NotifyChanged();
++    return;
++  }
++  if (!was_on_) {
++    // Turned on here: the first lists come now, not after the launch delay.
++    at_launch_ = false;
++  }
++  was_on_ = true;
++  // A list turned on or off changes the ruleset; the same lists give the
++  // same version, which the ruleset service skips.
++  Convert();
++  Schedule();
++  NotifyChanged();
++}
++
++base::Time BlockerLists::NextFetch(const ListSpec& spec) const {
++  // Never fetched: due now. Otherwise when the list's expiry, or a retry
++  // after a failure, says.
++  const base::DictValue* const state = ListState(spec);
++  return state ? base::ValueToTime(state->Find(kNextKey)).value_or(base::Time())
++               : base::Time();
++}
++
++void BlockerLists::Schedule() {
++  timer_.Stop();
++  if (!BlockerOn(env_.local_state)) {
++    return;
++  }
++  base::Time earliest = base::Time::Max();
++  for (const ListSpec& spec : Specs()) {
++    if (!ListOn(spec) || loaders_.contains(spec.id)) {
++      continue;
++    }
++    earliest = std::min(earliest, NextFetch(spec));
++  }
++  if (earliest.is_max()) {
++    return;
++  }
++  if (at_launch_) {
++    earliest = std::max(earliest, start_time_ + env_.launch_delay);
++  }
++  timer_.Start(FROM_HERE, std::max(earliest, base::Time::Now()),
++               base::BindOnce(&BlockerLists::FetchDue, base::Unretained(this)));
++}
++
++void BlockerLists::FetchDue() {
++  at_launch_ = false;
++  const base::Time now = base::Time::Now();
++  for (const ListSpec& spec : Specs()) {
++    if (ListOn(spec) && !loaders_.contains(spec.id) && NextFetch(spec) <= now) {
++      Fetch(spec, /*user_visible=*/false);
++    }
++  }
++  Schedule();
++}
++
++void BlockerLists::Fetch(const ListSpec& spec, bool user_visible) {
++  if (loaders_.contains(spec.id) || !env_.url_loader_factory ||
++      !env_.list_base.is_valid()) {
++    return;
++  }
++  auto request = std::make_unique<network::ResourceRequest>();
++  // Bk12: the list's own address, with no query string.
++  request->url = env_.list_base.Resolve(spec.file);
++  request->method = "GET";
++  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++  request->load_flags = net::LOAD_DISABLE_CACHE;
++  request->priority = user_visible ? net::MEDIUM : net::IDLE;
++  if (const base::DictValue* state = ListState(spec);
++      state && HasStoredList(spec)) {
++    // Bk2: a conditional request; the list answers 304 when unchanged.
++    if (const std::string* etag = state->FindString(kEtagKey);
++        etag && !etag->empty()) {
++      request->headers.SetHeader(net::HttpRequestHeaders::kIfNoneMatch, *etag);
++    }
++    if (const std::string* modified = state->FindString(kLastModifiedKey);
++        modified && !modified->empty()) {
++      request->headers.SetHeader(net::HttpRequestHeaders::kIfModifiedSince,
++                                 *modified);
++    }
++  }
++  std::unique_ptr<network::SimpleURLLoader> loader =
++      network::SimpleURLLoader::Create(std::move(request), kTrafficAnnotation);
++  // A 304 is an answer, not a failure.
++  loader->SetAllowHttpErrorResults(true);
++  loader->SetTimeoutDuration(kFetchTimeout);
++  network::SimpleURLLoader* const raw = loader.get();
++  loaders_.emplace(std::string(spec.id), std::move(loader));
++  ++fetches_started_;
++  raw->DownloadToTempFile(
++      env_.url_loader_factory.get(),
++      base::BindOnce(&BlockerLists::OnFetched, weak_factory_.GetWeakPtr(),
++                     std::string(spec.id)),
++      kMaxListBytes);
++  NotifyChanged();
++}
++
++void BlockerLists::OnFetched(std::string id, base::FilePath download) {
++  const auto it = loaders_.find(id);
++  if (it == loaders_.end()) {
++    return;
++  }
++  const std::unique_ptr<network::SimpleURLLoader> loader =
++      std::move(it->second);
++  loaders_.erase(it);
++  const ListSpec* const spec = SpecFor(id);
++  const network::mojom::URLResponseHead* const head = loader->ResponseInfo();
++  const int code =
++      head && head->headers ? head->headers->response_code() : 0;
++  const bool answered = spec && loader->NetError() == net::OK;
++  if (!answered || code != 200 || download.empty()) {
++    // A 304 has no body to keep, whether or not an empty file came with it.
++    if (!download.empty()) {
++      file_task_runner_->PostTask(FROM_HERE,
++                                  base::GetDeleteFileCallback(download));
++    }
++    if (answered && code == 304) {
++      OnNotModified(id);
++    } else {
++      FetchFailed(id);
++    }
++    return;
++  }
++  std::string etag =
++      head->headers->GetNormalizedHeader("ETag").value_or(std::string());
++  // Last-Modified is a header that is never joined with commas: its first
++  // value, read as such (GetNormalizedHeader DCHECKs on it).
++  size_t iter = 0;
++  std::string last_modified(
++      head->headers
++          ->EnumerateHeader(&iter, net::HttpResponseHeaders::kLastModified)
++          .value_or(std::string_view()));
++  file_task_runner_->PostTaskAndReplyWithResult(
++      FROM_HERE, base::BindOnce(&StoreList, download, ListPath(*spec)),
++      base::BindOnce(&BlockerLists::OnStored, weak_factory_.GetWeakPtr(), id,
++                     std::move(etag), std::move(last_modified)));
++}
++
++void BlockerLists::OnNotModified(const std::string& id) {
++  {
++    ScopedDictPrefUpdate update(env_.local_state, prefs::kBlockerLists);
++    base::DictValue* const state = update->EnsureDict(id);
++    const base::Time now = base::Time::Now();
++    state->Set(kFetchedKey, base::TimeToValue(now));
++    state->Set(kNextKey, base::TimeToValue(now + ExpiryFrom(state)));
++    state->Set(kFailuresKey, 0);
++  }
++  if (RulesetMissing()) {
++    Convert();
++  }
++  Schedule();
++  NotifyChanged();
++}
++
++void BlockerLists::OnStored(std::string id,
++                            std::string etag,
++                            std::string last_modified,
++                            std::optional<base::TimeDelta> expiry) {
++  if (!expiry) {
++    // Bk3: not a filter list; the stored one stays.
++    FetchFailed(id);
++    return;
++  }
++  {
++    ScopedDictPrefUpdate update(env_.local_state, prefs::kBlockerLists);
++    base::DictValue* const state = update->EnsureDict(id);
++    const base::Time now = base::Time::Now();
++    state->Set(kEtagKey, std::move(etag));
++    state->Set(kLastModifiedKey, std::move(last_modified));
++    state->Set(kFetchedKey, base::TimeToValue(now));
++    state->Set(kNextKey, base::TimeToValue(now + *expiry));
++    state->Set(kExpiryHoursKey, static_cast<int>(expiry->InHours()));
++    state->Set(kFailuresKey, 0);
++    state->Set(kStoredKey, true);
++  }
++  Convert();
++  Schedule();
++  NotifyChanged();
++}
++
++void BlockerLists::FetchFailed(const std::string& id) {
++  {
++    ScopedDictPrefUpdate update(env_.local_state, prefs::kBlockerLists);
++    base::DictValue* const state = update->EnsureDict(id);
++    const int failures = state->FindInt(kFailuresKey).value_or(0) + 1;
++    state->Set(kFailuresKey, failures);
++    // Bk2: an hour, then twice as long each time, up to the list's expiry.
++    const base::TimeDelta wait =
++        std::min(kFirstRetry * (1 << std::min(failures - 1, 10)),
++                 ExpiryFrom(state));
++    state->Set(kNextKey, base::TimeToValue(base::Time::Now() + wait));
++  }
++  Schedule();
++  NotifyChanged();
++}
++
++void BlockerLists::Convert() {
++  if (!BlockerOn(env_.local_state)) {
++    return;
++  }
++  if (converting_) {
++    convert_again_ = true;
++    return;
++  }
++  std::vector<ListSource> sources;
++  for (const ListSpec& spec : Specs()) {
++    if (ListOn(spec) && HasStoredList(spec)) {
++      sources.push_back({std::string(spec.id), std::string(spec.name),
++                         std::string(spec.homepage), std::string(spec.licence),
++                         ListPath(spec)});
++    }
++  }
++  if (sources.empty()) {
++    return;
++  }
++  converting_ = true;
++  const std::string salt =
++      base::NumberToString(State().FindInt(kSaltKey).value_or(0));
++  file_task_runner_->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(
++          [](const std::vector<ListSource>& lists, const base::FilePath& dir,
++             const std::string& salt, size_t minimum_rules) {
++            return ConvertLists(lists, dir, salt, minimum_rules);
++          },
++          std::move(sources), env_.dir.AppendASCII("ruleset"), salt,
++          env_.minimum_rules),
++      base::BindOnce(&BlockerLists::OnConverted, weak_factory_.GetWeakPtr()));
++  NotifyChanged();
++}
++
++void BlockerLists::OnConverted(const ConvertResult& result) {
++  converting_ = false;
++  file_task_runner_->UpdatePriority(base::TaskPriority::BEST_EFFORT);
++  if (result.ok && BlockerOn(env_.local_state)) {
++    {
++      ScopedDictPrefUpdate update(env_.local_state, prefs::kBlockerLists);
++      base::DictValue ruleset;
++      ruleset.Set(kVersionKey, result.content_version);
++      ruleset.Set(kTimeKey, base::TimeToValue(base::Time::Now()));
++      ruleset.Set(kUrlRulesKey, result.url_rules);
++      ruleset.Set(kSkippedKey, result.skipped_lines);
++      update->Set(kRulesetKey, std::move(ruleset));
++    }
++    if (!env_.publish.is_null() &&
++        (env_.indexed_version.is_null() ||
++         env_.indexed_version.Run() != result.content_version)) {
++      subresource_filter::UnindexedRulesetInfo info;
++      info.content_version = result.content_version;
++      info.ruleset_path = result.ruleset_path;
++      info.license_path = result.license_path;
++      env_.publish.Run(info);
++    }
++  }
++  if (convert_again_) {
++    convert_again_ = false;
++    Convert();
++  }
++  NotifyChanged();
++}
++
++void BlockerLists::NotifyChanged() {
++  for (Observer& observer : observers_) {
++    observer.OnBlockerListsChanged();
++  }
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_lists.h b/chrome/browser/ui/stedding/blocker/blocker_lists.h
+new file mode 100644
+index 0000000000000..b6e57c85ac8e2
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_lists.h
+@@ -0,0 +1,226 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_LISTS_H_
++#define CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_LISTS_H_
++
++#include <cstddef>
++#include <functional>
++#include <map>
++#include <memory>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/files/file_path.h"
++#include "base/functional/callback.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/observer_list.h"
++#include "base/observer_list_types.h"
++#include "base/time/time.h"
++#include "base/timer/wall_clock_timer.h"
++#include "base/values.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "url/gurl.h"
++
++class PrefService;
++
++namespace base {
++class UpdateableSequencedTaskRunner;
++}  // namespace base
++
++namespace network {
++class SharedURLLoaderFactory;
++class SimpleURLLoader;
++}  // namespace network
++
++namespace subresource_filter {
++struct UnindexedRulesetInfo;
++}  // namespace subresource_filter
++
++namespace stedding {
++
++struct ConvertResult;
++
++// docs/features/blocker.md Bk2, Bk3, Bk9, Bk12: the filter lists, fetched at
++// run time and only while blocking is on, and the ruleset made from them.
++// One for the browser, owned by the process (StartBlocker).
++//
++// Each list is fetched when its own "! Expires:" line says (Bk2), with a
++// conditional request that carries nothing about the user (Bk12): no cookies,
++// no cache, no query string. A 304 keeps the stored list. A failed fetch is
++// tried again after an hour, then after twice as long each time, up to the
++// list's own expiry. A changed list is converted (blocker_convert.h) on a
++// background sequence and handed to Chromium's ruleset service, which indexes
++// it and publishes it to every renderer (Bk3). Nothing is fetched or
++// converted while the switch is off, or for a list that is off.
++class BlockerLists {
++ public:
++  // One list Stedding offers: its id in the state, its name and where it
++  // comes from, as Settings and the LICENSE file name it; its file below the
++  // list base; and the local-state preference that turns it on.
++  struct ListSpec {
++    std::string_view id;
++    std::string_view name;
++    std::string_view file;
++    std::string_view homepage;
++    std::string_view licence;
++    const char* pref;
++  };
++  static const std::vector<ListSpec>& Specs();
++
++  // Where the lists come from and where they go; the tests give their own.
++  struct Environment {
++    Environment();
++    Environment(Environment&&);
++    Environment& operator=(Environment&&);
++    ~Environment();
++
++    raw_ptr<PrefService> local_state = nullptr;
++    // <user data>/Stedding Blocker: the downloaded lists, and the converted
++    // ruleset in its "ruleset" folder.
++    base::FilePath dir;
++    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
++    // https://easylist.to/easylist/ in the product.
++    GURL list_base;
++    // The fewest URL rules a list must give to be taken as whole (Bk3).
++    size_t minimum_rules = 1000;
++    // At launch a due fetch waits this long, so it is not part of the
++    // browser's start.
++    base::TimeDelta launch_delay = base::Seconds(10);
++    // Hands a converted ruleset to Chromium's ruleset service.
++    base::RepeatingCallback<void(
++        const subresource_filter::UnindexedRulesetInfo&)>
++        publish;
++    // The content version the ruleset service last indexed.
++    base::RepeatingCallback<std::string()> indexed_version;
++  };
++
++  // What Settings and the button show (Bk6, Bk9).
++  struct ListStatus {
++    std::string id;
++    std::string name;
++    std::string homepage;
++    std::string licence;
++    bool enabled = false;
++    // The last fetch that brought or confirmed the list; null before one.
++    base::Time fetched;
++    // The last fetch failed and a retry is waiting.
++    bool failing = false;
++  };
++  struct Status {
++    Status();
++    Status(const Status&);
++    Status& operator=(const Status&);
++    ~Status();
++
++    bool on = false;
++    // A fetch or a conversion is under way.
++    bool busy = false;
++    // A ruleset has been made from the lists; false on a fresh install until
++    // the first one arrives (Bk11).
++    bool has_ruleset = false;
++    // The content version of the ruleset made last; empty before one.
++    std::string content_version;
++    base::Time updated;
++    int url_rules = 0;
++    int skipped_lines = 0;
++    std::vector<ListStatus> lists;
++  };
++
++  class Observer : public base::CheckedObserver {
++   public:
++    virtual void OnBlockerListsChanged() = 0;
++  };
++
++  explicit BlockerLists(Environment environment);
++  BlockerLists(const BlockerLists&) = delete;
++  BlockerLists& operator=(const BlockerLists&) = delete;
++  ~BlockerLists();
++
++  // The browser's, or null before StartBlocker and in a process with none.
++  static BlockerLists* Get();
++  static void SetInstance(BlockerLists* lists);
++
++  // Watches the switch and the lists' preferences; while blocking is on,
++  // schedules the fetches and makes a ruleset the ruleset service does not
++  // have yet.
++  void Start();
++
++  // Bk9, Bk10: "Update lists now": every list that is on is fetched at once,
++  // whatever its expiry, at user-visible priority. Nothing while the switch
++  // is off.
++  void UpdateNow();
++
++  Status GetStatus() const;
++
++  void AddObserver(Observer* observer);
++  void RemoveObserver(Observer* observer);
++
++  // The time a list is next fetched, null when none is scheduled.
++  base::Time NextFetchForTesting(std::string_view id) const;
++  int fetches_started_for_testing() const { return fetches_started_; }
++
++ private:
++  // The state kept in local state (prefs::kBlockerLists): each list's
++  // validators, times and failures, the ruleset last made, and the salt.
++  const base::DictValue& State() const;
++  const base::DictValue* ListState(const ListSpec& spec) const;
++  const ListSpec* SpecFor(std::string_view id) const;
++  bool ListOn(const ListSpec& spec) const;
++  bool HasStoredList(const ListSpec& spec) const;
++  base::FilePath ListPath(const ListSpec& spec) const;
++  // When a list is due: null (now) for one never stored.
++  base::Time NextFetch(const ListSpec& spec) const;
++
++  // The content version of the ruleset last made here, or empty.
++  std::string RecordedVersion() const;
++  // A list is stored but no ruleset was made from it, or the ruleset made
++  // last is not the one the ruleset service has indexed.
++  bool RulesetMissing() const;
++  // A version the service never indexed may be barred by its crash
++  // sentinel; a new salt gives the same lists a new version.
++  void BumpSaltIfRecorded();
++
++  void OnPrefsChanged();
++  // Arms the timer for the earliest list that is due.
++  void Schedule();
++  void FetchDue();
++  void Fetch(const ListSpec& spec, bool user_visible);
++  void OnFetched(std::string id, base::FilePath download);
++  void OnNotModified(const std::string& id);
++  void OnStored(std::string id,
++                std::string etag,
++                std::string last_modified,
++                std::optional<base::TimeDelta> expiry);
++  void FetchFailed(const std::string& id);
++  // Converts every list that is on and stored, unless one is converting.
++  void Convert();
++  void OnConverted(const ConvertResult& result);
++  void NotifyChanged();
++
++  Environment env_;
++  PrefChangeRegistrar registrar_;
++  base::WallClockTimer timer_;
++  scoped_refptr<base::UpdateableSequencedTaskRunner> file_task_runner_;
++  std::map<std::string, std::unique_ptr<network::SimpleURLLoader>, std::less<>>
++      loaders_;
++  // At launch, a list already due waits for `launch_delay`; once the switch
++  // has been turned on here, it does not.
++  bool at_launch_ = true;
++  base::Time start_time_;
++  bool converting_ = false;
++  bool convert_again_ = false;
++  bool was_on_ = false;
++  int fetches_started_ = 0;
++  base::ObserverList<Observer> observers_;
++  base::WeakPtrFactory<BlockerLists> weak_factory_{this};
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_LISTS_H_
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_lists_unittest.cc b/chrome/browser/ui/stedding/blocker/blocker_lists_unittest.cc
+new file mode 100644
+index 0000000000000..864b3da3d5216
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_lists_unittest.cc
+@@ -0,0 +1,250 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/test/task_environment.h"
++#include "base/time/time.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/prefs/testing_pref_service.h"
++#include "components/subresource_filter/core/browser/ruleset_version.h"
++#include "content/public/test/browser_task_environment.h"
++#include "net/http/http_request_headers.h"
++#include "net/http/http_response_headers.h"
++#include "net/http/http_status_code.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/url_loader_completion_status.h"
++#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
++#include "services/network/test/test_url_loader_factory.h"
++#include "services/network/test/test_utils.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace stedding {
++
++namespace {
++
++constexpr char kEasyListUrl[] = "https://lists.test/easylist.txt";
++constexpr char kEasyPrivacyUrl[] = "https://lists.test/easyprivacy.txt";
++
++// A list in EasyList's format, written for these tests.
++constexpr char kList[] =
++    "[Adblock Plus 2.0]\n"
++    "! Title: A test list\n"
++    "! Expires: 2 days (update frequency)\n"
++    "||ads.example^\n"
++    "||track.example^$third-party\n";
++
++class BlockerListsTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    prefs::RegisterLocalStatePrefs(local_state_.registry());
++    ASSERT_TRUE(dir_.CreateUniqueTempDir());
++    BlockerLists::Environment environment;
++    environment.local_state = &local_state_;
++    environment.dir = dir_.GetPath();
++    environment.url_loader_factory = factory_.GetSafeWeakWrapper();
++    environment.list_base = GURL("https://lists.test/");
++    environment.minimum_rules = 1;
++    environment.launch_delay = base::Seconds(10);
++    environment.publish = base::BindRepeating(
++        [](std::vector<subresource_filter::UnindexedRulesetInfo>* published,
++           const subresource_filter::UnindexedRulesetInfo& info) {
++          published->push_back(info);
++        },
++        base::Unretained(&published_));
++    environment.indexed_version = base::BindRepeating(
++        [](const std::string* indexed) { return *indexed; },
++        base::Unretained(&indexed_));
++    lists_ = std::make_unique<BlockerLists>(std::move(environment));
++    lists_->Start();
++  }
++
++  void TurnOn() {
++    local_state_.SetBoolean(prefs::kBlockerEnabled, true);
++    task_environment_.RunUntilIdle();
++  }
++
++  // Answers the pending request for `url` with the list and an ETag.
++  void Answer(const char* url, const std::string& etag) {
++    network::mojom::URLResponseHeadPtr head =
++        network::CreateURLResponseHead(net::HTTP_OK);
++    head->headers->SetHeader("ETag", etag);
++    ASSERT_TRUE(factory_.SimulateResponseForPendingRequest(
++        GURL(url), network::URLLoaderCompletionStatus(), std::move(head),
++        kList));
++    task_environment_.RunUntilIdle();
++  }
++
++  const network::ResourceRequest* Pending(const char* url) {
++    const network::ResourceRequest* request = nullptr;
++    return factory_.IsPending(url, &request) ? request : nullptr;
++  }
++
++  content::BrowserTaskEnvironment task_environment_{
++      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
++  TestingPrefServiceSimple local_state_;
++  base::ScopedTempDir dir_;
++  network::TestURLLoaderFactory factory_;
++  std::vector<subresource_filter::UnindexedRulesetInfo> published_;
++  std::string indexed_;
++  std::unique_ptr<BlockerLists> lists_;
++};
++
++}  // namespace
++
++// Bk2, Bk12: off by default, nothing is fetched, however long the browser
++// runs. Turned on, both lists are fetched at once; turned off again, the
++// fetch under way is dropped and nothing more is asked.
++TEST_F(BlockerListsTest, NothingIsFetchedWhileTheSwitchIsOff) {
++  task_environment_.FastForwardBy(base::Days(30));
++  EXPECT_EQ(0, lists_->fetches_started_for_testing());
++  EXPECT_EQ(0u, factory_.total_requests());
++
++  TurnOn();
++  EXPECT_EQ(2, lists_->fetches_started_for_testing());
++  const network::ResourceRequest* const request = Pending(kEasyListUrl);
++  ASSERT_TRUE(request);
++  EXPECT_TRUE(Pending(kEasyPrivacyUrl));
++  // Bk12: nothing about the user: no cookies, no cache, no query.
++  EXPECT_EQ(network::mojom::CredentialsMode::kOmit,
++            request->credentials_mode);
++  EXPECT_TRUE(request->url.query().empty());
++  EXPECT_FALSE(request->headers.HasHeader(net::HttpRequestHeaders::kCookie));
++
++  local_state_.SetBoolean(prefs::kBlockerEnabled, false);
++  task_environment_.FastForwardBy(base::Days(30));
++  EXPECT_EQ(2, lists_->fetches_started_for_testing());
++  EXPECT_TRUE(published_.empty());
++}
++
++// Bk2, Bk3: a list fetched is stored and converted, and the ruleset handed
++// to the ruleset service; the list's Expires line sets its next fetch, which
++// is conditional on the ETag it came with.
++TEST_F(BlockerListsTest, TheExpiresLineSetsTheNextFetch) {
++  TurnOn();
++  const base::Time fetched = base::Time::Now();
++  Answer(kEasyListUrl, "\"one\"");
++  Answer(kEasyPrivacyUrl, "\"two\"");
++  EXPECT_EQ(fetched + base::Days(2), lists_->NextFetchForTesting("easylist"));
++  EXPECT_TRUE(base::PathExists(dir_.GetPath().AppendASCII("easylist.txt")));
++  ASSERT_FALSE(published_.empty());
++  EXPECT_TRUE(base::PathExists(published_.back().ruleset_path));
++  EXPECT_TRUE(base::PathExists(published_.back().license_path));
++  const BlockerLists::Status status = lists_->GetStatus();
++  EXPECT_TRUE(status.has_ruleset);
++  EXPECT_EQ(4, status.url_rules) << "two rules from each list";
++
++  task_environment_.FastForwardBy(base::Days(2) - base::Minutes(1));
++  EXPECT_FALSE(Pending(kEasyListUrl));
++  task_environment_.FastForwardBy(base::Minutes(2));
++  const network::ResourceRequest* const again = Pending(kEasyListUrl);
++  ASSERT_TRUE(again);
++  EXPECT_EQ("\"one\"",
++            again->headers.GetHeader(net::HttpRequestHeaders::kIfNoneMatch));
++}
++
++// Bk2: a 304 keeps the stored list and the ruleset; the list is next asked
++// for after its expiry again. "Update lists now" asks at once.
++TEST_F(BlockerListsTest, ANotModifiedAnswerKeepsTheList) {
++  TurnOn();
++  Answer(kEasyListUrl, "\"one\"");
++  Answer(kEasyPrivacyUrl, "\"two\"");
++  ASSERT_FALSE(published_.empty());
++  indexed_ = published_.back().content_version;
++  const size_t published = published_.size();
++
++  lists_->UpdateNow();
++  task_environment_.RunUntilIdle();
++  ASSERT_TRUE(Pending(kEasyListUrl));
++  const base::Time asked = base::Time::Now();
++  ASSERT_TRUE(factory_.SimulateResponseForPendingRequest(
++      GURL(kEasyListUrl), network::URLLoaderCompletionStatus(),
++      network::CreateURLResponseHead(net::HTTP_NOT_MODIFIED), ""));
++  ASSERT_TRUE(factory_.SimulateResponseForPendingRequest(
++      GURL(kEasyPrivacyUrl), network::URLLoaderCompletionStatus(),
++      network::CreateURLResponseHead(net::HTTP_NOT_MODIFIED), ""));
++  task_environment_.RunUntilIdle();
++
++  EXPECT_EQ(published, published_.size()) << "nothing new to index";
++  EXPECT_EQ(asked + base::Days(2), lists_->NextFetchForTesting("easylist"));
++  std::string stored;
++  ASSERT_TRUE(base::ReadFileToString(
++      dir_.GetPath().AppendASCII("easylist.txt"), &stored));
++  EXPECT_EQ(kList, stored);
++  EXPECT_FALSE(lists_->GetStatus().lists[0].failing);
++}
++
++// Bk2, Bk3: a failed fetch, or an answer that is no filter list, is tried
++// again after an hour, then after two.
++TEST_F(BlockerListsTest, AFailedFetchRetriesWithBackoff) {
++  TurnOn();
++  base::Time failed = base::Time::Now();
++  ASSERT_TRUE(factory_.SimulateResponseForPendingRequest(
++      GURL(kEasyListUrl),
++      network::URLLoaderCompletionStatus(net::ERR_CONNECTION_REFUSED),
++      network::CreateURLResponseHead(net::HTTP_OK), ""));
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(failed + base::Hours(1), lists_->NextFetchForTesting("easylist"));
++  EXPECT_TRUE(lists_->GetStatus().lists[0].failing);
++
++  task_environment_.FastForwardBy(base::Hours(1));
++  ASSERT_TRUE(Pending(kEasyListUrl));
++  failed = base::Time::Now();
++  // A captive portal's page under the list's address.
++  ASSERT_TRUE(factory_.SimulateResponseForPendingRequest(
++      GURL(kEasyListUrl), network::URLLoaderCompletionStatus(),
++      network::CreateURLResponseHead(net::HTTP_OK),
++      "<html><body>Sign in to the network</body></html>"));
++  task_environment_.RunUntilIdle();
++  EXPECT_EQ(failed + base::Hours(2), lists_->NextFetchForTesting("easylist"));
++  EXPECT_FALSE(base::PathExists(dir_.GetPath().AppendASCII("easylist.txt")));
++  EXPECT_TRUE(published_.empty());
++}
++
++// Bk11, Bk3: a ruleset made at an earlier run that the service never
++// indexed (a quit or a crash while indexing) is made again at launch, under
++// a new salt, so a version the service's crash sentinel bars is not asked
++// for again.
++TEST_F(BlockerListsTest, ARulesetNeverIndexedIsMadeAgainAtLaunch) {
++  TurnOn();
++  Answer(kEasyListUrl, "\"one\"");
++  Answer(kEasyPrivacyUrl, "\"two\"");
++  ASSERT_FALSE(published_.empty());
++  const std::string first = published_.back().content_version;
++  indexed_ = "an older version";
++
++  BlockerLists::Environment environment;
++  environment.local_state = &local_state_;
++  environment.dir = dir_.GetPath();
++  environment.url_loader_factory = factory_.GetSafeWeakWrapper();
++  environment.list_base = GURL("https://lists.test/");
++  environment.minimum_rules = 1;
++  environment.publish = base::BindRepeating(
++      [](std::vector<subresource_filter::UnindexedRulesetInfo>* published,
++         const subresource_filter::UnindexedRulesetInfo& info) {
++        published->push_back(info);
++      },
++      base::Unretained(&published_));
++  environment.indexed_version = base::BindRepeating(
++      [](const std::string* indexed) { return *indexed; },
++      base::Unretained(&indexed_));
++  lists_ = std::make_unique<BlockerLists>(std::move(environment));
++  lists_->Start();
++  task_environment_.RunUntilIdle();
++  ASSERT_FALSE(published_.empty());
++  EXPECT_NE(first, published_.back().content_version);
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_rules.cc b/chrome/browser/ui/stedding/blocker/blocker_rules.cc
+new file mode 100644
+index 0000000000000..c99b191e792c2
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_rules.cc
+@@ -0,0 +1,216 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++
++#include <algorithm>
++#include <optional>
++#include <string>
++
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/stedding/dark_pages.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/reload_type.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/url_util.h"
++
++namespace stedding {
++
++namespace {
++
++constexpr ContentSettingsType kType = ContentSettingsType::ADS;
++
++HostContentSettingsMap* MapFor(Profile* profile) {
++  return profile ? HostContentSettingsMapFactory::GetForProfile(profile)
++                 : nullptr;
++}
++
++Profile* ProfileOf(content::WebContents* contents) {
++  return contents ? Profile::FromBrowserContext(contents->GetBrowserContext())
++                  : nullptr;
++}
++
++}  // namespace
++
++bool BlockerOn(const PrefService* local_state) {
++  if (!local_state || !local_state->GetBoolean(prefs::kBlockerEnabled)) {
++    return false;
++  }
++  return local_state->GetBoolean(prefs::kBlockerEasyList) ||
++         local_state->GetBoolean(prefs::kBlockerEasyPrivacy);
++}
++
++bool IsSignInFlow(const GURL& url) {
++  if (!url.is_valid()) {
++    return false;
++  }
++  for (std::string_view segment :
++       base::SplitStringPiece(url.path(), "/", base::TRIM_WHITESPACE,
++                              base::SPLIT_WANT_NONEMPTY)) {
++    const std::string lower = base::ToLowerASCII(segment);
++    if (lower == "oauth" || lower == "oauth2" || lower == "authorize" ||
++        lower == "openid-connect") {
++      return true;
++    }
++  }
++  return net::GetValueForKeyInQuery(url, "client_id", nullptr) &&
++         net::GetValueForKeyInQuery(url, "redirect_uri", nullptr);
++}
++
++bool SiteHasBlockingOff(const HostContentSettingsMap* map, const GURL& url) {
++  if (!map || !url.is_valid()) {
++    return false;
++  }
++  content_settings::SettingInfo info;
++  const ContentSetting setting =
++      map->GetContentSetting(url, GURL(), kType, &info);
++  // The default, wherever it came from, is not an exception for a site.
++  if (info.primary_pattern == ContentSettingsPattern::Wildcard()) {
++    return false;
++  }
++  return setting == CONTENT_SETTING_ALLOW;
++}
++
++bool BlockerAppliesTo(const PrefService* local_state,
++                      const HostContentSettingsMap* map,
++                      const GURL& url) {
++  return BlockerOn(local_state) && url.is_valid() &&
++         url.SchemeIsHTTPOrHTTPS() && !IsSignInFlow(url) &&
++         !SiteHasBlockingOff(map, url);
++}
++
++bool BlockerAppliesTo(Profile* profile, const GURL& url) {
++  return BlockerAppliesTo(g_browser_process->local_state(), MapFor(profile),
++                          url);
++}
++
++void SetBlockingOnSiteInMap(HostContentSettingsMap* map,
++                            bool off_the_record,
++                            const GURL& url,
++                            bool on) {
++  if (!map) {
++    return;
++  }
++  const std::optional<ContentSettingsPattern> site =
++      DarkPagesSitePatternFor(url);
++  if (!site) {
++    return;
++  }
++  // The map's own entries that name this page go first; a private map's own
++  // entries are the incognito ones, the normal profile's are not touched from
++  // there.
++  for (const ContentSettingPatternSource& entry :
++       map->GetSettingsForOneType(kType)) {
++    if (entry.source == content_settings::mojom::ProviderType::kPrefProvider &&
++        entry.incognito == off_the_record &&
++        entry.primary_pattern != ContentSettingsPattern::Wildcard() &&
++        entry.primary_pattern.Matches(url)) {
++      map->SetContentSettingCustomScope(entry.primary_pattern,
++                                        entry.secondary_pattern, kType,
++                                        CONTENT_SETTING_DEFAULT);
++    }
++  }
++  if (SiteHasBlockingOff(map, url) == !on) {
++    return;
++  }
++  map->SetContentSettingCustomScope(
++      *site, ContentSettingsPattern::Wildcard(), kType,
++      on ? CONTENT_SETTING_BLOCK : CONTENT_SETTING_ALLOW);
++}
++
++bool CanChooseBlockingForSite(content::WebContents* contents) {
++  if (!contents || !BlockerOn(g_browser_process->local_state())) {
++    return false;
++  }
++  return DarkPagesSitePatternFor(contents->GetLastCommittedURL()).has_value();
++}
++
++bool IsBlockingOnForSite(content::WebContents* contents) {
++  if (!contents) {
++    return false;
++  }
++  return BlockerAppliesTo(ProfileOf(contents), contents->GetLastCommittedURL());
++}
++
++void ToggleBlockingOnSite(content::WebContents* contents) {
++  if (!CanChooseBlockingForSite(contents)) {
++    return;
++  }
++  Profile* const profile = ProfileOf(contents);
++  const GURL url = contents->GetLastCommittedURL();
++  const bool on = !SiteHasBlockingOff(MapFor(profile), url);
++  SetBlockingOnSiteInMap(MapFor(profile), profile->IsOffTheRecord(), url, !on);
++  // A new decision reaches the page only with its next load.
++  contents->GetController().Reload(content::ReloadType::NORMAL,
++                                   /*check_for_repost=*/true);
++}
++
++std::u16string BlockerSiteName(content::WebContents* contents) {
++  if (!contents) {
++    return std::u16string();
++  }
++  const std::optional<ContentSettingsPattern> site =
++      DarkPagesSitePatternFor(contents->GetLastCommittedURL());
++  return site ? base::UTF8ToUTF16(DarkPagesSiteName(*site))
++              : std::u16string();
++}
++
++std::vector<ContentSettingsPattern> GetBlockerExceptions(Profile* profile) {
++  std::vector<ContentSettingsPattern> sites;
++  HostContentSettingsMap* const map =
++      MapFor(profile ? profile->GetOriginalProfile() : nullptr);
++  if (!map) {
++    return sites;
++  }
++  for (const ContentSettingPatternSource& entry :
++       map->GetSettingsForOneType(kType)) {
++    if (entry.source == content_settings::mojom::ProviderType::kPrefProvider &&
++        !entry.incognito &&
++        entry.primary_pattern != ContentSettingsPattern::Wildcard() &&
++        entry.GetContentSetting() == CONTENT_SETTING_ALLOW) {
++      sites.push_back(entry.primary_pattern);
++    }
++  }
++  std::ranges::sort(sites, [](const ContentSettingsPattern& a,
++                              const ContentSettingsPattern& b) {
++    return DarkPagesSiteName(a) < DarkPagesSiteName(b);
++  });
++  return sites;
++}
++
++bool AddBlockerException(Profile* profile, std::string_view typed) {
++  HostContentSettingsMap* const map =
++      MapFor(profile ? profile->GetOriginalProfile() : nullptr);
++  const std::optional<ContentSettingsPattern> site =
++      DarkPagesSitePatternFromTyped(typed);
++  if (!map || !site) {
++    return false;
++  }
++  map->SetContentSettingCustomScope(*site, ContentSettingsPattern::Wildcard(),
++                                    kType, CONTENT_SETTING_ALLOW);
++  return true;
++}
++
++void RemoveBlockerException(Profile* profile,
++                            const ContentSettingsPattern& pattern) {
++  HostContentSettingsMap* const map =
++      MapFor(profile ? profile->GetOriginalProfile() : nullptr);
++  if (!map || !pattern.IsValid()) {
++    return;
++  }
++  map->SetContentSettingCustomScope(pattern, ContentSettingsPattern::Wildcard(),
++                                    kType, CONTENT_SETTING_DEFAULT);
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_rules.h b/chrome/browser/ui/stedding/blocker/blocker_rules.h
+new file mode 100644
+index 0000000000000..97ccd0629bf99
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_rules.h
+@@ -0,0 +1,107 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_RULES_H_
++#define CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_RULES_H_
++
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "components/content_settings/core/common/content_settings_pattern.h"
++#include "url/gurl.h"
++
++class HostContentSettingsMap;
++class PrefService;
++class Profile;
++
++namespace content {
++class WebContents;
++}  // namespace content
++
++namespace stedding {
++
++// Ad and tracker blocking (docs/features/blocker.md): which pages are
++// filtered. The switch and the two lists live in local state, since the
++// ruleset is the browser's, one for every profile (Bk1, Bk2). The exceptions
++// for a site are Chromium's own ADS content setting of the profile, where
++// ALLOW for a site turns blocking off there (Bk5). Only an entry for a site
++// counts: the content setting's default, which Chromium's own "Intrusive
++// ads" page and policy can change, is not read, so it can never turn
++// blocking off everywhere while Stedding's switch says it is on.
++
++// Bk1, Bk2: the switch is on and at least one list is on. Blocking with
++// neither list on is the same as blocking off: nothing is fetched and no page
++// is filtered.
++bool BlockerOn(const PrefService* local_state);
++
++// Bk8: a page with the shape of a sign-in step is never filtered, so a
++// login that goes through a tracker-like host still works: a path segment
++// "oauth", "oauth2", "authorize" or "openid-connect", or a query that carries
++// both client_id and redirect_uri.
++bool IsSignInFlow(const GURL& url);
++
++// Bk5: whether `map` holds an entry for the site of `url` that turns
++// blocking off there. The default is not an entry.
++bool SiteHasBlockingOff(const HostContentSettingsMap* map, const GURL& url);
++
++// Bk1, Bk5, Bk8: whether a top-level page at `url` is filtered, given the
++// switch in `local_state` and the exceptions in `map`: the switch is on, the
++// page is http or https, it is not a sign-in step, and its site has no
++// exception.
++bool BlockerAppliesTo(const PrefService* local_state,
++                      const HostContentSettingsMap* map,
++                      const GURL& url);
++
++// The same for a page of `profile`, with the browser's local state. A
++// private window's map reads its own entries first, then the normal
++// profile's (Bk5).
++bool BlockerAppliesTo(Profile* profile, const GURL& url);
++
++// Bk5: turns blocking on or off for the site of `url` in `map`. Every entry
++// of the map's own that names the page goes first (one typed for a
++// subdomain would outrank the site's own); then the site gets an entry only
++// when the result is not yet what was asked: ALLOW to turn blocking off,
++// BLOCK to turn it back on over an exception a private window inherits.
++// `off_the_record` says whether `map` is a private session's, whose own
++// entries live in memory and go with it.
++void SetBlockingOnSiteInMap(HostContentSettingsMap* map,
++                            bool off_the_record,
++                            const GURL& url,
++                            bool on);
++
++// Bk6, Bk10: whether the page `contents` shows can have blocking turned on
++// or off for its site: the switch is on and the page is an http or https
++// page with a site.
++bool CanChooseBlockingForSite(content::WebContents* contents);
++
++// Bk6, Bk10: whether blocking applies to the site of the page `contents`
++// shows, by the map of the profile the tab belongs to.
++bool IsBlockingOnForSite(content::WebContents* contents);
++
++// Bk5, Bk6, Bk10: flips the site's switch in the map of the tab's own
++// profile (a private window's stays in memory) and reloads the tab so the
++// page shows the change.
++void ToggleBlockingOnSite(content::WebContents* contents);
++
++// How the site of the page `contents` shows is named on the button and in
++// the command bar: its registrable domain ("example.com"). Empty when the
++// page has none.
++std::u16string BlockerSiteName(content::WebContents* contents);
++
++// Bk9: the sites where the user turned blocking off, of the original
++// profile, sorted by name.
++std::vector<ContentSettingsPattern> GetBlockerExceptions(Profile* profile);
++
++// Bk9: adds a site typed in Settings (a host, a web address or `*.host`).
++// False, and nothing written, when what was typed is no site.
++bool AddBlockerException(Profile* profile, std::string_view typed);
++
++// Bk9: removes an exception, turning blocking back on for that site.
++void RemoveBlockerException(Profile* profile,
++                            const ContentSettingsPattern& pattern);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_BLOCKER_BLOCKER_RULES_H_
+diff --git a/chrome/browser/ui/stedding/blocker/blocker_rules_unittest.cc b/chrome/browser/ui/stedding/blocker/blocker_rules_unittest.cc
+new file mode 100644
+index 0000000000000..aa203ce66134c
+--- /dev/null
++++ b/chrome/browser/ui/stedding/blocker/blocker_rules_unittest.cc
+@@ -0,0 +1,160 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++
++#include <vector>
++
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/test/base/testing_profile.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_pattern.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/prefs/testing_pref_service.h"
++#include "content/public/test/browser_task_environment.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "url/gurl.h"
++
++namespace stedding {
++
++namespace {
++
++class BlockerRulesTest : public testing::Test {
++ protected:
++  void SetUp() override {
++    prefs::RegisterLocalStatePrefs(local_state_.registry());
++  }
++
++  void TurnOn() { local_state_.SetBoolean(prefs::kBlockerEnabled, true); }
++
++  HostContentSettingsMap* map() {
++    return HostContentSettingsMapFactory::GetForProfile(&profile_);
++  }
++
++  bool Applies(const char* url) {
++    return BlockerAppliesTo(&local_state_, map(), GURL(url));
++  }
++
++  content::BrowserTaskEnvironment task_environment_;
++  TestingProfile profile_;
++  TestingPrefServiceSimple local_state_;
++};
++
++}  // namespace
++
++// Bk1, Bk5: off by default; on, every http and https page is filtered and no
++// browser page or file; a site's own exception turns it off there, for its
++// subdomains too, and nowhere else; the content setting's default does not
++// count; with both lists off nothing is filtered.
++TEST_F(BlockerRulesTest, TheSwitchTheSchemeAndTheSiteDecideEachPage) {
++  EXPECT_FALSE(BlockerOn(&local_state_)) << "off in a fresh install";
++  EXPECT_FALSE(Applies("https://www.example.com/"));
++
++  TurnOn();
++  EXPECT_TRUE(BlockerOn(&local_state_));
++  EXPECT_TRUE(Applies("https://www.example.com/"));
++  EXPECT_TRUE(Applies("http://news.example.com/a?b=c"));
++  EXPECT_FALSE(Applies("chrome://settings/"));
++  EXPECT_FALSE(Applies("file:///tmp/page.html"));
++  EXPECT_FALSE(Applies("about:blank"));
++
++  SetBlockingOnSiteInMap(map(), /*off_the_record=*/false,
++                         GURL("https://www.example.com/page"), /*on=*/false);
++  EXPECT_FALSE(Applies("https://www.example.com/"));
++  EXPECT_FALSE(Applies("http://news.example.com/")) << "the whole site";
++  EXPECT_TRUE(Applies("https://other.test/"));
++
++  // Chromium's own "Intrusive ads" default is not an exception for a site.
++  map()->SetDefaultContentSetting(ContentSettingsType::ADS,
++                                  CONTENT_SETTING_ALLOW);
++  EXPECT_TRUE(Applies("https://other.test/"));
++  map()->SetDefaultContentSetting(ContentSettingsType::ADS,
++                                  CONTENT_SETTING_BLOCK);
++
++  SetBlockingOnSiteInMap(map(), false, GURL("https://news.example.com/"),
++                         /*on=*/true);
++  EXPECT_TRUE(Applies("https://www.example.com/")) << "the exception went";
++  EXPECT_TRUE(GetBlockerExceptions(&profile_).empty());
++
++  local_state_.SetBoolean(prefs::kBlockerEasyList, false);
++  EXPECT_TRUE(Applies("https://www.example.com/")) << "one list is enough";
++  local_state_.SetBoolean(prefs::kBlockerEasyPrivacy, false);
++  EXPECT_FALSE(BlockerOn(&local_state_));
++  EXPECT_FALSE(Applies("https://www.example.com/"));
++}
++
++// Bk8: a sign-in step is let through.
++TEST_F(BlockerRulesTest, SignInFlowsAreLetThrough) {
++  TurnOn();
++  for (const char* url : {
++           "https://login.example.com/oauth/start",
++           "https://login.example.com/OAuth2/v2.0/token",
++           "https://id.example.com/authorize?x=1",
++           "https://id.example.com/realms/a/openid-connect/auth",
++           "https://sso.example.com/start?client_id=a&redirect_uri=https%3A%2F",
++       }) {
++    EXPECT_TRUE(IsSignInFlow(GURL(url))) << url;
++    EXPECT_FALSE(Applies(url)) << url;
++  }
++  for (const char* url : {
++           "https://www.example.com/",
++           "https://www.example.com/authorized-dealers",
++           "https://www.example.com/?client_id=a",
++           "https://www.example.com/?redirect_uri=b",
++       }) {
++    EXPECT_FALSE(IsSignInFlow(GURL(url))) << url;
++    EXPECT_TRUE(Applies(url)) << url;
++  }
++}
++
++// Bk5: a private window's choice stays in its own session; turning blocking
++// back on there over an exception it inherits writes its own entry.
++TEST_F(BlockerRulesTest, APrivateSessionsChoiceStaysInIt) {
++  TurnOn();
++  Profile* const otr = profile_.GetPrimaryOTRProfile(/*create_if_needed=*/true);
++  HostContentSettingsMap* const otr_map =
++      HostContentSettingsMapFactory::GetForProfile(otr);
++  const GURL page("https://www.example.com/");
++
++  SetBlockingOnSiteInMap(otr_map, /*off_the_record=*/true, page, false);
++  EXPECT_FALSE(BlockerAppliesTo(&local_state_, otr_map, page));
++  EXPECT_TRUE(BlockerAppliesTo(&local_state_, map(), page))
++      << "the normal profile is untouched";
++  EXPECT_TRUE(GetBlockerExceptions(&profile_).empty());
++  SetBlockingOnSiteInMap(otr_map, true, page, true);
++  EXPECT_TRUE(BlockerAppliesTo(&local_state_, otr_map, page));
++
++  SetBlockingOnSiteInMap(map(), false, page, false);
++  EXPECT_FALSE(BlockerAppliesTo(&local_state_, otr_map, page))
++      << "the normal profile's exception is inherited";
++  SetBlockingOnSiteInMap(otr_map, true, page, true);
++  EXPECT_TRUE(BlockerAppliesTo(&local_state_, otr_map, page));
++  EXPECT_FALSE(BlockerAppliesTo(&local_state_, map(), page))
++      << "and the normal profile keeps it";
++}
++
++// Bk9: Settings lists the user's exceptions by name, adds a typed site and
++// removes one.
++TEST_F(BlockerRulesTest, ExceptionsAreListedAddedAndRemoved) {
++  TurnOn();
++  EXPECT_FALSE(AddBlockerException(&profile_, "chrome://settings"));
++  EXPECT_FALSE(AddBlockerException(&profile_, ""));
++  ASSERT_TRUE(AddBlockerException(&profile_, "https://shop.test/basket"));
++  ASSERT_TRUE(AddBlockerException(&profile_, "*.alpha.test"));
++  const std::vector<ContentSettingsPattern> sites =
++      GetBlockerExceptions(&profile_);
++  ASSERT_EQ(2u, sites.size());
++  EXPECT_EQ(ContentSettingsPattern::FromString("[*.]alpha.test"), sites[0]);
++  EXPECT_EQ(ContentSettingsPattern::FromString("[*.]shop.test"), sites[1]);
++  EXPECT_FALSE(Applies("https://www.shop.test/"));
++
++  RemoveBlockerException(&profile_, sites[1]);
++  EXPECT_TRUE(Applies("https://www.shop.test/"));
++  EXPECT_EQ(1u, GetBlockerExceptions(&profile_).size());
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 54fdbfa39bad4..6bedab4ac16e0 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -42,6 +42,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kUiAnimate, true);
+   registry->RegisterBooleanPref(kShowLinkAddress, true);
+   registry->RegisterBooleanPref(kDarkPagesButton, true);
++  // blocker Bk6.
++  registry->RegisterBooleanPref(kBlockerButton, true);
+   registry->RegisterBooleanPref(kPinsCloseSleeps, true);
+   // Never, until sleep refuses audible, capturing, picture-in-picture and
+   // form tabs. A 15-minute default discarded those.
+@@ -94,6 +96,11 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+ 
+ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kGlobalPrivacyControl, true);
++  // blocker Bk1-Bk3: off until the user turns it on; both lists on.
++  registry->RegisterBooleanPref(kBlockerEnabled, false);
++  registry->RegisterBooleanPref(kBlockerEasyList, true);
++  registry->RegisterBooleanPref(kBlockerEasyPrivacy, true);
++  registry->RegisterDictionaryPref(kBlockerLists);
+   registry->RegisterIntegerPref(kSidebarDensity, 0);
+   registry->RegisterIntegerPref(kSidebarTextSize, 0);
+   registry->RegisterBooleanPref(kUpdatesAutomatic, true);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 893db9b214a4a..1c251af9252bc 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -85,6 +85,18 @@ inline constexpr char kShowLinkAddress[] = "stedding.page.show_link_address";
+ // webkit.webprefs.force_dark_mode_enabled, off by default (Dk1).
+ inline constexpr char kDarkPagesButton[] = "stedding.page.dark_pages_button";
+ 
++// Ad and tracker blocking (docs/features/blocker.md, ADR 0030), in local
++// state, since the ruleset is the browser's: the switch, off by default
++// (Bk1); the two lists, each on (Bk2); and, with no setting, the lists' fetch
++// state and the ruleset made from them (Bk2, Bk3).
++inline constexpr char kBlockerEnabled[] = "stedding.blocker.enabled";
++inline constexpr char kBlockerEasyList[] = "stedding.blocker.list.easylist";
++inline constexpr char kBlockerEasyPrivacy[] =
++    "stedding.blocker.list.easyprivacy";
++inline constexpr char kBlockerLists[] = "stedding.blocker.lists";
++// The blocker's shield shows at the address row's right end (blocker Bk6).
++inline constexpr char kBlockerButton[] = "stedding.page.blocker_button";
++
+ // Cmd-W on a pinned tab puts it to sleep instead of closing it
+ // (docs/features/pins.md H3, H9).
+ inline constexpr char kPinsCloseSleeps[] = "stedding.pins.close_sleeps";
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index e89cf642389ab..b2dbb22ecbdd0 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -29,7 +29,7 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   for (const char* name :
+        {kNewTabShowHint, kNewTabShowShortcuts, kCopyStripTracking, kUiAnimate,
+         kShowLinkAddress, kPinsCloseSleeps, kMenusShort, kHoldCmdNumbers,
+-        kDarkPagesButton, kMarkLocalTabs, kLittleEnabled,
++        kDarkPagesButton, kBlockerButton, kMarkLocalTabs, kLittleEnabled,
+         kCopyLinkButton, kPeekEnabled}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_TRUE(service.GetBoolean(name)) << name;
+@@ -80,6 +80,12 @@ TEST(SteddingPrefsTest, TheBrowserWidePreferencesRegisterWithTheirDefaults) {
+   TestingPrefServiceSimple local_state;
+   RegisterLocalStatePrefs(local_state.registry());
+   EXPECT_TRUE(local_state.GetBoolean(kGlobalPrivacyControl));
++  // blocker Bk1, Bk2: blocking starts off, with both lists on and nothing
++  // fetched.
++  EXPECT_FALSE(local_state.GetBoolean(kBlockerEnabled));
++  EXPECT_TRUE(local_state.GetBoolean(kBlockerEasyList));
++  EXPECT_TRUE(local_state.GetBoolean(kBlockerEasyPrivacy));
++  EXPECT_TRUE(local_state.GetDict(kBlockerLists).empty());
+   EXPECT_TRUE(local_state.GetBoolean(kUpdatesAutomatic));
+   EXPECT_TRUE(local_state.GetBoolean(kThanksAfterUpdate));
+   EXPECT_EQ("", local_state.GetString(kLastRunVersion));
+diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
+index 0fb86ffcbbe5b..8577118600834 100644
+--- a/chrome/browser/ui/views/commandbar/BUILD.gn
++++ b/chrome/browser/ui/views/commandbar/BUILD.gn
+@@ -25,6 +25,7 @@ source_set("commandbar") {
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:app_updater",
+     "//chrome/browser/ui/stedding:bookmarks_to_pins_dialog",
++    "//chrome/browser/ui/stedding/blocker",
+     "//chrome/browser/ui/stedding:dark_pages",
+     "//chrome/browser/ui/stedding:make_app",
+     "//chrome/browser:browser_process",
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index ab4d283da4a40..63c807cd154ab 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -48,6 +48,8 @@
+ #include "chrome/browser/ui/spaces/space_query.h"
+ #include "chrome/browser/ui/stedding/app_updater.h"
+ #include "chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding/make_app.h"
+ #include "chrome/browser/ui/stedding/media_keys.h"
+@@ -990,6 +992,37 @@ void CommandBarView::BuildActions() {
+       }
+     }
+   }
++  // blocker Bk10: while blocking is on, the tab's site's switch, named for
++  // what Enter does, and the lists' update; in private windows too (a private
++  // window's choice stays in its session, Bk5). Tab-scoped, so none while a
++  // peek is open (K16). The site's row reloads the tab, so the bar closes.
++  if (tabbed && active &&
++      stedding::BlockerOn(g_browser_process->local_state())) {
++    content::WebContents* const page = active->GetContents();
++    if (page && stedding::CanChooseBlockingForSite(page)) {
++      actions_.push_back(
++          {stedding::IsBlockingOnForSite(page)
++               ? u"Turn Off Blocking on This Site"
++               : u"Turn On Blocking on This Site",
++           std::u16string(),
++           base::BindRepeating(
++               [](BrowserWindowInterface* browser) {
++                 if (content::WebContents* const contents =
++                         browser->GetTabStripModel()->GetActiveWebContents()) {
++                   stedding::ToggleBlockingOnSite(contents);
++                 }
++               },
++               base::Unretained(browser_))});
++    }
++    actions_.push_back(
++        {u"Update Ad and Tracker Lists", std::u16string(),
++         base::BindRepeating([]() {
++           if (stedding::BlockerLists* const lists =
++                   stedding::BlockerLists::Get()) {
++             lists->UpdateNow();
++           }
++         })});
++  }
+   // The window's commands, from one table, in tabbed windows only: the bar
+   // opens nowhere else (K15).
+   if (tabbed) {
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index 66a17190941f0..cd4c0309b29a2 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -185,6 +185,8 @@ source_set("impl") {
+     "pinned_toolbar_button_status_indicator.cc",
+     "reload_button.cc",
+     "split_tabs_button.cc",
++    "stedding_blocker_button.cc",
++    "stedding_blocker_button.h",
+     "stedding_dark_pages_button.cc",
+     "stedding_dark_pages_button.h",
+     "stedding_little_promote_button.cc",
+@@ -332,6 +334,7 @@ source_set("impl") {
+     "//chrome/browser/upgrade_detector",
+     "//chrome/browser/user_education",
+     "//chrome/browser/ui/stedding:address_row",
++    "//chrome/browser/ui/stedding/blocker",
+     "//chrome/browser/ui/stedding:dark_pages",
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:prefs",
+diff --git a/chrome/browser/ui/views/toolbar/stedding_blocker_button.cc b/chrome/browser/ui/views/toolbar/stedding_blocker_button.cc
+new file mode 100644
+index 0000000000000..515e27d30f7f9
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/stedding_blocker_button.cc
+@@ -0,0 +1,196 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/views/toolbar/stedding_blocker_button.h"
++
++#include <iterator>
++#include <string>
++
++#include "base/functional/bind.h"
++#include "base/strings/strcat.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/gfx/vector_icon_types.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/view_class_properties.h"
++
++namespace stedding {
++
++namespace {
++
++// Bk6: a shield. Blocking off on the site, its outline; on, filled. Drawn
++// for the toolbar's 20 DIP canvas; the touch form is the same icon.
++// clang-format off
++constexpr gfx::PathElement kBlockerOffPath[] = {
++    gfx::CANVAS_DIMENSIONS, 20,
++    gfx::STROKE, 1.5f,
++    gfx::MOVE_TO, 10, 2.75f,
++    gfx::LINE_TO, 16, 5,
++    gfx::V_LINE_TO, 9.5f,
++    gfx::CUBIC_TO, 16, 13.4f, 13.4f, 16.2f, 10, 17.25f,
++    gfx::CUBIC_TO, 6.6f, 16.2f, 4, 13.4f, 4, 9.5f,
++    gfx::V_LINE_TO, 5,
++    gfx::CLOSE};
++// clang-format on
++constexpr gfx::VectorIconRep kBlockerOffReps[] = {{kBlockerOffPath}};
++constexpr gfx::VectorIcon kBlockerOffIcon = {
++    kBlockerOffReps, std::size(kBlockerOffReps), "stedding_blocker_off"};
++
++// clang-format off
++constexpr gfx::PathElement kBlockerOnPath[] = {
++    gfx::CANVAS_DIMENSIONS, 20,
++    gfx::MOVE_TO, 10, 2,
++    gfx::LINE_TO, 16.75f, 4.5f,
++    gfx::V_LINE_TO, 9.5f,
++    gfx::CUBIC_TO, 16.75f, 13.9f, 13.8f, 17, 10, 18,
++    gfx::CUBIC_TO, 6.2f, 17, 3.25f, 13.9f, 3.25f, 9.5f,
++    gfx::V_LINE_TO, 4.5f,
++    gfx::CLOSE};
++// clang-format on
++constexpr gfx::VectorIconRep kBlockerOnReps[] = {{kBlockerOnPath}};
++constexpr gfx::VectorIcon kBlockerOnIcon = {
++    kBlockerOnReps, std::size(kBlockerOnReps), "stedding_blocker_on"};
++
++}  // namespace
++
++DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(BlockerButton, kElementId);
++
++BlockerButton::BlockerButton(BrowserWindowInterface* browser)
++    : ToolbarButton(base::BindRepeating(&BlockerButton::OnPressed,
++                                        base::Unretained(this))),
++      browser_(browser) {
++  SetProperty(views::kElementIdentifierKey, kElementId);
++  GetViewAccessibility().SetRole(ax::mojom::Role::kToggleButton);
++  Profile* const profile = browser_->GetProfile();
++  const base::RepeatingClosure update =
++      base::BindRepeating(&BlockerButton::Update, base::Unretained(this));
++  // Bk6: the button's setting is the profile's; a private window's
++  // preferences pass its changes on.
++  profile_registrar_.Init(profile->GetPrefs());
++  profile_registrar_.Add(prefs::kBlockerButton, update);
++  // Bk1, Bk2: the switch and the lists are the browser's.
++  if (PrefService* const local_state = g_browser_process->local_state()) {
++    local_state_registrar_.Init(local_state);
++    local_state_registrar_.Add(prefs::kBlockerEnabled, update);
++    local_state_registrar_.Add(prefs::kBlockerEasyList, update);
++    local_state_registrar_.Add(prefs::kBlockerEasyPrivacy, update);
++  }
++  // Bk5: a site's exception, made here, in another window, in the command
++  // bar or in Settings. A private window's map also reports the entries it
++  // inherits.
++  if (HostContentSettingsMap* const map =
++          HostContentSettingsMapFactory::GetForProfile(profile)) {
++    settings_observation_.Observe(map);
++  }
++  active_tab_subscription_ =
++      browser_->RegisterActiveTabDidChange(base::BindRepeating(
++          &BlockerButton::OnActiveTabChanged, base::Unretained(this)));
++  Observe(ActiveContents());
++  Update();
++}
++
++BlockerButton::~BlockerButton() = default;
++
++void BlockerButton::AddedToWidget() {
++  ToolbarButton::AddedToWidget();
++  UpdateHighlight();
++}
++
++void BlockerButton::DidFinishNavigation(
++    content::NavigationHandle* navigation) {
++  if (navigation->IsInPrimaryMainFrame() && navigation->HasCommitted()) {
++    Update();
++  }
++}
++
++void BlockerButton::OnContentSettingChanged(
++    const ContentSettingsPattern& primary_pattern,
++    const ContentSettingsPattern& secondary_pattern,
++    ContentSettingsTypeSet content_type_set) {
++  if (content_type_set.Contains(ContentSettingsType::ADS)) {
++    Update();
++  }
++}
++
++void BlockerButton::OnBlockerListsChanged() {
++  Update();
++}
++
++void BlockerButton::OnPressed() {
++  // Bk5: the same path as the command bar's row.
++  ToggleBlockingOnSite(ActiveContents());
++}
++
++void BlockerButton::OnActiveTabChanged(BrowserWindowInterface* browser) {
++  Observe(ActiveContents());
++  Update();
++}
++
++content::WebContents* BlockerButton::ActiveContents() const {
++  TabStripModel* const model = browser_->GetTabStripModel();
++  return model ? model->GetActiveWebContents() : nullptr;
++}
++
++void BlockerButton::Update() {
++  // The lists start with the browser, after the first window may have been
++  // made (StartBlocker); their status reaches the tooltip from then on.
++  if (BlockerLists* const lists = BlockerLists::Get();
++      lists && !lists_observation_.IsObserving()) {
++    lists_observation_.Observe(lists);
++  }
++  content::WebContents* const contents = ActiveContents();
++  const bool shown =
++      browser_->GetProfile()->GetPrefs()->GetBoolean(prefs::kBlockerButton) &&
++      CanChooseBlockingForSite(contents);
++  on_ = shown && IsBlockingOnForSite(contents);
++  SetVisible(shown);
++  SetVectorIcons(on_ ? kBlockerOnIcon : kBlockerOffIcon,
++                 on_ ? kBlockerOnIcon : kBlockerOffIcon);
++  UpdateHighlight();
++
++  std::u16string text;
++  if (shown) {
++    const std::u16string site = BlockerSiteName(contents);
++    const BlockerLists* const lists = BlockerLists::Get();
++    if (lists && !lists->GetStatus().has_ruleset) {
++      // Bk11: on a fresh install pages load unfiltered until the first
++      // lists have arrived.
++      text = u"Blocking starts once the lists have downloaded";
++    } else if (on_) {
++      text = base::StrCat({u"Blocking ads and trackers on ", site});
++    } else {
++      text = base::StrCat({u"Blocking is off on ", site});
++    }
++  }
++  SetTooltipText(text);
++  GetViewAccessibility().SetName(text.empty() ? u"Ad and tracker blocking"
++                                              : text);
++  GetViewAccessibility().SetCheckedState(on_ ? ax::mojom::CheckedState::kTrue
++                                             : ax::mojom::CheckedState::kFalse);
++}
++
++void BlockerButton::UpdateHighlight() {
++  // Chromium's active look for a toolbar button, as the dark pages moon's.
++  if (!on_) {
++    highlight_.reset();
++  } else if (!highlight_ && GetWidget()) {
++    highlight_.emplace(AddAnchorHighlight());
++  }
++}
++
++BEGIN_METADATA(BlockerButton)
++END_METADATA
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/views/toolbar/stedding_blocker_button.h b/chrome/browser/ui/views/toolbar/stedding_blocker_button.h
+new file mode 100644
+index 0000000000000..f5df6a176591b
+--- /dev/null
++++ b/chrome/browser/ui/views/toolbar/stedding_blocker_button.h
+@@ -0,0 +1,94 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_STEDDING_BLOCKER_BUTTON_H_
++#define CHROME_BROWSER_UI_VIEWS_TOOLBAR_STEDDING_BLOCKER_BUTTON_H_
++
++#include <optional>
++#include <string>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
++#include "components/content_settings/core/browser/content_settings_observer.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "ui/base/interaction/element_identifier.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/controls/button/button.h"
++
++class BrowserWindowInterface;
++
++namespace stedding {
++
++// docs/features/blocker.md Bk6: the shield at the address row's right end,
++// beside the dark pages moon, in every normal and private window. It shows
++// whether ads and trackers are blocked on the active tab's site: a filled
++// shield with the toolbar's active highlight while they are, an outline
++// while blocking is off there. A click turns blocking off or on for that
++// site (Bk5) and reloads the tab. To assistive technology it is a toggle
++// button named for the site, checked while blocking applies. It is hidden
++// while the switch is off, on a page that is not a web page, and when "Show
++// the blocker button" in Settings is off. Kept out of page info on purpose:
++// the site's switch lives here, in the command bar and in Settings.
++class BlockerButton : public ToolbarButton,
++                      public content::WebContentsObserver,
++                      public content_settings::Observer,
++                      public BlockerLists::Observer {
++  METADATA_HEADER(BlockerButton, ToolbarButton)
++
++ public:
++  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kElementId);
++
++  explicit BlockerButton(BrowserWindowInterface* browser);
++  BlockerButton(const BlockerButton&) = delete;
++  BlockerButton& operator=(const BlockerButton&) = delete;
++  ~BlockerButton() override;
++
++  // Whether the button shows blocking as on for the active tab's site.
++  bool is_on() const { return on_; }
++
++  // views::View:
++  void AddedToWidget() override;
++
++  // content::WebContentsObserver:
++  void DidFinishNavigation(content::NavigationHandle* navigation) override;
++
++  // content_settings::Observer:
++  void OnContentSettingChanged(
++      const ContentSettingsPattern& primary_pattern,
++      const ContentSettingsPattern& secondary_pattern,
++      ContentSettingsTypeSet content_type_set) override;
++
++  // BlockerLists::Observer:
++  void OnBlockerListsChanged() override;
++
++ private:
++  void OnPressed();
++  void OnActiveTabChanged(BrowserWindowInterface* browser);
++  // The switch, the lists, the site's exception, the tab or its page
++  // changed; or the button's own setting.
++  void Update();
++  // The highlight is an ink drop state, which needs the widget.
++  void UpdateHighlight();
++  content::WebContents* ActiveContents() const;
++
++  const raw_ptr<BrowserWindowInterface> browser_;
++  PrefChangeRegistrar profile_registrar_;
++  PrefChangeRegistrar local_state_registrar_;
++  base::CallbackListSubscription active_tab_subscription_;
++  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
++      settings_observation_{this};
++  base::ScopedObservation<BlockerLists, BlockerLists::Observer>
++      lists_observation_{this};
++  std::optional<views::Button::ScopedAnchorHighlight> highlight_;
++  bool on_ = false;
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_STEDDING_BLOCKER_BUTTON_H_
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index fff41a52e6e8e..e6067635e0e24 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -111,6 +111,7 @@
+ #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
+ #include "chrome/browser/ui/views/toolbar/reload_button.h"
+ #include "chrome/browser/ui/views/toolbar/split_tabs_button.h"
++#include "chrome/browser/ui/views/toolbar/stedding_blocker_button.h"
+ #include "chrome/browser/ui/views/toolbar/stedding_dark_pages_button.h"
+ #include "chrome/browser/ui/views/toolbar/stedding_little_promote_button.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
+@@ -633,6 +634,10 @@ void ToolbarView::Init() {
+   // still reach the switch there. The button keeps itself in step with the
+   // switch and its setting, so the toolbar holds no pointer to it.
+   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    // Stedding: the blocker's shield (docs/features/blocker.md Bk6), before
++    // the moon. It hides itself while blocking is off and on pages that are
++    // not web pages.
++    AddChildView(std::make_unique<stedding::BlockerButton>(browser_));
+     AddChildView(std::make_unique<stedding::DarkPagesButton>(browser_));
+   }
+ 
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index c2b88e5759bc0..c068f19780735 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -145,6 +145,8 @@ source_set("impl") {
+     "captions_handler.cc",
+     "custom_home_pages_table_model.cc",
+     "dictation_handler.cc",
++    "stedding_blocker_handler.cc",
++    "stedding_blocker_handler.h",
+     "stedding_clean_links_handler.cc",
+     "stedding_clean_links_handler.h",
+     "stedding_dark_pages_handler.cc",
+@@ -198,6 +200,9 @@ source_set("impl") {
+     "//chrome/browser/ui/stedding:clean_links",
+     "//chrome/browser/ui/stedding:prefs",
+     "//chrome/browser/ui/stedding:dark_pages",
++    # blocker Bk9: the lists' state and the sites where blocking is off.
++    "//base:i18n",
++    "//chrome/browser/ui/stedding/blocker",
+     "//chrome/app/vector_icons",
+     "//chrome/browser:browser_process",
+     "//chrome/browser:browser_process_platform_part",
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index cd25706cddd8b..9b8544396871a 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -64,6 +64,7 @@
+ #include "chrome/browser/ui/webui/settings/appearance_handler.h"
+ #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
+ #include "chrome/browser/ui/webui/settings/dictation_handler.h"
++#include "chrome/browser/ui/webui/settings/stedding_blocker_handler.h"
+ #include "chrome/browser/ui/webui/settings/stedding_clean_links_handler.h"
+ #include "chrome/browser/ui/webui/settings/stedding_dark_pages_handler.h"
+ #include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
+@@ -255,6 +256,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   // cut to a host by the rule the throttle matches.
+   AddSettingsPageUIHandler(
+       std::make_unique<SteddingCleanLinksHandler>(profile));
++  // Stedding blocker (docs/features/blocker.md Bk9): the lists' state, Update
++  // lists now and the sites where blocking is off.
++  AddSettingsPageUIHandler(std::make_unique<SteddingBlockerHandler>(profile));
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
+@@ -877,6 +881,46 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   // Cl9: a remove button's name to a screen reader is the action and the
+   // site, not the site alone.
+   html_source->AddString("steddingCleanLinksRemoveSite", "Remove $1");
++  // blocker Bk1, Bk2, Bk6, Bk9.
++  html_source->AddString("steddingBlockerLabel", "Block ads and trackers");
++  html_source->AddString(
++      "steddingBlockerSubLabel",
++      "Off by default. On, Stedding downloads the lists below from "
++      "easylist.to and blocks the scripts, images, frames and requests they "
++      "name, on every site but the ones below. Nothing about you is sent "
++      "with the download.");
++  html_source->AddString("steddingBlockerEasyListWhat", "Ads.");
++  html_source->AddString("steddingBlockerEasyPrivacyWhat", "Trackers.");
++  html_source->AddString("steddingBlockerListSource",
++                         "From $1, licensed $2.");
++  html_source->AddString("steddingBlockerListFetched", "Fetched $1.");
++  html_source->AddString("steddingBlockerListFailing",
++                         "The last fetch failed; it is tried again soon.");
++  html_source->AddString("steddingBlockerNoLists",
++                         "No lists downloaded yet");
++  html_source->AddString("steddingBlockerUpdated",
++                         "Last updated $1: $2 rules, $3 lines skipped");
++  html_source->AddString(
++      "steddingBlockerStatusSubLabel",
++      "Each list is fetched again when it says it expires, after one to "
++      "fourteen days.");
++  html_source->AddString("steddingBlockerUpdateNow", "Update lists now");
++  html_source->AddString("steddingBlockerExceptionsList",
++                         "Sites where blocking is off:");
++  html_source->AddString("steddingBlockerExceptionsEmpty", "No sites");
++  html_source->AddString("steddingBlockerAddPlaceholder",
++                         "Add a site, such as example.com");
++  html_source->AddString(
++      "steddingBlockerAddInvalid",
++      "Not a site: type a host such as example.com, or a web address.");
++  html_source->AddString("steddingBlockerRemove", "Remove");
++  html_source->AddString("steddingBlockerRemoveSite", "Remove $1");
++  html_source->AddString("steddingBlockerButtonLabel",
++                         "Show the blocker button");
++  html_source->AddString(
++      "steddingBlockerButtonSubLabel",
++      "A shield at the address row’s right end turns blocking off or on "
++      "for the site you are on.");
+   html_source->AddString("steddingQuietNotificationsLabel",
+                          "Quiet notification prompts");
+   html_source->AddString("steddingQuietNotificationsSubLabel",
+diff --git a/chrome/browser/ui/webui/settings/stedding_blocker_handler.cc b/chrome/browser/ui/webui/settings/stedding_blocker_handler.cc
+new file mode 100644
+index 0000000000000..0840d77f3018d
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/stedding_blocker_handler.cc
+@@ -0,0 +1,160 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/settings/stedding_blocker_handler.h"
++
++#include <string>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/i18n/time_formatting.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++#include "chrome/browser/ui/stedding/dark_pages.h"
++#include "components/content_settings/core/common/content_settings_pattern.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "content/public/browser/web_ui.h"
++
++namespace {
++
++std::u16string FormatTime(base::Time time) {
++  return time.is_null() ? std::u16string()
++                        : base::TimeFormatShortDateAndTime(time);
++}
++
++}  // namespace
++
++SteddingBlockerHandler::SteddingBlockerHandler(Profile* profile)
++    : profile_(profile->GetOriginalProfile()) {}
++
++SteddingBlockerHandler::~SteddingBlockerHandler() = default;
++
++void SteddingBlockerHandler::RegisterMessages() {
++  web_ui()->RegisterMessageCallback(
++      "steddingGetBlocker",
++      base::BindRepeating(&SteddingBlockerHandler::HandleGetBlocker,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingUpdateBlockerLists",
++      base::BindRepeating(&SteddingBlockerHandler::HandleUpdateBlockerLists,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingAddBlockerException",
++      base::BindRepeating(&SteddingBlockerHandler::HandleAddBlockerException,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingRemoveBlockerException",
++      base::BindRepeating(
++          &SteddingBlockerHandler::HandleRemoveBlockerException,
++          base::Unretained(this)));
++}
++
++void SteddingBlockerHandler::OnJavascriptAllowed() {
++  if (HostContentSettingsMap* const map =
++          HostContentSettingsMapFactory::GetForProfile(profile_);
++      map && !settings_observation_.IsObserving()) {
++    settings_observation_.Observe(map);
++  }
++  if (stedding::BlockerLists* const lists = stedding::BlockerLists::Get();
++      lists && !lists_observation_.IsObserving()) {
++    lists_observation_.Observe(lists);
++  }
++}
++
++void SteddingBlockerHandler::OnJavascriptDisallowed() {
++  settings_observation_.Reset();
++  lists_observation_.Reset();
++}
++
++void SteddingBlockerHandler::OnContentSettingChanged(
++    const ContentSettingsPattern& primary_pattern,
++    const ContentSettingsPattern& secondary_pattern,
++    ContentSettingsTypeSet content_type_set) {
++  // Bk9: a site turned off from the button or the command bar shows here at
++  // once.
++  if (content_type_set.Contains(ContentSettingsType::ADS) &&
++      IsJavascriptAllowed()) {
++    FireWebUIListener("stedding-blocker-changed", State());
++  }
++}
++
++void SteddingBlockerHandler::OnBlockerListsChanged() {
++  if (IsJavascriptAllowed()) {
++    FireWebUIListener("stedding-blocker-changed", State());
++  }
++}
++
++base::DictValue SteddingBlockerHandler::State() const {
++  base::DictValue state;
++  const stedding::BlockerLists* const lists = stedding::BlockerLists::Get();
++  const stedding::BlockerLists::Status status =
++      lists ? lists->GetStatus() : stedding::BlockerLists::Status();
++  state.Set("busy", status.busy);
++  state.Set("hasRuleset", status.has_ruleset);
++  state.Set("updated", FormatTime(status.updated));
++  state.Set("urlRules", status.url_rules);
++  state.Set("skippedLines", status.skipped_lines);
++  base::ListValue list_rows;
++  for (const stedding::BlockerLists::ListStatus& list : status.lists) {
++    base::DictValue row;
++    row.Set("id", list.id);
++    row.Set("name", list.name);
++    row.Set("homepage", list.homepage);
++    row.Set("licence", list.licence);
++    row.Set("fetched", FormatTime(list.fetched));
++    row.Set("failing", list.failing);
++    list_rows.Append(std::move(row));
++  }
++  state.Set("lists", std::move(list_rows));
++  base::ListValue exceptions;
++  for (const ContentSettingsPattern& pattern :
++       stedding::GetBlockerExceptions(profile_)) {
++    base::DictValue entry;
++    entry.Set("name", stedding::DarkPagesSiteName(pattern));
++    entry.Set("pattern", pattern.ToString());
++    exceptions.Append(std::move(entry));
++  }
++  state.Set("exceptions", std::move(exceptions));
++  return state;
++}
++
++void SteddingBlockerHandler::HandleGetBlocker(const base::ListValue& args) {
++  if (args.size() != 1U) {
++    return;
++  }
++  AllowJavascript();
++  ResolveJavascriptCallback(args[0], State());
++}
++
++void SteddingBlockerHandler::HandleUpdateBlockerLists(
++    const base::ListValue& args) {
++  // Bk9: nothing while the switch is off (BlockerLists::UpdateNow).
++  if (stedding::BlockerLists* const lists = stedding::BlockerLists::Get()) {
++    lists->UpdateNow();
++  }
++}
++
++void SteddingBlockerHandler::HandleAddBlockerException(
++    const base::ListValue& args) {
++  if (args.size() != 2U || !args[1].is_string()) {
++    return;
++  }
++  AllowJavascript();
++  // What is no site is refused and nothing is written; the page says so
++  // under the field.
++  const bool added =
++      stedding::AddBlockerException(profile_, args[1].GetString());
++  ResolveJavascriptCallback(args[0], base::Value(added));
++}
++
++void SteddingBlockerHandler::HandleRemoveBlockerException(
++    const base::ListValue& args) {
++  if (args.size() != 1U || !args[0].is_string()) {
++    return;
++  }
++  const ContentSettingsPattern pattern =
++      ContentSettingsPattern::FromString(args[0].GetString());
++  stedding::RemoveBlockerException(profile_, pattern);
++}
+diff --git a/chrome/browser/ui/webui/settings/stedding_blocker_handler.h b/chrome/browser/ui/webui/settings/stedding_blocker_handler.h
+new file mode 100644
+index 0000000000000..e4b0bb804821a
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/stedding_blocker_handler.h
+@@ -0,0 +1,66 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_BLOCKER_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_BLOCKER_HANDLER_H_
++
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "base/values.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
++#include "components/content_settings/core/browser/content_settings_observer.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++
++class Profile;
++
++// docs/features/blocker.md Bk9: the rows of Settings > Stedding > Privacy >
++// Blocking that no preference binds: each list's name, homepage, licence and
++// last fetch; when the ruleset was last made and from how many rules; "Update
++// lists now"; and the sites where blocking is off, with Remove and Add. The
++// switch, the two lists' toggles and the button's setting are preferences
++// the page binds itself.
++class SteddingBlockerHandler : public settings::SettingsPageUIHandler,
++                               public content_settings::Observer,
++                               public stedding::BlockerLists::Observer {
++ public:
++  explicit SteddingBlockerHandler(Profile* profile);
++  SteddingBlockerHandler(const SteddingBlockerHandler&) = delete;
++  SteddingBlockerHandler& operator=(const SteddingBlockerHandler&) = delete;
++  ~SteddingBlockerHandler() override;
++
++  // SettingsPageUIHandler:
++  void RegisterMessages() override;
++  void OnJavascriptAllowed() override;
++  void OnJavascriptDisallowed() override;
++
++  // content_settings::Observer:
++  void OnContentSettingChanged(
++      const ContentSettingsPattern& primary_pattern,
++      const ContentSettingsPattern& secondary_pattern,
++      ContentSettingsTypeSet content_type_set) override;
++
++  // stedding::BlockerLists::Observer:
++  void OnBlockerListsChanged() override;
++
++  // What the page draws, for tests.
++  base::DictValue StateForTesting() const { return State(); }
++
++ private:
++  base::DictValue State() const;
++
++  void HandleGetBlocker(const base::ListValue& args);
++  void HandleUpdateBlockerLists(const base::ListValue& args);
++  void HandleAddBlockerException(const base::ListValue& args);
++  void HandleRemoveBlockerException(const base::ListValue& args);
++
++  const raw_ptr<Profile> profile_;
++  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
++      settings_observation_{this};
++  base::ScopedObservation<stedding::BlockerLists,
++                          stedding::BlockerLists::Observer>
++      lists_observation_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_BLOCKER_HANDLER_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 699496ec0e07c..d296f4ec14825 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -5138,6 +5138,7 @@ test("unit_tests") {
+     "//chrome/browser/ui/views/commandbar:unit_tests",
+     "//chrome/browser/ui/views/switcher:unit_tests",
+     "//chrome/browser/ui/stedding:unit_tests",
++    "//chrome/browser/ui/stedding/blocker:unit_tests",
+     "//chrome/browser/ui/webui/stedding_archive:unit_tests",
+     "//chrome/browser/ui/webui/stedding_welcome:unit_tests",
+     "//chrome/browser/ui/views/peek:unit_tests",
+diff --git a/chrome/test/DEPS b/chrome/test/DEPS
+index 58fff64cdae1e..defe0c31d75e3 100644
+--- a/chrome/test/DEPS
++++ b/chrome/test/DEPS
+@@ -25,6 +25,7 @@ include_rules = [
+   "+components/component_updater",
+   "+components/compose",
+   "+components/constrained_window",
++  "+components/content_settings/browser",
+   "+components/content_settings/core/browser",
+   "+components/contextual_tasks/public",
+   "+components/custom_handlers",
+diff --git a/chrome/test/data/stedding/blocker/blocker-ad-fetch.json b/chrome/test/data/stedding/blocker/blocker-ad-fetch.json
+new file mode 100644
+index 0000000000000..f680de2205abf
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ad-fetch.json
+@@ -0,0 +1 @@
++{"ad": true}
+diff --git a/chrome/test/data/stedding/blocker/blocker-ad-frame.html b/chrome/test/data/stedding/blocker/blocker-ad-frame.html
+new file mode 100644
+index 0000000000000..df3bf5bd61e9b
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ad-frame.html
+@@ -0,0 +1,2 @@
++<!doctype html>
++<body>frame</body>
+diff --git a/chrome/test/data/stedding/blocker/blocker-ad-image.svg b/chrome/test/data/stedding/blocker/blocker-ad-image.svg
+new file mode 100644
+index 0000000000000..bb1e428c6e43c
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ad-image.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>
+diff --git a/chrome/test/data/stedding/blocker/blocker-ad-script.js b/chrome/test/data/stedding/blocker/blocker-ad-script.js
+new file mode 100644
+index 0000000000000..206352648793c
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ad-script.js
+@@ -0,0 +1 @@
++window.adScript = true;
+diff --git a/chrome/test/data/stedding/blocker/blocker-ok-fetch.json b/chrome/test/data/stedding/blocker/blocker-ok-fetch.json
+new file mode 100644
+index 0000000000000..bb663e7083fc2
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ok-fetch.json
+@@ -0,0 +1 @@
++{"ok": true}
+diff --git a/chrome/test/data/stedding/blocker/blocker-ok-frame.html b/chrome/test/data/stedding/blocker/blocker-ok-frame.html
+new file mode 100644
+index 0000000000000..df3bf5bd61e9b
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ok-frame.html
+@@ -0,0 +1,2 @@
++<!doctype html>
++<body>frame</body>
+diff --git a/chrome/test/data/stedding/blocker/blocker-ok-image.svg b/chrome/test/data/stedding/blocker/blocker-ok-image.svg
+new file mode 100644
+index 0000000000000..bb1e428c6e43c
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ok-image.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>
+diff --git a/chrome/test/data/stedding/blocker/blocker-ok-script.js b/chrome/test/data/stedding/blocker/blocker-ok-script.js
+new file mode 100644
+index 0000000000000..e0b4e3ca01c19
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-ok-script.js
+@@ -0,0 +1 @@
++window.okScript = true;
+diff --git a/chrome/test/data/stedding/blocker/blocker-tracker.js b/chrome/test/data/stedding/blocker/blocker-tracker.js
+new file mode 100644
+index 0000000000000..cea8d709cab2c
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/blocker-tracker.js
+@@ -0,0 +1 @@
++window.tracker = true;
+diff --git a/chrome/test/data/stedding/blocker/easylist.txt b/chrome/test/data/stedding/blocker/easylist.txt
+new file mode 100644
+index 0000000000000..43078de6d9e74
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/easylist.txt
+@@ -0,0 +1,10 @@
++[Adblock Plus 2.0]
++! Title: Stedding test ads
++! A list in EasyList's format, written for Stedding's tests
++! (docs/features/blocker.md). Nothing here comes from EasyList.
++! Expires: 4 days
++/blocker-ad-script.js
++/blocker-ad-image.svg
++/blocker-ad-frame.html
++/blocker-ad-fetch.json
++##.blocker-test-banner
+diff --git a/chrome/test/data/stedding/blocker/easyprivacy.txt b/chrome/test/data/stedding/blocker/easyprivacy.txt
+new file mode 100644
+index 0000000000000..a5cc354f9d7d9
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/easyprivacy.txt
+@@ -0,0 +1,6 @@
++[Adblock Plus 2.0]
++! Title: Stedding test trackers
++! A list in EasyPrivacy's format, written for Stedding's tests
++! (docs/features/blocker.md). Nothing here comes from EasyPrivacy.
++! Expires: 4 days
++/blocker-tracker.js
+diff --git a/chrome/test/data/stedding/blocker/page.html b/chrome/test/data/stedding/blocker/page.html
+new file mode 100644
+index 0000000000000..a58cafd9fbc0f
+--- /dev/null
++++ b/chrome/test/data/stedding/blocker/page.html
+@@ -0,0 +1,42 @@
++<!doctype html>
++<!-- Stedding's blocker tests (docs/features/blocker.md Bk1): one listed and
++     one unlisted script, image, frame and fetch, and a listed tracker. -->
++<title>Blocker test page</title>
++<script src="blocker-ad-script.js"></script>
++<script src="blocker-ok-script.js"></script>
++<script src="blocker-tracker.js"></script>
++<img id="adImage" src="blocker-ad-image.svg" onload="window.adImage = true">
++<img id="okImage" src="blocker-ok-image.svg" onload="window.okImage = true">
++<iframe id="adFrame" src="blocker-ad-frame.html"></iframe>
++<iframe id="okFrame" src="blocker-ok-frame.html"></iframe>
++<script>
++  // What loaded, as "ad script,ok script,tracker,ad image,ok image,ad frame,
++  // ok frame,ad fetch,ok fetch", each "1" or "0", once the page has loaded.
++  window.blockerResults = async () => {
++    if (document.readyState !== 'complete') {
++      await new Promise(resolve => addEventListener('load', resolve));
++    }
++    const framed = id => {
++      try {
++        const body = document.getElementById(id).contentDocument.body;
++        return !!body && body.textContent.trim() === 'frame';
++      } catch (e) {
++        return false;
++      }
++    };
++    const fetched = async url => {
++      try {
++        return (await fetch(url, {cache: 'no-store'})).ok;
++      } catch (e) {
++        return false;
++      }
++    };
++    return [
++      !!window.adScript, !!window.okScript, !!window.tracker,
++      !!window.adImage, !!window.okImage,
++      framed('adFrame'), framed('okFrame'),
++      await fetched('blocker-ad-fetch.json'),
++      await fetched('blocker-ok-fetch.json'),
++    ].map(loaded => loaded ? '1' : '0').join(',');
++  };
++</script>
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 30079f0c716cc..31ae7728d0873 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -20,6 +20,7 @@ test("stedding_browser_tests") {
+     "address_band_browsertest.cc",
+     "app_jar_browsertest.cc",
+     "archive_sweep_browsertest.cc",
++    "blocker_browsertest.cc",
+     "branding_browsertest.cc",
+     "certificate_checks_browsertest.cc",
+     "child_tabs_browsertest.cc",
+@@ -175,6 +176,15 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/stedding:bookmarks_to_pins_dialog",
+     "//chrome/browser/ui/stedding:clean_links",
+     "//chrome/browser/ui/stedding:dark_pages",
++    # blocker (docs/features/blocker.md): the lists, the rules, the ruleset
++    # service, the component list and the browsing-data remover.
++    "//chrome/browser/browsing_data:constants",
++    "//chrome/browser/ui/stedding/blocker",
++    "//components/component_updater",
++    "//components/content_settings/browser",
++    "//components/subresource_filter/content/browser",
++    # The ruleset dealer the tests wait on for a publication.
++    "//components/subresource_filter/core/browser",
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:media_keys",
+     "//chrome/browser/ui/stedding:motion",
+diff --git a/chrome/test/stedding/blocker_browsertest.cc b/chrome/test/stedding/blocker_browsertest.cc
+new file mode 100644
+index 0000000000000..5fbbce7efc312
+--- /dev/null
++++ b/chrome/test/stedding/blocker_browsertest.cc
+@@ -0,0 +1,580 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Ad and tracker blocking (docs/features/blocker.md) in a real browser: the
++// lists come from a server of the test's own, holding two small lists in
++// EasyList's format written for these tests, and the pages from another;
++// nothing is fetched from easylist.to.
++
++#include <algorithm>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/run_loop.h"
++#include "base/synchronization/lock.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/test/run_until.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stedding/blocker/blocker.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_lists.h"
++#include "chrome/browser/ui/stedding/blocker/blocker_rules.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/commandbar/command_bar_view.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/toolbar/stedding_blocker_button.h"
++#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "chrome/common/chrome_switches.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/component_updater/component_updater_service.h"
++#include "components/component_updater/component_updater_switches.h"
++#include "components/content_settings/browser/page_specific_content_settings.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/prefs/pref_service.h"
++#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
++#include "components/subresource_filter/content/browser/ruleset_service.h"
++#include "content/public/browser/browsing_data_remover.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/browsing_data_remover_test_util.h"
++#include "content/public/test/test_launcher.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "ui/events/base_event_utils.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/events/types/event_type.h"
++#include "ui/gfx/geometry/point.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/test/button_test_api.h"
++#include "ui/views/view_utils.h"
++#include "url/gurl.h"
++
++namespace {
++
++// Google's Subresource Filter Rules component.
++constexpr char kGooglesRulesetComponentId[] =
++    "gcmjkmgdlgnkkcocmoeiminaijmmjnii";
++
++constexpr char kPage[] = "/stedding/blocker/page.html";
++
++// page.html's results: the ad script, the ok script, the tracker, the ad
++// image, the ok image, the ad frame, the ok frame, the ad fetch, the ok
++// fetch.
++constexpr char kAllLoaded[] = "1,1,1,1,1,1,1,1,1";
++constexpr char kListedBlocked[] = "0,1,0,0,1,0,1,0,1";
++
++using Manager = subresource_filter::ContentSubresourceFilterThrottleManager;
++
++class BlockerTest : public InProcessBrowserTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    ASSERT_TRUE(list_server_.InitializeAndListen());
++    command_line->AppendSwitchASCII(
++        stedding::kBlockerListBaseSwitch,
++        list_server_.GetURL("/stedding/blocker/").spec());
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    list_server_.RegisterRequestMonitor(base::BindRepeating(
++        &BlockerTest::OnListServerRequest, base::Unretained(this)));
++    list_server_.AddDefaultHandlers(GetChromeTestDataDir());
++    list_server_.StartAcceptingConnections();
++    if (embedded_test_server()->Started()) {
++      embedded_test_server()->StartAcceptingConnections();
++    } else {
++      ASSERT_TRUE(embedded_test_server()->Start());
++    }
++  }
++
++  PrefService* local_state() { return g_browser_process->local_state(); }
++  Profile* profile() { return browser()->GetProfile(); }
++
++  content::WebContents* Active(BrowserWindowInterface* browser = nullptr) {
++    return (browser ? browser : this->browser())
++        ->GetTabStripModel()
++        ->GetActiveWebContents();
++  }
++
++  GURL PageOn(const std::string& host) {
++    return embedded_test_server()->GetURL(host, kPage);
++  }
++
++  void Open(const std::string& host,
++            BrowserWindowInterface* browser = nullptr) {
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser ? browser : this->browser(), PageOn(host)));
++  }
++
++  static std::string Results(content::WebContents* contents) {
++    return content::EvalJs(contents, "window.blockerResults()")
++        .ExtractString();
++  }
++
++  // Turns blocking on and waits until both lists have arrived and the
++  // ruleset made from them is the one the ruleset service has indexed.
++  void TurnOnAndWait() {
++    local_state()->SetBoolean(stedding::prefs::kBlockerEnabled, true);
++    stedding::BlockerLists* const lists = stedding::BlockerLists::Get();
++    ASSERT_TRUE(lists);
++    subresource_filter::RulesetService* const service =
++        g_browser_process->subresource_filter_ruleset_service();
++    ASSERT_TRUE(service);
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      const stedding::BlockerLists::Status status = lists->GetStatus();
++      return !status.busy && status.has_ruleset &&
++             std::ranges::all_of(
++                 status.lists,
++                 [](const stedding::BlockerLists::ListStatus& list) {
++                   return !list.fetched.is_null();
++                 }) &&
++             service->GetMostRecentlyIndexedVersion().content_version ==
++                 status.content_version;
++    }));
++    // The service records the version it indexed, then opens the ruleset on
++    // its dealer's sequence and publishes it from the reply. A turn of that
++    // sequence and back to this one ends after the publication, so the next
++    // page is filtered with the new ruleset.
++    base::RunLoop published;
++    service->GetRulesetDealer()->GetDealerAsync(base::BindOnce(
++        [](scoped_refptr<base::SequencedTaskRunner> ui,
++           base::OnceClosure quit,
++           subresource_filter::VerifiedRulesetDealer*) {
++          ui->PostTask(FROM_HERE, std::move(quit));
++        },
++        base::SequencedTaskRunner::GetCurrentDefault(),
++        published.QuitClosure()));
++    published.Run();
++  }
++
++  // Flips the site's switch for the active tab and waits for its reload.
++  static void ToggleSite(content::WebContents* contents) {
++    content::TestNavigationObserver reload(contents);
++    stedding::ToggleBlockingOnSite(contents);
++    reload.Wait();
++  }
++
++  std::vector<net::test_server::HttpRequest> ListRequests() {
++    base::AutoLock lock(lock_);
++    std::vector<net::test_server::HttpRequest> lists;
++    for (const net::test_server::HttpRequest& request : list_server_requests_) {
++      if (request.GetURL().path().ends_with(".txt")) {
++        lists.push_back(request);
++      }
++    }
++    return lists;
++  }
++
++  net::EmbeddedTestServer list_server_;
++
++ private:
++  void OnListServerRequest(const net::test_server::HttpRequest& request) {
++    base::AutoLock lock(lock_);
++    list_server_requests_.push_back(request);
++  }
++
++  base::Lock lock_;
++  std::vector<net::test_server::HttpRequest> list_server_requests_;
++};
++
++}  // namespace
++
++// Bk1, Bk2, Bk12: a fresh install blocks nothing and fetches nothing; the
++// subresource filter keeps Chromium's own activation.
++IN_PROC_BROWSER_TEST_F(BlockerTest, AFreshProfileFetchesNothing) {
++  EXPECT_FALSE(local_state()->GetBoolean(stedding::prefs::kBlockerEnabled));
++  EXPECT_FALSE(stedding::BlockerOn(local_state()));
++  EXPECT_FALSE(Manager::HasPageActivationThrottleFactory());
++  Open("a.test");
++  EXPECT_EQ(kAllLoaded, Results(Active()));
++  EXPECT_TRUE(ListRequests().empty());
++}
++
++// Bk1: with blocking on, the listed script, tracker, image, frame and fetch
++// do not load; the unlisted ones do.
++IN_PROC_BROWSER_TEST_F(BlockerTest, AListedScriptImageAndFrameAreBlocked) {
++  TurnOnAndWait();
++  EXPECT_TRUE(Manager::HasPageActivationThrottleFactory());
++  Open("a.test");
++  EXPECT_EQ(kListedBlocked, Results(Active()));
++}
++
++// Bk1: turned off again, every page loads everything; the lists stay on
++// disk and nothing more is fetched.
++IN_PROC_BROWSER_TEST_F(BlockerTest, TheSwitchOffLoadsEverything) {
++  TurnOnAndWait();
++  local_state()->SetBoolean(stedding::prefs::kBlockerEnabled, false);
++  EXPECT_FALSE(Manager::HasPageActivationThrottleFactory());
++  const size_t fetched = ListRequests().size();
++  Open("a.test");
++  EXPECT_EQ(kAllLoaded, Results(Active()));
++  stedding::BlockerLists::Get()->UpdateNow();
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(fetched, ListRequests().size());
++}
++
++// Bk4: Google's ruleset component is not registered, so the ruleset is
++// Stedding's alone. The test lets the browser register its components, with
++// the update service pointed at the test's own server.
++class BlockerComponentsTest : public BlockerTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    BlockerTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII(
++        switches::kComponentUpdater,
++        "url-source=" + list_server_.GetURL("/no-components").spec());
++  }
++
++  // The test launcher turns component updates off after SetUpCommandLine.
++  void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
++    BlockerTest::SetUpDefaultCommandLine(command_line);
++    command_line->RemoveSwitch(switches::kDisableComponentUpdate);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(BlockerComponentsTest,
++                       GooglesRulesetComponentIsNotRegistered) {
++  const std::vector<std::string> ids =
++      g_browser_process->component_updater()->GetComponentIDs();
++  ASSERT_FALSE(ids.empty()) << "the components were registered";
++  EXPECT_FALSE(std::ranges::contains(ids, kGooglesRulesetComponentId));
++}
++
++// Bk5: turning blocking off on a site loads that site's pages, subdomains
++// too, unfiltered; every other site stays filtered. Turning it back on
++// removes the exception.
++IN_PROC_BROWSER_TEST_F(BlockerTest,
++                       TheSiteSwitchTurnsBlockingOffForThatSiteOnly) {
++  TurnOnAndWait();
++  Open("a.test");
++  ASSERT_EQ(kListedBlocked, Results(Active()));
++  ToggleSite(Active());
++  EXPECT_EQ(kAllLoaded, Results(Active()));
++  EXPECT_FALSE(stedding::IsBlockingOnForSite(Active()));
++  EXPECT_EQ(1u, stedding::GetBlockerExceptions(profile()).size());
++
++  Open("sub.a.test");
++  EXPECT_EQ(kAllLoaded, Results(Active())) << "the site's subdomains too";
++  Open("b.test");
++  EXPECT_EQ(kListedBlocked, Results(Active()));
++
++  Open("a.test");
++  ToggleSite(Active());
++  EXPECT_EQ(kListedBlocked, Results(Active()));
++  EXPECT_TRUE(stedding::GetBlockerExceptions(profile()).empty());
++}
++
++// Bk5: a private window's choice stays in that window's session; the normal
++// profile keeps filtering the site and records nothing.
++IN_PROC_BROWSER_TEST_F(BlockerTest, APrivateWindowsSiteSwitchIsForgotten) {
++  TurnOnAndWait();
++  BrowserWindowInterface* const incognito = CreateIncognitoBrowser();
++  Open("a.test", incognito);
++  ASSERT_EQ(kListedBlocked, Results(Active(incognito)));
++  ToggleSite(Active(incognito));
++  EXPECT_EQ(kAllLoaded, Results(Active(incognito)));
++
++  EXPECT_TRUE(stedding::GetBlockerExceptions(profile()).empty());
++  Open("a.test");
++  EXPECT_EQ(kListedBlocked, Results(Active()));
++}
++
++// Bk7: blocking keeps no record of the sites visited: no ADS_DATA metadata
++// for a site with blocked requests, and no "ads blocked" icon, also for a
++// page restored from the back-forward cache.
++IN_PROC_BROWSER_TEST_F(BlockerTest, BlockingWritesNothingPerSite) {
++  TurnOnAndWait();
++  HostContentSettingsMap* const map =
++      HostContentSettingsMapFactory::GetForProfile(profile());
++  const auto check = [&](const std::string& host) {
++    SCOPED_TRACE(host);
++    EXPECT_EQ(kListedBlocked, Results(Active()));
++    EXPECT_TRUE(map->GetWebsiteSetting(PageOn(host), GURL(),
++                                       ContentSettingsType::ADS_DATA)
++                    .is_none());
++    content_settings::PageSpecificContentSettings* const page =
++        content_settings::PageSpecificContentSettings::GetForFrame(
++            Active()->GetPrimaryMainFrame());
++    ASSERT_TRUE(page);
++    EXPECT_FALSE(page->IsContentBlocked(ContentSettingsType::ADS));
++  };
++  for (const char* host : {"a.test", "b.test", "c.test"}) {
++    Open(host);
++    check(host);
++  }
++  // Back to b.test, from the back-forward cache where the browser keeps it.
++  content::TestNavigationObserver back(Active());
++  Active()->GetController().GoBack();
++  back.Wait();
++  check("b.test");
++}
++
++// Bk12: a list fetch carries nothing about the user: no cookie, though the
++// list's host has set one, and no query string.
++IN_PROC_BROWSER_TEST_F(BlockerTest, TheListFetchCarriesNothingAboutTheUser) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), list_server_.GetURL("/set-cookie?visitor=1")));
++  TurnOnAndWait();
++  const std::vector<net::test_server::HttpRequest> requests = ListRequests();
++  ASSERT_EQ(2u, requests.size());
++  for (const net::test_server::HttpRequest& request : requests) {
++    SCOPED_TRACE(request.relative_url);
++    EXPECT_FALSE(request.headers.contains("Cookie"));
++    EXPECT_TRUE(request.GetURL().query().empty());
++  }
++}
++
++// Bk13: Delete browsing data with "Site settings" ticked clears the
++// exceptions.
++IN_PROC_BROWSER_TEST_F(BlockerTest, DeletingSiteSettingsClearsTheExceptions) {
++  ASSERT_TRUE(stedding::AddBlockerException(profile(), "a.test"));
++  ASSERT_EQ(1u, stedding::GetBlockerExceptions(profile()).size());
++  content::BrowsingDataRemover* const remover =
++      profile()->GetBrowsingDataRemover();
++  content::BrowsingDataRemoverCompletionObserver observer(remover);
++  remover->RemoveAndReply(
++      base::Time(), base::Time::Max(),
++      chrome_browsing_data_remover::DATA_TYPE_CONTENT_SETTINGS,
++      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, &observer);
++  observer.BlockUntilCompletion();
++  EXPECT_TRUE(stedding::GetBlockerExceptions(profile()).empty());
++}
++
++// Bk11: after a launch with a ruleset indexed at the run before, the first
++// page, given on the command line, is filtered.
++class BlockerLaunchTest : public BlockerTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    BlockerTest::SetUpCommandLine(command_line);
++    if (!content::IsPreTest()) {
++      ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
++      command_line->AppendArg(
++          embedded_test_server()->GetURL(kPage).spec());
++    }
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(BlockerLaunchTest,
++                       PRE_TheFirstPageAfterALaunchIsFiltered) {
++  TurnOnAndWait();
++}
++
++IN_PROC_BROWSER_TEST_F(BlockerLaunchTest,
++                       TheFirstPageAfterALaunchIsFiltered) {
++  content::WebContents* const first =
++      browser()->GetTabStripModel()->GetWebContentsAt(0);
++  ASSERT_TRUE(first);
++  ASSERT_TRUE(content::WaitForLoadStop(first));
++  ASSERT_EQ(embedded_test_server()->GetURL(kPage),
++            first->GetLastCommittedURL());
++  EXPECT_EQ(kListedBlocked, Results(first));
++}
++
++// Bk6: the shield follows the active tab's site, the switch and its own
++// setting, and a click flips the site's switch.
++using BlockerButtonTest = BlockerTest;
++
++IN_PROC_BROWSER_TEST_F(BlockerButtonTest, TheButtonFollowsTheSiteAndFlipsIt) {
++  stedding::BlockerButton* button = nullptr;
++  ToolbarView* const toolbar =
++      BrowserView::GetBrowserViewForBrowser(browser())->toolbar();
++  for (views::View* child : toolbar->children()) {
++    if (auto* const found =
++            views::AsViewClass<stedding::BlockerButton>(child)) {
++      button = found;
++    }
++  }
++  ASSERT_TRUE(button);
++  Open("a.test");
++  EXPECT_FALSE(button->GetVisible()) << "hidden while blocking is off";
++
++  TurnOnAndWait();
++  Open("a.test");
++  EXPECT_TRUE(button->GetVisible());
++  EXPECT_TRUE(button->is_on());
++  EXPECT_EQ(u"Blocking ads and trackers on a.test", button->GetTooltipText());
++
++  content::TestNavigationObserver reload(Active());
++  views::test::ButtonTestApi(button).NotifyClick(ui::MouseEvent(
++      ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
++      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
++      ui::EF_LEFT_MOUSE_BUTTON));
++  reload.Wait();
++  EXPECT_FALSE(button->is_on());
++  EXPECT_EQ(u"Blocking is off on a.test", button->GetTooltipText());
++  EXPECT_EQ(kAllLoaded, Results(Active()));
++
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), GURL("chrome://version/")));
++  EXPECT_FALSE(button->GetVisible()) << "not a web page";
++  Open("b.test");
++  EXPECT_TRUE(button->GetVisible());
++  EXPECT_TRUE(button->is_on());
++  profile()->GetPrefs()->SetBoolean(stedding::prefs::kBlockerButton, false);
++  EXPECT_FALSE(button->GetVisible()) << "its setting hides it";
++}
++
++// Bk9: Settings shows the lists and the exceptions, binds the switch, the
++// two lists and the button's setting, and "Update lists now" fetches.
++using SettingsBlockerTest = BlockerTest;
++
++IN_PROC_BROWSER_TEST_F(SettingsBlockerTest,
++                       TheRowsShowTheListsAndUpdateNow) {
++  TurnOnAndWait();
++  ASSERT_TRUE(stedding::AddBlockerException(profile(), "shop.test"));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("chrome://settings/stedding")));
++  content::WebContents* const page = Active();
++
++  EXPECT_EQ("EasyList,EasyPrivacy|shop.test",
++            content::EvalJs(page, R"(
++      import('chrome://resources/js/cr.js')
++          .then(cr => cr.sendWithPromise('steddingGetBlocker'))
++          .then(state => state.lists.map(list => list.name).join(',') + '|' +
++                state.exceptions.map(site => site.name).join(',')))")
++                .ExtractString());
++
++  // Every control of the group, found through every shadow root once the
++  // page has drawn it.
++  constexpr char kFind[] = R"(
++    new Promise(resolve => {
++      const find = root => {
++        for (const element of root.querySelectorAll('*')) {
++          if (element.id === $1 ||
++              element.getAttribute('pref-key') === $1) {
++            return element;
++          }
++          if (element.shadowRoot) {
++            const found = find(element.shadowRoot);
++            if (found) {
++              return found;
++            }
++          }
++        }
++        return null;
++      };
++      let tries = 100;
++      const look = () => {
++        const element = find(document);
++        if (element || --tries === 0) {
++          if (element && $2) {
++            element.click();
++          }
++          resolve(!!element);
++        } else {
++          setTimeout(look, 100);
++        }
++      };
++      look();
++    }))";
++  for (const char* key :
++       {"stedding.blocker.enabled", "stedding.blocker.list.easylist",
++        "stedding.blocker.list.easyprivacy", "stedding.page.blocker_button",
++        "blockerExceptions"}) {
++    EXPECT_EQ(true, content::EvalJs(page, content::JsReplace(kFind, key,
++                                                              false)))
++        << key;
++  }
++  const size_t before = ListRequests().size();
++  EXPECT_EQ(true, content::EvalJs(page, content::JsReplace(
++                                            kFind, "blockerUpdateNow", true)));
++  EXPECT_TRUE(base::test::RunUntil(
++      [&] { return ListRequests().size() >= before + 2; }));
++}
++
++// Bk10: the command bar's rows turn blocking off and on for the tab's site
++// and update the lists.
++class BlockerCommandBarTest : public BlockerTest {
++ protected:
++  stedding::CommandBarView* OpenBar() {
++    chrome::ExecuteCommand(browser(), IDC_STEDDING_COMMAND_PALETTE);
++    return stedding::CommandBarView::GetOpenBar(
++        BrowserView::GetBrowserViewForBrowser(browser()));
++  }
++
++  std::vector<std::u16string> Titles(const std::u16string& typed) {
++    stedding::CommandBarView* const bar = OpenBar();
++    EXPECT_TRUE(bar);
++    if (!bar) {
++      return {};
++    }
++    bar->field_for_testing()->SetText(typed);
++    bar->ContentsChanged(bar->field_for_testing(), typed);
++    std::vector<std::u16string> titles;
++    for (size_t i = 0; i < bar->row_count_for_testing(); ++i) {
++      titles.push_back(bar->row_title_for_testing(i));
++    }
++    bar->Close();
++    base::RunLoop().RunUntilIdle();
++    return titles;
++  }
++
++  // Types `title`, walks down to its row and presses Enter.
++  void Run(const std::u16string& title) {
++    stedding::CommandBarView* const bar = OpenBar();
++    ASSERT_TRUE(bar);
++    bar->field_for_testing()->SetText(title);
++    bar->ContentsChanged(bar->field_for_testing(), title);
++    size_t index = 0;
++    while (index < bar->row_count_for_testing() &&
++           bar->row_title_for_testing(index) != title) {
++      ++index;
++    }
++    ASSERT_LT(index, bar->row_count_for_testing()) << "the row is there";
++    views::View* const field = bar->field_for_testing();
++    for (size_t i = 0; i < index; ++i) {
++      field->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyPressed,
++                                       ui::VKEY_DOWN, ui::EF_NONE));
++    }
++    field->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyPressed,
++                                     ui::VKEY_RETURN, ui::EF_NONE));
++    base::RunLoop().RunUntilIdle();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(BlockerCommandBarTest, TheBlockerRowsActOnTheSite) {
++  Open("a.test");
++  EXPECT_FALSE(std::ranges::contains(Titles(u"Blocking"),
++                                     u"Turn Off Blocking on This Site"))
++      << "no row while blocking is off";
++
++  TurnOnAndWait();
++  Open("a.test");
++  const std::vector<std::u16string> titles = Titles(u"Blocking");
++  EXPECT_TRUE(std::ranges::contains(titles, u"Turn Off Blocking on This Site"));
++  EXPECT_TRUE(std::ranges::contains(Titles(u"Lists"),
++                                    u"Update Ad and Tracker Lists"));
++
++  content::TestNavigationObserver reload(Active());
++  Run(u"Turn Off Blocking on This Site");
++  reload.Wait();
++  EXPECT_FALSE(stedding::IsBlockingOnForSite(Active()));
++  EXPECT_EQ(kAllLoaded, Results(Active()));
++  EXPECT_TRUE(std::ranges::contains(Titles(u"Blocking"),
++                                    u"Turn On Blocking on This Site"));
++
++  const size_t before = ListRequests().size();
++  Run(u"Update Ad and Tracker Lists");
++  EXPECT_TRUE(base::test::RunUntil(
++      [&] { return ListRequests().size() >= before + 2; }));
++}
+diff --git a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc
+index e440b4d7a8342..8cd6234fdf5f6 100644
+--- a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc
++++ b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc
+@@ -11,6 +11,7 @@
+ #include "base/debug/crash_logging.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
++#include "base/no_destructor.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/strings/stringprintf.h"
+@@ -56,6 +57,31 @@ namespace subresource_filter {
+ // static
+ const int ContentSubresourceFilterThrottleManager::kUserDataKey;
+ 
++namespace {
++
++// Stedding (ADR 0030): the embedder's page activation, if any.
++ContentSubresourceFilterThrottleManager::PageActivationThrottleFactory&
++PageActivationThrottleFactoryStorage() {
++  static base::NoDestructor<
++      ContentSubresourceFilterThrottleManager::PageActivationThrottleFactory>
++      factory;
++  return *factory;
++}
++
++}  // namespace
++
++// static
++void ContentSubresourceFilterThrottleManager::SetPageActivationThrottleFactory(
++    PageActivationThrottleFactory factory) {
++  PageActivationThrottleFactoryStorage() = std::move(factory);
++}
++
++// static
++bool ContentSubresourceFilterThrottleManager::
++    HasPageActivationThrottleFactory() {
++  return !PageActivationThrottleFactoryStorage().is_null();
++}
++
+ // static
+ void ContentSubresourceFilterThrottleManager::BindReceiver(
+     mojo::PendingAssociatedReceiver<mojom::SubresourceFilterHost>
+@@ -490,7 +516,9 @@ void ContentSubresourceFilterThrottleManager::DidBecomePrimaryPage() {
+   // If we tried to notify while non-primary, we didn't show UI so do that now
+   // that the page became primary. This also leads to reattempting notification
+   // if a page transitioned from primary to non-primary and back (BFCache).
+-  if (current_committed_load_has_notified_disallowed_load_) {
++  // Stedding (ADR 0030): no notification while the embedder decides.
++  if (current_committed_load_has_notified_disallowed_load_ &&
++      !HasPageActivationThrottleFactory()) {
+     profile_interaction_manager_->MaybeShowNotification();
+   }
+ }
+@@ -572,7 +600,13 @@ void ContentSubresourceFilterThrottleManager::
+   CHECK(!navigation_handle.IsSameDocument());
+   CHECK(!ShouldInheritActivation(navigation_handle.GetURL()));
+ 
+-  if (IsInSubresourceFilterRoot(&navigation_handle) && database_manager_) {
++  if (IsInSubresourceFilterRoot(&navigation_handle) &&
++      HasPageActivationThrottleFactory()) {
++    // Stedding (ADR 0030): the embedder's throttle decides the page's
++    // activation, ahead of the activation state computing throttle below.
++    PageActivationThrottleFactoryStorage().Run(registry);
++  } else if (IsInSubresourceFilterRoot(&navigation_handle) &&
++             database_manager_) {
+     registry.AddThrottle(std::make_unique<SafeBrowsingPageActivationThrottle>(
+         registry, profile_interaction_manager_.get(), database_manager_));
+   }
+@@ -625,6 +659,11 @@ void ContentSubresourceFilterThrottleManager::OnReloadRequested() {
+ void ContentSubresourceFilterThrottleManager::OnAdsViolationTriggered(
+     content::RenderFrameHost* rfh,
+     mojom::AdsViolation triggered_violation) {
++  // Stedding (ADR 0030): no ads intervention, which records the site for a
++  // week, while the embedder decides.
++  if (HasPageActivationThrottleFactory()) {
++    return;
++  }
+   profile_interaction_manager_->OnAdsViolationTriggered(rfh,
+                                                         triggered_violation);
+ }
+@@ -738,7 +777,8 @@ void ContentSubresourceFilterThrottleManager::MaybeShowNotification(
+   // Non-primary pages shouldn't affect UI. When the page becomes primary we'll
+   // check |current_committed_load_has_notified_disallowed_load_| and try
+   // again.
+-  if (page_->IsPrimary()) {
++  // Stedding (ADR 0030): no notification while the embedder decides.
++  if (page_->IsPrimary() && !HasPageActivationThrottleFactory()) {
+     profile_interaction_manager_->MaybeShowNotification();
+   }
+ }
+diff --git a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h
+index 609be0a633ed6..22de6a7413b91 100644
+--- a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h
++++ b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h
+@@ -11,6 +11,7 @@
+ #include <vector>
+ 
+ #include "base/containers/flat_set.h"
++#include "base/functional/callback.h"
+ #include "base/gtest_prod_util.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/raw_ref.h"
+@@ -181,6 +182,20 @@ class ContentSubresourceFilterThrottleManager
+   void MaybeCreateAndAddNavigationThrottles(
+       content::NavigationThrottleRegistry& registry);
+ 
++  // Stedding (docs/decisions/0030-ad-and-tracker-blocking.md): while an
++  // embedder has set a factory, the factory adds the throttle that decides a
++  // subresource filter root's activation, in place of the Safe Browsing one
++  // and ahead of the activation state computing throttle; and the embedder
++  // owns what the user sees and what is kept: this class shows no "ads
++  // blocked" notification and triggers no ads intervention, so nothing is
++  // written for the site visited. Set and cleared on the UI thread; a null
++  // callback clears it.
++  using PageActivationThrottleFactory =
++      base::RepeatingCallback<void(content::NavigationThrottleRegistry&)>;
++  static void SetPageActivationThrottleFactory(
++      PageActivationThrottleFactory factory);
++  static bool HasPageActivationThrottleFactory();
++
+   PageLoadStatistics* page_load_statistics() const { return statistics_.get(); }
+ 
+   ProfileInteractionManager* profile_interaction_manager_for_testing() {

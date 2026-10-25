@@ -1,0 +1,2660 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 07:59:57 -0400
+Subject: feat: clean links on every page opened (S-89)
+
+A page the user opens now loads without the tracking parameters a
+copied link loses, and a known redirect page that carries its target
+in its own address is skipped to that target
+(docs/features/clean-links.md Cl1-Cl3). CleanLinksThrottle, made in
+ChromeContentBrowserClient::CreateURLLoaderThrottles, rewrites the
+first address of a top-level GET in WillStartRequest, so the loader
+makes an internal redirect before anything is sent. Subresources,
+frames, POSTs, forms, reloads, restores, back and forward, and every
+server redirect are left alone (Cl4, Cl5). HistoryTabHelper leaves
+Stedding's own hop out of the redirect chain (Cl6). A Privacy row, on
+by default, with a command-bar row (Cl7), and a list of kept sites in
+Settings (Cl8, Cl9). Private windows clean too (Cl10). Nothing is
+fetched (Cl11). Copy-link's table is shared and unchanged (Cl2,
+copy-link L2). The copy-link and defaults browser tests turn the
+setting off, since they test the copy and the address row, not this.
+
+Why: tracking parameters reached the site on every link the user
+opened; only a copied link was cleaned (BACKLOG S-89).
+Removable when: never; the throttle and the history hunk go if
+Chromium ships its own top-level parameter filter that does the same.
+---
+ chrome/browser/BUILD.gn                       |   2 +
+ .../browser/chrome_content_browser_client.cc  |  20 +
+ .../api/settings_private/prefs_util.cc        |   3 +
+ chrome/browser/history/BUILD.gn               |   3 +
+ chrome/browser/history/history_tab_helper.cc  |  17 +-
+ .../history/history_tab_helper_unittest.cc    |  24 +
+ .../stedding_page/stedding_page.html.ts       |  31 +
+ .../settings/stedding_page/stedding_page.ts   |  44 ++
+ chrome/browser/ui/stedding/BUILD.gn           |  43 +-
+ chrome/browser/ui/stedding/clean_link.cc      | 153 ++++
+ chrome/browser/ui/stedding/clean_link.h       |  46 +-
+ .../ui/stedding/clean_link_unittest.cc        | 181 +++++
+ chrome/browser/ui/stedding/clean_links.cc     |  49 ++
+ chrome/browser/ui/stedding/clean_links.h      |  35 +
+ .../ui/stedding/clean_links_throttle.cc       | 143 ++++
+ .../ui/stedding/clean_links_throttle.h        |  80 ++
+ .../stedding/clean_links_throttle_unittest.cc | 330 ++++++++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   4 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   6 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   7 +
+ .../ui/views/commandbar/command_bar_view.cc   |   2 +
+ chrome/browser/ui/webui/settings/BUILD.gn     |   5 +
+ .../browser/ui/webui/settings/settings_ui.cc  |  25 +
+ .../settings/stedding_clean_links_handler.cc  |  98 +++
+ .../settings/stedding_clean_links_handler.h   |  55 ++
+ chrome/test/stedding/BUILD.gn                 |   2 +
+ .../test/stedding/clean_links_browsertest.cc  | 720 ++++++++++++++++++
+ chrome/test/stedding/copy_link_browsertest.cc |   5 +
+ chrome/test/stedding/defaults_browsertest.cc  |   9 +
+ .../common/loader/throttling_url_loader.cc    |   5 +
+ .../common/loader/url_loader_throttle.cc      |   2 +
+ .../common/loader/url_loader_throttle.h       |   8 +
+ 32 files changed, 2150 insertions(+), 7 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/clean_links.cc
+ create mode 100644 chrome/browser/ui/stedding/clean_links.h
+ create mode 100644 chrome/browser/ui/stedding/clean_links_throttle.cc
+ create mode 100644 chrome/browser/ui/stedding/clean_links_throttle.h
+ create mode 100644 chrome/browser/ui/stedding/clean_links_throttle_unittest.cc
+ create mode 100644 chrome/browser/ui/webui/settings/stedding_clean_links_handler.cc
+ create mode 100644 chrome/browser/ui/webui/settings/stedding_clean_links_handler.h
+ create mode 100644 chrome/test/stedding/clean_links_browsertest.cc
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index b1b4f4086fbd6..6b20c3435b4a6 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1306,6 +1306,8 @@ source_set("core") {
+       "//chrome/browser/ui:stedding_ui_metrics",
+       "//chrome/browser/ui:uma_browsing_activity_observer",
+       "//chrome/browser/ui/lens",
++      # clean links Cl1: the throttle CreateURLLoaderThrottles makes.
++      "//chrome/browser/ui/stedding:clean_links",
+       "//chrome/browser/ui/stedding:dark_pages",
+       "//chrome/browser/ui/tabs/tab_drag_api/desktop_tab_drag_impl",
+       "//chrome/browser/ui/views/frame:glass_frame_service",
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 3f321dad984b7..751576c1d991c 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -590,6 +590,7 @@
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/chrome_pages.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
++#include "chrome/browser/ui/stedding/clean_links_throttle.h"
+ #include "chrome/browser/ui/stedding/dark_pages.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/waap/waap_utils.h"
+@@ -6158,6 +6159,25 @@ ChromeContentBrowserClient::CreateURLLoaderThrottles(
+   Profile* profile = Profile::FromBrowserContext(browser_context);
+   DCHECK(profile);
+ 
++  // Stedding: the page the user opens loads without its tracking parameters
++  // (docs/features/clean-links.md Cl1). It is told the address the tab
++  // shows, so a page that puts a parameter on its own address keeps it
++  // (Cl13), and whether the ForceGoogleSafeSearch policy is on: Google's
++  // throttle below then also changes a Google search page's address at the
++  // start, and a loader takes one change there, so clean links stands aside
++  // for those pages (Cl14).
++  if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
++    content::WebContents* const clean_links_tab =
++        navigation_id && !wc_getter.is_null() ? wc_getter.Run() : nullptr;
++    if (auto clean_links = stedding::CleanLinksThrottle::MaybeCreate(
++            request, navigation_id, *profile->GetPrefs(),
++            clean_links_tab ? clean_links_tab->GetLastCommittedURL() : GURL(),
++            profile->GetPrefs()->GetBoolean(
++                policy::policy_prefs::kForceGoogleSafeSearch))) {
++      result.push_back(std::move(clean_links));
++    }
++  }
++
+   ChromeNavigationUIData* chrome_navigation_ui_data =
+       static_cast<ChromeNavigationUIData*>(navigation_ui_data);
+ 
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 5c842c1336c14..4a999043e123a 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -346,6 +346,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kString;
+   (*s_allowlist)[stedding::prefs::kCopyStripTracking] =
+       settings_api::PrefType::kBoolean;
++  // clean-links Cl7, settings T31.
++  (*s_allowlist)[stedding::prefs::kCleanLinks] =
++      settings_api::PrefType::kBoolean;
+   // copy-link L7, settings T28.
+   (*s_allowlist)[stedding::prefs::kCopyLinkButton] =
+       settings_api::PrefType::kBoolean;
+diff --git a/chrome/browser/history/BUILD.gn b/chrome/browser/history/BUILD.gn
+index a2d825a7ee9a5..eb1d2d3b74ccc 100644
+--- a/chrome/browser/history/BUILD.gn
++++ b/chrome/browser/history/BUILD.gn
+@@ -59,6 +59,9 @@ source_set("impl") {
+     "//chrome/browser/sync:factories",
+     "//chrome/browser/translate",
+     "//chrome/browser/ui/profiles",
++
++    # Stedding: clean links Cl6, the hop history leaves out.
++    "//chrome/browser/ui/stedding:clean_link",
+     "//chrome/common",
+     "//chrome/common:constants",
+     "//components/bookmarks/browser",
+diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
+index cff7c3955c8a1..090a05d51c2a2 100644
+--- a/chrome/browser/history/history_tab_helper.cc
++++ b/chrome/browser/history/history_tab_helper.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
+ #include "chrome/browser/translate/chrome_translate_client.h"
++#include "chrome/browser/ui/stedding/clean_link.h"
+ #include "components/actor/core/task_id.h"
+ #include "components/history/content/browser/history_context_helper.h"
+ #include "components/history/core/browser/history_constants.h"
+@@ -438,14 +439,26 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
+       http_response_code == 404 ? history::VisitResponseCodeCategory::k404
+                                 : history::VisitResponseCodeCategory::kNot404;
+ 
++  // Stedding: the tracked address or the redirect page a clean link skipped
++  // is left out of the chain, so history holds only the address the page
++  // opened at (docs/features/clean-links.md Cl6).
++  history::RedirectList redirects = navigation_handle->GetRedirectChain();
++  for (size_t i = 0; i + 1 < redirects.size();) {
++    if (stedding::IsCleanLinkHop(redirects[i], redirects[i + 1])) {
++      redirects.erase(redirects.begin() + i);
++    } else {
++      ++i;
++    }
++  }
++
+   // TODO(crbug.com/434976953): Move TaskId to be accessible by
+   // HistoryAddPageArgs, so we can pass actor_task_id() directly without getting
+   // int32 value.
+   history::HistoryAddPageArgs add_page_args(
+       navigation_handle->GetURL(), timestamp,
+       history::ContextIDForWebContents(web_contents()), nav_entry_id,
+-      navigation_handle->GetNavigationId(), referrer_url,
+-      navigation_handle->GetRedirectChain(), page_transition, hidden,
++      navigation_handle->GetNavigationId(), referrer_url, redirects,
++      page_transition, hidden,
+       actor_task_id ? history::SOURCE_ACTOR : history::SOURCE_BROWSED,
+       response_code_category, navigation_handle->DidReplaceEntry(),
+       should_consider_for_ntp_most_visited, visit_context_ephemerality, title,
+diff --git a/chrome/browser/history/history_tab_helper_unittest.cc b/chrome/browser/history/history_tab_helper_unittest.cc
+index daa7fb3171862..baa6659f8f20d 100644
+--- a/chrome/browser/history/history_tab_helper_unittest.cc
++++ b/chrome/browser/history/history_tab_helper_unittest.cc
+@@ -326,6 +326,30 @@ TEST_F(HistoryTabHelperTest, CreateAddPageArgsReferringURLMainFrameNoReferrer) {
+   EXPECT_TRUE(args.referrer.is_empty());
+ }
+ 
++// Stedding, docs/features/clean-links.md Cl6: the hop a clean link made (a
++// tracked address to its clean one, a redirect page to its target) is left
++// out of the chain history is given; a server's own redirect stays.
++TEST_F(HistoryTabHelperTest, SteddingLeavesTheCleanLinkHopOut) {
++  NiceMock<content::MockNavigationHandle> navigation_handle(web_contents());
++  const GURL tracked("https://a.test/p?utm_source=x&id=1");
++  const GURL clean("https://a.test/p?id=1");
++  const GURL moved("https://b.test/q");
++  navigation_handle.set_url(moved);
++  navigation_handle.set_redirect_chain({tracked, clean, moved});
++  history::HistoryAddPageArgs args =
++      history_tab_helper()->CreateHistoryAddPageArgs(moved, base::Time(), 1,
++                                                     &navigation_handle);
++  EXPECT_EQ((history::RedirectList{clean, moved}), args.redirects);
++
++  const GURL wrapper("https://www.google.com/url?q=https%3A%2F%2Fc.test%2F");
++  const GURL target("https://c.test/");
++  navigation_handle.set_url(target);
++  navigation_handle.set_redirect_chain({wrapper, target});
++  args = history_tab_helper()->CreateHistoryAddPageArgs(target, base::Time(), 1,
++                                                        &navigation_handle);
++  EXPECT_EQ(history::RedirectList{target}, args.redirects);
++}
++
+ TEST_F(HistoryTabHelperTest, CreateAddPageArgsHistoryTitleAfterPageReload) {
+   NiceMock<content::MockNavigationHandle> navigation_handle(web_contents());
+   navigation_handle.set_redirect_chain({GURL("https://someurl.com")});
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 12c49c2293421..68c3c6736f887 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -416,6 +416,37 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingGpcLabel}"
+       sub-label="$i18n{steddingGpcSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="cleanLinks"
++      class="hr"
++      pref-key="stedding.privacy.clean_links"
++      label="$i18n{steddingCleanLinksLabel}"
++      sub-label="$i18n{steddingCleanLinksSubLabel}">
++  </settings-toggle-button>
++  <div class="settings-box continuation route-row" id="cleanLinksKeptSites">
++    <div class="flex route-list">
++      <span class="secondary">$i18n{steddingCleanLinksKeptList}</span>
++      ${this.cleanLinksKeptSites_.length === 0 ? html`
++        <span class="secondary" id="cleanLinksKeptEmpty">
++          $i18n{steddingCleanLinksKeptEmpty}
++        </span>` : ''}
++      ${this.cleanLinksKeptSites_.map(site => html`
++        <span class="route-chip clean-links-site">${site}
++          <cr-icon-button class="icon-clear" data-site="${site}"
++              title="$i18n{steddingCleanLinksRemove}"
++              aria-label="${this.removeCleanLinksSiteLabel_(site)}"
++              @click="${this.onRemoveCleanLinksSiteClick_}">
++          </cr-icon-button>
++        </span>`)}
++    </div>
++    <cr-input id="cleanLinksAdd" class="route-add"
++        placeholder="$i18n{steddingCleanLinksAddPlaceholder}"
++        aria-label="$i18n{steddingCleanLinksAddPlaceholder}"
++        .invalid="${!!this.cleanLinksError_}"
++        .errorMessage="${this.cleanLinksError_}"
++        @change="${this.onCleanLinksAddChange_}">
++    </cr-input>
++  </div>
+   <settings-toggle-button
+       id="quietNotifications"
+       class="hr"
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+index 04fc8d2a56554..93cc13fca256f 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+@@ -118,6 +118,8 @@ export class SettingsSteddingPageElement extends
+       hoverDelayOptions_: {type: Array},
+       darkPages_: {type: Object},
+       darkPagesError_: {type: String},
++      cleanLinksKeptSites_: {type: Array},
++      cleanLinksError_: {type: String},
+     };
+   }
+ 
+@@ -142,6 +144,10 @@ export class SettingsSteddingPageElement extends
+   protected accessor darkPages_:
+       SteddingDarkPages = {mode: 'all', except: [], only: []};
+   protected accessor darkPagesError_: string = '';
++  // clean-links Cl9: the kept sites, from the browser; the line under the
++  // add field when what was typed is no site.
++  protected accessor cleanLinksKeptSites_: string[] = [];
++  protected accessor cleanLinksError_: string = '';
+   // settings T11: the rail's pause on hover, 0 for Chromium's own. A name
+   // written into the template is escaped for markup, and the menu draws its
+   // names as plain text, so "Chromium's" read "Chromium&#39;s"; the names
+@@ -182,6 +188,13 @@ export class SettingsSteddingPageElement extends
+     sendWithPromise('steddingGetDarkPages').then((state: unknown) => {
+       this.darkPages_ = state as SteddingDarkPages;
+     });
++    // clean-links Cl9: the kept sites, and every change to them.
++    this.addWebUiListener(
++        'stedding-clean-links-kept-sites-changed',
++        (sites: string[]) => this.cleanLinksKeptSites_ = sites);
++    sendWithPromise('steddingGetCleanLinksKeptSites').then((sites: unknown) => {
++      this.cleanLinksKeptSites_ = sites as string[];
++    });
+   }
+ 
+   // dark-pages Dk12: the list of the mode shown, and its heading.
+@@ -233,6 +246,37 @@ export class SettingsSteddingPageElement extends
+     }
+   }
+ 
++  // clean-links Cl9: the browser cuts what was typed to a host; what is no
++  // site is refused, nothing is written, and the field says why. The list
++  // follows the browser's answer.
++  protected async onCleanLinksAddChange_(e: Event) {
++    const input = e.target as CrInputElement;
++    const typed = input.value.trim();
++    if (!typed) {
++      this.cleanLinksError_ = '';
++      return;
++    }
++    const added =
++        await sendWithPromise('steddingAddCleanLinksKeptSite', typed);
++    if (added) {
++      input.value = '';
++      this.cleanLinksError_ = '';
++    } else {
++      this.cleanLinksError_ =
++          loadTimeData.getString('steddingCleanLinksAddInvalid');
++    }
++  }
++
++  protected removeCleanLinksSiteLabel_(site: string): string {
++    return loadTimeData.getStringF('steddingCleanLinksRemoveSite', site);
++  }
++
++  protected onRemoveCleanLinksSiteClick_(e: Event) {
++    const site = (e.currentTarget as HTMLElement).dataset['site'];
++    if (site) {
++      chrome.send('steddingRemoveCleanLinksKeptSite', [site]);
++    }
++  }
+   protected onSpaceNameChange_(e: Event) {
+     const input = e.target as CrInputElement;
+     chrome.send('steddingRenameSpace', [input.dataset['id'], input.value]);
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 919e440a5c66f..f47f01aaffd51 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -36,13 +36,48 @@ source_set("prefs") {
+   deps = [ "//chrome/common/stedding:web_apps" ]
+ }
+ 
+-# The tracking-parameter strip behind "copy link" (docs/features/copy-link.md).
+-# Pure URL logic: no profile, no window, so it can be tested without either.
++# The tracking-parameter strip behind "copy link" (docs/features/copy-link.md)
++# and clean links (docs/features/clean-links.md): the table, the redirect
++# pages skipped, the kept sites. Pure URL logic: no profile, no window, so it
++# can be tested without either, and history can use it.
+ source_set("clean_link") {
+   public = [ "clean_link.h" ]
+   sources = [ "clean_link.cc" ]
+   public_deps = [ "//url" ]
+-  deps = [ "//base" ]
++  deps = [
++    "//base",
++    "//components/google/core/common",
++    "//components/safe_search_api",
++    "//net",
++  ]
++}
++
++# Clean links (docs/features/clean-links.md): the throttle that opens a page
++# without its tracking parameters, and the profile's switch and kept sites.
++source_set("clean_links") {
++  public = [
++    "clean_links.h",
++    "clean_links_throttle.h",
++  ]
++  sources = [
++    "clean_links.cc",
++    "clean_links_throttle.cc",
++  ]
++  public_deps = [
++    "//services/network/public/cpp",
++    "//third_party/blink/public/common:headers",
++    "//url",
++  ]
++  deps = [
++    ":clean_link",
++    ":prefs",
++    "//base",
++    "//components/prefs",
++    "//net",
++    "//services/network/public/mojom",
++    "//third_party/blink/public/common",
++    "//ui/base",
++  ]
+ }
+ 
+ # Copy link: the clean URL, or a Markdown link with a rich-text twin, and the
+@@ -641,6 +676,7 @@ source_set("unit_tests") {
+     "address_row_rules_unittest.cc",
+     "address_row_unittest.cc",
+     "clean_link_unittest.cc",
++    "clean_links_throttle_unittest.cc",
+     "copy_link_unittest.cc",
+     "dark_pages_unittest.cc",
+     "little_window_unittest.cc",
+@@ -676,6 +712,7 @@ source_set("unit_tests") {
+     "//third_party/boringssl",
+     ":address_row_rules",
+     ":clean_link",
++    ":clean_links",
+     ":copy_link",
+     ":dark_pages",
+     ":little_window",
+diff --git a/chrome/browser/ui/stedding/clean_link.cc b/chrome/browser/ui/stedding/clean_link.cc
+index 1324475fa6e99..16c9afe35aa2d 100644
+--- a/chrome/browser/ui/stedding/clean_link.cc
++++ b/chrome/browser/ui/stedding/clean_link.cc
+@@ -4,12 +4,19 @@
+ 
+ #include "chrome/browser/ui/stedding/clean_link.h"
+ 
++#include <optional>
+ #include <string>
+ #include <string_view>
++#include <utility>
+ #include <vector>
+ 
++#include "base/containers/span.h"
++#include "base/strings/strcat.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
++#include "components/google/core/common/google_util.h"
++#include "components/safe_search_api/safe_search_util.h"
++#include "net/base/url_util.h"
+ #include "url/gurl.h"
+ 
+ namespace stedding {
+@@ -41,6 +48,70 @@ bool IsTracking(std::string_view raw_name, const GURL& url) {
+   return name == kYouTubeShareId && IsYouTube(url);
+ }
+ 
++// clean-links Cl3: how deep a redirect page inside a redirect page is
++// unwrapped.
++constexpr int kMaxUnwrapDepth = 3;
++
++// clean-links Cl3: the parameters that may name a redirect page's target,
++// in the order they are tried.
++constexpr std::string_view kGoogleTarget[] = {"q", "url"};
++constexpr std::string_view kUTarget[] = {"u"};
++constexpr std::string_view kUrlTarget[] = {"url"};
++constexpr std::string_view kQTarget[] = {"q"};
++
++// clean-links Cl3: the parameters of |url| that may name its target, when
++// |url| is a known redirect page; empty otherwise. Hosts are matched exactly,
++// on the scheme's own port, so a page that only looks like one is left
++// alone.
++base::span<const std::string_view> TargetParametersOf(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS() || !url.has_query() || url.has_port()) {
++    return {};
++  }
++  const std::string_view host = url.host();
++  const std::string_view path = url.path();
++  // www.google.<tld>/url: search results carry the target in q=, and the
++  // usual form of a shared result carries an empty q= with the target in
++  // url=, so both are tried.
++  if (path == "/url" && google_util::IsGoogleDomainUrl(
++                             url, google_util::DISALLOW_SUBDOMAIN,
++                             google_util::DISALLOW_NON_STANDARD_PORTS)) {
++    return kGoogleTarget;
++  }
++  if ((host == "l.facebook.com" || host == "lm.facebook.com" ||
++       host == "l.messenger.com") &&
++      path == "/l.php") {
++    return kUTarget;
++  }
++  if (host == "l.instagram.com" && path == "/") {
++    return kUTarget;
++  }
++  if (host == "out.reddit.com") {
++    return kUrlTarget;
++  }
++  if ((host == "www.youtube.com" || host == "youtube.com" ||
++       host == "m.youtube.com") &&
++      path == "/redirect") {
++    return kQTarget;
++  }
++  return {};
++}
++
++// One level of Cl3: the decoded http(s) target of |url| in the first of its
++// target parameters that holds one, or nothing.
++std::optional<GURL> UnwrapOnce(const GURL& url) {
++  for (std::string_view parameter : TargetParametersOf(url)) {
++    std::string value;
++    if (!net::GetValueForKeyInQuery(url, parameter, &value)) {
++      continue;
++    }
++    GURL target(base::TrimWhitespaceASCII(value, base::TRIM_ALL));
++    if (target.is_valid() && target.SchemeIsHTTPOrHTTPS()) {
++      return target;
++    }
++  }
++  return std::nullopt;
++}
++
+ }  // namespace
+ 
+ GURL CleanLink(const GURL& url) {
+@@ -77,4 +148,86 @@ bool HasTrackingParameters(const GURL& url) {
+   return CleanLink(url) != url;
+ }
+ 
++std::optional<GURL> UnwrapRedirectHop(const GURL& url) {
++  std::optional<GURL> target;
++  GURL current = url;
++  for (int depth = 0; depth < kMaxUnwrapDepth; ++depth) {
++    std::optional<GURL> next = UnwrapOnce(current);
++    if (!next) {
++      break;
++    }
++    current = std::move(*next);
++    target = current;
++  }
++  return target;
++}
++
++bool IsKeptSite(const GURL& url, const std::vector<std::string>& kept_sites) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return false;
++  }
++  for (const std::string& site : kept_sites) {
++    if (!site.empty() && url.DomainIs(site)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++GURL CleanLinkForNavigation(const GURL& url,
++                            const std::vector<std::string>& kept_sites) {
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() ||
++      IsKeptSite(url, kept_sites)) {
++    return url;
++  }
++  // Cl3, Cl8: the redirect page is skipped even when its target's site is
++  // kept; the target then keeps what it was given.
++  const GURL target = UnwrapRedirectHop(url).value_or(url);
++  if (IsKeptSite(target, kept_sites)) {
++    return target;
++  }
++  return CleanLink(target);
++}
++
++GURL WithGoogleSafeSearch(const GURL& url) {
++  GURL safe;
++  safe_search_api::ForceGoogleSafeSearch(url, &safe);
++  return safe.is_empty() ? url : safe;
++}
++
++bool IsCleanLinkHop(const GURL& from, const GURL& to) {
++  if (!from.is_valid() || !to.is_valid() || from == to) {
++    return false;
++  }
++  if (to == CleanLink(from)) {
++    return true;
++  }
++  const std::optional<GURL> target = UnwrapRedirectHop(from);
++  if (!target) {
++    return false;
++  }
++  // Cl14: with the ForceGoogleSafeSearch policy on, a redirect page into a
++  // Google search opens the cleaned target with SafeSearch's parameters.
++  const GURL clean_target = CleanLink(*target);
++  return to == *target || to == clean_target ||
++         to == WithGoogleSafeSearch(clean_target);
++}
++
++std::optional<std::string> KeptSiteFromTyped(std::string_view typed) {
++  const std::string_view trimmed =
++      base::TrimWhitespaceASCII(typed, base::TRIM_ALL);
++  if (trimmed.empty() || trimmed.front() == '/') {
++    return std::nullopt;
++  }
++  const GURL url(trimmed.find("://") == std::string_view::npos
++                     ? base::StrCat({"https://", trimmed})
++                     : std::string(trimmed));
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || !url.has_host() ||
++      url.host().empty()) {
++    return std::nullopt;
++  }
++  // The canonical host is already lower-cased.
++  return std::string(url.host());
++}
++
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/clean_link.h b/chrome/browser/ui/stedding/clean_link.h
+index 2832d825b5076..36b3e289d1d3c 100644
+--- a/chrome/browser/ui/stedding/clean_link.h
++++ b/chrome/browser/ui/stedding/clean_link.h
+@@ -5,6 +5,11 @@
+ #ifndef CHROME_BROWSER_UI_STEDDING_CLEAN_LINK_H_
+ #define CHROME_BROWSER_UI_STEDDING_CLEAN_LINK_H_
+ 
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
+ #include "url/gurl.h"
+ 
+ namespace stedding {
+@@ -12,13 +17,50 @@ namespace stedding {
+ // Returns |url| without the query parameters that only exist to track the
+ // reader: the utm_* family, the ad-click ids (fbclid, gclid, ...), the mail
+ // merge ids, and YouTube's share id. Everything else keeps its order and its
+-// encoding. This is used for copying a link (docs/features/copy-link.md L2)
+-// and never for navigation: a page is loaded with the URL it was given.
++// encoding. One table serves copying a link (docs/features/copy-link.md L2)
++// and opening one (docs/features/clean-links.md Cl2): what a copy drops is
++// what an opened page never sends.
+ GURL CleanLink(const GURL& url);
+ 
+ // True when CleanLink(|url|) would remove something.
+ bool HasTrackingParameters(const GURL& url);
+ 
++// clean-links Cl3: the address a known redirect page leads to, when that
++// address is written in its own: Google's /url, Facebook's and Messenger's
++// l.php, Instagram's l., Reddit's out. and YouTube's /redirect. The target is
++// decoded and must be an http or https address; Google's page names it in
++// q= or, when q= is empty or no address, in url=. A wrapper inside a wrapper
++// is unwrapped too, up to three deep. Anything else, a shortener among them
++// (its target is not in its address), gives nullopt.
++std::optional<GURL> UnwrapRedirectHop(const GURL& url);
++
++// clean-links Cl8: whether |url| is on one of |kept_sites| (lower-cased
++// hosts, as KeptSiteFromTyped makes them). An entry covers its subdomains.
++bool IsKeptSite(const GURL& url, const std::vector<std::string>& kept_sites);
++
++// clean-links Cl1, Cl3, Cl8: the address a top-level page opened at |url|
++// loads instead. A page on a kept site is left as it is, a known redirect
++// page is skipped to its target, and the target loses its tracking
++// parameters unless its own site is kept. Returns |url| when nothing changes.
++GURL CleanLinkForNavigation(const GURL& url,
++                            const std::vector<std::string>& kept_sites);
++
++// clean-links Cl14: |url| with Google's SafeSearch parameters, as the
++// ForceGoogleSafeSearch policy asks for them, when |url| is a Google search,
++// home or SafeSearch settings page; |url| itself otherwise.
++GURL WithGoogleSafeSearch(const GURL& url);
++
++// clean-links Cl6: whether the redirect |from| -> |to| is one Stedding made
++// (the tracked address to its clean one, or a redirect page to its target,
++// cleaned or not, with SafeSearch's parameters when the policy added them),
++// so history can leave |from| out.
++bool IsCleanLinkHop(const GURL& from, const GURL& to);
++
++// clean-links Cl9: the kept-site entry for what was typed in Settings, a
++// host or a whole address: its lower-cased host. Nothing for an empty entry,
++// a path alone, or an address that is not http or https (a browser page).
++std::optional<std::string> KeptSiteFromTyped(std::string_view typed);
++
+ }  // namespace stedding
+ 
+ #endif  // CHROME_BROWSER_UI_STEDDING_CLEAN_LINK_H_
+diff --git a/chrome/browser/ui/stedding/clean_link_unittest.cc b/chrome/browser/ui/stedding/clean_link_unittest.cc
+index 07d629604dea0..b634d0e175147 100644
+--- a/chrome/browser/ui/stedding/clean_link_unittest.cc
++++ b/chrome/browser/ui/stedding/clean_link_unittest.cc
+@@ -4,6 +4,10 @@
+ 
+ #include "chrome/browser/ui/stedding/clean_link.h"
+ 
++#include <optional>
++#include <string>
++#include <vector>
++
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "url/gurl.h"
+ 
+@@ -53,5 +57,182 @@ TEST(CleanLinkTest, TrackingParameters) {
+   }
+ }
+ 
++// clean-links Cl3: each known redirect page gives its decoded target, a
++// wrapper inside a wrapper is unwrapped, and the target is taken as written
++// (its own tracking parameters are CleanLink's business).
++TEST(CleanLinkTest, UnwrapsKnownRedirectHops) {
++  struct Case {
++    const char* in;
++    const char* out;
++  };
++  const Case kCases[] = {
++      {"https://www.google.com/url?sa=t&q=https%3A%2F%2Fa.test%2Fp%3Fx%3D1"
++       "&usg=abc",
++       "https://a.test/p?x=1"},
++      {"https://www.google.co.uk/url?url=https://a.test/p&sa=t",
++       "https://a.test/p"},
++      {"https://google.com/url?q=http://a.test/", "http://a.test/"},
++      // The usual form of a shared result: an empty q= and the target in
++      // url=.
++      {"https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&url="
++       "https%3A%2F%2Fa.test%2Fs%3Fk%3D1&usg=abc",
++       "https://a.test/s?k=1"},
++      // A q= that is no address gives way to url=; a q= that is one wins.
++      {"https://www.google.com/url?q=hello&url=https%3A%2F%2Fa.test%2Fu",
++       "https://a.test/u"},
++      {"https://www.google.com/url?q=https%3A%2F%2Fa.test%2Fq&url=https%3A%2F"
++       "%2Fb.test%2Fu",
++       "https://a.test/q"},
++      {"https://l.facebook.com/l.php?u=https%3A%2F%2Fa.test%2F%3Futm_source"
++       "%3Dfb&h=xyz",
++       "https://a.test/?utm_source=fb"},
++      {"https://lm.facebook.com/l.php?u=https%3A%2F%2Fa.test%2F",
++       "https://a.test/"},
++      {"https://l.messenger.com/l.php?u=https%3A%2F%2Fa.test%2Fm",
++       "https://a.test/m"},
++      {"https://l.instagram.com/?u=https%3A%2F%2Fa.test%2Fi&e=1",
++       "https://a.test/i"},
++      {"https://out.reddit.com/t3_abc?url=https%3A%2F%2Fa.test%2Fr&token=1",
++       "https://a.test/r"},
++      {"https://www.youtube.com/redirect?event=video&q=https%3A%2F%2Fa.test"
++       "%2Fy",
++       "https://a.test/y"},
++      // Nested: Google's /url around Facebook's l.php around the target.
++      {"https://www.google.com/url?q=https%3A%2F%2Fl.facebook.com%2Fl.php%3Fu"
++       "%3Dhttps%253A%252F%252Fa.test%252Fn",
++       "https://a.test/n"},
++  };
++  for (const Case& row : kCases) {
++    SCOPED_TRACE(row.in);
++    const std::optional<GURL> target = UnwrapRedirectHop(GURL(row.in));
++    ASSERT_TRUE(target);
++    EXPECT_EQ(GURL(row.out), *target);
++  }
++}
++
++// clean-links Cl3: a shortener is not skipped (its target is not in its
++// address), nor a wrapper whose target is missing or is no web address, nor
++// a page on a host or path that is not a known wrapper.
++TEST(CleanLinkTest, LeavesOtherAddressesAlone) {
++  const char* const kCases[] = {
++      "https://t.co/abc",
++      "https://bit.ly/abc?url=https://a.test/",
++      "https://www.google.com/url?sa=t",
++      "https://www.google.com/url?q=&url=&sa=t",
++      "https://www.google.com/url?q=&url=javascript:alert(1)",
++      "https://www.google.com/url?q=javascript:alert(1)",
++      "https://www.google.com/url?q=file:///etc/passwd",
++      "https://www.google.com/url?q=data:text/html,hi",
++      "https://www.google.com/url?q=not%20an%20address",
++      "https://www.google.com/search?q=https://a.test/",
++      "https://mail.google.com/url?q=https://a.test/",
++      "https://www.google.com:8443/url?q=https://a.test/",
++      "https://l.facebook.com/other.php?u=https://a.test/",
++      "https://www.facebook.com/l.php?u=https://a.test/",
++      "https://l.instagram.com/p/abc?u=https://a.test/",
++      "https://www.youtube.com/watch?v=abc&q=https://a.test/",
++      "https://a.test/url?q=https://b.test/",
++      "ftp://www.google.com/url?q=https://a.test/",
++  };
++  for (const char* in : kCases) {
++    SCOPED_TRACE(in);
++    EXPECT_FALSE(UnwrapRedirectHop(GURL(in)));
++    EXPECT_EQ(GURL(in), CleanLinkForNavigation(GURL(in), {}));
++  }
++}
++
++// clean-links Cl1, Cl3, Cl8: the address a page opens at. A kept site's page
++// is left alone, wrapper and all; a wrapper into a kept site is skipped but
++// its target keeps its parameters.
++TEST(CleanLinkTest, CleansTheAddressAPageOpensAt) {
++  const std::vector<std::string> kNone;
++  const std::vector<std::string> kShop = {"shop.test"};
++  EXPECT_EQ(GURL("https://a.test/p?q=1#top"),
++            CleanLinkForNavigation(
++                GURL("https://a.test/p?utm_source=x&q=1&fbclid=y#top"), kNone));
++  EXPECT_EQ(GURL("https://a.test/p"),
++            CleanLinkForNavigation(
++                GURL("https://www.google.com/url?q=https%3A%2F%2Fa.test%2Fp%3F"
++                     "utm_source%3Dx"),
++                kNone));
++  // The site and its subdomains are kept.
++  EXPECT_EQ(GURL("https://shop.test/?utm_source=x"),
++            CleanLinkForNavigation(GURL("https://shop.test/?utm_source=x"),
++                                   kShop));
++  EXPECT_EQ(GURL("https://www.shop.test/?gclid=1"),
++            CleanLinkForNavigation(GURL("https://www.shop.test/?gclid=1"),
++                                   kShop));
++  // A host that only ends in the same letters is not the kept site.
++  EXPECT_EQ(GURL("https://myshop.test/"),
++            CleanLinkForNavigation(GURL("https://myshop.test/?gclid=1"),
++                                   kShop));
++  // A kept target: the wrapper is skipped, the parameters stay.
++  EXPECT_EQ(GURL("https://shop.test/?gclid=1"),
++            CleanLinkForNavigation(
++                GURL("https://www.google.com/url?q=https%3A%2F%2Fshop.test%2F"
++                     "%3Fgclid%3D1"),
++                kShop));
++  // A kept wrapper: nothing changes.
++  EXPECT_EQ(GURL("https://www.google.com/url?q=https://a.test/?utm_source=x"),
++            CleanLinkForNavigation(
++                GURL("https://www.google.com/url?q=https://a.test/"
++                     "?utm_source=x"),
++                {"google.com"}));
++  EXPECT_FALSE(IsKeptSite(GURL("chrome://settings"), {"settings"}));
++  EXPECT_FALSE(IsKeptSite(GURL("https://a.test/"), {""}));
++}
++
++// clean-links Cl6: history knows Stedding's own hop, and only that one.
++TEST(CleanLinkTest, RecognisesItsOwnHop) {
++  const GURL tracked("https://a.test/p?utm_source=x&q=1");
++  const GURL clean("https://a.test/p?q=1");
++  const GURL wrapper(
++      "https://www.google.com/url?q=https%3A%2F%2Fb.test%2F%3Fgclid%3D1");
++  EXPECT_TRUE(IsCleanLinkHop(tracked, clean));
++  EXPECT_TRUE(IsCleanLinkHop(wrapper, GURL("https://b.test/")));
++  // A wrapper into a kept site: the target as written.
++  EXPECT_TRUE(IsCleanLinkHop(wrapper, GURL("https://b.test/?gclid=1")));
++  EXPECT_FALSE(IsCleanLinkHop(clean, clean));
++  EXPECT_FALSE(IsCleanLinkHop(clean, tracked));
++  EXPECT_FALSE(IsCleanLinkHop(GURL("http://a.test/"), GURL("https://a.test/")));
++  EXPECT_FALSE(IsCleanLinkHop(tracked, GURL("https://c.test/")));
++  // Cl14: a redirect page into a Google search, opened with SafeSearch's
++  // parameters under the policy.
++  EXPECT_TRUE(IsCleanLinkHop(
++      GURL("https://www.google.com/url?q=https%3A%2F%2Fwww.google.com%2F"
++           "search%3Fq%3Dy%26utm_source%3Dz"),
++      GURL("https://www.google.com/search?q=y&safe=active&ssui=on")));
++}
++
++// clean-links Cl14: SafeSearch's parameters go on a Google search, home or
++// SafeSearch settings page, at the end, once; anything else is left alone.
++TEST(CleanLinkTest, AddsGoogleSafeSearchToGoogleSearchOnly) {
++  EXPECT_EQ(GURL("https://www.google.com/search?q=x&safe=active&ssui=on"),
++            WithGoogleSafeSearch(GURL("https://www.google.com/search?q=x")));
++  EXPECT_EQ(
++      GURL("https://www.google.com/search?q=x&safe=active&ssui=on"),
++      WithGoogleSafeSearch(
++          GURL("https://www.google.com/search?q=x&safe=active&ssui=on")));
++  EXPECT_EQ(GURL("https://www.google.com/url?q=https://a.test/"),
++            WithGoogleSafeSearch(
++                GURL("https://www.google.com/url?q=https://a.test/")));
++  EXPECT_EQ(GURL("https://a.test/search?q=x"),
++            WithGoogleSafeSearch(GURL("https://a.test/search?q=x")));
++}
++
++// clean-links Cl9: what Settings stores for what was typed.
++TEST(CleanLinkTest, AKeptSiteIsAHost) {
++  EXPECT_EQ("shop.example", KeptSiteFromTyped("https://Shop.Example/x?y"));
++  EXPECT_EQ("shop.example", KeptSiteFromTyped("  SHOP.example  "));
++  EXPECT_EQ("www.shop.example", KeptSiteFromTyped("www.shop.example/path"));
++  EXPECT_EQ("localhost", KeptSiteFromTyped("http://localhost:8080/"));
++  EXPECT_FALSE(KeptSiteFromTyped(""));
++  EXPECT_FALSE(KeptSiteFromTyped("   "));
++  EXPECT_FALSE(KeptSiteFromTyped("/just/a/path"));
++  EXPECT_FALSE(KeptSiteFromTyped("chrome://settings"));
++  EXPECT_FALSE(KeptSiteFromTyped("file:///tmp/a.html"));
++  EXPECT_FALSE(KeptSiteFromTyped("about:blank"));
++}
++
+ }  // namespace
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/clean_links.cc b/chrome/browser/ui/stedding/clean_links.cc
+new file mode 100644
+index 0000000000000..37f9eeff13945
+--- /dev/null
++++ b/chrome/browser/ui/stedding/clean_links.cc
+@@ -0,0 +1,49 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/clean_links.h"
++
++#include <string>
++#include <vector>
++
++#include "base/values.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++
++namespace stedding {
++
++bool CleanLinksOn(const PrefService& service) {
++  return service.GetBoolean(prefs::kCleanLinks);
++}
++
++std::vector<std::string> CleanLinksKeptSites(const PrefService& service) {
++  std::vector<std::string> sites;
++  for (const base::Value& entry :
++       service.GetList(prefs::kCleanLinksKeptSites)) {
++    if (entry.is_string() && !entry.GetString().empty()) {
++      sites.push_back(entry.GetString());
++    }
++  }
++  return sites;
++}
++
++void AddCleanLinksKeptSite(PrefService& service, const std::string& site) {
++  if (site.empty() ||
++      service.GetList(prefs::kCleanLinksKeptSites).contains(site)) {
++    return;
++  }
++  ScopedListPrefUpdate update(service, prefs::kCleanLinksKeptSites);
++  update->Append(site);
++}
++
++void RemoveCleanLinksKeptSite(PrefService& service, const std::string& site) {
++  if (!service.GetList(prefs::kCleanLinksKeptSites).contains(site)) {
++    return;
++  }
++  ScopedListPrefUpdate update(service, prefs::kCleanLinksKeptSites);
++  update->EraseValue(base::Value(site));
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/clean_links.h b/chrome/browser/ui/stedding/clean_links.h
+new file mode 100644
+index 0000000000000..359e285c7290a
+--- /dev/null
++++ b/chrome/browser/ui/stedding/clean_links.h
+@@ -0,0 +1,35 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_CLEAN_LINKS_H_
++#define CHROME_BROWSER_UI_STEDDING_CLEAN_LINKS_H_
++
++#include <string>
++#include <vector>
++
++class PrefService;
++
++namespace stedding {
++
++// Clean links (docs/features/clean-links.md): a profile's switch and its
++// list of kept sites. The URL rules themselves are in clean_link.h, which
++// takes no profile.
++
++// Cl7: "Remove tracking from links you open", on by default.
++bool CleanLinksOn(const PrefService& service);
++
++// Cl8: the sites whose pages open with their parameters, as stored: lower-
++// cased hosts, each covering its subdomains. Entries that are not strings
++// are skipped.
++std::vector<std::string> CleanLinksKeptSites(const PrefService& service);
++
++// Cl9: adds |site| (already made by KeptSiteFromTyped) unless it is listed.
++void AddCleanLinksKeptSite(PrefService& service, const std::string& site);
++
++// Cl9: removes every entry equal to |site|.
++void RemoveCleanLinksKeptSite(PrefService& service, const std::string& site);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_CLEAN_LINKS_H_
+diff --git a/chrome/browser/ui/stedding/clean_links_throttle.cc b/chrome/browser/ui/stedding/clean_links_throttle.cc
+new file mode 100644
+index 0000000000000..cc556e83913d0
+--- /dev/null
++++ b/chrome/browser/ui/stedding/clean_links_throttle.cc
+@@ -0,0 +1,143 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/clean_links_throttle.h"
++
++#include <memory>
++#include <optional>
++#include <utility>
++
++#include "base/memory/ptr_util.h"
++#include "chrome/browser/ui/stedding/clean_link.h"
++#include "chrome/browser/ui/stedding/clean_links.h"
++#include "components/prefs/pref_service.h"
++#include "net/http/http_request_headers.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "ui/base/page_transition_types.h"
++#include "url/gurl.h"
++#include "url/origin.h"
++
++namespace stedding {
++
++namespace {
++
++// Cl4, Cl5: whether `request` is the first address of a top-level GET the
++// user opened, the only request this feature touches.
++bool IsAnOpenedPage(const network::ResourceRequest& request,
++                    std::optional<int64_t> navigation_id) {
++  // A navigation's own loader, of the outermost page: never a subresource,
++  // a worker, a frame inside a page, a fenced frame, or a preload made
++  // without a navigation.
++  if (!navigation_id ||
++      request.destination != network::mojom::RequestDestination::kDocument ||
++      !request.is_outermost_main_frame) {
++    return false;
++  }
++  if (request.method != net::HttpRequestHeaders::kGetMethod ||
++      !request.url.SchemeIsHTTPOrHTTPS()) {
++    return false;
++  }
++  // Cl5: a loader made again after a redirect carries the chain so far; a
++  // later leg is the server's address, followed as given, so a server that
++  // puts a parameter back gets it and nothing loops.
++  if (request.navigation_redirect_chain.size() > 1) {
++    return false;
++  }
++  // Cl4: a reload, a restored page (which loads as a reload), back and
++  // forward show the page as it was; a form, GET forms too, sends what the
++  // page asked for.
++  const ui::PageTransition transition =
++      ui::PageTransitionFromInt(request.transition_type);
++  if (request.is_reload_navigation ||
++      ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD) ||
++      ui::PageTransitionCoreTypeIs(transition,
++                                   ui::PAGE_TRANSITION_FORM_SUBMIT) ||
++      (transition & ui::PAGE_TRANSITION_FORWARD_BACK)) {
++    return false;
++  }
++  return true;
++}
++
++// Cl13: whether the page the tab shows, at `page_url`, sent itself to its own
++// address (the same origin and path) with no click behind it: a meta
++// refresh, a script redirect or a later script that puts a tracking
++// parameter on its own address. That is the page's own choice, like a
++// server's redirect (Cl5); cleaning it would load the page again, which
++// asks again, with no end.
++bool IsAPageAskingForItsOwnParameter(const network::ResourceRequest& request,
++                                     const GURL& page_url) {
++  // A navigation the browser started (a typed address, a bookmark, another
++  // app) has no initiator; a click gives the request a user gesture.
++  if (!request.request_initiator || request.has_user_gesture ||
++      !page_url.is_valid()) {
++    return false;
++  }
++  return url::IsSameOriginWith(request.url, page_url) &&
++         request.url.path() == page_url.path();
++}
++
++}  // namespace
++
++// static
++std::unique_ptr<blink::URLLoaderThrottle> CleanLinksThrottle::MaybeCreate(
++    const network::ResourceRequest& request,
++    std::optional<int64_t> navigation_id,
++    const PrefService& prefs,
++    const GURL& page_url,
++    bool force_google_safe_search) {
++  if (!IsAnOpenedPage(request, navigation_id) || !CleanLinksOn(prefs) ||
++      IsAPageAskingForItsOwnParameter(request, page_url)) {
++    return nullptr;
++  }
++  // Cl14: Google's throttle adds SafeSearch's parameters to this address at
++  // the start; a loader takes one change of address there, so this one
++  // stands aside.
++  if (force_google_safe_search &&
++      WithGoogleSafeSearch(request.url) != request.url) {
++    return nullptr;
++  }
++  GURL clean = CleanLinkForNavigation(request.url, CleanLinksKeptSites(prefs));
++  // Cl14: a redirect page skipped into a Google search would never pass
++  // Google's throttle, so the policy's parameters are added here.
++  if (force_google_safe_search) {
++    clean = WithGoogleSafeSearch(clean);
++  }
++  if (clean == request.url || !clean.SchemeIsHTTPOrHTTPS()) {
++    return nullptr;
++  }
++  return base::WrapUnique(
++      new CleanLinksThrottle(request.url, std::move(clean)));
++}
++
++CleanLinksThrottle::CleanLinksThrottle(GURL from, GURL to)
++    : from_(std::move(from)), to_(std::move(to)) {}
++
++CleanLinksThrottle::~CleanLinksThrottle() = default;
++
++void CleanLinksThrottle::DetachFromCurrentSequence() {
++  // The throttle holds only two addresses decided on the UI thread.
++}
++
++void CleanLinksThrottle::WillStartRequest(network::ResourceRequest* request,
++                                          bool* defer) {
++  // Cl1: the loader sees the new address and makes the internal redirect;
++  // nothing has gone to the network yet. The loader hands every throttle the
++  // address the request was made for, so this matches unless the loader was
++  // made for another request.
++  if (request->url == from_) {
++    request->url = to_;
++  }
++}
++
++void CleanLinksThrottle::WillRestartWithURLReset(GURL* url) {
++  // Cl12: a restart goes back to the address the request was made for, which
++  // is the tracked one; it asks for the clean one again instead, so the
++  // server never receives the other and the page commits clean.
++  if (*url == from_) {
++    *url = to_;
++  }
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/clean_links_throttle.h b/chrome/browser/ui/stedding/clean_links_throttle.h
+new file mode 100644
+index 0000000000000..d332afb19270d
+--- /dev/null
++++ b/chrome/browser/ui/stedding/clean_links_throttle.h
+@@ -0,0 +1,80 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_CLEAN_LINKS_THROTTLE_H_
++#define CHROME_BROWSER_UI_STEDDING_CLEAN_LINKS_THROTTLE_H_
++
++#include <cstdint>
++#include <memory>
++#include <optional>
++
++#include "third_party/blink/public/common/loader/url_loader_throttle.h"
++#include "url/gurl.h"
++
++class PrefService;
++
++namespace network {
++struct ResourceRequest;
++}  // namespace network
++
++namespace stedding {
++
++// Clean links (docs/features/clean-links.md Cl1, Cl3): a page the user opens
++// loads without its tracking parameters, and a known redirect page is
++// skipped to the address it carries. The throttle rewrites the request's URL
++// in WillStartRequest, before anything is sent; the loader turns that into
++// an internal 307, so the address field, the page's own location and history
++// see the clean address, and the site's server never sees the other one.
++// When the loader later restarts at the address the request was made for (a
++// site that asks for client hints with Critical-CH, a language restart), the
++// throttle turns that restart to the clean address too (Cl12).
++//
++// Made on the UI thread for each navigation's loader, it decides there,
++// from the request and the profile's preferences, and holds the address it
++// will open; it reads nothing later, so it may move to another sequence.
++class CleanLinksThrottle : public blink::URLLoaderThrottle {
++ public:
++  // A throttle for `request` when it is a navigation the user's link,
++  // typed address, bookmark or other app opens and cleaning changes its
++  // address; null otherwise. Never for (Cl4) a subresource, a worker, a
++  // frame inside a page, a POST, a form, a reload or a restored page, back
++  // or forward, anything not http or https; nor (Cl5) a redirect's leg,
++  // which a server chose: only the first address of a navigation is
++  // cleaned; nor (Cl13) a navigation the page at `page_url` started with no
++  // click behind it to its own address, which the page chose. Null too
++  // while the setting is off (Cl7), for a kept site (Cl8), and (Cl14) for a
++  // Google search page when `force_google_safe_search` is on, since Google's
++  // own throttle changes that address and a loader takes one change only.
++  //
++  // `page_url` is the address the tab shows as the navigation starts (empty
++  // for a new tab); `force_google_safe_search` is the profile's
++  // ForceGoogleSafeSearch policy.
++  static std::unique_ptr<blink::URLLoaderThrottle> MaybeCreate(
++      const network::ResourceRequest& request,
++      std::optional<int64_t> navigation_id,
++      const PrefService& prefs,
++      const GURL& page_url,
++      bool force_google_safe_search);
++
++  CleanLinksThrottle(const CleanLinksThrottle&) = delete;
++  CleanLinksThrottle& operator=(const CleanLinksThrottle&) = delete;
++  ~CleanLinksThrottle() override;
++
++  // blink::URLLoaderThrottle:
++  void DetachFromCurrentSequence() override;
++  void WillStartRequest(network::ResourceRequest* request,
++                        bool* defer) override;
++  void WillRestartWithURLReset(GURL* url) override;
++
++ private:
++  CleanLinksThrottle(GURL from, GURL to);
++
++  // The address the request was made for, and the one it opens instead.
++  const GURL from_;
++  const GURL to_;
++};
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_CLEAN_LINKS_THROTTLE_H_
+diff --git a/chrome/browser/ui/stedding/clean_links_throttle_unittest.cc b/chrome/browser/ui/stedding/clean_links_throttle_unittest.cc
+new file mode 100644
+index 0000000000000..d6fbfecdfec98
+--- /dev/null
++++ b/chrome/browser/ui/stedding/clean_links_throttle_unittest.cc
+@@ -0,0 +1,330 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/clean_links_throttle.h"
++
++#include <cstdint>
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "chrome/browser/ui/stedding/clean_links.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/sync_preferences/testing_pref_service_syncable.h"
++#include "net/http/http_request_headers.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/mojom/fetch_api.mojom-shared.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/loader/url_loader_throttle.h"
++#include "ui/base/page_transition_types.h"
++#include "url/gurl.h"
++#include "url/origin.h"
++
++namespace stedding {
++namespace {
++
++constexpr std::optional<int64_t> kNavigation = 7;
++
++class CleanLinksThrottleTest : public testing::Test {
++ protected:
++  CleanLinksThrottleTest() {
++    prefs::RegisterProfilePrefs(prefs_.registry());
++  }
++
++  // A link clicked in the page: the first leg of a top-level GET.
++  static network::ResourceRequest LinkTo(const std::string& url) {
++    network::ResourceRequest request;
++    request.url = GURL(url);
++    request.method = net::HttpRequestHeaders::kGetMethod;
++    request.destination = network::mojom::RequestDestination::kDocument;
++    request.is_outermost_main_frame = true;
++    request.transition_type = ui::PAGE_TRANSITION_LINK;
++    request.navigation_redirect_chain.push_back(request.url);
++    return request;
++  }
++
++  // A navigation the page at `page` started by script, with no click
++  // behind it: a meta refresh or a script redirect.
++  static network::ResourceRequest StartedByThePage(const std::string& url,
++                                                   const GURL& page) {
++    network::ResourceRequest request = LinkTo(url);
++    request.request_initiator = url::Origin::Create(page);
++    request.has_user_gesture = false;
++    request.transition_type =
++        ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_CLIENT_REDIRECT;
++    return request;
++  }
++
++  // The throttle for `request`, made as the browser makes it, with the tab
++  // showing `page_url_` and the SafeSearch policy at `force_safe_search_`.
++  std::unique_ptr<blink::URLLoaderThrottle> Make(
++      const network::ResourceRequest& request,
++      std::optional<int64_t> navigation_id = kNavigation) {
++    return CleanLinksThrottle::MaybeCreate(request, navigation_id, prefs_,
++                                           page_url_, force_safe_search_);
++  }
++
++  // What the request asks for once the throttle has run, or its own address
++  // when no throttle is made.
++  GURL Opened(network::ResourceRequest request,
++              std::optional<int64_t> navigation_id = kNavigation) {
++    std::unique_ptr<blink::URLLoaderThrottle> throttle =
++        Make(request, navigation_id);
++    if (!throttle) {
++      return request.url;
++    }
++    bool defer = false;
++    throttle->WillStartRequest(&request, &defer);
++    EXPECT_FALSE(defer) << "clean links never waits";
++    return request.url;
++  }
++
++  sync_preferences::TestingPrefServiceSyncable prefs_;
++  // The address the tab shows as the navigation starts; empty for a new tab.
++  GURL page_url_;
++  bool force_safe_search_ = false;
++};
++
++// Cl1, Cl7: on by default, a link opens without its tracking parameters;
++// the rest of the address keeps its order, encoding and fragment.
++TEST_F(CleanLinksThrottleTest, StripsATopLevelGet) {
++  ASSERT_TRUE(CleanLinksOn(prefs_));
++  EXPECT_EQ(GURL("https://a.test/p?q=a%20b&page=2#top"),
++            Opened(LinkTo("https://a.test/p?utm_source=x&q=a%20b&fbclid=y"
++                          "&page=2#top")));
++  // A typed address and a bookmark go the same way.
++  network::ResourceRequest typed = LinkTo("http://a.test/?gclid=1");
++  typed.transition_type =
++      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR;
++  EXPECT_EQ(GURL("http://a.test/"), Opened(typed));
++  network::ResourceRequest bookmark = LinkTo("https://a.test/?utm_medium=b");
++  bookmark.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
++  EXPECT_EQ(GURL("https://a.test/"), Opened(bookmark));
++  // A clean address needs no throttle at all.
++  EXPECT_FALSE(Make(LinkTo("https://a.test/?q=1")));
++}
++
++// Cl3: a known redirect page is skipped to its target, cleaned in the same
++// step; the wrapper's address is never requested.
++TEST_F(CleanLinksThrottleTest, SkipsARedirectPage) {
++  EXPECT_EQ(GURL("https://b.test/article"),
++            Opened(LinkTo("https://www.google.com/url?sa=t&q=https%3A%2F%2F"
++                          "b.test%2Farticle%3Futm_source%3Dgoogle")));
++  // A shortener is asked, as the user asked it.
++  EXPECT_EQ(GURL("https://t.co/abc"), Opened(LinkTo("https://t.co/abc")));
++}
++
++// Cl4: only the outermost page of a navigation is touched.
++TEST_F(CleanLinksThrottleTest, OnlyTopLevelDocumentsAreCleaned) {
++  const std::string tracked = "https://a.test/p?utm_source=x";
++  EXPECT_FALSE(Make(LinkTo(tracked), std::nullopt))
++      << "no navigation: a preload or a fetch of the browser's own";
++
++  network::ResourceRequest image = LinkTo(tracked);
++  image.destination = network::mojom::RequestDestination::kImage;
++  EXPECT_FALSE(Make(image));
++
++  network::ResourceRequest worker = LinkTo(tracked);
++  worker.destination = network::mojom::RequestDestination::kServiceWorker;
++  EXPECT_FALSE(Make(worker));
++
++  network::ResourceRequest frame = LinkTo(tracked);
++  frame.destination = network::mojom::RequestDestination::kIframe;
++  frame.is_outermost_main_frame = false;
++  EXPECT_FALSE(Make(frame));
++
++  network::ResourceRequest fenced = LinkTo(tracked);
++  fenced.destination = network::mojom::RequestDestination::kFencedframe;
++  fenced.is_outermost_main_frame = false;
++  EXPECT_FALSE(Make(fenced));
++}
++
++// Cl4: a POST, a form (GET forms too), a reload, a restored page, back and
++// forward, and anything not http or https keep their address.
++TEST_F(CleanLinksThrottleTest, LeavesPostsFormsReloadsAndHistoryAlone) {
++  const std::string tracked = "https://a.test/p?utm_source=x";
++
++  network::ResourceRequest post = LinkTo(tracked);
++  post.method = net::HttpRequestHeaders::kPostMethod;
++  EXPECT_EQ(GURL(tracked), Opened(post));
++
++  network::ResourceRequest form = LinkTo(tracked);
++  form.transition_type = ui::PAGE_TRANSITION_FORM_SUBMIT;
++  EXPECT_EQ(GURL(tracked), Opened(form));
++
++  network::ResourceRequest reload = LinkTo(tracked);
++  reload.transition_type = ui::PAGE_TRANSITION_RELOAD;
++  EXPECT_EQ(GURL(tracked), Opened(reload));
++
++  network::ResourceRequest reloaded_link = LinkTo(tracked);
++  reloaded_link.is_reload_navigation = true;
++  EXPECT_EQ(GURL(tracked), Opened(reloaded_link));
++
++  network::ResourceRequest back = LinkTo(tracked);
++  back.transition_type =
++      ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_FORWARD_BACK;
++  EXPECT_EQ(GURL(tracked), Opened(back));
++
++  network::ResourceRequest file = LinkTo("file:///tmp/a.html?utm_source=x");
++  EXPECT_EQ(GURL("file:///tmp/a.html?utm_source=x"), Opened(file));
++}
++
++// Cl5: a loader made again for a redirect's leg leaves the server's address
++// as it is, so a server that puts a parameter back gets it, and a redirect
++// that adds one is followed as given.
++TEST_F(CleanLinksThrottleTest, AServerThatAsksForTheParameterBackGetsIt) {
++  network::ResourceRequest leg = LinkTo("https://a.test/p?utm_source=x");
++  leg.navigation_redirect_chain = {GURL("https://a.test/p?utm_source=x"),
++                                   GURL("https://a.test/p"),
++                                   GURL("https://a.test/p?utm_source=x")};
++  EXPECT_EQ(GURL("https://a.test/p?utm_source=x"), Opened(leg));
++}
++
++// Cl7: off, every page opens as it was written, redirect pages included; the
++// next navigation reads the change.
++TEST_F(CleanLinksThrottleTest, TheSettingOffLeavesEveryLinkAlone) {
++  prefs_.SetBoolean(prefs::kCleanLinks, false);
++  EXPECT_EQ(GURL("https://a.test/?utm_source=x"),
++            Opened(LinkTo("https://a.test/?utm_source=x")));
++  EXPECT_EQ(GURL("https://www.google.com/url?q=https://b.test/"),
++            Opened(LinkTo("https://www.google.com/url?q=https://b.test/")));
++  prefs_.SetBoolean(prefs::kCleanLinks, true);
++  EXPECT_EQ(GURL("https://a.test/"),
++            Opened(LinkTo("https://a.test/?utm_source=x")));
++}
++
++// Cl8: a kept site and its subdomains open with their parameters; another
++// site is still cleaned.
++TEST_F(CleanLinksThrottleTest, AKeptSiteIsLeftAlone) {
++  AddCleanLinksKeptSite(prefs_, "shop.test");
++  EXPECT_EQ(GURL("https://shop.test/?gclid=1"),
++            Opened(LinkTo("https://shop.test/?gclid=1")));
++  EXPECT_EQ(GURL("https://www.shop.test/?gclid=1"),
++            Opened(LinkTo("https://www.shop.test/?gclid=1")));
++  EXPECT_EQ(GURL("https://other.test/"),
++            Opened(LinkTo("https://other.test/?gclid=1")));
++  RemoveCleanLinksKeptSite(prefs_, "shop.test");
++  EXPECT_EQ(GURL("https://shop.test/"),
++            Opened(LinkTo("https://shop.test/?gclid=1")));
++}
++
++// Cl8: a redirect page into a kept site is skipped, and the target keeps its
++// parameters.
++TEST_F(CleanLinksThrottleTest, AKeptTargetIsUnwrappedButNotCleaned) {
++  AddCleanLinksKeptSite(prefs_, "shop.test");
++  EXPECT_EQ(GURL("https://shop.test/?gclid=1"),
++            Opened(LinkTo("https://www.google.com/url?q=https%3A%2F%2F"
++                          "shop.test%2F%3Fgclid%3D1")));
++}
++
++// Cl8: a kept redirect page is opened, as written.
++TEST_F(CleanLinksThrottleTest, AKeptWrapperIsNotUnwrapped) {
++  AddCleanLinksKeptSite(prefs_, "google.com");
++  const std::string wrapper =
++      "https://www.google.com/url?q=https%3A%2F%2Fb.test%2F%3Fgclid%3D1";
++  EXPECT_EQ(GURL(wrapper), Opened(LinkTo(wrapper)));
++}
++
++// Cl9: the list holds each site once, and removing takes it out.
++TEST_F(CleanLinksThrottleTest, TheKeptListHoldsEachSiteOnce) {
++  EXPECT_TRUE(CleanLinksKeptSites(prefs_).empty());
++  AddCleanLinksKeptSite(prefs_, "shop.test");
++  AddCleanLinksKeptSite(prefs_, "shop.test");
++  AddCleanLinksKeptSite(prefs_, "");
++  EXPECT_EQ(std::vector<std::string>({"shop.test"}),
++            CleanLinksKeptSites(prefs_));
++  RemoveCleanLinksKeptSite(prefs_, "shop.test");
++  EXPECT_TRUE(CleanLinksKeptSites(prefs_).empty());
++}
++
++// Cl12: a restart at the address the request was made for (Critical-CH, a
++// language restart) asks for the clean address again; any other address the
++// loader restarts at is left as it is.
++TEST_F(CleanLinksThrottleTest, ARestartAsksForTheCleanAddressAgain) {
++  const GURL tracked("https://a.test/p?utm_source=x&q=1");
++  std::unique_ptr<blink::URLLoaderThrottle> throttle =
++      Make(LinkTo(tracked.spec()));
++  ASSERT_TRUE(throttle);
++  GURL restart = tracked;
++  throttle->WillRestartWithURLReset(&restart);
++  EXPECT_EQ(GURL("https://a.test/p?q=1"), restart);
++
++  GURL other("https://b.test/?utm_source=y");
++  throttle->WillRestartWithURLReset(&other);
++  EXPECT_EQ(GURL("https://b.test/?utm_source=y"), other);
++
++  // A skipped redirect page restarts at its target, never at itself.
++  std::unique_ptr<blink::URLLoaderThrottle> unwrap = Make(
++      LinkTo("https://www.google.com/url?q=https%3A%2F%2Fb.test%2Fr%3F"
++             "gclid%3D1"));
++  ASSERT_TRUE(unwrap);
++  GURL wrapper(
++      "https://www.google.com/url?q=https%3A%2F%2Fb.test%2Fr%3Fgclid%3D1");
++  unwrap->WillRestartWithURLReset(&wrapper);
++  EXPECT_EQ(GURL("https://b.test/r"), wrapper);
++}
++
++// Cl13: a page that sends itself, with no click behind it, to its own
++// address with a tracking parameter gets it, so it does not load forever.
++// A click, another page, another path or a navigation the browser started
++// is still cleaned.
++TEST_F(CleanLinksThrottleTest, APageThatAsksForItsOwnParameterGetsIt) {
++  page_url_ = GURL("https://a.test/p?n=1");
++  const std::string own = "https://a.test/p?utm_source=x&n=1";
++  EXPECT_EQ(GURL(own), Opened(StartedByThePage(own, page_url_)));
++
++  // A script that runs after the page has loaded makes no client redirect;
++  // the same.
++  network::ResourceRequest later = StartedByThePage(own, page_url_);
++  later.transition_type = ui::PAGE_TRANSITION_LINK;
++  EXPECT_EQ(GURL(own), Opened(later));
++
++  network::ResourceRequest clicked = StartedByThePage(own, page_url_);
++  clicked.has_user_gesture = true;
++  EXPECT_EQ(GURL("https://a.test/p?n=1"), Opened(clicked));
++
++  EXPECT_EQ(GURL("https://a.test/q?n=1"),
++            Opened(StartedByThePage("https://a.test/q?utm_source=x&n=1",
++                                    page_url_)));
++  EXPECT_EQ(GURL("https://b.test/p"),
++            Opened(StartedByThePage("https://b.test/p?utm_source=x",
++                                    page_url_)));
++
++  // Typed again in the address field: the browser started it.
++  EXPECT_EQ(GURL("https://a.test/p?n=1"), Opened(LinkTo(own)));
++
++  // A new tab shows nothing yet.
++  page_url_ = GURL();
++  EXPECT_EQ(GURL("https://a.test/p?n=1"),
++            Opened(StartedByThePage(own, GURL("https://a.test/p"))));
++}
++
++// Cl14: with the ForceGoogleSafeSearch policy on, a Google search page is
++// left to Google's throttle, the only one that then changes its address at
++// the start; a redirect page skipped into a Google search opens it cleaned
++// and with SafeSearch's parameters; other pages are cleaned as ever.
++TEST_F(CleanLinksThrottleTest, TheSafeSearchPolicyKeepsOneChangeOfAddress) {
++  const std::string search = "https://www.google.com/search?q=x&utm_source=y";
++  EXPECT_EQ(GURL("https://www.google.com/search?q=x"),
++            Opened(LinkTo(search)))
++      << "without the policy, a search page is cleaned";
++
++  force_safe_search_ = true;
++  EXPECT_FALSE(Make(LinkTo(search)));
++  EXPECT_FALSE(Make(LinkTo("https://www.google.com/?utm_source=y")));
++  EXPECT_EQ(GURL("https://www.google.com/search?q=y&safe=active&ssui=on"),
++            Opened(LinkTo("https://www.google.com/url?q=https%3A%2F%2F"
++                          "www.google.com%2Fsearch%3Fq%3Dy%26utm_source%3Dz")));
++  EXPECT_EQ(GURL("https://a.test/p"),
++            Opened(LinkTo("https://a.test/p?utm_source=x")));
++  // A search page that already has the policy's parameters is not changed
++  // by Google's throttle, so it is cleaned.
++  EXPECT_EQ(GURL("https://www.google.com/search?q=x&safe=active&ssui=on"),
++            Opened(LinkTo("https://www.google.com/search?q=x&utm_source=y"
++                          "&safe=active&ssui=on")));
++}
++
++}  // namespace
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 3decc84d07c18..09feb8c232eed 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -33,6 +33,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kLittleEnabled, true);
+   registry->RegisterBooleanPref(kWelcomeShown, false);
+   registry->RegisterBooleanPref(kCopyStripTracking, true);
++  // clean-links Cl7, Cl8: on, the protective side, as Stedding's privacy rows
++  // ship (ADR 0017); no site keeps its parameters until the user adds one.
++  registry->RegisterBooleanPref(kCleanLinks, true);
++  registry->RegisterListPref(kCleanLinksKeptSites);
+   registry->RegisterBooleanPref(kCopyLinkButton, true);
+   registry->RegisterBooleanPref(kUiAnimate, true);
+   registry->RegisterBooleanPref(kShowLinkAddress, true);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 53a6b425fb996..9c62882e58059 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -61,6 +61,12 @@ inline constexpr char kWelcomeShown[] = "stedding.welcome.shown";
+ // Copying a link (⇧⌘C, ⌥⇧⌘C) drops tracking parameters first
+ // (docs/features/copy-link.md L2, L6).
+ inline constexpr char kCopyStripTracking[] = "stedding.copy.strip_tracking";
++// Pages the user opens load without tracking parameters, and known redirect
++// pages are skipped (docs/features/clean-links.md Cl7); the sites that keep
++// theirs, as lower-cased hosts (Cl8).
++inline constexpr char kCleanLinks[] = "stedding.privacy.clean_links";
++inline constexpr char kCleanLinksKeptSites[] =
++    "stedding.privacy.clean_links_kept_sites";
+ // The Copy Link button shows at the address field's right end on a page with
+ // a web address (docs/features/copy-link.md L7; settings T28). On by default
+ // (GitHub issue 11; the owner, 2026-10-22).
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index c151d5070cf31..618321e41b163 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -40,6 +40,13 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_FALSE(service.GetBoolean(name)) << name;
+   }
++  // clean-links Cl7: links the user opens are cleaned on a fresh profile.
++  ASSERT_TRUE(service.FindPreference(kCleanLinks));
++  EXPECT_TRUE(service.GetBoolean(kCleanLinks));
++  // clean-links Cl8: no site keeps its tracking parameters until the user
++  // adds one.
++  ASSERT_TRUE(service.FindPreference(kCleanLinksKeptSites));
++  EXPECT_TRUE(service.GetList(kCleanLinksKeptSites).empty());
+   EXPECT_EQ(0, service.GetInteger(kSpaceSleepMinutes));
+   // tabs R39: no tab sleeps on a timer until the user chooses a time.
+   ASSERT_TRUE(service.FindPreference(kTabsIdleSleepMinutes));
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index 9e5435da4660e..17ad7f9d61513 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -1092,6 +1092,8 @@ void CommandBarView::BuildActions() {
+           {stedding::prefs::kShowLinkAddress, u"Link address on hover"},
+           {stedding::prefs::kCopyStripTracking,
+            u"Copy links without tracking parameters"},
++          // clean-links Cl7.
++          {stedding::prefs::kCleanLinks, u"Clean links you open"},
+           {stedding::prefs::kPinsCloseSleeps,
+ #if BUILDFLAG(IS_MAC)
+            u"\u2318W on a pinned tab puts it to sleep"},
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index c93e81f15da79..c2b88e5759bc0 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -145,6 +145,8 @@ source_set("impl") {
+     "captions_handler.cc",
+     "custom_home_pages_table_model.cc",
+     "dictation_handler.cc",
++    "stedding_clean_links_handler.cc",
++    "stedding_clean_links_handler.h",
+     "stedding_dark_pages_handler.cc",
+     "stedding_dark_pages_handler.h",
+     "stedding_shortcuts_handler.cc",
+@@ -192,6 +194,9 @@ source_set("impl") {
+     "//chrome/app:command_ids",
+     "//chrome/app:generated_resources",
+     "//chrome/browser/ui/stedding:app_updater",
++    "//chrome/browser/ui/stedding:clean_link",
++    "//chrome/browser/ui/stedding:clean_links",
++    "//chrome/browser/ui/stedding:prefs",
+     "//chrome/browser/ui/stedding:dark_pages",
+     "//chrome/app/vector_icons",
+     "//chrome/browser:browser_process",
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 16c639a6890a8..88ff618386090 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -64,6 +64,7 @@
+ #include "chrome/browser/ui/webui/settings/appearance_handler.h"
+ #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
+ #include "chrome/browser/ui/webui/settings/dictation_handler.h"
++#include "chrome/browser/ui/webui/settings/stedding_clean_links_handler.h"
+ #include "chrome/browser/ui/webui/settings/stedding_dark_pages_handler.h"
+ #include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
+ #include "chrome/browser/ui/webui/settings/stedding_spaces_handler.h"
+@@ -250,6 +251,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   // Stedding dark pages (docs/features/dark-pages.md Dk20): the mode and the
+   // lists, a content setting the page's preference bindings cannot reach.
+   AddSettingsPageUIHandler(std::make_unique<SteddingDarkPagesHandler>(profile));
++  // Stedding clean links (docs/features/clean-links.md Cl9): the kept sites,
++  // cut to a host by the rule the throttle matches.
++  AddSettingsPageUIHandler(
++      std::make_unique<SteddingCleanLinksHandler>(profile));
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
+@@ -841,6 +846,26 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingGpcSubLabel",
+       "Sec-GPC: 1 on every request, and navigator.globalPrivacyControl for "
+       "pages. Takes effect after a restart.");
++  // clean-links Cl7, Cl9 (settings T31, T32).
++  html_source->AddString("steddingCleanLinksLabel",
++                         "Remove tracking from links you open");
++  html_source->AddString(
++      "steddingCleanLinksSubLabel",
++      "Pages open without utm_ and ad-click parameters, and redirect pages "
++      "that carry the address they lead to are skipped. The sites below keep "
++      "theirs.");
++  html_source->AddString("steddingCleanLinksKeptList",
++                         "Sites that keep their links:");
++  html_source->AddString("steddingCleanLinksKeptEmpty", "No sites");
++  html_source->AddString("steddingCleanLinksAddPlaceholder",
++                         "Add a site, such as example.com");
++  html_source->AddString(
++      "steddingCleanLinksAddInvalid",
++      "Not a site: type a host such as example.com, or a web address.");
++  html_source->AddString("steddingCleanLinksRemove", "Remove");
++  // Cl9: a remove button's name to a screen reader is the action and the
++  // site, not the site alone.
++  html_source->AddString("steddingCleanLinksRemoveSite", "Remove $1");
+   html_source->AddString("steddingQuietNotificationsLabel",
+                          "Quiet notification prompts");
+   html_source->AddString("steddingQuietNotificationsSubLabel",
+diff --git a/chrome/browser/ui/webui/settings/stedding_clean_links_handler.cc b/chrome/browser/ui/webui/settings/stedding_clean_links_handler.cc
+new file mode 100644
+index 0000000000000..e33beb49502f8
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/stedding_clean_links_handler.cc
+@@ -0,0 +1,98 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/settings/stedding_clean_links_handler.h"
++
++#include <optional>
++#include <string>
++
++#include "base/functional/bind.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/stedding/clean_link.h"
++#include "chrome/browser/ui/stedding/clean_links.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_ui.h"
++
++SteddingCleanLinksHandler::SteddingCleanLinksHandler(Profile* profile)
++    : profile_(profile->GetOriginalProfile()) {}
++
++SteddingCleanLinksHandler::~SteddingCleanLinksHandler() = default;
++
++void SteddingCleanLinksHandler::RegisterMessages() {
++  web_ui()->RegisterMessageCallback(
++      "steddingGetCleanLinksKeptSites",
++      base::BindRepeating(&SteddingCleanLinksHandler::HandleGetKeptSites,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingAddCleanLinksKeptSite",
++      base::BindRepeating(&SteddingCleanLinksHandler::HandleAddKeptSite,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingRemoveCleanLinksKeptSite",
++      base::BindRepeating(&SteddingCleanLinksHandler::HandleRemoveKeptSite,
++                          base::Unretained(this)));
++}
++
++void SteddingCleanLinksHandler::OnJavascriptAllowed() {
++  if (registrar_.IsEmpty()) {
++    registrar_.Init(profile_->GetPrefs());
++    registrar_.Add(
++        stedding::prefs::kCleanLinksKeptSites,
++        base::BindRepeating(&SteddingCleanLinksHandler::OnKeptSitesChanged,
++                            base::Unretained(this)));
++  }
++}
++
++void SteddingCleanLinksHandler::OnJavascriptDisallowed() {
++  registrar_.RemoveAll();
++}
++
++void SteddingCleanLinksHandler::OnKeptSitesChanged() {
++  if (IsJavascriptAllowed()) {
++    FireWebUIListener("stedding-clean-links-kept-sites-changed", Sites());
++  }
++}
++
++base::ListValue SteddingCleanLinksHandler::Sites() const {
++  base::ListValue sites;
++  for (const std::string& site :
++       stedding::CleanLinksKeptSites(*profile_->GetPrefs())) {
++    sites.Append(site);
++  }
++  return sites;
++}
++
++void SteddingCleanLinksHandler::HandleGetKeptSites(
++    const base::ListValue& args) {
++  if (args.size() != 1U) {
++    return;
++  }
++  AllowJavascript();
++  ResolveJavascriptCallback(args[0], Sites());
++}
++
++void SteddingCleanLinksHandler::HandleAddKeptSite(const base::ListValue& args) {
++  if (args.size() != 2U || !args[1].is_string()) {
++    return;
++  }
++  AllowJavascript();
++  // Cl9: what is no site is refused, and nothing is written; the page says
++  // so under the field.
++  const std::optional<std::string> site =
++      stedding::KeptSiteFromTyped(args[1].GetString());
++  if (site) {
++    stedding::AddCleanLinksKeptSite(*profile_->GetPrefs(), *site);
++  }
++  ResolveJavascriptCallback(args[0], base::Value(site.has_value()));
++}
++
++void SteddingCleanLinksHandler::HandleRemoveKeptSite(
++    const base::ListValue& args) {
++  if (args.size() != 1U || !args[0].is_string()) {
++    return;
++  }
++  stedding::RemoveCleanLinksKeptSite(*profile_->GetPrefs(),
++                                     args[0].GetString());
++}
+diff --git a/chrome/browser/ui/webui/settings/stedding_clean_links_handler.h b/chrome/browser/ui/webui/settings/stedding_clean_links_handler.h
+new file mode 100644
+index 0000000000000..5ba3be322d343
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/stedding_clean_links_handler.h
+@@ -0,0 +1,55 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_CLEAN_LINKS_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_CLEAN_LINKS_HANDLER_H_
++
++#include "base/memory/raw_ptr.h"
++#include "base/values.h"
++#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
++#include "components/prefs/pref_change_registrar.h"
++
++class Profile;
++
++// Clean links' kept sites in chrome://settings/stedding
++// (docs/features/clean-links.md Cl9): the list, and adding and removing a
++// site. What was typed is cut to its host here, by the one rule
++// (stedding::KeptSiteFromTyped), so Settings stores what the throttle
++// matches; the page pushes nothing it made itself.
++//
++// Messages:
++//   steddingGetCleanLinksKeptSites(callback) -> [site, ...]
++//   steddingAddCleanLinksKeptSite(callback, typed) -> whether it was a site
++//   steddingRemoveCleanLinksKeptSite(site)
++// Event: "stedding-clean-links-kept-sites-changed" with the list, whenever
++// the preference changes.
++class SteddingCleanLinksHandler : public settings::SettingsPageUIHandler {
++ public:
++  explicit SteddingCleanLinksHandler(Profile* profile);
++  SteddingCleanLinksHandler(const SteddingCleanLinksHandler&) = delete;
++  SteddingCleanLinksHandler& operator=(const SteddingCleanLinksHandler&) =
++      delete;
++  ~SteddingCleanLinksHandler() override;
++
++  // SettingsPageUIHandler:
++  void RegisterMessages() override;
++  void OnJavascriptAllowed() override;
++  void OnJavascriptDisallowed() override;
++
++  // What the page draws, for tests.
++  base::ListValue SitesForTesting() const { return Sites(); }
++
++ private:
++  base::ListValue Sites() const;
++  void OnKeptSitesChanged();
++
++  void HandleGetKeptSites(const base::ListValue& args);
++  void HandleAddKeptSite(const base::ListValue& args);
++  void HandleRemoveKeptSite(const base::ListValue& args);
++
++  const raw_ptr<Profile> profile_;
++  PrefChangeRegistrar registrar_;
++};
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_CLEAN_LINKS_HANDLER_H_
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index a299fe23339dc..5ed5874302580 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -24,6 +24,7 @@ test("stedding_browser_tests") {
+     "certificate_checks_browsertest.cc",
+     "child_tabs_browsertest.cc",
+     "chromium_version_browsertest.cc",
++    "clean_links_browsertest.cc",
+     "clear_space_browsertest.cc",
+     "command_bar_browsertest.cc",
+     "copy_link_browsertest.cc",
+@@ -167,6 +168,7 @@ test("stedding_browser_tests") {
+     "//chrome/browser/ui/stedding:address_row",
+     "//chrome/browser/ui/stedding:app_updater_test_support",
+     "//chrome/browser/ui/stedding:bookmarks_to_pins_dialog",
++    "//chrome/browser/ui/stedding:clean_links",
+     "//chrome/browser/ui/stedding:dark_pages",
+     "//chrome/browser/ui/stedding:little_window",
+     "//chrome/browser/ui/stedding:media_keys",
+diff --git a/chrome/test/stedding/clean_links_browsertest.cc b/chrome/test/stedding/clean_links_browsertest.cc
+new file mode 100644
+index 0000000000000..786762d7fac5f
+--- /dev/null
++++ b/chrome/test/stedding/clean_links_browsertest.cc
+@@ -0,0 +1,720 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Clean links in a real window (docs/features/clean-links.md): what the
++// test server is asked for when a page is opened from a link, a new tab, the
++// address field, a redirect page or a private window; what it is still asked
++// for by the page's own requests, forms and redirects; what a restart for
++// client hints asks for; what history keeps; the SafeSearch policy; the
++// setting, its command-bar row and the kept sites in Settings.
++
++#include <algorithm>
++#include <memory>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/run_loop.h"
++#include "base/strings/escape.h"
++#include "base/strings/strcat.h"
++#include "base/synchronization/lock.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/thread_annotations.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stedding/clean_links.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/commandbar/command_bar_view.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/history/core/browser/history_service.h"
++#include "components/history/core/test/history_service_test_util.h"
++#include "components/keyed_service/core/service_access_type.h"
++#include "components/policy/core/common/policy_pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/back_forward_cache.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/back_forward_cache_util.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "content/public/test/url_loader_interceptor.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/http/http_status_code.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/events/event.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/view.h"
++#include "url/gurl.h"
++
++namespace {
++
++// Cl5: a page that needs its parameter sends the browser back for it.
++constexpr char kPutItBack[] = "/put-it-back";
++
++std::unique_ptr<net::test_server::HttpResponse> PutItBack(
++    const net::test_server::HttpRequest& request) {
++  const GURL url = request.GetURL();
++  if (url.path() != kPutItBack) {
++    return nullptr;
++  }
++  auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++  if (url.query().find("utm_source=") == std::string_view::npos) {
++    response->set_code(net::HTTP_FOUND);
++    response->AddCustomHeader("Location",
++                              base::StrCat({kPutItBack, "?utm_source=back"}));
++    return response;
++  }
++  response->set_code(net::HTTP_OK);
++  response->set_content_type("text/html");
++  response->set_content("<title>kept</title>");
++  return response;
++}
++
++// Cl12: a page that needs a client hint it was not sent asks for it with
++// Critical-CH, and the browser asks for the page again with the hint.
++constexpr char kCriticalHint[] = "/critical-ch";
++constexpr char kHint[] = "Sec-CH-UA-Platform-Version";
++
++std::unique_ptr<net::test_server::HttpResponse> AsksForAHint(
++    const net::test_server::HttpRequest& request) {
++  if (request.GetURL().path() != kCriticalHint) {
++    return nullptr;
++  }
++  auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++  response->set_code(net::HTTP_OK);
++  response->set_content_type("text/html");
++  response->AddCustomHeader("Accept-CH", kHint);
++  response->AddCustomHeader("Critical-CH", kHint);
++  response->set_content("<title>hinted</title>");
++  return response;
++}
++
++// Cl13: a page whose script, with no click behind it, sends the browser to
++// its own address with a tracking parameter until it has one.
++constexpr char kSelfTracking[] = "/self-tracking";
++
++std::unique_ptr<net::test_server::HttpResponse> PutsItsOwnParameterOn(
++    const net::test_server::HttpRequest& request) {
++  if (request.GetURL().path() != kSelfTracking) {
++    return nullptr;
++  }
++  auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++  response->set_code(net::HTTP_OK);
++  response->set_content_type("text/html");
++  response->set_content(
++      "<title>self</title><script>"
++      "if (!location.search.includes('utm_source=')) {"
++      "  location.replace('/self-tracking?utm_source=self&n=13');"
++      "}</script>");
++  return response;
++}
++
++class CleanLinksTest : public InProcessBrowserTest {
++ protected:
++  // The test host resolver takes rules only until the network process is set
++  // up, and the server's monitor must be in place before it starts.
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    embedded_test_server()->RegisterRequestMonitor(base::BindRepeating(
++        &CleanLinksTest::OnRequest, base::Unretained(this)));
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&PutItBack));
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&AsksForAHint));
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&PutsItsOwnParameterOn));
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  // On the server's own thread: every address it was asked for, with its
++  // host, and " [hint]" after it when the request carried kHint.
++  void OnRequest(const net::test_server::HttpRequest& request) {
++    std::string host;
++    if (const auto it = request.headers.find("Host");
++        it != request.headers.end()) {
++      host = it->second;
++    }
++    const bool hinted = request.headers.contains(kHint);
++    base::AutoLock lock(lock_);
++    requests_.push_back(
++        base::StrCat({host, request.relative_url, hinted ? " [hint]" : ""}));
++  }
++
++  std::vector<std::string> Requests() {
++    base::AutoLock lock(lock_);
++    return requests_;
++  }
++
++  // Whether the server was ever asked for an address containing `text`.
++  bool Asked(std::string_view text) {
++    const std::vector<std::string> requests = Requests();
++    return std::ranges::any_of(requests, [&](const std::string& request) {
++      return request.find(text) != std::string::npos;
++    });
++  }
++
++  GURL Url(std::string_view host, std::string_view path) {
++    return embedded_test_server()->GetURL(host, path);
++  }
++
++  content::WebContents* Active() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  // What the address field shows for the active tab.
++  std::u16string AddressField() {
++    return BrowserView::GetBrowserViewForBrowser(browser())
++        ->GetLocationBarView()
++        ->omnibox_view()
++        ->GetText();
++  }
++
++  // A link to `href` clicked in the active page, as a person clicks it.
++  void ClickLink(const GURL& href) {
++    content::TestNavigationObserver navigated(Active(), 1);
++    ASSERT_TRUE(content::ExecJs(
++        Active(), content::JsReplace("const a = document.createElement('a');"
++                                     "a.href = $1; a.textContent = 'go';"
++                                     "document.body.appendChild(a);"
++                                     "a.click();",
++                                     href)));
++    navigated.Wait();
++  }
++
++  bool InHistory(Profile* profile, const GURL& url) {
++    history::HistoryService* const history =
++        HistoryServiceFactory::GetForProfile(
++            profile, ServiceAccessType::EXPLICIT_ACCESS);
++    history::BlockUntilHistoryProcessesPendingRequests(history);
++    ui_test_utils::HistoryEnumerator enumerator(profile);
++    return std::ranges::contains(enumerator.urls(), url);
++  }
++
++ private:
++  base::Lock lock_;
++  std::vector<std::string> requests_ GUARDED_BY(lock_);
++};
++
++// Cl1: a link clicked in the page opens without its tracking parameters.
++// The server is asked only for the clean address; the page, the tab and the
++// address field all have it.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, ALinkClickArrivesClean) {
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), Url("a.test", "/title1.html")));
++  ClickLink(Url("a.test", "/echo?q=1&utm_source=mail&fbclid=x#top"));
++  EXPECT_EQ(Url("a.test", "/echo?q=1#top"), Active()->GetLastCommittedURL());
++  EXPECT_EQ("?q=1", content::EvalJs(Active(), "location.search"));
++  EXPECT_TRUE(Asked("/echo?q=1"));
++  EXPECT_FALSE(Asked("utm_source")) << "the server saw the tracked address";
++  EXPECT_FALSE(Asked("fbclid"));
++  EXPECT_EQ(std::u16string::npos, AddressField().find(u"utm_source"))
++      << AddressField();
++}
++
++// Cl1: a link opened in a new tab or window, by script with the user's click
++// behind it, arrives clean too.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, ALinkOpenedInANewTabArrivesClean) {
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), Url("a.test", "/title1.html")));
++  const GURL clean = Url("b.test", "/echo?q=2");
++  content::TestNavigationObserver opened(clean);
++  opened.StartWatchingNewWebContents();
++  ASSERT_TRUE(content::ExecJs(
++      Active(),
++      content::JsReplace("window.open($1)",
++                         Url("b.test", "/echo?q=2&utm_campaign=c&gclid=1"))));
++  opened.Wait();
++  EXPECT_TRUE(opened.last_navigation_succeeded());
++  EXPECT_EQ(clean, opened.last_navigation_url());
++  EXPECT_FALSE(Asked("utm_campaign"));
++  EXPECT_FALSE(Asked("gclid"));
++}
++
++// Cl1: a typed address (the test's navigation is a typed one) arrives clean,
++// and the address field shows the clean address once it has loaded.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, ATypedAddressArrivesClean) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("a.test", "/echo?utm_source=typed&page=3")));
++  EXPECT_EQ(Url("a.test", "/echo?page=3"), Active()->GetLastCommittedURL());
++  EXPECT_TRUE(Asked("/echo?page=3"));
++  EXPECT_FALSE(Asked("utm_source"));
++  EXPECT_EQ(std::u16string::npos, AddressField().find(u"utm_source"))
++      << AddressField();
++}
++
++// Cl3, Cl11: a link through Google's redirect page opens its target, cleaned,
++// in one step. The redirect page is never asked for: its host resolves to
++// this machine, where nothing answers on 443, so asking would have ended in
++// an error page.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, ARedirectHopIsSkipped) {
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), Url("a.test", "/title1.html")));
++  const GURL target = Url("c.test", "/echo?id=4&utm_medium=search");
++  ClickLink(GURL(base::StrCat(
++      {"https://www.google.com/url?sa=t&q=",
++       base::EscapeQueryParamValue(target.spec(), /*use_plus=*/false)})));
++  EXPECT_EQ(Url("c.test", "/echo?id=4"), Active()->GetLastCommittedURL());
++
++  // The usual form of a shared result: an empty q= and the target in url=.
++  const GURL shared = Url("c.test", "/echo?id=5&gclid=g");
++  ClickLink(GURL(base::StrCat(
++      {"https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&url=",
++       base::EscapeQueryParamValue(shared.spec(), /*use_plus=*/false),
++       "&usg=abc"})));
++  EXPECT_EQ(Url("c.test", "/echo?id=5"), Active()->GetLastCommittedURL());
++
++  EXPECT_FALSE(Asked("/url?"));
++  EXPECT_FALSE(Asked("www.google.com"));
++  EXPECT_FALSE(Asked("utm_medium"));
++  EXPECT_FALSE(Asked("gclid"));
++}
++
++// Cl5: only the first address of a navigation is cleaned. A server that
++// redirects to put a parameter back gets it, with no loop, and a server's
++// own redirect is followed as given.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, TheServerThatAsksForItBackGetsIt) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("a.test", "/put-it-back?utm_source=first")));
++  EXPECT_EQ(Url("a.test", "/put-it-back?utm_source=back"),
++            Active()->GetLastCommittedURL());
++  EXPECT_EQ(u"kept", Active()->GetTitle());
++  EXPECT_FALSE(Asked("utm_source=first")) << "the first address was cleaned";
++
++  const GURL redirected = Url("a.test", "/echo?utm_source=server");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("a.test", "/server-redirect?" + redirected.spec())));
++  EXPECT_EQ(redirected, Active()->GetLastCommittedURL());
++}
++
++// Cl12: on a first visit, a site that asks for a client hint with
++// Critical-CH makes the browser ask for the page again; that restart asks for
++// the clean address, not the one the link carried, and the page commits and
++// is kept in history clean. Client hints go only to a secure origin, and the
++// test server's own address is one.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, ARestartForClientHintsStaysClean) {
++  const GURL tracked = Url("127.0.0.1", "/critical-ch?utm_source=ch&n=11");
++  const GURL clean = Url("127.0.0.1", "/critical-ch?n=11");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), tracked));
++  EXPECT_EQ(clean, Active()->GetLastCommittedURL());
++  EXPECT_EQ(u"hinted", Active()->GetTitle());
++  EXPECT_TRUE(Asked("/critical-ch?n=11 [hint]"))
++      << "the site's restart never happened, so this proves nothing";
++  EXPECT_FALSE(Asked("utm_source=ch"))
++      << "the restart went back to the tracked address";
++  Profile* const profile = browser()->GetProfile();
++  EXPECT_TRUE(InHistory(profile, clean));
++  EXPECT_FALSE(InHistory(profile, tracked));
++}
++
++// Cl13: a page whose script puts a tracking parameter on its own address,
++// with no click behind it, gets it once and stops; cleaning it would load
++// the page again and again.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, APageThatPutsItsParameterOnGetsIt) {
++  const GURL page = Url("a.test", "/self-tracking?n=13");
++  const GURL kept = Url("a.test", "/self-tracking?utm_source=self&n=13");
++  // Watched by the address the page sends itself to: a count of the tab's
++  // navigations never saw the page's own replace finish.
++  content::TestNavigationObserver replaced(kept);
++  replaced.WatchExistingWebContents();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
++  replaced.Wait();
++  EXPECT_EQ(kept, Active()->GetLastCommittedURL());
++  EXPECT_TRUE(Asked("/self-tracking?utm_source=self&n=13"));
++  const std::vector<std::string> requests = Requests();
++  EXPECT_EQ(2, std::ranges::count_if(requests, [](const std::string& request) {
++              return request.find(kSelfTracking) != std::string::npos;
++            })) << "the page was loaded more than twice";
++
++  // A link the user clicks from that page is still cleaned. Watched by its
++  // address: the tab's own count could take the page's replace for it.
++  content::TestNavigationObserver clicked(Url("a.test", "/echo?n=14"));
++  clicked.WatchExistingWebContents();
++  ASSERT_TRUE(content::ExecJs(
++      Active(), content::JsReplace("const a = document.createElement('a');"
++                                   "a.href = $1; a.textContent = 'go';"
++                                   "document.body.appendChild(a);"
++                                   "a.click();",
++                                   Url("a.test", "/echo?n=14&utm_source=click"))));
++  clicked.Wait();
++  EXPECT_EQ(Url("a.test", "/echo?n=14"), Active()->GetLastCommittedURL());
++}
++
++// Cl4: the page's own requests and frames keep their parameters.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest,
++                       SubresourcesAndFramesKeepTheirParameters) {
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), Url("a.test", "/title1.html")));
++  ASSERT_TRUE(content::ExecJs(Active(), R"(
++      const img = document.createElement('img');
++      img.src = '/echo?img=1&utm_source=i';
++      document.body.appendChild(img);
++      fetch('/echo?fetch=1&utm_source=f');
++      const frame = document.createElement('iframe');
++      frame.src = '/echo?frame=1&utm_source=fr';
++      document.body.appendChild(frame);)"));
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return Asked("/echo?img=1&utm_source=i") &&
++           Asked("/echo?fetch=1&utm_source=f") &&
++           Asked("/echo?frame=1&utm_source=fr");
++  }));
++}
++
++// Cl4: a form sends what it was given, as a GET or a POST.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, AFormKeepsItsParameters) {
++  for (const char* method : {"get", "post"}) {
++    SCOPED_TRACE(method);
++    ASSERT_TRUE(
++        ui_test_utils::NavigateToURL(browser(), Url("a.test", "/title1.html")));
++    content::TestNavigationObserver submitted(Active(), 1);
++    ASSERT_TRUE(content::ExecJs(
++        Active(),
++        content::JsReplace(
++            "const form = document.createElement('form');"
++            "form.method = $1;"
++            "form.action = $1 === 'get' ? '/echo' : '/echo?utm_source=post';"
++            "const field = document.createElement('input');"
++            "field.name = 'utm_source'; field.value = 'form';"
++            "form.appendChild(field);"
++            "document.body.appendChild(form);"
++            "form.submit();",
++            method)));
++    submitted.Wait();
++    EXPECT_NE(std::string::npos,
++              Active()->GetLastCommittedURL().spec().find("utm_source="))
++        << Active()->GetLastCommittedURL();
++  }
++}
++
++// Cl4: a reload, back and forward load the entry as it was opened. The
++// entries here were opened with the setting off, so they still carry their
++// parameters once it is on again: had any of the three loads been cleaned,
++// the server would have been asked for the clean address and the tab would
++// have committed it.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, BackForwardAndReloadAreNotCleaned) {
++  // A page restored from the back/forward cache makes no request at all; with
++  // the cache off, each step is a load the throttle could touch.
++  content::DisableBackForwardCacheForTesting(
++      Active(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  prefs->SetBoolean(stedding::prefs::kCleanLinks, false);
++  const GURL first = Url("a.test", "/echo?utm_source=x&n=1");
++  const GURL second = Url("a.test", "/echo?utm_source=y&n=2");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), second));
++  ASSERT_EQ(second, Active()->GetLastCommittedURL());
++  prefs->SetBoolean(stedding::prefs::kCleanLinks, true);
++
++  content::TestNavigationObserver back(Active(), 1);
++  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
++  back.Wait();
++  EXPECT_EQ(first, Active()->GetLastCommittedURL());
++
++  content::TestNavigationObserver reloaded(Active(), 1);
++  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
++  reloaded.Wait();
++  EXPECT_EQ(first, Active()->GetLastCommittedURL());
++
++  content::TestNavigationObserver forward(Active(), 1);
++  chrome::GoForward(browser(), WindowOpenDisposition::CURRENT_TAB);
++  forward.Wait();
++  EXPECT_EQ(second, Active()->GetLastCommittedURL());
++
++  EXPECT_FALSE(Asked("/echo?n=1")) << "a history load or a reload was cleaned";
++  EXPECT_FALSE(Asked("/echo?n=2")) << "a history load or a reload was cleaned";
++
++  // The setting is on: a page opened now is cleaned.
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("a.test", "/echo?utm_source=z&n=3")));
++  EXPECT_EQ(Url("a.test", "/echo?n=3"), Active()->GetLastCommittedURL());
++}
++
++// Cl6: history holds the address the page opened at, not the tracked one
++// nor the redirect page.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, HistoryHoldsOnlyTheCleanAddress) {
++  const GURL tracked = Url("a.test", "/echo?utm_source=h&n=6");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), tracked));
++  const GURL target = Url("d.test", "/echo?n=7");
++  const GURL wrapper(base::StrCat(
++      {"https://www.google.com/url?q=",
++       base::EscapeQueryParamValue(target.spec(), /*use_plus=*/false)}));
++  ClickLink(wrapper);
++  ASSERT_EQ(target, Active()->GetLastCommittedURL());
++
++  Profile* const profile = browser()->GetProfile();
++  EXPECT_TRUE(InHistory(profile, Url("a.test", "/echo?n=6")));
++  EXPECT_TRUE(InHistory(profile, target));
++  EXPECT_FALSE(InHistory(profile, tracked)) << "the tracked address is kept";
++  EXPECT_FALSE(InHistory(profile, wrapper)) << "the redirect page is kept";
++}
++
++// Cl7: off, a page opens with the address as it was written, redirect pages
++// included; on again, the next one is cleaned.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, TheSettingOffOpensLinksAsWritten) {
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  ASSERT_TRUE(prefs->GetBoolean(stedding::prefs::kCleanLinks))
++      << "on by default";
++  prefs->SetBoolean(stedding::prefs::kCleanLinks, false);
++  const GURL tracked = Url("a.test", "/echo?utm_source=off");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), tracked));
++  EXPECT_EQ(tracked, Active()->GetLastCommittedURL());
++  EXPECT_TRUE(Asked("/echo?utm_source=off"));
++
++  prefs->SetBoolean(stedding::prefs::kCleanLinks, true);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("a.test", "/echo?utm_source=on&n=8")));
++  EXPECT_EQ(Url("a.test", "/echo?n=8"), Active()->GetLastCommittedURL());
++}
++
++// Cl7: the command bar's row says the state and turns it over, the bar
++// staying open, as every on/off row does (commandbar K17).
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, TheCommandBarRowTurnsItOff) {
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  chrome::ExecuteCommand(browser(), IDC_STEDDING_COMMAND_PALETTE);
++  stedding::CommandBarView* const bar = stedding::CommandBarView::GetOpenBar(
++      BrowserView::GetBrowserViewForBrowser(browser()));
++  ASSERT_TRUE(bar);
++  const std::u16string query = u"Clean links you open";
++  bar->field_for_testing()->SetText(query);
++  bar->ContentsChanged(bar->field_for_testing(), query);
++  size_t row = bar->row_count_for_testing();
++  for (size_t i = 0; i < bar->row_count_for_testing(); ++i) {
++    if (bar->row_title_for_testing(i) == u"Clean links you open: On") {
++      row = i;
++      break;
++    }
++  }
++  ASSERT_LT(row, bar->row_count_for_testing()) << "no row for the setting";
++  for (size_t i = 0; i < row; ++i) {
++    static_cast<views::View*>(bar->field_for_testing())->OnKeyPressed(ui::KeyEvent(
++        ui::EventType::kKeyPressed, ui::VKEY_DOWN, ui::EF_NONE));
++  }
++  static_cast<views::View*>(bar->field_for_testing())->OnKeyPressed(ui::KeyEvent(
++      ui::EventType::kKeyPressed, ui::VKEY_RETURN, ui::EF_NONE));
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(prefs->GetBoolean(stedding::prefs::kCleanLinks));
++  if (stedding::CommandBarView* const open =
++          stedding::CommandBarView::GetOpenBar(
++              BrowserView::GetBrowserViewForBrowser(browser()))) {
++    open->Close();
++    base::RunLoop().RunUntilIdle();
++  }
++}
++
++// Cl8: a kept site opens with its parameters; another site is still cleaned.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, AKeptSiteOpensAsWritten) {
++  stedding::AddCleanLinksKeptSite(*browser()->GetProfile()->GetPrefs(),
++                                  "shop.test");
++  const GURL kept = Url("www.shop.test", "/echo?gclid=k");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kept));
++  EXPECT_EQ(kept, Active()->GetLastCommittedURL());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), Url("other.test", "/echo?gclid=o&n=9")));
++  EXPECT_EQ(Url("other.test", "/echo?n=9"), Active()->GetLastCommittedURL());
++}
++
++// Cl14: with the ForceGoogleSafeSearch policy on, Google's throttle alone
++// changes a Google search page's address (two changes at the start stop a
++// DCHECK build), and a redirect page into a search opens it cleaned and with
++// SafeSearch on. Google's pages are served here by an interceptor; nothing
++// reaches the network.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest,
++                       TheSafeSearchPolicyKeepsOneChangeOfAddress) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      policy::policy_prefs::kForceGoogleSafeSearch, true);
++  base::Lock lock;
++  std::vector<GURL> google_requests;
++  // Called on the UI or the IO thread, by the factory it hooked.
++  content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
++      [&](content::URLLoaderInterceptor::RequestParams* params) {
++        if (params->url_request.url.host() != "www.google.com") {
++          return false;
++        }
++        {
++          base::AutoLock hold(lock);
++          google_requests.push_back(params->url_request.url);
++        }
++        content::URLLoaderInterceptor::WriteResponse(
++            "HTTP/1.1 200 OK\nContent-type: text/html\n\n",
++            "<title>search</title>", params->client.get());
++        return true;
++      }));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("https://www.google.com/search?q=x&utm_source=y")));
++  EXPECT_EQ(GURL("https://www.google.com/search?q=x&utm_source=y"
++                 "&safe=active&ssui=on"),
++            Active()->GetLastCommittedURL());
++
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), Url("a.test", "/title1.html")));
++  ClickLink(GURL(base::StrCat(
++      {"https://www.google.com/url?q=",
++       base::EscapeQueryParamValue("https://www.google.com/search?q=y"
++                                   "&utm_source=z",
++                                   /*use_plus=*/false)})));
++  EXPECT_EQ(GURL("https://www.google.com/search?q=y&safe=active&ssui=on"),
++            Active()->GetLastCommittedURL());
++
++  base::AutoLock hold(lock);
++  for (const GURL& request : google_requests) {
++    SCOPED_TRACE(request.spec());
++    EXPECT_NE("/url", request.path()) << "the redirect page was asked for";
++    EXPECT_EQ(std::string::npos, request.spec().find("utm_source=z"));
++  }
++}
++
++// Cl10: a private window cleans links too.
++IN_PROC_BROWSER_TEST_F(CleanLinksTest, APrivateWindowCleansToo) {
++  BrowserWindowInterface* const incognito = CreateIncognitoBrowser();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      incognito, Url("a.test", "/echo?utm_source=private&n=10")));
++  EXPECT_EQ(Url("a.test", "/echo?n=10"), incognito->GetTabStripModel()
++                                             ->GetActiveWebContents()
++                                             ->GetLastCommittedURL());
++  EXPECT_FALSE(Asked("utm_source=private"));
++}
++
++// `body`, run on the settings page with `pick(selector)`: the first element
++// that matches anywhere on the page, through every shadow root, or null.
++std::string OnThePage(std::string_view body) {
++  return base::StrCat({R"(
++    (() => {
++      const find = (root, selector) => {
++        const hit = root.querySelector(selector);
++        if (hit) {
++          return hit;
++        }
++        for (const element of root.querySelectorAll('*')) {
++          if (element.shadowRoot) {
++            const found = find(element.shadowRoot, selector);
++            if (found) {
++              return found;
++            }
++          }
++        }
++        return null;
++      };
++      const pick = selector => find(document, selector);
++    )",
++                       body, R"(
++    })()
++  )"});
++}
++
++// Cl7, Cl9: the switch and the kept sites in chrome://settings/stedding.
++class CleanLinksSettingsTest : public InProcessBrowserTest {
++ protected:
++  content::WebContents* OpenSettings() {
++    EXPECT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), GURL("chrome://settings/stedding")));
++    content::WebContents* const page =
++        browser()->GetTabStripModel()->GetActiveWebContents();
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return content::EvalJs(page,
++                             OnThePage("return !!pick('#cleanLinksAdd');"))
++          .ExtractBool();
++    })) << "the page never drew the kept sites";
++    return page;
++  }
++
++  static void Type(content::WebContents* page, std::string_view text) {
++    EXPECT_EQ("", content::EvalJs(page, content::JsReplace(OnThePage(R"(
++      const field = pick('cr-input#cleanLinksAdd');
++      field.value = $1;
++      field.dispatchEvent(new Event('change'));
++      return '';)"),
++                                                           text)));
++  }
++
++  // The sites the page shows, joined by commas.
++  static std::string Chips(content::WebContents* page) {
++    return content::EvalJs(page, OnThePage(R"(
++      const box = pick('#cleanLinksKeptSites');
++      return box ? [...box.querySelectorAll('.clean-links-site')]
++                       .map(chip => chip.textContent.trim()).join(',')
++                 : '?';)"))
++        .ExtractString();
++  }
++
++  std::vector<std::string> Kept() {
++    return stedding::CleanLinksKeptSites(*browser()->GetProfile()->GetPrefs());
++  }
++};
++
++// Cl7: the switch is drawn, bound to its preference, and on.
++IN_PROC_BROWSER_TEST_F(CleanLinksSettingsTest, TheSwitchIsBoundAndOn) {
++  content::WebContents* const page = OpenSettings();
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return content::EvalJs(page, OnThePage(R"(
++      const toggle = pick('settings-toggle-button#cleanLinks');
++      return !!toggle && toggle.getAttribute('pref-key') ===
++          'stedding.privacy.clean_links' && toggle.checked === true;)"))
++        .ExtractBool();
++  }));
++  EXPECT_EQ(true, content::EvalJs(page,
++                                  "chrome.settingsPrivate.getPref("
++                                  "'stedding.privacy.clean_links')"
++                                  ".then(pref => pref.value)"));
++}
++
++// Cl9: a typed site is stored as its lower-cased host and shown; what is no
++// site is refused with a line under the field; Remove takes a site off; an
++// empty list says so.
++IN_PROC_BROWSER_TEST_F(CleanLinksSettingsTest, AddsAndRemovesAKeptSite) {
++  content::WebContents* const page = OpenSettings();
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return content::EvalJs(page,
++                           OnThePage("return !!pick('#cleanLinksKeptEmpty');"))
++        .ExtractBool();
++  })) << "an empty list says so";
++
++  Type(page, "https://Shop.Example/x?y");
++  ASSERT_TRUE(base::test::RunUntil([&]() {
++    return Kept() == std::vector<std::string>{"shop.example"};
++  }));
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return Chips(page) == "shop.example";
++  })) << Chips(page);
++
++  for (const char* typed : {"chrome://settings", "/news", "  "}) {
++    SCOPED_TRACE(typed);
++    Type(page, typed);
++    if (std::string_view(typed).find_first_not_of(' ') ==
++        std::string_view::npos) {
++      continue;  // An empty field is no entry at all, and says nothing.
++    }
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return content::EvalJs(page, OnThePage(R"(
++        const field = pick('cr-input#cleanLinksAdd');
++        return field.invalid && field.errorMessage.length > 0;)"))
++          .ExtractBool();
++    })) << "the field says the entry is no site";
++    EXPECT_EQ(std::vector<std::string>{"shop.example"}, Kept());
++  }
++
++  EXPECT_EQ("", content::EvalJs(page, OnThePage(R"(
++      pick('#cleanLinksKeptSites cr-icon-button[data-site="shop.example"]')
++          .click();
++      return '';)")));
++  EXPECT_TRUE(base::test::RunUntil([&]() { return Kept().empty(); }));
++  EXPECT_TRUE(base::test::RunUntil([&]() { return Chips(page).empty(); }));
++}
++
++}  // namespace
+diff --git a/chrome/test/stedding/copy_link_browsertest.cc b/chrome/test/stedding/copy_link_browsertest.cc
+index 038dee03a5a29..98852726a5591 100644
+--- a/chrome/test/stedding/copy_link_browsertest.cc
++++ b/chrome/test/stedding/copy_link_browsertest.cc
+@@ -124,6 +124,11 @@ class CopyLinkTest : public InProcessBrowserTest {
+     ui::Clipboard::SetClipboardForCurrentThread(std::move(clipboard));
+     host_resolver()->AddRule("*", "127.0.0.1");
+     ASSERT_TRUE(embedded_test_server()->Start());
++    // clean-links Cl7: these tests open pages with tracking parameters to see
++    // the copy drop them (L2, L3, L7). With clean links on, the page would
++    // already be clean and the copy would have nothing to drop.
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        stedding::prefs::kCleanLinks, false);
+   }
+ 
+   void TearDownOnMainThread() override {
+diff --git a/chrome/test/stedding/defaults_browsertest.cc b/chrome/test/stedding/defaults_browsertest.cc
+index bc2c3b28f3b66..c3909d5f1b263 100644
+--- a/chrome/test/stedding/defaults_browsertest.cc
++++ b/chrome/test/stedding/defaults_browsertest.cc
+@@ -326,6 +326,15 @@ IN_PROC_BROWSER_TEST_F(DefaultsTest, AFreshProfileHoldsAndWorksAfterStay) {
+     peek->GetWindow()->Close();
+     closed.Wait();
+   }
++  // clean-links Cl7: on in a fresh profile. Turned off for the address row's
++  // check below, which is about the whole address the field shows (T28), not
++  // about what an opened page loses; on, the page would commit without its
++  // utm_source.
++  {
++    PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++    EXPECT_TRUE(prefs->GetBoolean(stedding::prefs::kCleanLinks));
++    prefs->SetBoolean(stedding::prefs::kCleanLinks, false);
++  }
+   BrowserView* const view = BrowserView::GetBrowserViewForBrowser(browser());
+   view->GetWidget()->SetBounds(gfx::Rect(0, 0, 1600, 900));
+   const GURL url = embedded_test_server()->GetURL(
+diff --git a/third_party/blink/common/loader/throttling_url_loader.cc b/third_party/blink/common/loader/throttling_url_loader.cc
+index ef4cdd0f534d3..deaa2afeecc98 100644
+--- a/third_party/blink/common/loader/throttling_url_loader.cc
++++ b/third_party/blink/common/loader/throttling_url_loader.cc
+@@ -546,6 +546,11 @@ void ThrottlingURLLoader::RestartWithURLResetNow() {
+   url_loader_.reset();
+   client_receiver_.reset();
+   throttle_will_start_redirect_url_ = original_url_;
++  // Stedding: a throttle that changed the URL in WillStartRequest() may keep
++  // its URL for the restart (docs/features/clean-links.md Cl12).
++  for (auto& entry : throttles_) {
++    entry.throttle->WillRestartWithURLReset(&throttle_will_start_redirect_url_);
++  }
+   StartNow();
+ }
+ 
+diff --git a/third_party/blink/common/loader/url_loader_throttle.cc b/third_party/blink/common/loader/url_loader_throttle.cc
+index 7d4e08238db56..f291fe5a62254 100644
+--- a/third_party/blink/common/loader/url_loader_throttle.cc
++++ b/third_party/blink/common/loader/url_loader_throttle.cc
+@@ -65,6 +65,8 @@ void URLLoaderThrottle::BeforeWillRedirectRequest(
+     const network::mojom::URLResponseHead& response_head,
+     RestartWithURLReset* restart_with_url_reset) {}
+ 
++void URLLoaderThrottle::WillRestartWithURLReset(GURL* url) {}
++
+ void URLLoaderThrottle::WillOnCompleteWithError(
+     const network::URLLoaderCompletionStatus& status) {}
+ 
+diff --git a/third_party/blink/public/common/loader/url_loader_throttle.h b/third_party/blink/public/common/loader/url_loader_throttle.h
+index 4dae1e07a0cc7..b46f5e0d6fac8 100644
+--- a/third_party/blink/public/common/loader/url_loader_throttle.h
++++ b/third_party/blink/public/common/loader/url_loader_throttle.h
+@@ -186,6 +186,14 @@ class BLINK_COMMON_EXPORT URLLoaderThrottle {
+       const network::mojom::URLResponseHead& response_head,
+       RestartWithURLReset* restart_with_url_reset);
+ 
++  // Stedding (docs/features/clean-links.md Cl12): called when the loader
++  // restarts with a URL reset, before the internal redirect to `*url`, which
++  // is the URL the request was made for. A throttle that changed that URL in
++  // WillStartRequest() may set `*url` to the URL it chose, so the restart
++  // asks for that one again. Called for every throttle in turn; it must not
++  // call the delegate.
++  virtual void WillRestartWithURLReset(GURL* url);
++
+   // Called if there is a non-OK net::Error in the completion status.
+   virtual void WillOnCompleteWithError(
+       const network::URLLoaderCompletionStatus& status);

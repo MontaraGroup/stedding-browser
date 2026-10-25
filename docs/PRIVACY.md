@@ -39,11 +39,17 @@ A beta named here by its number alone is one of the 0.2.0 betas; 0.3.0 beta 1 fo
 |---|---|---|---|
 | Browser update check | GitHub: the update feed on `raw.githubusercontent.com`, at launch when the last check is more than an hour old and every six hours while the browser runs, and a new version's image (the Mac's DMG, the Windows installer) from `github.com` when there is one, which answers with a redirect to `release-assets.githubusercontent.com`, the host that serves the file. Described under "The update check" below; off in Settings › Stedding › Updates. | On the Mac a plain GET with Sparkle's user agent (the browser's name and version); on Windows a plain GET through the browser's own network stack with Chromium's reduced user agent (Chrome's major version and the Windows platform, not Stedding or its version), no cookies and the cache disabled. Nothing about the machine. | Security updates are non-negotiable for a Chromium fork. |
 | Thank-you pages | stedding.dev, twice in an installation's life and then once per update: `/thanks/` when the welcome flow ends, `/thanks/updated/` on the first launch of a later version. The second is off in Settings › Stedding › Updates. | A plain page request. The version is in the URL's fragment, which the browser never sends. The pages load nothing from another host and set no cookie. | The owner's thanks, and the project's sponsorship (ADR 0022). |
-| Security component updates | Google's component update service, as in stock Chromium; no patch in the series changes it yet. | Component name and version. | Chromium ships security-critical data as components (for example certificate revocation sets). Which ones to mirror, proxy or remove is decided before 1.0. |
+| Security component updates | Google's component update service, as in stock Chromium, less one component: Google's Subresource Filter Rules are not registered, since Stedding's own blocking makes its rules from lists it fetches only when the user asks (`features/blocker.md` Bk4). | Component name and version. | Chromium ships security-critical data as components (for example certificate revocation sets). Which ones to mirror, proxy or remove is decided before 1.0. |
 | Safe Browsing list updates | Google (`safebrowsing.googleapis.com`); refused in these builds, see the Safe Browsing section | Hashed URL prefixes, not URLs. | Phishing and malware protection. |
 | Network time | Google (`clients2.google.com`) | A request for the current time. | Chromium judges certificate dates with it. Turning it off is not done yet (below). |
 | The user's own browsing | Sites the user visits | Whatever the user does. | This is a web browser. Includes the DNS, TLS (OCSP/CT) and favicon traffic that browsing implies. |
 | Extension install and update | Chrome Web Store (Google) | Standard store traffic. | Only once the user installs an extension. See the extension note below. |
+
+### Made only after the user turns it on
+
+| Connection | To | Contains | Why |
+|---|---|---|---|
+| Ad and tracker lists | `easylist.to` (`/easylist/easylist.txt` and `/easylist/easyprivacy.txt`), only while Settings › Stedding › Privacy › **Block ads and trackers** is on, which it is not by default: each list when its own expiry says (one to fourteen days) and at once on **Update lists now**. Described under "Ad and tracker blocking" below. | A plain conditional GET (If-None-Match, If-Modified-Since): no cookies, no cache, no query string, Chromium's own user agent. Nothing about the machine or the pages visited. | The filter lists blocking works from; nothing from them is built into the browser (`decisions/0030-ad-and-tracker-blocking.md`). |
 
 ### Never
 
@@ -205,6 +211,18 @@ window is kept in memory for that session only. A page can learn that the reader
 dark, the signal a dark window already gives, and, through a trick Chrome documents, that
 automatic darkening is on; it cannot read the lists.
 
+### History and Downloads in the sidebar — nothing fetched
+
+The sidebar's History and Downloads panels (`features/sidebar-panels.md`, written
+2026-10-25, not yet built) make no network request. Their page is built into the browser;
+site icons come from the profile's own favicon cache, never from a favicon server, and a site
+with no icon there shows the default globe; file icons come from the system. The History panel
+reads the local history through Chromium's own handler, which could read Google's web history
+only for a profile signed in with history sync, which Stedding does not offer (below, "Google
+account sync — not available"). Copy File writes a downloaded file's path to the clipboard
+only when the user picks it; Move to Trash moves a file to the system's Trash or Recycle Bin
+and never deletes it outright.
+
 ### Pictures of pages in hover cards — in memory only
 
 Hovering a tab that is not on screen shows a small picture of its page as it was last seen
@@ -231,6 +249,20 @@ cookie jar of the Space the app was made in (`stedding.apps.jars`) and, on the M
 launcher its Dock tile points at (`stedding.apps.dock_tiles`); both go when the app is
 removed.
 
+### Imports from Dia and from Safari's export file — read on this machine
+
+Importing from Dia (welcome step 2) reads Dia's own files on this computer: its bookmarks,
+and copies of its history and logins files, made in a temporary folder that is deleted when
+the read ends. Its passwords are unsealed with Dia's key, which on the Mac macOS hands over
+only after asking you, and only after you press the button with Passwords ticked; the
+summary before it reads no key. Safari's export file is read where you chose it, and
+Stedding neither copies nor deletes it. It holds your passwords as plain text, so Passwords
+starts unticked there; ticked, they are held in memory only until they are saved in the
+profile's password store, and a saved password is never replaced. Payment cards in the
+export are never read: of their file, only the opening lines that name what it holds. The
+export's bookmarks page and passwords file are parsed in sandboxed utility processes.
+Nothing an import reads is sent anywhere (`features/import.md` I28-I42).
+
 ### Google account sync — not available
 
 Google shut off access to its private Sync APIs for third-party Chromium builds in
@@ -238,8 +270,19 @@ Google shut off access to its private Sync APIs for third-party Chromium builds 
 otherwise. Signing into Google *websites* works normally — this only concerns
 browser-level account integration, which the de-Googling work removes
 (ARCHITECTURE.md). Sync services are out of scope on the way to 1.0 (ROADMAP.md).
-Today a Space travels between machines as a file (**Export Space…** and **Import
-sidebar…**), and profile import covers the rest.
+Today the sidebar travels between machines as a file: **Export Space…** writes one Space and
+**Export all Spaces…** every Space, to Downloads, and **Import sidebar…** reads either on the
+other machine; profile import covers the rest. The file holds each Space's name, icon,
+colours and whether it has its own session, and the addresses and titles of its pins,
+folders, essentials and open tabs. It never holds history, cookies, passwords, extensions or
+anything in a Space's own session, and Stedding sends it nowhere
+(`features/sidebar-file.md`).
+
+Sync through a folder (off by default) is not a sync service: each computer writes that file
+to a folder the user picks and reads the other computers' files from it; their own sync tool
+or shared drive carries them, and Stedding itself sends nothing anywhere. Each computer also
+keeps, in its own profile, a record of the merged sidebar, the last ten changes for Undo and
+five backups (`features/sidebar-file.md` Sf7–Sf41, ADR 0029).
 
 ### WebRTC IP handling
 
@@ -255,6 +298,37 @@ Stedding sends the GPC signal (`Sec-GPC` header and
 `navigator.globalPrivacyControl`) by default. It is a legally meaningful opt-out
 in several jurisdictions and costs users nothing. Settings → Stedding → Privacy →
 **Send Global Privacy Control** turns it off (`features/privacy.md` Q4).
+
+### Links you open — tracking parameters removed, on by default
+
+A page you open, from a link, a new tab, the address field, a bookmark or another app,
+loads without the tracking parameters a copied link loses (`utm_*`, `fbclid`, `gclid` and
+the rest of one table, `features/copy-link.md` L2), so the site's server never receives
+them, and history keeps only the clean address. A link through a redirect page that
+carries its target in its own address (Google's `/url`, Facebook's and Messenger's
+`l.php`, Instagram's `l.`, Reddit's `out.`, YouTube's `/redirect`) goes straight to the
+target, and the redirect page is never asked for. Both tables are compiled in: nothing is
+fetched, and a shortener such as `t.co` is not asked for its target, so it is followed as
+any link is. Only the first address of a top-level page is touched: a page's own requests,
+frames, forms, reloads, back and forward, and a server's redirects are left as they are, so
+a page that needs a parameter can still ask for it back. The tab's own entry, which session
+restore writes to disk, still records the address as it was opened. Settings → Stedding →
+Privacy → **Remove tracking from links you open** turns it off, and **Sites that keep
+their links** exempts a site (`features/clean-links.md`; `features/privacy.md` Q15).
+### Ad and tracker blocking — off by default, nothing kept per site
+
+**Block ads and trackers** (Settings › Stedding › Privacy; `features/blocker.md`, ADR 0030) is
+off until the user turns it on. Then, and only then, Stedding downloads two filter lists,
+EasyList and EasyPrivacy, from their homepage, `easylist.to`, each again when it says it
+expires, and converts them on this computer into the rules Chromium's own subresource filter
+blocks by. The request carries nothing about the user (the row above). The lists, the rules made
+from them and a LICENSE file naming each list stay in the `Stedding Blocker` folder of the data
+folder; their fetch times are in local state. Blocking keeps no record of the sites visited: the
+"ads blocked" icon is not shown and Chromium's per-site ads data is not written. The only thing
+stored for a site is an exception the user made (the ADS content setting, in the profile's
+`Preferences` file); one made in a private window stays in that window's memory. Delete
+browsing data with "Site settings" ticked clears the exceptions. Turning blocking off stops the
+fetches; the downloaded lists stay on disk until the data folder is removed.
 
 ### Extensions — compatibility with a caveat
 
@@ -287,8 +361,11 @@ consequences we will not hide:
 | Topics, Protected Audience, Attribution Reporting | Off | — |
 | Safe Browsing | The setting is on (hash-prefix only), but it does not protect in these builds: the list updates are refused without an API key (see above) | Turn off |
 | Google sync | Not available | — |
+| Sidebar sync through a folder | Off. Once a folder is chosen, this computer's file there holds its Spaces (name, icon, colours, order, whether it has its own session), pins (home address and the user's own name), pinned folders, essentials, a random install id and the computer's name ("Mac" or "Windows PC" and four characters, or what the user typed). Never open tabs, history, cookies, passwords, jars or the host name. Stedding makes no network request for it: the user's own sync tool or shared drive moves the file (`features/sidebar-file.md` Sf7–Sf41) | Settings → Stedding → Spaces → Sync through a folder; Stop syncing, with or without removing this computer's file |
 | WebRTC local IPs | Hidden (mDNS) | Stricter policies through an extension; no setting |
 | Global Privacy Control | On | Turn off |
+| Tracking parameters on links you open | Removed, and known redirect pages skipped; nothing fetched | Turn off; keep a site's in Settings |
+| Ad and tracker blocking | Off; nothing fetched | Turn on (lists from easylist.to); then off or on for any site |
 | New-tab sponsored content | Never (no network on the new tab page) | — |
 | Extensions | None installed | User installs; store traffic follows |
 
@@ -312,10 +389,9 @@ patch has changed yet:
 | Component updates from our infrastructure | The component updater talks to Google; it needs an endpoint swap and a component allowlist |
 | No placeholder API keys in request URLs | The placeholder key is still appended to some Google requests |
 
-Planned (`ROADMAP.md` M10): ad and tracker blocking built in, with a switch per site,
-whose own ADR comes first and names the filter-list fetches it adds to this document
-(`BACKLOG.md` S-88), and tracking parameters stripped from every link opened, not only
-from a copied one (S-89).
+Planned (`ROADMAP.md` M10): the later slices of ad and tracker blocking (element hiding,
+optional lists and a page for a blocked site, `features/blocker.md` Bk20 to Bk23)
+(`BACKLOG.md` S-88).
 
 ---
 

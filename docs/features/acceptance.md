@@ -277,20 +277,230 @@ script and call the window's activation). About ten minutes on each platform.
 | `pk_dialog` | In the peek, press the page's button. | The page's dialog shows in the peek (P6). |
 | `pk_as_tab` | Open a peek; press Open as Tab, then the same with ⌘O (Ctrl+O). | The page becomes the active tab of the window, under the Clear line, without loading again; the peek is gone (P7). |
 | `pk_split` | Open a peek; press Open in Split View, then the same with ⇧⌘O (Ctrl+Shift+O). | The page sits in a split beside the pinned tab (P9). |
-| `pk_essential` | Drag the pin into the essentials, click its link. | The peek offers Open as Tab alone (P9). |
-| `pk_close` | Open a peek; click the window's margin outside it. Open it again; press Escape. Open it again; press ⌘W (Ctrl+W). | Each closes the peek, and the window is in front, the pinned tab where it was (P14). |
+| `pk_essential` | Drag the pin into the essentials, click its link. Right-click the peek's page; on the Mac, open the File menu. | The peek offers Open as Tab alone: on its row, in the page menu, and in the File menu, whose first row reads Open as Tab (P9). |
+| `pk_close` | Open a peek; click the window's margin outside it. Open it again; press Escape. Open it again; press ⌘W (Ctrl+W). Open it again; wait a second, click the window's margin, then the pin's link at once. | Each closes the peek, and the window is in front, the pinned tab where it was; the link clicked straight after opens the peek again (P14). |
 | `pk_fullscreen` | Put the window in full screen (⌃⌘F on the Mac, F11 on Windows), click the pin's link. | The peek opens over the full-screen window, in its Space on the Mac, not on another desktop (P6). |
 | `pk_redirect` | In the pinned mail or chat app, click a link to another site, then a link to the app's own pages, then its "Sign in" or account link. | The first peeks; the second and the third go on in the pin (P2, P15, P16). |
 | `pk_off` | Turn Peek off in Settings; click the pin's link. | The pinned tab follows the link, as any tab would (P10). |
+| `pk_space` | With two Spaces, open a peek from a tab pinned in its Space; without clicking the window, swipe two fingers sideways over the sidebar to the other Space; press Open in Split View. Repeat with Open as Tab. | The window shows the pinned tab's Space again: the page in a split beside the pinned tab, then as the active tab; the other Space's tabs stay where they were (P7, P9). |
+| `pk_grace` | Click the pin's link, and as the peek appears (within half a second) click the window's margin. | The peek comes back to the front, over the window; a click on the margin a moment later closes it (P14). |
+| `pk_restore` | With the next launch set to continue where you left off, open a peek from a pin in a Space with a session of its own; quit (⌘Q, or Exit from the menu on Windows) with the peek open; start the browser again. | The window and its pinned tab come back; the peek does not (P17). |
 
 ### Runs
 
 One row per run, as for the core loop.
 
-| Date | Build | Platform | `pk_open` | `pk_dialog` | `pk_as_tab` | `pk_split` | `pk_essential` | `pk_close` | `pk_fullscreen` | `pk_redirect` | `pk_off` | Notes |
+| Date | Build | Platform | `pk_open` | `pk_dialog` | `pk_as_tab` | `pk_split` | `pk_essential` | `pk_close` | `pk_fullscreen` | `pk_redirect` | `pk_off` | `pk_space` | `pk_grace` | `pk_restore` | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-25 | patch 0088, release, a copy with its own data folder | Mac | pass | pass | pass (the button and ⌘O) | pass (the button and ⇧⌘O; the pair's row leaves the pinned run, splits J5) | TBD | pass (margin, Escape, ⌘W) | pass | TBD | pass | not run | not run | not run | driven by `tooling/drive` with synthetic input, the owner asleep; captures by window id |
+| 2026-10-25 | patch 0088, `out\win-release` | Windows 11 | pass (`example.com` pinned, a link to `iana.org`: a peek at the window's inset bounds) | TBD | pass (Ctrl+O) | TBD | TBD | pass (Escape, a click on the window's margin) | TBD | TBD | TBD | not run | not run | not run | `tooling\win\drive.ps1`'s real pointer and keyboard, the owner asleep; checked by window bounds and DevTools' page list, no captures |
+
+## Clean links
+
+The live checks `docs/features/clean-links.md` cites: a tracked link, a typed one and a
+redirect page, opened on a real build, with the address field and history read by eye.
+About five minutes on each platform.
+
+### Before the run
+
+- An installed build with a fresh profile ("Remove tracking from links you open" on, as
+  shipped).
+- A page served from this computer with links to another site: for example
+  `python3 -m http.server 8765` serving `links.html`, with a link to
+  `http://localhost:8765/a.html?utm_source=mail&id=1` and one to
+  `https://www.google.com/url?q=http%3A%2F%2Flocalhost%3A8765%2Fb.html%3Ffbclid%3Dx`,
+  opened as `http://127.0.0.1:8765/links.html`. The server's own log shows what it was
+  asked for.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `cl_click` | Click the `utm_source` link; then ⌘-click (Ctrl-click) it. | Both pages open at `a.html?id=1`; the address field shows no `utm_source`; the server's log has no request with it (Cl1). |
+| `cl_typed` | Type `localhost:8765/a.html?gclid=1&id=2` in the address field and press Enter. | The page opens at `a.html?id=2`, and the field shows that once it has loaded (Cl1). |
+| `cl_redirect` | Click the Google link. | `b.html` opens with no `fbclid`, without a stop at google.com (Cl3). |
+| `cl_history` | Open chrome://history. | `a.html?id=1`, `a.html?id=2` and `b.html` are listed; no `utm_source`, `gclid` or google.com/url address is (Cl6). |
+| `cl_kept` | In Settings → Stedding → Privacy, add `localhost` to "Sites that keep their links"; click the `utm_source` link again. | The page opens with `utm_source=mail` (Cl8, Cl9). |
+| `cl_off` | Remove the site; turn "Remove tracking from links you open" off; click the link. | The page opens with `utm_source=mail`; the Google link stops at google.com (Cl7). |
+
+### Runs
+
+One row per run, as for the core loop.
+
+| Date | Build | Platform | `cl_click` | `cl_typed` | `cl_redirect` | `cl_history` | `cl_kept` | `cl_off` | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+
+## The sidebar on the right
+
+The live checks `docs/features/sidebar.md` Y34–Y43 cite: what the sidebar on the right looks
+like and how it answers the real pointer, which the browser tests play by hand. About ten
+minutes on each platform; none has run yet.
+
+### Before the run
+
+- An installed build, a fresh profile, two normal windows and a long page (one with a
+  vertical scroll bar) in each.
+- On Windows, a white page and a page with a dark `theme-color`, for the caption buttons'
+  colours.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `sr_switch` | Settings → Stedding → Sidebar → turn "Sidebar on the right" on; look at both windows; turn it off. | Both sidebars move to the right at once, the page a gutter to their left and the address row over the page; off, both come back (Y34, Y35, Y36). |
+| `sr_menus` | Right-click the sidebar's empty ground; choose "Move Sidebar to the Right". Then ⌘T (Ctrl+T), type "Move Sidebar", Enter. On the Mac, the View menu. | Each names the side the sidebar goes to and moves it there (Y34). |
+| `sr_private` | Open a private window (⇧⌘N, Ctrl+Shift+N); move the sidebar from its menu; close it. | The normal windows move too, and stay moved (Y34). |
+| `sr_edge` | With the sidebar on the right, rest on its left edge, drag it left and right; double-click it; Tab to it and press Left and Right. | The bar shows on the gutter; left widens, right narrows; the double click returns the default width (Y37). |
+| `sr_rail` | ⌘S (Ctrl+S) with "Shrink to icons"; rest on the rail with expand-on-hover on. | The rail is at the right, its icons centred against the page's edge; it opens leftward over the page, which does not move (Y35, Y38). |
+| `sr_hidden` | "Hide it completely", ⌘S; push the pointer to the window's right edge and rest. Then, in a maximized window, throw the pointer at the screen's right edge and drag the page's scroll bar at once. | The sidebar slides in from the right; the scroll bar drag scrolls the page and the sidebar stays hidden (Y39). |
+| `sr_drop` | Drag a link from another app toward the sidebar. | The drop arrow is at the sidebar's right edge, pointing left (Y40). |
+| `sr_lights` | On the Mac: look at the window's top left, open and as the rail; then full screen with Always Show Toolbar off, pointer to the screen's top. | The traffic lights sit on the address row's bar, its buttons past them; in full screen the row's contents start past where the lights come in (Y41). |
+| `sr_caption` | On Windows: look at the top right, open and as the rail, on the white page and the dark one; hover each caption button. | Over the open sidebar the buttons are drawn in the sidebar's colours and its toggle is clear of them; over the rail they sit on the row's bar in its colours and the rail's toggle is below them; every glyph and hover fill is readable (Y42). |
+
+### Runs
+
+One row per run, as for the core loop.
+
+| Date | Build | Platform | `sr_switch` | `sr_menus` | `sr_private` | `sr_edge` | `sr_rail` | `sr_hidden` | `sr_drop` | `sr_lights` | `sr_caption` | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-10-25 | patch 0088, release, a copy with its own data folder | Mac | pass | pass | pass (the button and ⌘O) | pass (the button and ⇧⌘O; the pair's row leaves the pinned run, splits J5) | TBD | pass (margin, Escape, ⌘W) | pass | TBD | pass | driven by `tooling/drive` with synthetic input, the owner asleep; captures by window id |
-| 2026-10-25 | patch 0088, `out\win-release` | Windows 11 | pass (`example.com` pinned, a link to `iana.org`: a peek at the window's inset bounds) | TBD | pass (Ctrl+O) | TBD | TBD | pass (Escape, a click on the window's margin) | TBD | TBD | TBD | `tooling\win\drive.ps1`'s real pointer and keyboard, the owner asleep; checked by window bounds and DevTools' page list, no captures |
+## Site controls
+
+The live checks `docs/features/site-controls.md` Si11 and Si12 wait on, and the rest of the
+panel as a person meets it: how it looks and sounds, which no browser test sees, and the
+real pointer and keyboard. About fifteen minutes by hand on each platform; none has run yet.
+
+### Before the run
+
+- An installed build; a profile with Home and Work, Work's Independent session on (its
+  chip menu); a site you can sign in to, signed in from a tab in Work and from a tab in
+  Home.
+- One extension installed and not pinned; a page with a video; an https site that has
+  never asked for the camera.
+- VoiceOver on the Mac, Narrator on Windows, for `sc_voice`.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `sc_open` | Click the site chip at the address row's left. Hide the row (⇧⌘D, Ctrl+Shift+D) and run View Site Information from the command bar. | Both open page info with the strip under its title and Stedding's rows before Site settings; with the row hidden, inside the page at the card's top left (Si1). |
+| `sc_strip` | Rest the pointer on each strip button. Press Copy link, Option-click it (Alt-click), press Copy title; paste each into a text field. | Each tooltip names the action and its chord. The clean link, the Markdown link, the title; the panel closes after each; the toasts say what was copied (Si2, Si3). |
+| `sc_media` | On the video page open the panel, then play the video. Press Mute, then Picture in picture. | Picture in picture comes on as the video plays; Mute's words and icon flip and the panel stays; Picture in picture opens the floating window (Si4). |
+| `sc_zoom` | Press Zoom in twice, the percentage, Zoom out. Press ⌘+ (Ctrl++) with the panel open. | 110%, 125%, 100%, 90%; no zoom bubble over the panel; the key shows in the percentage (Si5). |
+| `sc_camera` | Open the panel on the https site. Turn the camera off, then look at Site settings. | Camera and Microphone rows though the site never asked; the choice shows in Site settings (Si6). |
+| `sc_session` | Open the panel on Work's page, then on Home's. | "Work · Independent session" with the cookie, its tooltip the mark's; "Shared session" (Si7). |
+| `sc_clear` | On the signed-in site in Work, press Clear site data…, read the question, press Clear and Reload. Then show the same site in Home. | The question names the site and Work and says you will be signed out; the page reloads signed out, with the toast; Home is still signed in (Si8). |
+| `sc_dark` | Turn Dark pages on in the panel, then turn the site's row off. Press ⌥⇧⌘D (Ctrl+Alt+Shift+D) with the panel open. | The moon turns on with the switch; the page darkens, then stays light; the switch row follows the chord (Si9). |
+| `sc_extensions` | Press Extensions in the panel and pin the extension. Hide the row and do it again from View Site Information. | The menu opens from the extensions button; the pinned button shows in the row at once; with the row hidden, the menu opens at the card's top left (Si10). |
+| `sc_look` | Look at the panel in Light and Dark (Settings → Appearance), on a page with a coloured top. Capture it by window id (`tooling/capture-windows`). | Page info's own colours; the strip's buttons hover and press as page info's rows do; no page colour in the panel (Si12). |
+| `sc_voice` | With VoiceOver or Narrator on, Tab through the panel; press Escape. | Each strip button read by its action, the zoom as "Reset zoom, 100%", each switch as a toggle named for what it turns, the session row once with the mark's meaning; Escape closes the panel and the page has the focus (Si11). |
+
+### Runs
+
+One row per run, as for the core loop. None yet.
+
+| Date | Build | Platform | `sc_open` | `sc_strip` | `sc_media` | `sc_zoom` | `sc_camera` | `sc_session` | `sc_clear` | `sc_dark` | `sc_extensions` | `sc_look` | `sc_voice` | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+## Sidebar panels
+
+The live checks `docs/features/sidebar-panels.md` cites: what the browser tests cannot see or
+do -- the Mac's menu-bar keys, the look over a Space's colour, the system's Trash, a drag into
+the Finder or Explorer, a screen reader. About fifteen minutes on each platform.
+
+### Before the run
+
+- An installed build with "Open History and Downloads in the sidebar" on (the default).
+- Some history, and two finished downloads, one of them small enough to move to the Trash.
+- Three Spaces of different colours; the system in light, then dark.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `sp_keys` | Press ⌘Y (Ctrl+H), then ⇧⌘J and ⌥⌘L (Ctrl+J), then the same again; click into the panel's search field and press ⌘Y (Ctrl+H) again. | History opens in the sidebar's column, Downloads replaces it, the same key closes it; with the focus in the panel the key still closes it (Pn1, Pn2). |
+| `sp_glass` | On the Mac, set the sidebar narrow (about 200 DIP) and open History. | The sidebar is drawn about 340 DIP wide with the glass behind all of it; closed, it is narrow again (Pn4). |
+| `sp_look` | Open each panel in each Space, in light and in dark. | Every row, heading and button reads clearly over the Space's colour; the panel has no ground of its own (Pn16). |
+| `sp_caption` | With the address row shown, click into the search field and press on the panel's header. | The field takes the focus and the window does not move (Pn16). |
+| `sp_open_show` | In Downloads, click a finished row; then its menu's Show in Finder (Show in Folder). | The file opens; the Finder (Explorer) shows it (Pn9). |
+| `sp_trash` | Move to Trash (Recycle Bin) on the small download. | The file is in the Trash and can be put back; the row stays, marked as deleted (Pn11). |
+| `sp_drag` | Drag a finished row to the Finder's desktop (Explorer's). | A copy of the file lands there (Pn12). |
+| `sp_nudge` | Download a file with the sidebar open; then again with Reduce Motion on (Windows: animation effects off). | The downloads button bobs twice when it finishes; with motion off it does not (Pn13). |
+| `sp_reader` | With VoiceOver (Narrator) on, press F6 until the panel. | It is announced as "History" or "Downloads", and its rows read their titles (Pn16). |
+
+### Runs
+
+| Date | Build | Platform | `sp_keys` | `sp_glass` | `sp_look` | `sp_caption` | `sp_open_show` | `sp_trash` | `sp_drag` | `sp_nudge` | `sp_reader` | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+## Shortcuts the user changes
+
+The live checks `docs/features/shortcuts.md` cites (Z5, Z11, Z15, Z17-Z19): what a person
+does in the Shortcuts block on a real build, with the real keyboard. About fifteen minutes
+on each platform.
+
+### Before the run
+
+- An installed build that carries BACKLOG S-91, two windows open, a few tabs in each.
+- On the Mac, an App Shortcut set in System Settings (Keyboard, Keyboard Shortcuts, App
+  Shortcuts) for one of the browser's menu rows, for `sc_macos`. On Windows, a keyboard
+  layout with AltGr (Polish (Programmers), German) for `sc_altgr`.
+- VoiceOver or Narrator for `sc_reader`.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `sc_rebind` | In Settings → Stedding → Shortcuts, press Add on Next Space and press ⌃⌥⇧J (Ctrl+Alt+Shift+J); take its shipped chords off with their ×. Press the new chord in both windows, then the old one. | The new chord moves to the next Space in each window, at once; the old one does nothing (Z11). On the Mac the Spaces menu's row shows the new chord. |
+| `sc_record` | Press Add on a row and press ⌘T (Ctrl+T), then ⌘W (Ctrl+W). | No tab opens or closes; the row names ⌘T's owner (Z12, Z19). Escape cancels; Tab alone leaves the recorder. |
+| `sc_replace` | Record ⇧⌘E (Ctrl+Shift+E) on Clear; press Replace. | Clear has it; Collapse the folders is off (its only chord gone); Cancel instead leaves both (Z12). |
+| `sc_refused` | Record ⌘Q, ⌘C (Ctrl+C), Escape alone, and a chord macOS has on (⌃Space). | Each is refused with its reason (Z14, Z15). |
+| `sc_held` | Move Most Recent Tab to ⌥J (Alt+J) and hold it: press J again, let go of ⌥ (Alt). | The strip of recent tabs follows the new chord and commits on letting go (Z18). |
+| `sc_numbers` | Turn the row chords' switch off; hold ⌘ (Ctrl). | No row numbers appear, and ⌘1 (Ctrl+1) does nothing (Z17). |
+| `sc_macos` | Find the row of the menu command with an App Shortcut. | It says macOS sets it, and has no Add (Z15). |
+| `sc_altgr` | On a layout with AltGr, record a chord with AltGr. | The recorder asks for the left Alt instead (Z15). |
+| `sc_reader` | With VoiceOver or Narrator, press Add. | It reads "Press the keys for <command>; Escape cancels" (Z19). |
+| `sc_restart` | Reset all shortcuts after changing two; then change one and relaunch. | Reset all asks first and puts both back; the relaunched browser keeps the one changed (Z5, Z10). |
+
+### Runs
+
+One row per run, as for the core loop.
+
+| Date | Build | Platform | `sc_rebind` | `sc_record` | `sc_replace` | `sc_refused` | `sc_held` | `sc_numbers` | `sc_macos` | `sc_altgr` | `sc_reader` | `sc_restart` | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+## Sync through a folder
+
+The live checks `docs/features/sidebar-file.md` Sf7–Sf41 cite, which the tests cannot make: two
+computers, a real sync tool, the system's privacy prompts. About forty minutes; none has run
+yet.
+
+### Before the run
+
+- The Mac (a signed build) and the PC, each with a profile holding two Spaces and a few
+  pins, one pinned folder and two essentials; a folder both see (Syncthing, or a share on
+  the NAS), an iCloud Drive folder on the Mac and a OneDrive folder on the PC.
+
+### The checks
+
+| Id | Do | Expect |
+|---|---|---|
+| `sy_join` | Mac: Settings → Stedding → Spaces → Set up…, pick the shared folder, Start syncing. PC: the same; tick the pairs; Combine. | The sheet names the Mac and its counts and the pairs; after Combine, one Space per pair on both, the Mac's pins unloaded on the PC; nothing open closed (Sf9, Sf10, Sf17). |
+| `sy_edit` | Mac: rename a Space; PC within the same minute: recolour it. Pin a page on the PC. | Both computers show the new name and colour within a few seconds of the sync tool moving the file; the pin arrives unloaded on the Mac (Sf13, Sf15). |
+| `sy_remove` | PC: unpin one pin; close a window holding pins; quit and relaunch. | The unpinned pin goes on the Mac (into Recently Closed if never opened there); the window's pins stay on the Mac (Sf18, Sf19, Sf21). |
+| `sy_bulk` | PC: unpin five pins at once; delete a Space. | The Mac shows one row for the five with Apply and Keep, and one for the Space with Delete here… and Keep; nothing goes until answered (Sf22, Sf23). |
+| `sy_copy` | Edit the PC's file on both machines while Syncthing is paused, then resume. | A conflict copy is named with Show in folder and Dismiss; nothing in it applies (Sf28). |
+| `sy_cloud` | Mac: an iCloud Drive folder; Remove Download on the PC's file; Sync now. PC: OneDrive with Files On-Demand. | "Waiting for … to download", nothing removed; the change applies once the file is down (Sf30). |
+| `sy_prompt` | Mac: pick a folder in Documents and one on a network volume; quit and relaunch. | Any prompt shows right after the pick with Stedding's sentence, and at a launch only once a window is up (Sf32). |
+| `sy_share` | Mac: a NAS share; write from the PC; bring Stedding to the front. | The change arrives within ten seconds of Stedding being in front (Sf13). |
+| `sy_stop` | Stop syncing on the PC, with the box ticked. | The PC's sidebar is unchanged; its file goes from the folder; the Mac keeps its own (Sf37). |
+| `sy_time` | Join a profile with 300 pins. | The join applies without a visible stall; time it. |
+
+### Runs
+
+One row per run, as for the core loop.
+
+| Date | Build | Platforms | `sy_join` | `sy_edit` | `sy_remove` | `sy_bulk` | `sy_copy` | `sy_cloud` | `sy_prompt` | `sy_share` | `sy_stop` | `sy_time` | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 ## The tests beside the script
 
