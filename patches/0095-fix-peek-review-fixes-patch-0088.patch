@@ -31,16 +31,16 @@ Removable when: never; these are fixes to shipped Peek behaviour.
  .../render_view_context_menu.cc               |   9 +-
  chrome/browser/ui/stedding/little_window.cc   |  67 +++-
  chrome/browser/ui/stedding/little_window.h    |  26 +-
- chrome/browser/ui/stedding/peek.cc            | 109 +++---
- chrome/browser/ui/stedding/peek.h             |  13 +-
+ chrome/browser/ui/stedding/peek.cc            | 114 +++---
+ chrome/browser/ui/stedding/peek.h             |  19 +-
  .../views/frame/browser_native_widget_mac.mm  |   5 +-
  chrome/browser/ui/views/peek/BUILD.gn         |   6 +
  .../ui/views/peek/peek_navigation_throttle.cc |  26 +-
  .../ui/views/peek/peek_navigation_throttle.h  |   7 +-
  chrome/browser/ui/views/peek/peek_unittest.cc |  73 +++-
  chrome/test/stedding/BUILD.gn                 |   2 +
- chrome/test/stedding/peek_browsertest.cc      | 339 ++++++++++++++++--
- 12 files changed, 544 insertions(+), 138 deletions(-)
+ chrome/test/stedding/peek_browsertest.cc      | 343 ++++++++++++++++--
+ 12 files changed, 561 insertions(+), 136 deletions(-)
 
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 index 39f7a5d4568cf..ea53a8d6a9826 100644
@@ -225,7 +225,7 @@ index c5d619b736cb5..94f06d4e67fc8 100644
  // window's button, in its page menu and on the File menu's row.
  std::u16string OpenInMainWindowLabel();
 diff --git a/chrome/browser/ui/stedding/peek.cc b/chrome/browser/ui/stedding/peek.cc
-index a3a8327dfa501..fa16613339c9c 100644
+index a3a8327dfa501..812f71b301126 100644
 --- a/chrome/browser/ui/stedding/peek.cc
 +++ b/chrome/browser/ui/stedding/peek.cc
 @@ -11,7 +11,6 @@
@@ -236,7 +236,7 @@ index a3a8327dfa501..fa16613339c9c 100644
  #include "base/task/single_thread_task_runner.h"
  #include "base/time/time.h"
  #include "chrome/browser/profiles/profile.h"
-@@ -46,37 +45,10 @@ constexpr int kTopMargin = 48;
+@@ -46,35 +45,13 @@ constexpr int kTopMargin = 48;
  
  // P14: the source's window may take the activation back while the peek's
  // window appears -- Windows does when the browser is not the foreground
@@ -271,12 +271,13 @@ index a3a8327dfa501..fa16613339c9c 100644
 -                    base::TimeTicks::Now() - last->when < kSameLinkWindow;
 -  last.reset();
 -  return same;
--}
--
++base::TimeDelta& OpeningGrace() {
++  static base::TimeDelta grace = kOpeningGrace;
++  return grace;
+ }
+ 
  // The window a page is a tab of now; null while it is not in one.
- BrowserWindowInterface* WindowOf(content::WebContents* contents) {
-   tabs::TabInterface* const tab =
-@@ -84,6 +56,16 @@ BrowserWindowInterface* WindowOf(content::WebContents* contents) {
+@@ -84,6 +61,16 @@ BrowserWindowInterface* WindowOf(content::WebContents* contents) {
    return tab ? tab->GetBrowserWindowInterface() : nullptr;
  }
  
@@ -293,7 +294,7 @@ index a3a8327dfa501..fa16613339c9c 100644
  // What makes a page a peek's: the pinned tab it came from, and the watch on
  // that tab's window, whose activation closes the peek (P14).
  class PeekPage : public content::WebContentsUserData<PeekPage> {
-@@ -100,13 +82,9 @@ class PeekPage : public content::WebContentsUserData<PeekPage> {
+@@ -100,13 +87,9 @@ class PeekPage : public content::WebContentsUserData<PeekPage> {
   private:
    friend class content::WebContentsUserData<PeekPage>;
  
@@ -308,7 +309,7 @@ index a3a8327dfa501..fa16613339c9c 100644
          opened_(base::TimeTicks::Now()) {
      if (BrowserWindowInterface* const window =
              source->GetBrowserWindowInterface()) {
-@@ -116,34 +94,39 @@ class PeekPage : public content::WebContentsUserData<PeekPage> {
+@@ -116,34 +99,39 @@ class PeekPage : public content::WebContentsUserData<PeekPage> {
    }
  
    // P14: a click on the window the peek came from closes it, as a click
@@ -322,7 +323,7 @@ index a3a8327dfa501..fa16613339c9c 100644
 +  // the one the activation is moving from.
    void SourceWindowBecameActive(BrowserWindowInterface*) {
 -    if (base::TimeTicks::Now() - opened_ < kOpeningGrace) {
-+    const bool raise = base::TimeTicks::Now() - opened_ < kOpeningGrace;
++    const bool raise = base::TimeTicks::Now() - opened_ < OpeningGrace();
 +    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
 +        FROM_HERE, base::BindOnce(&PeekPage::AfterSourceWindowBecameActive,
 +                                  GetWebContents().GetWeakPtr(), raise));
@@ -370,7 +371,7 @@ index a3a8327dfa501..fa16613339c9c 100644
    const base::TimeTicks opened_;
    base::CallbackListSubscription activated_;
  
-@@ -190,12 +173,16 @@ BrowserWindowInterface* MakePeek(tabs::TabInterface* source,
+@@ -190,12 +178,16 @@ BrowserWindowInterface* MakePeek(tabs::TabInterface* source,
        open && open->GetWindow()) {
      open->GetWindow()->Close();
    }
@@ -389,7 +390,7 @@ index a3a8327dfa501..fa16613339c9c 100644
    chrome::AddWebContents(window, nullptr, std::move(contents), url,
                           WindowOpenDisposition::NEW_FOREGROUND_TAB,
                           blink::mojom::WindowFeatures());
-@@ -219,7 +206,7 @@ PeekLink::~PeekLink() = default;
+@@ -219,7 +211,7 @@ PeekLink::~PeekLink() = default;
  
  BrowserWindowInterface* OpenPeek(tabs::TabInterface* source,
                                   const PeekLink& link) {
@@ -398,7 +399,7 @@ index a3a8327dfa501..fa16613339c9c 100644
      return nullptr;
    }
    // P11 (PLAN.md CMD-9): the page is made in the pinned tab's own jar, so a
-@@ -264,7 +251,7 @@ BrowserWindowInterface* OpenPeekWithContents(
+@@ -264,7 +256,7 @@ BrowserWindowInterface* OpenPeekWithContents(
      tabs::TabInterface* source,
      std::unique_ptr<content::WebContents> contents,
      const GURL& url) {
@@ -407,11 +408,30 @@ index a3a8327dfa501..fa16613339c9c 100644
      return nullptr;
    }
    content::WebContents* const page = contents.get();
+@@ -307,6 +299,10 @@ BrowserWindowInterface* PeekOver(const BrowserWindowInterface* window) {
+   return found;
+ }
+ 
++void SetPeekOpeningGraceForTesting(base::TimeDelta grace) {
++  OpeningGrace() = grace;
++}
++
+ void ForgetPeek(content::WebContents* contents) {
+   if (contents) {
+     contents->RemoveUserData(PeekPage::UserDataKey());
 diff --git a/chrome/browser/ui/stedding/peek.h b/chrome/browser/ui/stedding/peek.h
-index 388d1d76cc92a..528e39d8dcf4c 100644
+index 388d1d76cc92a..70bcdd42c59ec 100644
 --- a/chrome/browser/ui/stedding/peek.h
 +++ b/chrome/browser/ui/stedding/peek.h
-@@ -54,15 +54,16 @@ struct PeekLink {
+@@ -10,6 +10,7 @@
+ #include <string>
+ 
+ #include "base/memory/scoped_refptr.h"
++#include "base/time/time.h"
+ #include "content/public/common/child_process_id.h"
+ #include "content/public/common/referrer.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+@@ -54,15 +55,16 @@ struct PeekLink {
  };
  
  // P6: opens `link` in a peek over the window of `source`, the page made in
@@ -434,6 +454,18 @@ index 388d1d76cc92a..528e39d8dcf4c 100644
  BrowserWindowInterface* OpenPeekWithContents(
      tabs::TabInterface* source,
      std::unique_ptr<content::WebContents> contents,
+@@ -87,6 +89,11 @@ BrowserWindowInterface* PeekOver(const BrowserWindowInterface* window);
+ // the source's window no longer closes the window it is in.
+ void ForgetPeek(content::WebContents* contents);
+ 
++// P14: how long after a peek appears an activation of its window brings the
++// peek back rather than closing it; 750 ms but in a test that cannot open a
++// peek that fast (a slow build).
++void SetPeekOpeningGraceForTesting(base::TimeDelta grace);
++
+ // P7, P9: the names of the peek's two ways into the window, on its row and
+ // in its page menu.
+ std::u16string PeekOpenAsTabLabel();
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 index 7770911851d25..ac5ff28c54683 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
@@ -716,7 +748,7 @@ index 72ccbe0913e86..1bb5f36e6b869 100644
      "//components/certificate_transparency:proto",
      "//components/payments/core",
 diff --git a/chrome/test/stedding/peek_browsertest.cc b/chrome/test/stedding/peek_browsertest.cc
-index accba78c8784e..defc96b13bfad 100644
+index accba78c8784e..66321014b2f61 100644
 --- a/chrome/test/stedding/peek_browsertest.cc
 +++ b/chrome/test/stedding/peek_browsertest.cc
 @@ -7,6 +7,8 @@
@@ -1028,7 +1060,7 @@ index accba78c8784e..defc96b13bfad 100644
  
    chrome::ExecuteCommand(peek, IDC_STEDDING_LITTLE_PROMOTE_SPLIT);
    ASSERT_TRUE(base::test::RunUntil(
-@@ -303,37 +460,128 @@ IN_PROC_BROWSER_TEST_F(PeekTest, OpenInSplitViewPairsThePageWithItsPin) {
+@@ -303,37 +460,132 @@ IN_PROC_BROWSER_TEST_F(PeekTest, OpenInSplitViewPairsThePageWithItsPin) {
    EXPECT_TRUE(moved->IsSplit());
    EXPECT_TRUE(pin->IsSplit());
    EXPECT_EQ(moved->GetSplit(), pin->GetSplit());
@@ -1111,6 +1143,9 @@ index accba78c8784e..defc96b13bfad 100644
 +// click on it: the peek stays (and is brought back to the front, which only
 +// a real window shows: live check pk_grace).
 +IN_PROC_BROWSER_TEST_F(PeekTest, AnActivationAsThePeekAppearsKeepsIt) {
++  // The activation comes inside the grace whatever the build's speed: under
++  // AddressSanitizer the peek took longer than 750 ms to appear.
++  stedding::SetPeekOpeningGraceForTesting(base::Seconds(30));
 +  ASSERT_NO_FATAL_FAILURE(OpenPin(Url("b.test", "/title3.html")));
 +  ClickLink();
 +  // At once, well inside the first 750 ms: not after the page has loaded.
@@ -1121,6 +1156,7 @@ index accba78c8784e..defc96b13bfad 100644
    content::RunAllTasksUntilIdle();
 -  EXPECT_FALSE(stedding::PeekOver(browser())) << "the link opened it again";
 +  EXPECT_EQ(peek, stedding::PeekOver(browser())) << "the peek closed";
++  stedding::SetPeekOpeningGraceForTesting(base::Milliseconds(750));
 +}
 +
 +// P14: Escape in the peek's page closes the peek; the pinned tab stays as
@@ -1173,7 +1209,7 @@ index accba78c8784e..defc96b13bfad 100644
  }
  
  // private V6: a peek from a private window is private, and Open as Tab
-@@ -390,6 +638,39 @@ IN_PROC_BROWSER_TEST_F(PeekTest, ALinkForANewTabPeeks) {
+@@ -390,6 +642,39 @@ IN_PROC_BROWSER_TEST_F(PeekTest, ALinkForANewTabPeeks) {
    EXPECT_EQ(count, tabs().count());
  }
  
