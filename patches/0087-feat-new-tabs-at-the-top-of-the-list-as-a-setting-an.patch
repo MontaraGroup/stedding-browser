@@ -89,7 +89,7 @@ Removable when: never; it is product behaviour.
  chrome/browser/ui/stedding/stedding_prefs.h   |   4 +
  chrome/browser/ui/tabs/tab_strip_model.cc     |  13 +-
  chrome/browser/ui/tabs/tab_strip_model.h      |   8 +
- .../frame/vertical_tab_strip_region_view.cc   |  16 +-
+ .../frame/vertical_tab_strip_region_view.cc   |  28 +-
  chrome/browser/ui/views/spaces/BUILD.gn       |   7 +
  .../ui/views/spaces/edit_space_view.cc        | 879 ++++++++++++++++++
  .../browser/ui/views/spaces/edit_space_view.h | 131 +++
@@ -103,7 +103,7 @@ Removable when: never; it is product behaviour.
  .../test/stedding/edit_space_browsertest.cc   | 206 ++++
  .../test/stedding/pinned_run_browsertest.cc   | 368 ++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  90 ++
- 37 files changed, 3205 insertions(+), 241 deletions(-)
+ 37 files changed, 3217 insertions(+), 241 deletions(-)
  create mode 100644 chrome/browser/ui/spaces/space_icon.cc
  create mode 100644 chrome/browser/ui/spaces/space_icon.h
  create mode 100644 chrome/browser/ui/spaces/space_icon_unittest.cc
@@ -2600,10 +2600,18 @@ index 45564668955ff..2123516abed75 100644
    BeforeCloseTabsCallback before_detach_tabs_callback_;
  
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 25654c0580dda..46093334834a7 100644
+index 25654c0580dda..82954170ee0da 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -124,6 +124,7 @@
+@@ -12,6 +12,7 @@
+ #include "base/callback_list.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/i18n/number_formatting.h"
+ #include "base/i18n/rtl.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -124,6 +125,7 @@
  #include "ui/display/screen.h"
  #include "ui/events/event.h"
  #include "ui/gfx/canvas.h"
@@ -2611,7 +2619,7 @@ index 25654c0580dda..46093334834a7 100644
  #include "ui/gfx/geometry/point.h"
  #include "ui/gfx/geometry/rect_conversions.h"
  #include "ui/gfx/image/image_skia.h"
-@@ -331,8 +332,15 @@ class VerticalTabStripRegionView::SpaceTint
+@@ -331,8 +333,15 @@ class VerticalTabStripRegionView::SpaceTint
      // menu; spaces B31: the choice showed nothing on a fresh profile,
      // 2026-09-05).
      const bool tint = active && (model_->size() > 1 || active->color_chosen());
@@ -2629,13 +2637,24 @@ index 25654c0580dda..46093334834a7 100644
    }
  
    // spaces::SpaceModel::Observer:
-@@ -1211,6 +1219,10 @@ void VerticalTabStripRegionView::OnPaintAsActiveChangedForNumbers() {
+@@ -1211,6 +1220,21 @@ void VerticalTabStripRegionView::OnPaintAsActiveChangedForNumbers() {
  
  void VerticalTabStripRegionView::OnThemeChanged() {
    views::View::OnThemeChanged();
-+  // spaces B43: the look changed, so a Space's pair gives another colour.
++  // spaces B43: the look changed, so a Space's pair gives another colour. A
++  // turn later: the colour is the widget's, and setting it here, in the
++  // middle of the theme's walk down the views, started a second walk inside
++  // the first (the DCHECK that every view's OnThemeChanged ran). Setting the
++  // colour it already has changes nothing, so this ends there.
 +  if (space_tint_) {
-+    space_tint_->Apply();
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(
++                       [](base::WeakPtr<VerticalTabStripRegionView> view) {
++                         if (view && view->space_tint_) {
++                           view->space_tint_->Apply();
++                         }
++                       },
++                       weak_factory_.GetWeakPtr()));
 +  }
    // sidebar Y2, Y3: the Archived row at the preset's height and text size
    // (a density change arrives as a theme change).
