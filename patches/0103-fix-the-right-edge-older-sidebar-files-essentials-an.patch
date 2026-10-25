@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
 Date: Sun, 25 Oct 2026 10:28:34 -0400
-Subject: fix: the right edge clears the caption buttons; older sidebar files
+Subject: fix: the right edge, older sidebar files, essentials, and an F6 crash
 
 Sidebar Y39: with the sidebar hidden on the right, a rest on the close
 button of a maximized window on Windows revealed the sidebar over it. The
@@ -17,18 +17,49 @@ Import I11: a Space's own essentials imported into a Space here that has no
 session of its own went into the shared row, counted against that Space's
 own (none), and filled it past twelve. They now count as shared ones.
 
+Pane focus (F6): Chromium's own lookup of the window's contents view may
+find none, and the bubble search used it unchecked: an access violation on
+Windows. It is checked, as the same file does a few lines above.
+
 Why: a review of the sidebar on the right (S-96) and of Export all Spaces
 (S-282).
 Removable when: never; to be folded into the patches that own the code.
 ---
+ .../focus/browser_focus_controller_views.cc   | 12 +++--
  .../browser/ui/spaces/arc_sidebar_importer.cc | 37 +++++++++++++--
  .../ui/spaces/sidebar_backup_unittest.cc      | 29 ++++++++++++
  .../layout/stedding_browser_view_layout.cc    | 14 ++++++
  .../frame/vertical_tab_strip_region_view.cc   | 47 ++++++++++++-------
  .../vertical_tab_strip_top_container.cc       |  6 +++
  .../stedding/sidebar_forms_browsertest.cc     | 17 ++++++-
- 6 files changed, 127 insertions(+), 23 deletions(-)
+ 7 files changed, 136 insertions(+), 26 deletions(-)
 
+diff --git a/chrome/browser/ui/focus/browser_focus_controller_views.cc b/chrome/browser/ui/focus/browser_focus_controller_views.cc
+index 22f7e9ce399f6..08cf5677d0ca4 100644
+--- a/chrome/browser/ui/focus/browser_focus_controller_views.cc
++++ b/chrome/browser/ui/focus/browser_focus_controller_views.cc
+@@ -97,12 +97,18 @@ bool BrowserFocusControllerViews::
+     }
+     auto* multi_contents_view = views::AsViewClass<MultiContentsView>(
+         GetViewForId(kMultiContentsViewElementId));
++    // Stedding: the window may have no contents view to find, as
++    // FocusWebContentsPane allows; F6 crashed here on Windows (2026-10-25).
++    views::View* const toast_anchor =
++        multi_contents_view &&
++                multi_contents_view->GetActiveContentsContainerView()
++            ? multi_contents_view->GetActiveContentsContainerView()
++                  ->GetToastAnchorView()
++            : nullptr;
+     for (auto* view : std::initializer_list<views::View*>{
+              GetViewForId(kLocationBarElementId),
+              toolbar_button_provider_->GetDownloadButton(),
+-             GetViewForId(kTopContainerElementId),
+-             multi_contents_view->GetActiveContentsContainerView()
+-                 ->GetToastAnchorView()}) {
++             GetViewForId(kTopContainerElementId), toast_anchor}) {
+       if (view) {
+         if (auto* dialog = view->GetProperty(views::kAnchoredDialogKey);
+             dialog && !user_education::HelpBubbleView::IsHelpBubble(dialog)) {
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 index 8d1a12e18eea9..5dd957e292f53 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
