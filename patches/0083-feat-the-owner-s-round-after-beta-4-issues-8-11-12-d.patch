@@ -92,7 +92,7 @@ the hover card).
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
  .../spaces/space_jar_navigation_throttle.cc   |   4 +-
  chrome/browser/ui/spaces/space_model.cc       | 369 ++++++-----
- chrome/browser/ui/spaces/space_model.h        |  70 +--
+ chrome/browser/ui/spaces/space_model.h        |  70 +-
  .../ui/spaces/space_model_window_unittest.cc  | 307 ++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
@@ -109,6 +109,7 @@ the hover card).
  chrome/browser/ui/toasts/api/toast_id.cc      |   2 -
  chrome/browser/ui/toasts/api/toast_id.h       |   8 +-
  chrome/browser/ui/toasts/toast_service.cc     |  22 -
+ .../frame/vertical_tab_strip_region_view.cc   |   6 +-
  chrome/browser/ui/views/page_action/BUILD.gn  |   9 +
  .../ui/views/page_action/page_action_view.cc  |  17 +-
  ...edding_copy_link_page_action_controller.cc | 153 +++++
@@ -122,23 +123,24 @@ the hover card).
  .../ui/views/spaces/space_switcher_view.h     |  27 +-
  .../spaces/space_tab_visibility_controller.cc |  45 ++
  .../spaces/space_tab_visibility_controller.h  |   4 +
- .../ui/views/tabs/common/folder_drag_target.h |   9 +-
- .../ui/views/tabs/common/folder_view.cc       | 459 +++++++++++---
- .../ui/views/tabs/common/folder_view.h        |  77 ++-
+ .../views/tabs/common/folder_drag_target.cc   |  96 ++-
+ .../ui/views/tabs/common/folder_drag_target.h |  19 +-
+ .../ui/views/tabs/common/folder_view.cc       | 522 ++++++++++++---
+ .../ui/views/tabs/common/folder_view.h        |  98 ++-
  .../views/tabs/common/folder_view_unittest.cc |  48 +-
  .../tabs/common/pinned_tab_container_view.cc  |  24 +-
  .../tabs/common/stedding_tab_row_rules.cc     |   4 +
  .../tabs/common/stedding_tab_row_rules.h      |   7 +
  .../common/stedding_tab_row_rules_unittest.cc |  10 +
- .../ui/views/tabs/common/tab_drag_handler.cc  |  70 +++
+ .../ui/views/tabs/common/tab_drag_handler.cc  |  76 +++
  .../ui/views/tabs/common/tab_strip_view.cc    |  93 ++-
  .../ui/views/tabs/common/tab_strip_view.h     |   1 +
  .../tabs/common/tab_strip_view_layout.cc      |  14 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |  28 +-
  .../browser/ui/views/tabs/common/tab_view.h   |  14 +-
- .../common/unpinned_tab_container_view.cc     |   8 +
- .../tabs/common/unpinned_tab_container_view.h |  29 +
- .../unpinned_tab_container_view_layout.cc     |  75 ++-
+ .../common/unpinned_tab_container_view.cc     |  24 +
+ .../tabs/common/unpinned_tab_container_view.h |  31 +
+ .../unpinned_tab_container_view_layout.cc     |  77 ++-
  .../browser/ui/views/tabs/hovercard/BUILD.gn  |  29 +-
  .../views/tabs/hovercard/fade_footer_view.cc  |  38 +-
  .../views/tabs/hovercard/fade_footer_view.h   |  13 +
@@ -152,8 +154,8 @@ the hover card).
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
- chrome/test/stedding/copy_link_browsertest.cc | 350 ++++++++++-
- .../test/stedding/folder_tabs_browsertest.cc  | 552 +++++++++++++++-
+ chrome/test/stedding/copy_link_browsertest.cc | 350 +++++++++-
+ .../test/stedding/folder_tabs_browsertest.cc  | 612 +++++++++++++++++-
  .../hover_card_picture_browsertest.cc         | 255 +++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
  .../test/stedding/pinned_run_browsertest.cc   | 194 ++++++
@@ -162,11 +164,11 @@ the hover card).
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
- chrome/test/stedding/tab_drop_browsertest.cc  | 594 +++++++++++++++++-
+ chrome/test/stedding/tab_drop_browsertest.cc  | 594 ++++++++++++++++-
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 87 files changed, 5806 insertions(+), 727 deletions(-)
+ 89 files changed, 6081 insertions(+), 734 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -442,7 +444,7 @@ index 9cb917131b6fe..28a5f4733fed5 100644
    }
    // A form a web page sends goes with the session the page was filled in:
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index ca531490e2626..b3fad7709536c 100644
+index a1f77f5eac7db..ba327b8732b42 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -638,6 +638,11 @@ void SpaceModel::SyncWithRegistry(bool seed) {
@@ -1029,7 +1031,7 @@ index ca531490e2626..b3fad7709536c 100644
        if (each == tab) {
          continue;
        }
-@@ -3255,6 +3312,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
+@@ -3259,6 +3316,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
        !tab_strip_model_->delegate()->IsTabStripEditable()) {
      return;
    }
@@ -1043,7 +1045,7 @@ index ca531490e2626..b3fad7709536c 100644
  }
  
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index f79b6994af4cc..da93531fea4fd 100644
+index 6b4b84fc63b70..42eab14610eae 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
 @@ -120,12 +120,6 @@ class SpaceModel : public TabStripModelObserver,
@@ -1180,7 +1182,7 @@ index f79b6994af4cc..da93531fea4fd 100644
    base::WeakPtrFactory<SpaceModel> weak_factory_{this};
  };
 diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
-index 60c7747465bde..4c2a1af18442c 100644
+index 474cd0b8598ca..f99b0cfd302b2 100644
 --- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
 +++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
 @@ -16,6 +16,7 @@
@@ -1241,7 +1243,7 @@ index 60c7747465bde..4c2a1af18442c 100644
  // tabs R34: with no row of the Space used since the launch left -- rows
  // opened in the background count only once selected -- a close shows the
  // next row below, else the nearest one above; not the tab that opened the
-@@ -1472,6 +1516,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
+@@ -1499,6 +1543,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
              stedding::PinnedSiteFor(browser(), essential));
  }
  
@@ -1274,7 +1276,7 @@ index 60c7747465bde..4c2a1af18442c 100644
  // pins H3, H9: Cmd-W on pins sleeps rather than closes, unless the setting
  // is off; a mixed selection closes.
  TEST_F(SpaceWindowTest, CloseOnPinnedTabSleepsIt) {
-@@ -1912,121 +1982,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
+@@ -1939,121 +2009,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
  }
  
  // sessions S8
@@ -2319,6 +2321,23 @@ index 0c52f9226f3aa..9104360257d55 100644
    toast_registry_->RegisterToast(
        ToastId::kSkillSaved,
        ToastSpecification::Builder(
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index c0bcdda294ca2..25654c0580dda 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -2352,7 +2352,11 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTargetInsideTabStrip(
+   FolderView* const view =
+       folder_drag_target_->FolderViewAtScreenPoint(point_in_screen);
+   if (!view) {
+-    return nullptr;
++    // folders F40 (GitHub issue 27): over an open folder's rows the target
++    // places the dragged tabs among them.
++    return folder_drag_target_->IsOverFolderRows(point_in_screen)
++               ? folder_drag_target_.get()
++               : nullptr;
+   }
+   folder_drag_target_->SetHoveredFolder(view->folder(), view);
+   return folder_drag_target_.get();
 diff --git a/chrome/browser/ui/views/page_action/BUILD.gn b/chrome/browser/ui/views/page_action/BUILD.gn
 index 6aa54a5eb5ade..3601e56694003 100644
 --- a/chrome/browser/ui/views/page_action/BUILD.gn
@@ -3403,24 +3422,193 @@ index de44c7ecf0774..0a804555f2e27 100644
    // pins H17: the active Space's pinned run is collapsed and holds a pin in
    // this window, so the Clear line stays though no pin row may show.
    bool PinnedRunCollapsed() const;
+diff --git a/chrome/browser/ui/views/tabs/common/folder_drag_target.cc b/chrome/browser/ui/views/tabs/common/folder_drag_target.cc
+index c3abf46d7cfa3..14b10a879f53a 100644
+--- a/chrome/browser/ui/views/tabs/common/folder_drag_target.cc
++++ b/chrome/browser/ui/views/tabs/common/folder_drag_target.cc
+@@ -6,18 +6,36 @@
+ 
+ #include <algorithm>
+ #include <memory>
++#include <set>
+ #include <utility>
+ #include <vector>
+ 
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
++#include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/dragging/drag_session_data.h"
+ #include "components/tabs/public/folder_tab_collection.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_utils.h"
+ 
++namespace {
++
++// The unpinned block's container that draws `view`, or null.
++UnpinnedTabContainerView* ContainerOf(views::View* view) {
++  for (; view; view = view->parent()) {
++    if (auto* const container =
++            views::AsViewClass<UnpinnedTabContainerView>(view)) {
++      return container;
++    }
++  }
++  return nullptr;
++}
++
++}  // namespace
++
+ FolderDragTarget::FolderDragTarget(TabStripModel& tabs,
+                                    views::View* tab_strip_root)
+     : tabs_(tabs), tab_strip_root_(tab_strip_root) {}
+@@ -52,6 +70,25 @@ FolderView* FolderDragTarget::FolderViewAtScreenPoint(
+                          : nullptr;
+ }
+ 
++bool FolderDragTarget::IsOverFolderRows(
++    const gfx::Point& point_in_screen) const {
++  FolderView* const holder =
++      tab_strip_root_
++          ? FolderView::FolderHoldingPointIn(*tab_strip_root_, point_in_screen)
++          : nullptr;
++  return holder && holder->TabDropPlaceAt(point_in_screen, {}).has_value();
++}
++
++void FolderDragTarget::ClearRowPlace() {
++  if (auto* const container = views::AsViewClass<UnpinnedTabContainerView>(
++          row_place_container_.view())) {
++    container->SetRowDropIndicator(std::nullopt);
++  }
++  row_place_container_.SetView(nullptr);
++  row_place_folder_.reset();
++  row_place_slot_ = 0;
++}
++
+ void FolderDragTarget::SetHoveredFolder(const tabs::TabCollection* folder,
+                                         FolderView* view) {
+   FolderView* const was = views::AsViewClass<FolderView>(hovered_view_.view());
+@@ -94,6 +131,38 @@ TabDragContext* FolderDragTarget::OnTabDragUpdated(
+                        ? nullptr
+                        : (view ? view->folder() : nullptr),
+                    view);
++  // folders F40 (GitHub issue 27): off a header, over an open folder's rows,
++  // the tabs go among them, at the place the bar shows.
++  std::optional<FolderView::TabDropPlace> place;
++  FolderView* const holder =
++      view || dragged_pinned_ || dragged_group_ || !tab_strip_root_
++          ? nullptr
++          : FolderView::FolderHoldingPointIn(*tab_strip_root_, point_in_screen);
++  if (holder && holder->folder()) {
++    std::set<const tabs::TabInterface*> dragged;
++    for (const TabDragData& data : session.tab_drag_data_) {
++      if (const tabs::TabInterface* const tab =
++              data.contents
++                  ? tabs::TabInterface::MaybeGetFromContents(data.contents)
++                  : nullptr) {
++        dragged.insert(tab);
++      }
++    }
++    place = holder->TabDropPlaceAt(point_in_screen, dragged);
++  }
++  UnpinnedTabContainerView* const container =
++      holder ? ContainerOf(holder) : nullptr;
++  if (place && container) {
++    if (row_place_container_.view() != container) {
++      ClearRowPlace();
++    }
++    row_place_folder_ = holder->folder()->GetHandle();
++    row_place_slot_ = place->slot;
++    row_place_container_.SetView(container);
++    container->SetRowDropIndicator(place->indicator_y);
++  } else {
++    ClearRowPlace();
++  }
+   // Keep the tab where it is. The header is inside the strip the tab is
+   // already attached to; returning null here would pop it out into a window
+   // of its own for as long as the header is hovered.
+@@ -102,18 +171,21 @@ TabDragContext* FolderDragTarget::OnTabDragUpdated(
+ 
+ void FolderDragTarget::OnTabDragExited(const gfx::Point& point_in_screen) {
+   ClearHoveredFolder();
++  ClearRowPlace();
+ }
+ 
+ void FolderDragTarget::OnTabDragEnded() {
+   ClearHoveredFolder();
++  ClearRowPlace();
+   dragged_pinned_ = false;
+   dragged_group_ = false;
+ }
+ 
+ bool FolderDragTarget::CanDropTab() {
+   // A refused group is left where the strip's reorder put it.
+-  return !dragged_pinned_ && !dragged_group_ && hovered_ &&
+-         hovered_->Get() != nullptr;
++  return !dragged_pinned_ && !dragged_group_ &&
++         ((hovered_ && hovered_->Get() != nullptr) ||
++          (row_place_folder_ && row_place_folder_->Get() != nullptr));
+ }
+ 
+ void FolderDragTarget::HandleTabDrop(DragController& controller) {
+@@ -130,10 +202,17 @@ void FolderDragTarget::HandleTabDrop(DragController& controller) {
+ 
+ void FolderDragTarget::DropContents(
+     const std::vector<content::WebContents*>& dragged) {
+-  // The highlight goes first: the move below rebuilds the folder's rows.
++  // The highlight and the bar go first: the move below rebuilds the
++  // folder's rows.
+   const std::optional<tabs::TabCollectionHandle> hovered = hovered_;
++  const std::optional<tabs::TabCollectionHandle> row_place = row_place_folder_;
++  const int slot = row_place_slot_;
+   ClearHoveredFolder();
+-  tabs::TabCollection* const collection = hovered ? hovered->Get() : nullptr;
++  ClearRowPlace();
++  tabs::TabCollection* const collection =
++      hovered     ? hovered->Get()
++      : row_place ? row_place->Get()
++                  : nullptr;
+   if (dragged_pinned_ || dragged_group_ || !collection ||
+       collection->type() != tabs::TabCollection::Type::FOLDER) {
+     return;
+@@ -153,8 +232,13 @@ void FolderDragTarget::DropContents(
+   // The drag already put the tabs in this strip; they join the folder as
+   // they are. Detaching them, as this used to, re-filed each as a new tab:
+   // its Space pin and home were dropped and routing could send it away.
+-  tabs_->MoveTabsToFolder(indices,
+-                          static_cast<tabs::FolderTabCollection*>(collection));
++  auto* const folder = static_cast<tabs::FolderTabCollection*>(collection);
++  if (!hovered && row_place) {
++    // folders F40: at the place among the folder's rows the bar showed.
++    tabs_->MoveTabsToFolderAt(indices, folder, slot);
++    return;
++  }
++  tabs_->MoveTabsToFolder(indices, folder);
+ }
+ 
+ base::CallbackListSubscription FolderDragTarget::RegisterWillDestroyCallback(
 diff --git a/chrome/browser/ui/views/tabs/common/folder_drag_target.h b/chrome/browser/ui/views/tabs/common/folder_drag_target.h
-index 876c447fb7da5..99e78048f1582 100644
+index 876c447fb7da5..f08a3c2abd7d1 100644
 --- a/chrome/browser/ui/views/tabs/common/folder_drag_target.h
 +++ b/chrome/browser/ui/views/tabs/common/folder_drag_target.h
-@@ -50,6 +50,12 @@ class FolderDragTarget : public TabDragTarget {
+@@ -49,6 +49,15 @@ class FolderDragTarget : public TabDragTarget {
+ 
    // The FolderView whose header contains `point_in_screen`, or null.
    FolderView* FolderViewAtScreenPoint(const gfx::Point& point_in_screen) const;
- 
++  // folders F40 (GitHub issue 27): whether `point_in_screen` is over the
++  // rows of an open folder, where a dragged tab is placed among them.
++  bool IsOverFolderRows(const gfx::Point& point_in_screen) const;
++
 +  // The shown FolderView under `parent`, at any depth, whose header contains
 +  // `point_in_screen`, or null. A folder header's own drag finds the folder
 +  // it would go into the same way (folders F39).
 +  static FolderView* FindFolderView(views::View& parent,
 +                                    const gfx::Point& point_in_screen);
-+
+ 
    // Remembers which folder the pointer is over. `view` may be null; it is
    // only used for the drop highlight.
-   void SetHoveredFolder(const tabs::TabCollection* folder, FolderView* view);
-@@ -77,9 +83,6 @@ class FolderDragTarget : public TabDragTarget {
+@@ -77,9 +86,6 @@ class FolderDragTarget : public TabDragTarget {
        base::OnceClosure callback) override;
  
   private:
@@ -3430,8 +3618,22 @@ index 876c447fb7da5..99e78048f1582 100644
    const raw_ref<TabStripModel> tabs_;
    const raw_ptr<views::View> tab_strip_root_;
    // A handle, not a pointer: the folder can be peeled out of the tree while
+@@ -95,6 +101,13 @@ class FolderDragTarget : public TabDragTarget {
+   // none (ADR 0013), so a header does not take it, as a Space chip does not
+   // (folders F7, spaces B12). Read from the drag session on each update.
+   bool dragged_group_ = false;
++  // folders F40: the open folder whose rows the pointer is over and the
++  // place among them (TabStripModel::MoveTabsToFolderAt's slot), and the
++  // container drawing the bar there.
++  std::optional<tabs::TabCollectionHandle> row_place_folder_;
++  int row_place_slot_ = 0;
++  views::ViewTracker row_place_container_;
++  void ClearRowPlace();
+   base::OnceClosureList will_destroy_callbacks_;
+ };
+ 
 diff --git a/chrome/browser/ui/views/tabs/common/folder_view.cc b/chrome/browser/ui/views/tabs/common/folder_view.cc
-index bf1aea04f9940..c39518653c2a0 100644
+index bf1aea04f9940..3559238934fe7 100644
 --- a/chrome/browser/ui/views/tabs/common/folder_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/folder_view.cc
 @@ -20,14 +20,17 @@
@@ -3666,7 +3868,7 @@ index bf1aea04f9940..c39518653c2a0 100644
      const views::View* const new_tab_row =
          container->space_boundary_new_tab_row();
      if (new_tab_row && new_tab_row->IsDrawn()) {
-@@ -433,60 +574,150 @@ std::optional<bool> FolderView::IsAboveClearLine(
+@@ -433,60 +574,213 @@ std::optional<bool> FolderView::IsAboveClearLine(
  }
  
  std::optional<FolderView::DropPlace> FolderView::DropPlaceAt(
@@ -3711,6 +3913,69 @@ index bf1aea04f9940..c39518653c2a0 100644
 +    return PlaceAmongRowsOf(*holder, screen_point);
 +  }
 +  return TopLevelPlaceAt(screen_point);
++}
++
++std::optional<FolderView::TabDropPlace> FolderView::TabDropPlaceAt(
++    const gfx::Point& screen_point,
++    const std::set<const tabs::TabInterface*>& dragged) const {
++  const tabs::FolderTabCollection* const into = folder();
++  const UnpinnedTabContainerView* const container =
++      NearestOfClass<UnpinnedTabContainerView>(this);
++  if (!into || !container || !HasDrawnRows()) {
++    return std::nullopt;
++  }
++  // As a folder's header dragged among the rows takes its place (F39), the
++  // place counted in tabs as the folder reads without the dragged ones.
++  const std::map<const tabs::TabInterface*, const views::View*> row_of_tab =
++      RowsByTab(*this);
++  TabDropPlace place;
++  const views::View* previous = nullptr;
++  const views::View* next = nullptr;
++  int tabs_before = 0;
++  for (const tabs::Child& child : into->GetChildren()) {
++    int count = 0;
++    bool any_dragged = false;
++    if (const auto* const tab = std::get_if<tabs::ScopedTab>(&child)) {
++      count = 1;
++      any_dragged = dragged.contains(tab->get());
++    } else {
++      const tabs::TabCollection* const collection =
++          std::get<std::unique_ptr<tabs::TabCollection>>(child).get();
++      count = collection->TabCountRecursive();
++      for (const tabs::TabInterface* const each :
++           collection->GetTabsRecursive()) {
++        any_dragged |= dragged.contains(each);
++      }
++    }
++    // A dragged row, or a split one of whose panes is dragged, is no place.
++    if (any_dragged) {
++      continue;
++    }
++    if (const views::View* const row = DrawnRowOf(row_of_tab, child);
++        row && !next) {
++      if (screen_point.y() < row->GetBoundsInScreen().CenterPoint().y()) {
++        place.slot = tabs_before;
++        next = row;
++      } else {
++        previous = row;
++        place.slot = tabs_before + count;
++      }
++    }
++    tabs_before += count;
++  }
++  constexpr int kHalfGap = 1;
++  gfx::Point bar(0, next       ? next->bounds().y() - kHalfGap
++                    : previous ? previous->bounds().bottom() + kHalfGap
++                               : header_->bounds().bottom() + kHalfGap);
++  views::View::ConvertPointToTarget(this, container, &bar);
++  place.indicator_y = bar.y();
++  return place;
++}
++
++// static
++FolderView* FolderView::FolderHoldingPointIn(views::View& view,
++                                             const gfx::Point& screen_point) {
++  return FolderHoldingPoint(view, screen_point);
 +}
 +
 +std::optional<FolderView::DropPlace> FolderView::PlaceAtTheEndOf(
@@ -3855,7 +4120,7 @@ index bf1aea04f9940..c39518653c2a0 100644
    if (!top) {
      return std::nullopt;
    }
-@@ -498,13 +729,12 @@ std::optional<FolderView::DropPlace> FolderView::DropPlaceAt(
+@@ -498,13 +792,12 @@ std::optional<FolderView::DropPlace> FolderView::DropPlaceAt(
    std::optional<size_t> slot;
    std::optional<size_t> from;
    for (const tabs::Child& child : top->GetChildren()) {
@@ -3872,7 +4137,7 @@ index bf1aea04f9940..c39518653c2a0 100644
        if (screen_point.y() < row->GetBoundsInScreen().CenterPoint().y()) {
          slot = index;
          next = row;
-@@ -543,13 +773,23 @@ std::optional<FolderView::DropPlace> FolderView::DropPlaceAt(
+@@ -543,13 +836,23 @@ std::optional<FolderView::DropPlace> FolderView::DropPlaceAt(
  
  void FolderView::ShowDropIndicator(const std::optional<DropPlace>& place) {
    // Lit while a release would move the folder, as a header is lit while a
@@ -3902,7 +4167,7 @@ index bf1aea04f9940..c39518653c2a0 100644
    }
  }
  
-@@ -565,9 +805,17 @@ void FolderView::OnHeaderDragEnded(const gfx::Point& screen_point,
+@@ -565,9 +868,17 @@ void FolderView::OnHeaderDragEnded(const gfx::Point& screen_point,
    if (!drop) {
      return;
    }
@@ -3922,7 +4187,7 @@ index bf1aea04f9940..c39518653c2a0 100644
      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
          FROM_HERE,
          base::BindOnce(&FolderView::PlaceAt, weak_factory_.GetWeakPtr(),
-@@ -578,8 +826,61 @@ void FolderView::OnHeaderDragEnded(const gfx::Point& screen_point,
+@@ -578,8 +889,61 @@ void FolderView::OnHeaderDragEnded(const gfx::Point& screen_point,
  void FolderView::PlaceAt(bool pinned, size_t slot) {
    TabStripCollectionController* const controller =
        collection_node_ ? collection_node_->GetController() : nullptr;
@@ -3986,7 +4251,7 @@ index bf1aea04f9940..c39518653c2a0 100644
    }
  }
  
-@@ -629,14 +930,6 @@ void FolderView::OnThemeChanged() {
+@@ -629,14 +993,6 @@ void FolderView::OnThemeChanged() {
  void FolderView::ViewHierarchyChanged(
      const views::ViewHierarchyChangedDetails& details) {
    views::View::ViewHierarchyChanged(details);
@@ -4001,7 +4266,7 @@ index bf1aea04f9940..c39518653c2a0 100644
    if (!details.is_add || details.parent != this ||
        views::IsViewClass<HeaderView>(details.child)) {
      return;
-@@ -777,42 +1070,30 @@ void FolderView::UpdateHeader() {
+@@ -777,42 +1133,30 @@ void FolderView::UpdateHeader() {
    } else {
      accessibility.SetIsExpanded();
    }
@@ -4054,10 +4319,18 @@ index bf1aea04f9940..c39518653c2a0 100644
  
  bool FolderView::IsOnName(const gfx::Point& point_in_header) const {
 diff --git a/chrome/browser/ui/views/tabs/common/folder_view.h b/chrome/browser/ui/views/tabs/common/folder_view.h
-index 3ecfbe265ae1b..6970017e8ada2 100644
+index 3ecfbe265ae1b..cb9c0ec132ae5 100644
 --- a/chrome/browser/ui/views/tabs/common/folder_view.h
 +++ b/chrome/browser/ui/views/tabs/common/folder_view.h
-@@ -23,7 +23,9 @@
+@@ -8,6 +8,7 @@
+ #include <cstddef>
+ #include <memory>
+ #include <optional>
++#include <set>
+ #include <string>
+ 
+ #include "base/callback_list.h"
+@@ -23,11 +24,14 @@
  #include "ui/views/context_menu_controller.h"
  #include "ui/views/controls/textfield/textfield_controller.h"
  #include "ui/views/view.h"
@@ -4067,7 +4340,12 @@ index 3ecfbe265ae1b..6970017e8ada2 100644
  class TabCollectionNode;
  
  namespace tabs {
-@@ -85,9 +87,11 @@ class FolderView : public views::View,
+ class FolderTabCollection;
++class TabInterface;
+ }  // namespace tabs
+ 
+ namespace views {
+@@ -85,9 +89,11 @@ class FolderView : public views::View,
    void UpdateHeaderForTesting() { UpdateHeader(); }
    // The field an open rename types into, or null.
    views::Textfield* rename_field_for_testing() { return rename_field_; }
@@ -4081,7 +4359,7 @@ index 3ecfbe265ae1b..6970017e8ada2 100644
    // The header menu as it would open now (M7).
    ui::SimpleMenuModel* menu_model_for_testing() {
      BuildMenuModel();
-@@ -105,18 +109,16 @@ class FolderView : public views::View,
+@@ -105,18 +111,16 @@ class FolderView : public views::View,
    // pointer shows among the rows of its strip, as a pin or a tab row moves:
    // between two pins or before the first, over the Clear line, takes it into
    // the Space's pinned run there, and among the rows under the line takes it
@@ -4106,7 +4384,33 @@ index 3ecfbe265ae1b..6970017e8ada2 100644
    // views::View:
    void ViewHierarchyChanged(
        const views::ViewHierarchyChangedDetails& details) override;
-@@ -156,32 +158,65 @@ class FolderView : public views::View,
+@@ -140,6 +144,25 @@ class FolderView : public views::View,
+   bool IsCommandIdEnabled(int command_id) const override;
+   void ExecuteCommand(int command_id, int event_flags) override;
+ 
++  // folders F40 (GitHub issue 27): the place among this open folder's rows
++  // for tab rows dragged over them, the `dragged` tabs aside: before the
++  // first of its rows on screen whose middle is below the pointer, or after
++  // the last. `slot` is what TabStripModel::MoveTabsToFolderAt takes, in
++  // tabs from the folder's first; `indicator_y` is where the bar between the
++  // rows goes, in the unpinned block's container's coordinates.
++  struct TabDropPlace {
++    int slot = 0;
++    int indicator_y = 0;
++  };
++  std::optional<TabDropPlace> TabDropPlaceAt(
++      const gfx::Point& screen_point,
++      const std::set<const tabs::TabInterface*>& dragged) const;
++
++  // folders F39, F40: the innermost drawn folder under `view` whose header
++  // or rows hold `screen_point`, or null.
++  static FolderView* FolderHoldingPointIn(views::View& view,
++                                          const gfx::Point& screen_point);
++
+  private:
+   class HeaderView;
+ 
+@@ -156,32 +179,65 @@ class FolderView : public views::View,
    void BeginRename();
    void EndRename(bool commit);
    void UpdateHeader();
@@ -4179,7 +4483,7 @@ index 3ecfbe265ae1b..6970017e8ada2 100644
  
    // Null once the node is destroyed: a removed folder's view outlives its
    // node while it animates out.
-@@ -201,10 +236,12 @@ class FolderView : public views::View,
+@@ -201,10 +257,12 @@ class FolderView : public views::View,
    bool drop_highlighted_ = false;
    // folders F38: a drag of the header is under way.
    bool header_dragging_ = false;
@@ -4388,7 +4692,7 @@ index b2fe54f849e0c..08de8d7512665 100644
    EXPECT_TRUE(ShowsClearLine(/*pinned_rows_shown=*/2,
                               /*pinned_run_collapsed=*/false,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
-index e53bb14537161..850a75f2c9ae8 100644
+index e53bb14537161..334d188fb8da1 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 @@ -7,11 +7,16 @@
@@ -4416,7 +4720,15 @@ index e53bb14537161..850a75f2c9ae8 100644
  #include "chrome/browser/ui/views/tabs/dragging/drag_session_data.h"
  #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
  #include "chrome/browser/ui/views/tabs/shared/tab_strip_types.h"
-@@ -122,6 +128,33 @@ const TabGroup& TabGroupDataFromNode(const TabCollectionNode& node) {
+@@ -50,6 +56,7 @@
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/view_targeter.h"
+ #include "ui/views/view_utils.h"
++#include "ui/views/widget/widget.h"
+ 
+ DEFINE_UI_CLASS_PROPERTY_TYPE(gfx::Vector2d*)
+ 
+@@ -122,6 +129,33 @@ const TabGroup& TabGroupDataFromNode(const TabCollectionNode& node) {
    return *group_data;
  }
  
@@ -4450,7 +4762,7 @@ index e53bb14537161..850a75f2c9ae8 100644
  // Stedding: the strip range of a folder's tabs. They sit together in the
  // strip, and an emptied folder leaves the tree, so there is a first tab.
  gfx::Range GetFolderRange(const TabCollectionNode& folder_node,
-@@ -413,12 +446,49 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
+@@ -413,12 +447,54 @@ void TabDragHandlerImpl::EndDrag(EndDragReason reason) {
      return;
    }
  
@@ -4465,6 +4777,11 @@ index e53bb14537161..850a75f2c9ae8 100644
 +      drag_controller_->attached_context() == this &&
 +      drag_controller_->GetSessionData().dragging_groups.empty()) {
 +    const DragSessionData& session = drag_controller_->GetSessionData();
++    // The side is the layout's, and the last move's layout may still be
++    // pending (GitHub issue 26).
++    if (views::Widget* const widget = tab_strip_region_view_->GetWidget()) {
++      widget->LayoutRootViewIfNecessary();
++    }
 +    for (TabSlotView* const slot : session.attached_views()) {
 +      const views::View* const row = ViewFromTabSlot(slot);
 +      const auto* const container =
@@ -4778,7 +5095,7 @@ index 5d67ac6a1b0d8..484672a9accbf 100644
    bool local_ = false;
    // Lt5: the title a local row's page shows when it names none of its own
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index aa2f61cc204e2..09d239c9886d9 100644
+index aa2f61cc204e2..423b767428950 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 @@ -174,6 +174,14 @@ UnpinnedTabContainerView::GetRowDropIndicatorBoundsInScreenForTesting() const {
@@ -4796,11 +5113,43 @@ index aa2f61cc204e2..09d239c9886d9 100644
  void UnpinnedTabContainerView::PaintChildren(const views::PaintInfo& info) {
    TabCollectionZOrderManager::PaintChildren(info);
    if (!row_drop_indicator_y_) {
+@@ -433,6 +441,22 @@ const views::ProposedLayout& UnpinnedTabContainerView::GetLayoutForDrag()
+   return layout_manager_->target_layout();
+ }
+ 
++TabDragContext* UnpinnedTabContainerView::OnTabDragUpdated(
++    TabDragTarget::DragController& controller,
++    const gfx::Point& point_in_screen) {
++  TabDragContext* const context =
++      DraggedTabsContainer::OnTabDragUpdated(controller, point_in_screen);
++  // pins H14 (GitHub issue 26): the side of the Clear line the dragged rows
++  // take is worked out in the layout (dragged_rows_pinned()), and a move that
++  // changes no row's place lays nothing out, so the side read at the drop
++  // was the one of the last reorder. Laid out at every move, the line also
++  // follows the pointer across it.
++  if (is_space_pinned_ && IsHandlingDrag()) {
++    InvalidateLayout();
++  }
++  return context;
++}
++
+ DraggedTabsContainer& UnpinnedTabContainerView::GetTabDragTarget(
+     const gfx::Point& point_in_screen) {
+   if (GetDragHandler().IsDraggingGroups()) {
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 958ed52e516cd..52f218e554a65 100644
+index 958ed52e516cd..1d3604386157e 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-@@ -78,6 +78,13 @@ class UnpinnedTabContainerView
+@@ -51,6 +51,8 @@ class UnpinnedTabContainerView
+   // DraggedTabsContainer:
+   DraggedTabsContainer& GetTabDragTarget(
+       const gfx::Point& point_in_screen) override;
++  TabDragContext* OnTabDragUpdated(TabDragTarget::DragController& controller,
++                                   const gfx::Point& point_in_screen) override;
+ 
+   std::optional<BrowserRootView::DropIndex> GetLinkDropIndex(
+       const gfx::Point& point_in_local_coords);
+@@ -78,6 +80,13 @@ class UnpinnedTabContainerView
        std::unique_ptr<views::View> new_tab_row,
        base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
    views::View* space_boundary_clear_line() { return boundary_clear_line_; }
@@ -4814,7 +5163,7 @@ index 958ed52e516cd..52f218e554a65 100644
    bool IsAnimatingForTesting() const { return layout_manager_->is_animating(); }
  
    // Stedding (pins H17): the Space's pinned run is collapsed while it holds
-@@ -102,6 +109,21 @@ class UnpinnedTabContainerView
+@@ -102,6 +111,21 @@ class UnpinnedTabContainerView
    // The bar's bounds in screen coordinates, or nothing while none is shown.
    std::optional<gfx::Rect> GetRowDropIndicatorBoundsInScreenForTesting() const;
  
@@ -4836,7 +5185,7 @@ index 958ed52e516cd..52f218e554a65 100644
    // views::View:
    void PaintChildren(const views::PaintInfo& info) override;
  
-@@ -123,6 +145,10 @@ class UnpinnedTabContainerView
+@@ -123,6 +147,10 @@ class UnpinnedTabContainerView
    void ResetCollectionNode();
  
    raw_ptr<TabCollectionNode> collection_node_;
@@ -4847,7 +5196,7 @@ index 958ed52e516cd..52f218e554a65 100644
  
    raw_ptr<views::View> boundary_clear_line_ = nullptr;
  
-@@ -132,6 +158,9 @@ class UnpinnedTabContainerView
+@@ -132,6 +160,9 @@ class UnpinnedTabContainerView
  
    bool pinned_run_collapsed_ = false;
  
@@ -4858,7 +5207,7 @@ index 958ed52e516cd..52f218e554a65 100644
    std::optional<int> row_drop_indicator_y_;
  
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index 4b6552b2b1d2d..e1dde5823b09d 100644
+index 4b6552b2b1d2d..6d8fd6e13cfd2 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 @@ -5,6 +5,7 @@
@@ -4869,7 +5218,7 @@ index 4b6552b2b1d2d..e1dde5823b09d 100644
  #include <vector>
  
  #include "base/feature_list.h"
-@@ -276,10 +277,77 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -276,10 +277,79 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
    // it never puts the pins after it under the line (PLAN.md TAB-24, SPC-34).
    views::View* const clear_line = tab_container_view->boundary_clear_line_;
    views::View* const new_tab_row = tab_container_view->boundary_new_tab_row_;
@@ -4925,10 +5274,12 @@ index 4b6552b2b1d2d..e1dde5823b09d 100644
 +        if (new_tab_row && new_tab_row->GetVisible()) {
 +          boundary += new_tab_row->GetPreferredSize().height();
 +        }
++        // Where the dragged rows are drawn. They follow the pointer by a
++        // transform, so their visual data's offset is zero until the drop:
++        // read from it, every row dragged to the first place under the line
++        // was over it, and dropped there it became a pin (GitHub issue 26).
 +        const int middle =
-+            tab_container_view->GetVisualDataForDraggedView(*first_dragged)
-+                ->offset.y() +
-+            dragged_height / 2;
++            tab_container_view->GetDraggingViewsBounds().CenterPoint().y();
 +        // A loose row joins only a run that is there: with no pin over the
 +        // line, as in a private window, the line stays a line.
 +        dragged_pinned = pinned_in_model(first_dragged)
@@ -4948,7 +5299,7 @@ index 4b6552b2b1d2d..e1dde5823b09d 100644
    int visible_unpinned_after_boundary = 0;
    int visible_pinned_before_boundary = 0;
    {
-@@ -397,6 +465,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -397,6 +467,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
    if (height > 0) {
      height -= vertical_padding;
    }
@@ -6451,7 +6802,7 @@ index 81eddea0a4a79..038dee03a5a29 100644
  // PLAN.md WIN-5 on Windows: what a copy made in a private window leaves on the
  // machine's own clipboard so that Win+V's history and the cloud clipboard skip
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index 291f9f1a8a074..7c8cd9664e5de 100644
+index 291f9f1a8a074..91b6ea3ee78a5 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -16,10 +16,13 @@
@@ -6749,7 +7100,7 @@ index 291f9f1a8a074..7c8cd9664e5de 100644
    }
  
    {
-@@ -2112,4 +2269,357 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, EveryLabelInTheSidebarSuitsItsGround) {
+@@ -2112,4 +2269,417 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, EveryLabelInTheSidebarSuitsItsGround) {
    }
  }
  
@@ -6916,6 +7267,66 @@ index 291f9f1a8a074..7c8cd9664e5de 100644
 +  EXPECT_EQ(1, IndexOf(a));
 +  EXPECT_EQ(2, IndexOf(b));
 +  EXPECT_EQ(3, IndexOf(c));
++}
++
++// folders F40 (GitHub issue 27): a tab's row dragged within an open folder,
++// or into it from outside, goes to the place among the folder's rows the
++// pointer shows, and stays in the folder; dropped on the header it goes to
++// the folder's end (F7).
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, ARowDraggedInAFolderTakesThePlaceShown) {
++  AppendTab();
++  AppendTab();
++  AppendTab();
++  AppendTab();
++  tabs::TabInterface* const a = tab_strip_model()->GetTabAtIndex(1);
++  tabs::TabInterface* const b = tab_strip_model()->GetTabAtIndex(2);
++  tabs::TabInterface* const c = tab_strip_model()->GetTabAtIndex(3);
++  tabs::TabInterface* const d = tab_strip_model()->GetTabAtIndex(4);
++  // [start, Reading[a, b, c], d]
++  tabs::FolderTabCollection* const reading =
++      tab_strip_model()->AddToNewFolder({1, 2, 3});
++  ASSERT_TRUE(reading);
++  tab_strip_model()->ActivateTabAt(0);
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  // A press on `tab`'s row, a drag in steps to `to` with the window laying
++  // out between two, and the release there.
++  const auto drag_row_to = [&](tabs::TabInterface* tab, const gfx::Point& to) {
++    TabView* const row = DrawnRow(tab);
++    ASSERT_TRUE(row) << "the row is not drawn";
++    const gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed,
++                                  from);
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, to);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  };
++  const auto in_reading = [&](const tabs::TabInterface* tab) {
++    return tab->GetParentCollection() == reading;
++  };
++
++  {
++    SCOPED_TRACE("the folder's last row dropped on the top of its first");
++    ASSERT_NO_FATAL_FAILURE(drag_row_to(c, JustInsideTheTopOf(a)));
++    EXPECT_TRUE(in_reading(c)) << "the row left the folder";
++    EXPECT_EQ(IndexOf(a) - 1, IndexOf(c)) << "not before the first row";
++    EXPECT_EQ(IndexOf(a) + 1, IndexOf(b));
++  }
++  {
++    SCOPED_TRACE("a row from outside dropped between two of the folder's");
++    ASSERT_NO_FATAL_FAILURE(drag_row_to(d, JustInsideTheTopOf(b)));
++    EXPECT_TRUE(in_reading(d)) << "the row did not go into the folder";
++    EXPECT_EQ(IndexOf(a) + 1, IndexOf(d)) << "not between the two rows";
++    EXPECT_EQ(IndexOf(d) + 1, IndexOf(b));
++  }
 +}
 +
 +// folders F39: a folder never goes into a folder of its own. Its header

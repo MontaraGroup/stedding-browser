@@ -10,6 +10,30 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-24, night -- three GitHub issues fixed, the issues labelled
+
+The owner held beta 15 for more work and asked for the GitHub issues to be read and labelled.
+Three bug reports, each reproduced by a browser test that failed before its fix:
+
+- Issue 29 (`S-298`, pins H14): a link opened from an essential, with the pinned run beginning
+  with a pinned folder, stayed above the run, and every pin and pinned folder was drawn under the
+  Clear line until it closed. The check for a loose tab inside the run looked only for a pin of
+  the list's own level right after it.
+- Issue 26 (`S-299`, tabs R63): no row could be dropped in the first place under the Clear line;
+  dropped there it became a pin. The side of the line was read from the dragged rows' offset,
+  zero while they follow the pointer, and worked out only when the rows changed order.
+- Issue 27 (`S-300`, folders F40): a tab could go into a folder only by its header, at the end;
+  a row dragged within a folder left it. A row dragged over an open folder's rows now goes to the
+  place the pointer shows, with the bar there, as a folder's header already did.
+
+Issue 30 (after a close, show the tab used before, an essential included) asked to change the
+rule the owner chose on 2026-10-20 (tabs R33, R35); the owner said to change it, and it is
+(`S-301`). Issue 31 (Air Traffic Control) is already there as routing (`docs/features/routing.md`),
+and the owner asked the reporter what is missing. Issues 23, 24 and 14 were fixed in betas 12 and 13. The open
+issues carry a type, an area, a platform where one was named, and a status; six labels were
+added (five areas and "platform: macos").
+
+
 ## 2026-10-24, evening -- betas 13 and 14, and the welcome flow's new look
 
 0.3.0 beta 13 (the three items below) and beta 14 went out on 2026-10-24; what they changed is

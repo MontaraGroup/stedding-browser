@@ -65,7 +65,7 @@ that owns its code (patches/README.md, the round-patch exception).
  .../ui/spaces/bookmarks_to_pins_unittest.cc   |   11 +-
  .../ui/spaces/folder_commands_unittest.cc     |   56 +
  chrome/browser/ui/spaces/space_commands.cc    |    6 +-
- chrome/browser/ui/spaces/space_model.cc       |  472 ++++++-
+ chrome/browser/ui/spaces/space_model.cc       |  476 ++++++-
  chrome/browser/ui/spaces/space_model.h        |   88 +-
  .../ui/spaces/space_model_window_unittest.cc  |   72 +
  chrome/browser/ui/stedding/BUILD.gn           |    1 +
@@ -124,7 +124,7 @@ that owns its code (patches/README.md, the round-patch exception).
  chrome/test/stedding/welcome_browsertest.cc   |  177 ++-
  components/tabs/impl/tab_strip_collection.cc  |   80 +-
  components/tabs/public/tab_strip_collection.h |   32 +-
- 71 files changed, 4884 insertions(+), 340 deletions(-)
+ 71 files changed, 4888 insertions(+), 340 deletions(-)
 
 diff --git a/chrome/browser/global_keyboard_shortcuts_mac.mm b/chrome/browser/global_keyboard_shortcuts_mac.mm
 index 7d5e56feddfe8..1d222e4dd0f90 100644
@@ -498,7 +498,7 @@ index 16d799c22eb99..f8b2ba1cba893 100644
    // Follow the tab: it is the one the user was looking at.
    TabStripModel* const tabs = browser->GetTabStripModel();
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index fbaca18551b28..bbfbe09b67d98 100644
+index fbaca18551b28..b135a1b968ecc 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -61,9 +61,11 @@
@@ -1026,7 +1026,7 @@ index fbaca18551b28..bbfbe09b67d98 100644
  void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
    if (!tab || !tab_strip_model_) {
      return;
-@@ -2417,6 +2717,46 @@ void SpaceModel::MoveToSpacePinBoundary(tabs::TabInterface* tab) {
+@@ -2417,6 +2717,50 @@ void SpaceModel::MoveToSpacePinBoundary(tabs::TabInterface* tab) {
    }
  }
  
@@ -1055,7 +1055,11 @@ index fbaca18551b28..bbfbe09b67d98 100644
 +  }
 +  const tabs::TabInterface* const next =
 +      tab_strip_model_->GetTabAtIndex(index + 1);
-+  return IsSpacePinned(next) && IsTopLevelRow(next);
++  // The run may begin with a pinned folder, whose first tab is the pin after
++  // this one (GitHub issue 29): a link from an essential stayed above such a
++  // run, and every pin and pinned folder was drawn under the line.
++  return IsSpacePinned(next) &&
++         (IsTopLevelRow(next) || OutermostFolderOf(next) != nullptr);
 +}
 +
 +void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
@@ -1073,7 +1077,7 @@ index fbaca18551b28..bbfbe09b67d98 100644
  void SpaceModel::SetSpacePinnedOnOneTab(tabs::TabInterface* tab,
                                          bool pinned,
                                          bool move) {
-@@ -2431,9 +2771,11 @@ void SpaceModel::SetSpacePinnedOnOneTab(tabs::TabInterface* tab,
+@@ -2431,9 +2775,11 @@ void SpaceModel::SetSpacePinnedOnOneTab(tabs::TabInterface* tab,
        const GURL page = CurrentUrl(tab);
        space_pin_homes_[tab->GetHandle()] =
            stedding::IsAllowedPinHome(page) ? page : GURL();
@@ -1085,7 +1089,7 @@ index fbaca18551b28..bbfbe09b67d98 100644
    }
    // pins H14: the Space-pinned tabs are the run at the top of the unpinned
    // block, over the Clear line. A new pin joins the end of that run, as in
-@@ -2506,41 +2848,14 @@ void SpaceModel::RestoreFrom(const std::string& data) {
+@@ -2506,41 +2852,14 @@ void SpaceModel::RestoreFrom(const std::string& data) {
      return;
    }
  
@@ -1130,7 +1134,7 @@ index fbaca18551b28..bbfbe09b67d98 100644
  
    // The active Space must be one that came back; a session naming a Space that
    // failed to parse would otherwise leave the window pointing at nothing.
-@@ -2586,10 +2901,41 @@ void SpaceModel::ShowSpaceFromSession(
+@@ -2586,10 +2905,41 @@ void SpaceModel::ShowSpaceFromSession(
    if (!active) {
      return;
    }

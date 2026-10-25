@@ -67,7 +67,7 @@ of its own (patches/README.md).
  .../ui/page_action/page_action_controller.h   |  10 +
  chrome/browser/ui/spaces/space_model.cc       | 157 +++-
  chrome/browser/ui/spaces/space_model.h        |  28 +
- .../ui/spaces/space_model_window_unittest.cc  | 393 ++++++++++
+ .../ui/spaces/space_model_window_unittest.cc  | 420 ++++++++++
  chrome/browser/ui/stedding/BUILD.gn           |  21 +
  chrome/browser/ui/stedding/pin_lifecycle.cc   |  42 +-
  chrome/browser/ui/stedding/sleep_tabs.cc      |  52 +-
@@ -130,7 +130,7 @@ of its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |  25 +
  .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
  chrome/test/stedding/tab_drop_browsertest.cc  | 322 +++++++-
- 90 files changed, 6769 insertions(+), 103 deletions(-)
+ 90 files changed, 6796 insertions(+), 103 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -1205,7 +1205,7 @@ index 73af530de2f3e..4d58a737cc3e5 100644
    base::OnceCallbackList<void(PageActionController&)>
        on_will_destroy_callback_list_;
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index c803bc9f2d0e2..0240328f42457 100644
+index b37f2da5ac8d6..d08b9f63e5c52 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -28,6 +28,7 @@
@@ -1410,7 +1410,7 @@ index c803bc9f2d0e2..0240328f42457 100644
    if (!tab_strip_model_ || delta == 0) {
      return false;
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index 51abf9a01ac7a..13c51742cc652 100644
+index 51abf9a01ac7a..7b122d45f2ed1 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
 @@ -14,6 +14,7 @@
@@ -1427,9 +1427,9 @@ index 51abf9a01ac7a..13c51742cc652 100644
  
 +  // tabs R33-R35 (BACKLOG S-112): the row to show when the row on screen
 +  // goes, with `leaving` (a close, a move to another window, a sleep): the
-+  // active Space's row used most recently (X1's history, so the row a Ctrl-Tab
-+  // tap would show), else the next row below the one on screen, else the
-+  // nearest one above. Never an essential, a tab of `leaving` or a pane of
++  // active Space's row or essential used most recently (X1's history, so the
++  // tab a Ctrl-Tab tap would show), else the next row below the one on
++  // screen, else the nearest one above. Never a tab of `leaving` or a pane of
 +  // its split, or a row the sidebar hides (spaces B33). Null when the Space
 +  // has no such row, and without a window.
 +  tabs::TabInterface* RowToShowAfter(
@@ -1465,7 +1465,7 @@ index 51abf9a01ac7a..13c51742cc652 100644
      explicit Cycle(SpaceId in_space);
      Cycle(Cycle&& other);
 diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
-index be2bf0ca14000..60c7747465bde 100644
+index be2bf0ca14000..474cd0b8598ca 100644
 --- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
 +++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
 @@ -11,6 +11,7 @@
@@ -1492,7 +1492,7 @@ index be2bf0ca14000..60c7747465bde 100644
  #include "ui/base/window_open_disposition.h"
  #include "url/gurl.h"
  
-@@ -373,6 +376,396 @@ TEST_F(SpaceWindowTest, ClosingTheLastTabOfASpaceOpensANewTabThere) {
+@@ -373,6 +376,423 @@ TEST_F(SpaceWindowTest, ClosingTheLastTabOfASpaceOpensANewTabThere) {
    EXPECT_EQ(work->id(), model().SpaceForTab(active));
  }
  
@@ -1638,8 +1638,8 @@ index be2bf0ca14000..60c7747465bde 100644
 +// tabs R35: the row shown after a close is one on screen. The row used
 +// before the closing one is passed over when it is another Space's tab (even
 +// one used more recently), a tab moved to another Space since it was used, a
-+// collapsed folder's row, a collapsed pinned run's pin, or an essential (the
-+// Space has rows of its own). Not even for a turn is it the tab on screen.
++// collapsed folder's row or a collapsed pinned run's pin. Not even for a turn
++// is it the tab on screen. (An essential used before is shown, R33.)
 +TEST_F(SpaceWindowTest, TheRowShownAfterACloseIsAlwaysOnScreen) {
 +  AppendRow(tabs(), profile(), true);
 +  const SpaceId elsewhere = model().AddSpace("Elsewhere", kBlue)->id();
@@ -1704,13 +1704,6 @@ index be2bf0ca14000..60c7747465bde 100644
 +       base::BindLambdaForTesting([&](tabs::TabInterface*, const SpaceId& id) {
 +         model().SetPinsCollapsed(id, true);
 +       })},
-+      {"an essential",
-+       base::BindLambdaForTesting([&](const SpaceId&) {
-+         tabs::TabInterface* const tab = AppendRow(tabs(), profile());
-+         tabs().SetTabPinned(tabs().GetIndexOfTab(tab), true);
-+         return tab;
-+       }),
-+       plain_use, nothing},
 +  };
 +
 +  for (const Kind& kind : kinds) {
@@ -1738,6 +1731,40 @@ index be2bf0ca14000..60c7747465bde 100644
 +    EXPECT_FALSE(shown.Showed(passed)) << "the tab passed over was on screen";
 +    EXPECT_FALSE(tabs().IsTabHidden(tabs().active_index()));
 +    EXPECT_EQ(id, model().active_id());
++  }
++}
++
++// tabs R33 (the owner, 2026-10-24, GitHub issue 30): an essential used
++// before the tab that closes comes back, as the tab used before: a tab
++// opened from an essential and closed shows that essential, not another row
++// of the Space. A row used after the essential still comes first.
++TEST_F(SpaceWindowTest, ACloseShowsTheEssentialUsedBefore) {
++  AppendRow(tabs(), profile(), true);
++  tabs::TabInterface* const essential = AppendRow(tabs(), profile());
++  tabs().SetTabPinned(tabs().GetIndexOfTab(essential), true);
++  ASSERT_TRUE(essential->IsPinned());
++  tabs::TabInterface* const row = AppendRow(tabs(), profile());
++
++  {
++    SCOPED_TRACE("a tab opened from the essential, then closed");
++    Use(tabs(), row);
++    Use(tabs(), essential);
++    tabs::TabInterface* const opened = AppendRow(tabs(), profile());
++    Use(tabs(), opened);
++    chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
++    task_environment()->RunUntilIdle();
++    EXPECT_EQ(essential, tabs().GetActiveTab())
++        << "another row of the Space was shown";
++  }
++  {
++    SCOPED_TRACE("a row used after the essential comes first");
++    Use(tabs(), essential);
++    Use(tabs(), row);
++    tabs::TabInterface* const opened = AppendRow(tabs(), profile());
++    Use(tabs(), opened);
++    chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
++    task_environment()->RunUntilIdle();
++    EXPECT_EQ(row, tabs().GetActiveTab());
 +  }
 +}
 +

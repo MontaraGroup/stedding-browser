@@ -33,7 +33,15 @@ the engines do; every control shows an amber ring with the keyboard
 focus. Drawn by the page in boxes and SVG paths, in the brand's palette;
 nothing is fetched.
 
+GitHub issues 26 and 29, the tests (their fixes are in the patches that
+own the code): a row dropped on the top half of the first row under the
+Clear line takes the first place there and stays a tab; a link opened
+from an essential when the pinned run begins with a pinned folder lands
+under the line.
+
 Tests: PinnedRunTest.NewTabsOpenAtTheTopWhenAsked,
+PinnedRunTest.ARowDroppedOnTheFirstRowTakesTheTop,
+PinnedRunTest.ALinkFromAnEssentialPassesAPinnedFolder,
 WelcomeFlowTest.TheFlowOpensOnAWelcomeScreen,
 WelcomeFlowTest.TheDefaultStepAsksWithOneLargeButton.
 
@@ -49,7 +57,7 @@ Removable when: never; it is product behaviour.
  .../browser/ui/spaces/arc_sidebar_importer.cc |  79 +-
  .../spaces/arc_sidebar_importer_unittest.cc   |   9 +-
  chrome/browser/ui/spaces/space_colors.h       |  49 +-
- chrome/browser/ui/spaces/space_model.cc       |  36 +-
+ chrome/browser/ui/spaces/space_model.cc       |  56 +-
  chrome/browser/ui/spaces/space_model.h        |  13 +
  chrome/browser/ui/spaces/space_registry.cc    |   5 +-
  chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
@@ -58,9 +66,9 @@ Removable when: never; it is product behaviour.
  chrome/browser/ui/tabs/tab_strip_model.h      |   8 +
  .../browser/ui/webui/settings/settings_ui.cc  |   8 +
  .../stedding_welcome_handler_unittest.cc      |   2 +-
- .../test/stedding/pinned_run_browsertest.cc   | 242 +++++
+ .../test/stedding/pinned_run_browsertest.cc   | 368 ++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  90 ++
- 18 files changed, 1550 insertions(+), 212 deletions(-)
+ 18 files changed, 1692 insertions(+), 216 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index a5cd8dafdde14..5c842c1336c14 100644
@@ -1845,7 +1853,7 @@ index e0afc51c8b8fc..d37e786a4a853 100644
  
  #endif  // CHROME_BROWSER_UI_SPACES_SPACE_COLORS_H_
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index b3fad7709536c..1cc8e2f6467ec 100644
+index ba327b8732b42..b242130727c54 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -4,6 +4,8 @@
@@ -1933,8 +1941,45 @@ index b3fad7709536c..1cc8e2f6467ec 100644
      RecordActivation(tab_strip_model->GetActiveTab());
      if (tabs::TabInterface* const active = tab_strip_model->GetActiveTab();
          active && !active->IsPinned()) {
+@@ -1542,20 +1570,32 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
+   // A row the sidebar shows that stays: the one rule for which rows show
+   // (spaces B33) passes over another Space's tabs, a tab moved to another
+   // Space since it was used, a collapsed folder's rows and a collapsed
+-  // pinned run's pins (R35). An essential is in every Space and says nothing
+-  // of where the user is (R33).
++  // pinned run's pins (R35).
+   const auto shows = [&](tabs::TabInterface* tab) {
+     const int index = tab_strip_model_->GetIndexOfTab(tab);
+     return index != TabStripModel::kNoTab && !tab->IsPinned() &&
+            !tab_strip_model_->IsTabHidden(index) && !IsLeaving(tab, leaving);
+   };
++  // An essential this Space shows, which stays (R33, GitHub issue 30).
++  const auto shows_essential = [&](tabs::TabInterface* tab) {
++    const int index = tab_strip_model_->GetIndexOfTab(tab);
++    return index != TabStripModel::kNoTab && tab->IsPinned() &&
++           !tab_strip_model_->IsTabHidden(index) && !IsLeaving(tab, leaving);
++  };
+   // switcher X1's history: the row a Ctrl-Tab tap shows. A split's entry is
+   // the pane used last, so the split comes back with that pane active. It
+   // is shown only while its row is in the sidebar's view (the owner,
+-  // 2026-10-22): one scrolled out of view took the list to it.
++  // 2026-10-22): one scrolled out of view took the list to it. An essential
++  // used last comes back too, as the tab used before (the owner, 2026-10-24,
++  // GitHub issue 30: closing a tab opened from an essential showed another
++  // row of the Space); the essentials sit over the list, always in view.
+   if (const auto it = history_.find(active_id_); it != history_.end()) {
+     for (const tabs::TabHandle& handle : it->second) {
+-      if (tabs::TabInterface* const tab = handle.Get(); tab && shows(tab)) {
++      tabs::TabInterface* const tab = handle.Get();
++      if (tab && shows_essential(tab)) {
++        return tab;
++      }
++      if (tab && shows(tab)) {
+         if (row_in_view_.is_null() || row_in_view_.Run(tab)) {
+           return tab;
+         }
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index da93531fea4fd..7d68672493f9e 100644
+index 42eab14610eae..25624426eca9d 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
 @@ -552,6 +552,17 @@ class SpaceModel : public TabStripModelObserver,
@@ -2105,10 +2150,14 @@ index f946739260551..32d1eac6018ab 100644
  
  // welcome W12: the behaviour step reads the profile. A fresh one answers
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
-index 5e9d7ad357996..e6f93a5396a29 100644
+index 5e9d7ad357996..6955e55d61ed4 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc
 +++ b/chrome/test/stedding/pinned_run_browsertest.cc
-@@ -22,13 +22,16 @@
+@@ -19,16 +19,20 @@
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/test/bind.h"
++#include "base/strings/strcat.h"
  #include "base/test/run_until.h"
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/browser/prefs/session_startup_pref.h"
@@ -2125,7 +2174,7 @@ index 5e9d7ad357996..e6f93a5396a29 100644
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "chrome/browser/ui/tabs/tab_model.h"
-@@ -36,7 +39,9 @@
+@@ -36,7 +40,9 @@
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/spaces/space_switcher_view.h"
  #include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
@@ -2135,7 +2184,7 @@ index 5e9d7ad357996..e6f93a5396a29 100644
  #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_view.h"
  #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
-@@ -44,6 +49,7 @@
+@@ -44,6 +50,7 @@
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "chrome/test/stedding/sidebar_test_util.h"
@@ -2143,7 +2192,7 @@ index 5e9d7ad357996..e6f93a5396a29 100644
  #include "components/split_tabs/split_tab_visual_data.h"
  #include "components/tabs/public/folder_tab_collection.h"
  #include "components/tabs/public/tab_interface.h"
-@@ -55,6 +61,7 @@
+@@ -55,6 +62,7 @@
  #include "third_party/skia/include/core/SkColor.h"
  #include "ui/base/page_transition_types.h"
  #include "ui/base/window_open_disposition.h"
@@ -2151,7 +2200,146 @@ index 5e9d7ad357996..e6f93a5396a29 100644
  #include "ui/events/event_constants.h"
  #include "ui/gfx/geometry/point.h"
  #include "ui/menus/simple_menu_model.h"
-@@ -1279,4 +1286,239 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADragTakesATabIntoTheEssentialsAndOut) {
+@@ -579,6 +587,82 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ATabOpenedFromAPinLandsUnderTheLine) {
+   }
+ }
+ 
++// pins H14 (GitHub issue 29): a link opened from an essential when the run
++// begins with a pinned folder lands under the line, after the run, whether
++// the run ends with a pin or with the folder. The check looked for a pin of
++// the list's own level right after the new tab, so a folder at the run's head
++// let it stay above the run, and every pin and pinned folder was drawn under
++// the Clear line until the tab closed.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, ALinkFromAnEssentialPassesAPinnedFolder) {
++  tabs::TabInterface* const essential = tabs().GetActiveTab();
++  ASSERT_TRUE(essential);
++  tabs().SetTabPinned(tabs().GetIndexOfTab(essential), true);
++  ASSERT_TRUE(essential->IsPinned());
++  tabs::TabInterface* const first = AddBlankTab();
++  tabs::TabInterface* const second = AddBlankTab();
++  tabs::FolderTabCollection* const folder = tabs().AddToNewFolder(
++      {tabs().GetIndexOfTab(first), tabs().GetIndexOfTab(second)});
++  ASSERT_TRUE(folder);
++  ASSERT_TRUE(model().CanPinFolder(folder));
++  model().SetFolderSpacePinned(folder, true);
++  tabs::TabInterface* const pin = AddBlankTab();
++  model().SetSpacePinned(pin, true);
++  // A row that stays under the line throughout, so the line is drawn.
++  tabs::TabInterface* const loose = AddBlankTab();
++  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  ASSERT_EQ(tabs().GetIndexOfTab(essential) + 1, tabs().GetIndexOfTab(first))
++      << "the folder is not the run's first row";
++  ASSERT_TRUE(IsAboveTheLine(first));
++  ASSERT_TRUE(IsAboveTheLine(pin));
++
++  const auto in_the_folder = [&](const tabs::TabInterface* tab) {
++    return tab->GetParentCollection() == folder;
++  };
++  // The run's last tab: the pin, then, once it is unpinned, the folder's.
++  tabs::TabInterface* last = pin;
++  for (const bool ends_with_the_folder : {false, true}) {
++    if (ends_with_the_folder) {
++      model().SetSpacePinned(pin, false);
++      ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++      last = second;
++    }
++    for (const WindowOpenDisposition disposition :
++         {WindowOpenDisposition::NEW_BACKGROUND_TAB,
++          WindowOpenDisposition::NEW_FOREGROUND_TAB}) {
++      SCOPED_TRACE(base::StrCat(
++          {ends_with_the_folder ? "a run of the folder alone"
++                                : "a run of the folder and a pin",
++           disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB
++               ? ", in the background"
++               : ", in front"}));
++      tabs().ActivateTabAt(tabs().GetIndexOfTab(essential));
++      NavigateParams params(browser(), GURL("about:blank#child"),
++                            ui::PAGE_TRANSITION_LINK);
++      params.disposition = disposition;
++      params.source_contents = essential->GetContents();
++      Navigate(&params);
++      tabs::TabInterface* const opened =
++          tabs().GetTabForWebContents(params.navigated_or_inserted_contents);
++      ASSERT_TRUE(opened);
++      ASSERT_TRUE(base::test::RunUntil([&]() {
++        return tabs().GetIndexOfTab(opened) == tabs().GetIndexOfTab(last) + 1;
++      })) << "the new tab stayed above the run";
++      ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++      EXPECT_FALSE(in_the_folder(opened)) << "the new tab went into the folder";
++      EXPECT_FALSE(model().IsSpacePinned(opened));
++      EXPECT_TRUE(model().IsFolderSpacePinned(folder));
++      EXPECT_TRUE(IsAboveTheLine(first)) << "the folder was drawn under the line";
++      EXPECT_TRUE(IsAboveTheLine(second));
++      EXPECT_EQ(!ends_with_the_folder, IsAboveTheLine(pin));
++      EXPECT_FALSE(IsAboveTheLine(opened));
++      EXPECT_FALSE(IsAboveTheLine(loose));
++      tabs().CloseWebContentsAt(tabs().GetIndexOfTab(opened),
++                                TabCloseTypes::CLOSE_NONE);
++      ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++  }
++}
++
+ // pins H1, H2 (docs/history/plan-2026-09-26.md SPC-14; BACKLOG S-147): a Space
+ // pin that goes to another window -- Move Tab to New Window, the command
+ // bar's row, and a drop into another window, as a drag's -- is a pin there
+@@ -1196,6 +1280,55 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest,
+   }
+ }
+ 
++// tabs R63, pins H14 (GitHub issue 26): a row dragged up onto the top half
++// of the first row under the Clear line takes the first place there, under
++// the line, and stays a tab. The side of the line was read from the dragged
++// rows' offset, which is zero while they follow the pointer, and laid out
++// only when the rows' order changed, so a row dropped in the first place
++// under the line became a pin, and none could be put there.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, ARowDroppedOnTheFirstRowTakesTheTop) {
++  tabs::TabInterface* const pin = tabs().GetActiveTab();
++  model().SetSpacePinned(pin, true);
++  tabs::TabInterface* const one = AddBlankTab();
++  tabs::TabInterface* const two = AddBlankTab();
++  tabs::TabInterface* const three = AddBlankTab();
++  ASSERT_TRUE(IsAboveTheLine(pin));
++  ASSERT_FALSE(IsAboveTheLine(one));
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  for (tabs::TabInterface* const dragged : {two, three}) {
++    SCOPED_TRACE(dragged == two ? "the second row" : "the last row");
++    tabs::TabInterface* const first =
++        tabs().GetTabAtIndex(tabs().GetIndexOfTab(pin) + 1);
++    ASSERT_NE(dragged, first);
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    const TabView* const row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), dragged);
++    ASSERT_TRUE(row) << "the sidebar shows no row for the tab";
++    const gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++    const gfx::Point to = JustInsideTheTopOf(first);
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed, from);
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, to);
++    base::RunLoop().RunUntilIdle();
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    EXPECT_EQ(tabs().GetIndexOfTab(pin) + 1, tabs().GetIndexOfTab(dragged))
++        << "the row did not take the first place under the line";
++    EXPECT_FALSE(model().IsSpacePinned(dragged)) << "the row became a pin";
++    EXPECT_FALSE(IsAboveTheLine(dragged));
++    EXPECT_TRUE(IsAboveTheLine(pin));
++    EXPECT_FALSE(IsAboveTheLine(first));
++  }
++}
++
+ // pins H27 (BACKLOG S-277, GitHub issue 16): as in Arc, a tab's row dragged
+ // onto the essentials becomes an essential, before the card it is dropped on;
+ // an essential dragged into the list leaves the essentials for the place the
+@@ -1279,4 +1412,239 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ADragTakesATabIntoTheEssentialsAndOut) {
    }
  }
  
