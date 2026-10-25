@@ -43,14 +43,14 @@ embedder hook for page activation; the feature itself stays.
  .../settings/stedding_page/stedding_page.ts   | 114 ++++
  chrome/browser/ui/stedding/blocker/BUILD.gn   |  90 +++
  chrome/browser/ui/stedding/blocker/DEPS       |   6 +
- chrome/browser/ui/stedding/blocker/blocker.cc | 106 ++++
- chrome/browser/ui/stedding/blocker/blocker.h  |  33 +
+ chrome/browser/ui/stedding/blocker/blocker.cc | 117 ++++
+ chrome/browser/ui/stedding/blocker/blocker.h  |  36 ++
  .../blocker/blocker_activation_throttle.cc    |  71 +++
  .../blocker/blocker_activation_throttle.h     |  52 ++
  .../ui/stedding/blocker/blocker_convert.cc    | 222 +++++++
  .../ui/stedding/blocker/blocker_convert.h     |  79 +++
  .../blocker/blocker_convert_unittest.cc       | 168 +++++
- .../ui/stedding/blocker/blocker_lists.cc      | 599 ++++++++++++++++++
+ .../ui/stedding/blocker/blocker_lists.cc      | 603 ++++++++++++++++++
  .../ui/stedding/blocker/blocker_lists.h       | 226 +++++++
  .../blocker/blocker_lists_unittest.cc         | 250 ++++++++
  .../ui/stedding/blocker/blocker_rules.cc      | 216 +++++++
@@ -87,7 +87,7 @@ embedder hook for page activation; the feature itself stays.
  chrome/test/stedding/blocker_browsertest.cc   | 580 +++++++++++++++++
  ...ent_subresource_filter_throttle_manager.cc |  46 +-
  ...tent_subresource_filter_throttle_manager.h |  15 +
- 52 files changed, 3941 insertions(+), 5 deletions(-)
+ 52 files changed, 3959 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/blocker/BUILD.gn
  create mode 100644 chrome/browser/ui/stedding/blocker/DEPS
  create mode 100644 chrome/browser/ui/stedding/blocker/blocker.cc
@@ -537,10 +537,10 @@ index 0000000000000..9372ea386fa8c
 +]
 diff --git a/chrome/browser/ui/stedding/blocker/blocker.cc b/chrome/browser/ui/stedding/blocker/blocker.cc
 new file mode 100644
-index 0000000000000..d961a12be5ef6
+index 0000000000000..22be461025e94
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/blocker/blocker.cc
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,117 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -601,6 +601,12 @@ index 0000000000000..d961a12be5ef6
 +                 : std::string();
 +}
 +
++// The watch on the blocker's switches in Local State.
++PrefChangeRegistrar& Registrar() {
++  static base::NoDestructor<PrefChangeRegistrar> registrar;
++  return *registrar;
++}
++
 +}  // namespace
 +
 +void StartBlocker(PrefService* local_state,
@@ -637,7 +643,7 @@ index 0000000000000..d961a12be5ef6
 +  lists->Start();
 +
 +  UpdatePageActivation(local_state);
-+  static base::NoDestructor<PrefChangeRegistrar> registrar;
++  PrefChangeRegistrar* const registrar = &Registrar();
 +  registrar->Init(local_state);
 +  const base::RepeatingClosure update = base::BindRepeating(
 +      &UpdatePageActivation, base::Unretained(local_state));
@@ -646,13 +652,18 @@ index 0000000000000..d961a12be5ef6
 +  registrar->Add(prefs::kBlockerEasyPrivacy, update);
 +}
 +
++void StopBlocker() {
++  Registrar().Reset();
++  delete BlockerLists::Get();
++}
++
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/blocker/blocker.h b/chrome/browser/ui/stedding/blocker/blocker.h
 new file mode 100644
-index 0000000000000..813cb4769f170
+index 0000000000000..7acbdf6a07a18
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/blocker/blocker.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,36 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -682,6 +693,9 @@ index 0000000000000..813cb4769f170
 +// process from then on.
 +void StartBlocker(PrefService* local_state,
 +                  scoped_refptr<network::SharedURLLoaderFactory> factory);
++// Ends it as the browser shuts down, before Local State is gone: the lists
++// and the watch on the switches hold pointers to it.
++void StopBlocker();
 +
 +}  // namespace stedding
 +
@@ -1310,10 +1324,10 @@ index 0000000000000..f4a9e28f03579
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/stedding/blocker/blocker_lists.cc b/chrome/browser/ui/stedding/blocker/blocker_lists.cc
 new file mode 100644
-index 0000000000000..82a408c959f50
+index 0000000000000..5d79d5f02d35a
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/blocker/blocker_lists.cc
-@@ -0,0 +1,599 @@
+@@ -0,0 +1,603 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1464,8 +1478,12 @@ index 0000000000000..82a408c959f50
 +
 +BlockerLists::BlockerLists(Environment environment)
 +    : env_(std::move(environment)),
++      // The priority goes up while the user waits for a list (Bk11); a
++      // runner raised from BEST_EFFORT names its thread policy (ThreadPool
++      // DCHECKs on one that does not).
 +      file_task_runner_(base::ThreadPool::CreateUpdateableSequencedTaskRunner(
 +          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
++           base::ThreadPolicy::MUST_USE_FOREGROUND,
 +           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {}
 +
 +BlockerLists::~BlockerLists() {

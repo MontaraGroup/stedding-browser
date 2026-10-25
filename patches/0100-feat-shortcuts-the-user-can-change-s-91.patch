@@ -28,7 +28,7 @@ accelerator tables, menu dispatcher and BrowserView go only if Chromium
 ships its own desktop shortcut remapping that Stedding adopts.
 ---
  chrome/browser/BUILD.gn                       |   5 +
- chrome/browser/chrome_browser_main.cc         |   6 +
+ chrome/browser/chrome_browser_main.cc         |  11 +
  .../browser/global_keyboard_shortcuts_mac.h   |  34 +-
  .../browser/global_keyboard_shortcuts_mac.mm  | 169 +++++-
  chrome/browser/resources/settings/BUILD.gn    |   2 +
@@ -61,8 +61,8 @@ ships its own desktop shortcut remapping that Stedding adopts.
  .../stedding/shortcut_overrides_unittest.cc   | 374 ++++++++++++
  .../browser/ui/stedding/shortcut_recording.cc |  54 ++
  .../browser/ui/stedding/shortcut_recording.h  |  52 ++
- .../browser/ui/stedding/shortcut_service.cc   | 142 +++++
- chrome/browser/ui/stedding/shortcut_service.h |  55 ++
+ .../browser/ui/stedding/shortcut_service.cc   | 151 +++++
+ chrome/browser/ui/stedding/shortcut_service.h |  58 ++
  .../ui/stedding/shortcut_service_unittest.cc  | 101 ++++
  .../ui/stedding/shortcut_test_util_mac.h      |  35 ++
  .../ui/stedding/shortcut_test_util_mac.mm     |  98 +++
@@ -92,7 +92,7 @@ ships its own desktop shortcut remapping that Stedding adopts.
  .../stedding_shortcuts_handler_unittest.cc    | 195 ++++++
  chrome/test/stedding/BUILD.gn                 |   7 +
  .../stedding/shortcut_rebind_browsertest.cc   | 561 ++++++++++++++++++
- 65 files changed, 5613 insertions(+), 93 deletions(-)
+ 65 files changed, 5630 insertions(+), 93 deletions(-)
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts
  create mode 100644 chrome/browser/ui/stedding/shortcut_catalog.cc
@@ -150,7 +150,7 @@ index f3f4afd89156c..b60e3c034db54 100644
        "//chrome/browser/apps/app_shim",
        "//chrome/browser/enterprise/connectors/device_trust/key_management/core/mac",
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 68b275965c571..63e340542229c 100644
+index 68b275965c571..ba2d317a7d8b4 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -80,6 +80,7 @@
@@ -172,6 +172,18 @@ index 68b275965c571..63e340542229c 100644
 +
    // Create an instance of GpuModeManager to watch gpu mode pref change.
    g_browser_process->gpu_mode_manager();
+ 
+@@ -2249,6 +2255,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
+   // disconnects DBus services in its PostDestroyThreads.
+   UpgradeDetector::GetInstance()->Shutdown();
+ 
++  // Stedding: the blocker and the shortcuts let go of Local State while it is
++  // still there (docs/features/blocker.md, shortcuts.md).
++  stedding::StopBlocker();
++  stedding::shortcuts::StopWatchingShortcuts();
++
+   // Start watching hangs up to the end of the process.
+   StartWatchingForProcessShutdownHangs();
  
 diff --git a/chrome/browser/global_keyboard_shortcuts_mac.h b/chrome/browser/global_keyboard_shortcuts_mac.h
 index e8801d1471373..58e65f04cd470 100644
@@ -4694,10 +4706,10 @@ index 0000000000000..0fe21239740ef
 +#endif  // CHROME_BROWSER_UI_STEDDING_SHORTCUT_RECORDING_H_
 diff --git a/chrome/browser/ui/stedding/shortcut_service.cc b/chrome/browser/ui/stedding/shortcut_service.cc
 new file mode 100644
-index 0000000000000..9852c53a63491
+index 0000000000000..3e1239070ec9c
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_service.cc
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,151 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4744,6 +4756,12 @@ index 0000000000000..9852c53a63491
 +  return *hot_keys;
 +}
 +
++// The watch on the user's chords in Local State (Z11).
++std::unique_ptr<PrefChangeRegistrar>& Registrar() {
++  static base::NoDestructor<std::unique_ptr<PrefChangeRegistrar>> registrar;
++  return *registrar;
++}
++
 +// The stored value, copied: a check writes nothing.
 +base::DictValue StoredCopy(PrefService* local_state) {
 +  return local_state->GetDict(prefs::kShortcutsUser).Clone();
@@ -4752,17 +4770,20 @@ index 0000000000000..9852c53a63491
 +}  // namespace
 +
 +void EnsureShortcutsInstalled(PrefService* local_state) {
-+  static base::NoDestructor<std::unique_ptr<PrefChangeRegistrar>> registrar;
-+  if (!local_state || *registrar ||
++  std::unique_ptr<PrefChangeRegistrar>& registrar = Registrar();
++  if (!local_state || registrar ||
 +      !local_state->FindPreference(prefs::kShortcutsUser)) {
 +    return;
 +  }
-+  *registrar = std::make_unique<PrefChangeRegistrar>();
-+  (*registrar)->Init(local_state);
-+  (*registrar)
-+      ->Add(prefs::kShortcutsUser,
-+            base::BindRepeating(&OnPrefChanged, local_state));
++  registrar = std::make_unique<PrefChangeRegistrar>();
++  registrar->Init(local_state);
++  registrar->Add(prefs::kShortcutsUser,
++                 base::BindRepeating(&OnPrefChanged, local_state));
 +  Load(local_state);
++}
++
++void StopWatchingShortcuts() {
++  Registrar().reset();
 +}
 +
 +RowState RowStateOf(PrefService* local_state, const Entry& entry) {
@@ -4842,10 +4863,10 @@ index 0000000000000..9852c53a63491
 +}  // namespace stedding::shortcuts
 diff --git a/chrome/browser/ui/stedding/shortcut_service.h b/chrome/browser/ui/stedding/shortcut_service.h
 new file mode 100644
-index 0000000000000..a1862c543bd31
+index 0000000000000..32a5c2ce994cb
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_service.h
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,58 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4867,6 +4888,9 @@ index 0000000000000..a1862c543bd31
 +// startup, after Local State is loaded and before the Mac's menu is built
 +// and any window opens. Safe to call again; later calls do nothing.
 +void EnsureShortcutsInstalled(PrefService* local_state);
++// Lets go of Local State as the browser shuts down, before it is gone: the
++// watch is a pointer to it.
++void StopWatchingShortcuts();
 +
 +// The rows as the block shows them, from the stored value.
 +RowState RowStateOf(PrefService* local_state, const Entry& entry);
