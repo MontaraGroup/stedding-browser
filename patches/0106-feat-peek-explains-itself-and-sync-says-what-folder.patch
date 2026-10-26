@@ -1,0 +1,685 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 21:58:10 -0400
+Subject: feat: Peek explains itself, and sync says what folder to pick
+
+Peek's default is Arc's, a click on a pinned tab's link to another site,
+so someone who skipped the welcome flow met it unexplained. The first
+peeks a profile opens now carry a one-line note at the top of the page:
+what a peek is, that Open as Tab keeps the page, and a link to the
+setting. Got it, the link, the close box, Open as Tab and Open in Split
+View answer it; answered, it never shows again, and unanswered it shows
+on at most three peeks. It does not follow a kept page into the window
+(peek P19). The welcome flow's question now says what a peek is and
+names the last choice "Never peek" (welcome W16).
+
+Sync through a folder has no provider to choose: the user's own sync
+app carries the file. The row now says to pick a folder iCloud Drive,
+OneDrive, Dropbox, Google Drive or a share keeps, and a folder in the
+home folder that none of them keeps gets a note (sidebar-file Sf42,
+GitHub issue 38's follow-up).
+
+Why: the owner, 2026-10-26.
+Removable when: never; to be folded into the patches that own the code.
+---
+ chrome/app/stedding_strings.grdp              |  11 ++
+ .../stedding_sync_section.html.ts             |   4 +
+ .../stedding_page/stedding_sync_section.ts    |   2 +
+ .../browser/resources/stedding_welcome/app.ts |   7 +-
+ chrome/browser/ui/spaces/sidebar_sync_file.cc |  34 +++++
+ chrome/browser/ui/spaces/sidebar_sync_file.h  |  13 ++
+ .../browser/ui/spaces/sidebar_sync_service.cc |  16 +++
+ .../ui/spaces/sidebar_sync_unittest.cc        |  26 ++++
+ chrome/browser/ui/stedding/BUILD.gn           |   5 +
+ chrome/browser/ui/stedding/peek.cc            |   8 ++
+ chrome/browser/ui/stedding/peek_notice.cc     | 134 ++++++++++++++++++
+ chrome/browser/ui/stedding/peek_notice.h      |  34 +++++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   3 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   7 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   5 +
+ .../browser/ui/webui/settings/settings_ui.cc  |  13 +-
+ chrome/test/stedding/peek_browsertest.cc      |  52 +++++++
+ components/infobars/core/infobar_delegate.h   |   2 +
+ 18 files changed, 371 insertions(+), 5 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/peek_notice.cc
+ create mode 100644 chrome/browser/ui/stedding/peek_notice.h
+
+diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
+index ac0cfbf2ed8b5..bd11b31359865 100644
+--- a/chrome/app/stedding_strings.grdp
++++ b/chrome/app/stedding_strings.grdp
+@@ -267,6 +267,17 @@
+     Show this page beside the pinned tab it came from
+   </message>
+ 
++  <!-- Peek's note on the first peeks (docs/features/peek.md P19). -->
++  <message name="IDS_STEDDING_PEEK_NOTICE" desc="A one-time notice at the top of a peek (a small window over the browser window that shows a link opened from a pinned tab), shown on the first peeks a person opens. It says what the window is and that the pinned tab stayed as it was. 'Open as Tab' is the name of the peek's button that keeps the page.">
++    A link from a pinned tab to another site opens here, in a peek, and the pinned tab stays as it was. Open as Tab keeps this page.
++  </message>
++  <message name="IDS_STEDDING_PEEK_NOTICE_GOT_IT" desc="The button on the first peeks' notice (a peek is a small window over the browser window that shows a link opened from a pinned tab) that dismisses it for good.">
++    Got it
++  </message>
++  <message name="IDS_STEDDING_PEEK_NOTICE_SETTINGS" desc="The link on the first peeks' notice (a peek is a small window over the browser window that shows a link opened from a pinned tab) that opens the settings where peeks are turned off or set to open only on a held press.">
++    Change how links open
++  </message>
++
+   <!-- Dark pages in the macOS menu bar (docs/features/dark-pages.md Dk24). -->
+   <message name="IDS_STEDDING_DARK_PAGES_MAC" desc="In Title Case: The Mac View menu item that turns dark pages on or off for the profile: every website drawn dark by the browser. Checked while dark pages is on.">
+     Dark Pages
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_sync_section.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_sync_section.html.ts
+index b1fbb04814df7..0ec8100b9c1a4 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_sync_section.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_sync_section.html.ts
+@@ -18,6 +18,10 @@ ${this.status_?.available ? html`
+     <div class="label" id="syncLabel">$i18n{steddingSyncLabel}</div>
+     ${this.status_.enabled ? html`
+       <div class="secondary" id="syncFolder">${this.folderLine_()}</div>
++      ${this.status_.looksSynced === false ? html`
++        <div class="secondary" id="syncNotShared">
++          $i18n{steddingSyncNotShared}
++        </div>` : ''}
+       <div class="secondary" id="syncStatus">${this.statusLine_()}</div>
+       ${this.problemLine_() ? html`
+         <div class="secondary sync-problem" id="syncProblem" role="status">
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_sync_section.ts b/chrome/browser/resources/settings/stedding_page/stedding_sync_section.ts
+index fa909cbe52401..f4dcaaeac5d11 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_sync_section.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_sync_section.ts
+@@ -63,6 +63,8 @@ export interface SteddingSyncStatus {
+   enabled: boolean;
+   ready?: boolean;
+   folder: string;
++  // Sf42: false when nothing seems to sync the folder.
++  looksSynced?: boolean;
+   device: string;
+   problem?: string;
+   problemDevice?: string;
+diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
+index faf2d2299d070..76797ea5cefb9 100644
+--- a/chrome/browser/resources/stedding_welcome/app.ts
++++ b/chrome/browser/resources/stedding_welcome/app.ts
+@@ -110,13 +110,14 @@ const BEHAVIOURS: Array<{
+     // W16: Peek, on by default (peek P10), and the press it opens with (P18).
+     name: 'peek',
+     label: 'Links from pinned tabs to other sites',
+-    hint: 'A peek shows the page in a window over this one, and the ' +
+-        'pinned tab stays where it was.',
++    hint: 'They open in a peek: a window over this one, so the pinned ' +
++        'tab stays where it was, and Open as Tab keeps the page. With a ' +
++        'hold, a plain click opens the link in the tab instead.',
+     choices: [
+       [0, 'Peek on a click'],
+       [300, 'Peek on a 0.3 s hold'],
+       [500, 'Peek on a 0.5 s hold'],
+-      [-1, 'Open in the tab'],
++      [-1, 'Never peek: open in the tab'],
+     ],
+   },
+ ];
+diff --git a/chrome/browser/ui/spaces/sidebar_sync_file.cc b/chrome/browser/ui/spaces/sidebar_sync_file.cc
+index 77ed4a2a28133..98f8762640e09 100644
+--- a/chrome/browser/ui/spaces/sidebar_sync_file.cc
++++ b/chrome/browser/ui/spaces/sidebar_sync_file.cc
+@@ -242,6 +242,40 @@ std::string DefaultDeviceName(std::string_view install) {
+           .c_str());
+ }
+ 
++bool LooksSynced(const base::FilePath& folder,
++                 const base::FilePath& home,
++                 const std::vector<base::FilePath>& synced_roots) {
++  for (const base::FilePath& root : synced_roots) {
++    if (!root.empty() && (root == folder || root.IsParent(folder))) {
++      return true;
++    }
++  }
++  if (home.empty() || !home.IsParent(folder)) {
++    return true;
++  }
++  base::FilePath relative;
++  if (!home.AppendRelativePath(folder, &relative)) {
++    return true;
++  }
++  const std::vector<base::FilePath::StringType> parts =
++      relative.GetComponents();
++  if (parts.empty()) {
++    return false;
++  }
++  const std::string first = base::FilePath(parts[0]).AsUTF8Unsafe();
++  if (base::EqualsCaseInsensitiveASCII(first, "Library") && parts.size() > 1) {
++    const std::string second = base::FilePath(parts[1]).AsUTF8Unsafe();
++    return base::EqualsCaseInsensitiveASCII(second, "Mobile Documents") ||
++           base::EqualsCaseInsensitiveASCII(second, "CloudStorage");
++  }
++  static constexpr std::string_view kSyncedNames[] = {
++      "Dropbox", "OneDrive",  "Google Drive", "GoogleDrive", "Box",
++      "iCloudDrive", "iCloud Drive", "Documents", "Desktop"};
++  return std::ranges::any_of(kSyncedNames, [&](std::string_view name) {
++    return base::StartsWith(first, name, base::CompareCase::INSENSITIVE_ASCII);
++  });
++}
++
+ base::FilePath SyncDirFor(const base::FilePath& picked,
+                           bool picked_holds_sidebar_files) {
+   if (picked_holds_sidebar_files ||
+diff --git a/chrome/browser/ui/spaces/sidebar_sync_file.h b/chrome/browser/ui/spaces/sidebar_sync_file.h
+index 0a59368dbebf0..7d1a420b73320 100644
+--- a/chrome/browser/ui/spaces/sidebar_sync_file.h
++++ b/chrome/browser/ui/spaces/sidebar_sync_file.h
+@@ -10,6 +10,7 @@
+ #include <optional>
+ #include <string>
+ #include <string_view>
++#include <vector>
+ 
+ #include "base/files/file_path.h"
+ #include "chrome/browser/ui/spaces/arc_sidebar_importer.h"
+@@ -47,6 +48,18 @@ std::string DefaultDeviceName(std::string_view install);
+ base::FilePath SyncDirFor(const base::FilePath& picked,
+                           bool picked_holds_sidebar_files);
+ 
++// Sf42 (GitHub issue 38): whether `folder` lies where something keeps it on
++// other computers. There is no provider to choose: the user's own sync app
++// or share carries the file. A folder outside `home` (another volume, a
++// network share) counts; inside it, only under a folder a sync app keeps --
++// iCloud Drive and the File Provider mounts under Library, Dropbox, OneDrive,
++// Google Drive, Box, iCloudDrive on Windows, and Documents and Desktop,
++// which iCloud and OneDrive back up -- or under one of `synced_roots` (the
++// OneDrive folders Windows names). Paths only; nothing is read.
++bool LooksSynced(const base::FilePath& folder,
++                 const base::FilePath& home,
++                 const std::vector<base::FilePath>& synced_roots);
++
+ // Sf28: what a name in the folder is.
+ enum class EntryKind {
+   // This install's own file.
+diff --git a/chrome/browser/ui/spaces/sidebar_sync_service.cc b/chrome/browser/ui/spaces/sidebar_sync_service.cc
+index 82345e9088807..f175480187114 100644
+--- a/chrome/browser/ui/spaces/sidebar_sync_service.cc
++++ b/chrome/browser/ui/spaces/sidebar_sync_service.cc
+@@ -8,6 +8,7 @@
+ #include <utility>
+ 
+ #include "base/auto_reset.h"
++#include "base/environment.h"
+ #include "base/files/file_enumerator.h"
+ #include "base/files/file_path_watcher.h"
+ #include "base/files/file_util.h"
+@@ -21,6 +22,7 @@
+ #include "base/time/clock.h"
+ #include "base/time/default_clock.h"
+ #include "base/token.h"
++#include "build/build_config.h"
+ #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -1639,6 +1641,20 @@ base::DictValue SidebarSyncService::GetStatus() {
+   base::DictValue status;
+   status.Set("enabled", enabled());
+   status.Set("folder", folder().AsUTF8Unsafe());
++  // Sf42: a folder nothing seems to sync gets a note in Settings.
++  std::vector<base::FilePath> synced_roots;
++#if BUILDFLAG(IS_WIN)
++  std::unique_ptr<base::Environment> env = base::Environment::Create();
++  for (const char* const name :
++       {"OneDrive", "OneDriveConsumer", "OneDriveCommercial"}) {
++    if (std::optional<std::string> root = env->GetVar(name)) {
++      synced_roots.push_back(base::FilePath::FromUTF8Unsafe(*root));
++    }
++  }
++#endif
++  status.Set("looksSynced",
++             !enabled() || sidebar_sync::LooksSynced(
++                               folder(), base::GetHomeDir(), synced_roots));
+   status.Set("device", DeviceName());
+   status.Set("ready", ready_);
+   if (!enabled()) {
+diff --git a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
+index 8e9b276a4c92f..20bd252c7fc6f 100644
+--- a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
++++ b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
+@@ -515,6 +515,32 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
+ }
+ 
+ // Sf8: a picked folder that already is one is not nested.
++// Sf42 (GitHub issue 38): a folder in the home folder that no sync app keeps
++// is named; a sync app's folder, another volume or a share is not.
++TEST(SidebarSyncFileTest, AFolderNothingSyncsIsNamed) {
++  const base::FilePath home(FILE_PATH_LITERAL("/Users/someone"));
++  const auto under = [&](const char* path) {
++    return home.Append(base::FilePath::FromUTF8Unsafe(path));
++  };
++  EXPECT_FALSE(LooksSynced(under("Personal Stuff/Stedding Sidebar"), home, {}))
++      << "the issue's folder";
++  EXPECT_FALSE(LooksSynced(under("Stedding Sidebar"), home, {}));
++  EXPECT_FALSE(LooksSynced(under("Library/Application Support/x"), home, {}));
++  for (const char* const synced :
++       {"Library/Mobile Documents/com~apple~CloudDocs/Stedding",
++        "Library/CloudStorage/OneDrive-Personal/Stedding", "Dropbox/Stedding",
++        "OneDrive - Company/Stedding", "Google Drive/My Drive/Stedding",
++        "Documents/Stedding", "Desktop/Stedding"}) {
++    EXPECT_TRUE(LooksSynced(under(synced), home, {})) << synced;
++  }
++  EXPECT_TRUE(LooksSynced(base::FilePath(FILE_PATH_LITERAL("/Volumes/NAS/s")),
++                          home, {}))
++      << "another volume or a share";
++  const base::FilePath named = under("Work Cloud");
++  EXPECT_TRUE(LooksSynced(named.AppendASCII("Stedding"), home, {named}))
++      << "a root the system names";
++}
++
+ TEST(SidebarSyncFileTest, APickedSteddingSidebarFolderIsNotNested) {
+   const base::FilePath share(FILE_PATH_LITERAL("share"));
+   EXPECT_EQ(share.AppendASCII("Stedding Sidebar"), SyncDirFor(share, false));
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index 2110db9ef7af3..ff0daee67c43f 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -465,10 +465,12 @@ source_set("little_window") {
+   public = [
+     "little_window.h",
+     "peek.h",
++    "peek_notice.h",
+   ]
+   sources = [
+     "little_window.cc",
+     "peek.cc",
++    "peek_notice.cc",
+   ]
+   public_deps = [
+     "//base",
+@@ -484,10 +486,13 @@ source_set("little_window") {
+     "//chrome/app:generated_resources",
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui/browser_window",
++    "//chrome/browser/infobars",
+     "//chrome/browser/ui/browser_window:create_browser_window",
+     "//chrome/browser/ui/navigator",
+     "//chrome/browser/ui/spaces:router",
+     "//chrome/browser/ui/tabs:tab_strip",
++    "//components/infobars/content",
++    "//components/infobars/core",
+     "//components/prefs",
+     "//components/tabs:public",
+     "//content/public/browser",
+diff --git a/chrome/browser/ui/stedding/peek.cc b/chrome/browser/ui/stedding/peek.cc
+index 812f71b301126..c04e0a801dcce 100644
+--- a/chrome/browser/ui/stedding/peek.cc
++++ b/chrome/browser/ui/stedding/peek.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/peek_notice.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -249,6 +250,7 @@ BrowserWindowInterface* OpenPeek(tabs::TabInterface* source,
+   load.has_user_gesture = link.user_gesture;
+   page->GetController().LoadURLWithParams(load);
+   ShowPeek(window, page);
++  MaybeShowPeekNotice(page);
+   return window;
+ }
+ 
+@@ -264,6 +266,7 @@ BrowserWindowInterface* OpenPeekWithContents(
+       MakePeek(source, std::move(contents), url);
+   if (window) {
+     ShowPeek(window, page);
++    MaybeShowPeekNotice(page);
+   }
+   return window;
+ }
+@@ -305,6 +308,11 @@ void SetPeekOpeningGraceForTesting(base::TimeDelta grace) {
+ 
+ void ForgetPeek(content::WebContents* contents) {
+   if (contents) {
++    // P19: the page is kept (Open as Tab, Open in Split View); its note,
++    // if it has one, stays behind.
++    if (contents->GetUserData(PeekPage::UserDataKey())) {
++      OnPeekPageKept(contents);
++    }
+     contents->RemoveUserData(PeekPage::UserDataKey());
+   }
+ }
+diff --git a/chrome/browser/ui/stedding/peek_notice.cc b/chrome/browser/ui/stedding/peek_notice.cc
+new file mode 100644
+index 0000000000000..f19de93824172
+--- /dev/null
++++ b/chrome/browser/ui/stedding/peek_notice.cc
+@@ -0,0 +1,134 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/peek_notice.h"
++
++#include <memory>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/infobars/confirm_infobar_creator.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/grit/generated_resources.h"
++#include "components/infobars/content/content_infobar_manager.h"
++#include "components/infobars/core/confirm_infobar_delegate.h"
++#include "components/infobars/core/infobar.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/window_open_disposition.h"
++#include "url/gurl.h"
++
++namespace stedding {
++namespace {
++
++// Settings, searched for the peek rows: the switch and "Open a peek with".
++constexpr char kPeekSettingsURL[] = "chrome://settings/stedding?search=peek";
++
++PrefService* PrefsOf(content::WebContents* page) {
++  Profile* const profile =
++      page ? Profile::FromBrowserContext(page->GetBrowserContext()) : nullptr;
++  return profile ? profile->GetPrefs() : nullptr;
++}
++
++void MarkAnswered(PrefService* prefs) {
++  if (prefs) {
++    prefs->SetBoolean(prefs::kPeekNoticeAnswered, true);
++  }
++}
++
++class PeekNoticeDelegate : public ConfirmInfoBarDelegate {
++ public:
++  explicit PeekNoticeDelegate(PrefService* prefs) : prefs_(prefs) {}
++  PeekNoticeDelegate(const PeekNoticeDelegate&) = delete;
++  PeekNoticeDelegate& operator=(const PeekNoticeDelegate&) = delete;
++  ~PeekNoticeDelegate() override = default;
++
++  // ConfirmInfoBarDelegate:
++  InfoBarIdentifier GetIdentifier() const override {
++    return STEDDING_PEEK_NOTICE_INFOBAR_DELEGATE;
++  }
++  std::u16string GetMessageText() const override {
++    return l10n_util::GetStringUTF16(IDS_STEDDING_PEEK_NOTICE);
++  }
++  int GetButtons() const override { return BUTTON_OK; }
++  std::u16string GetButtonLabel(InfoBarButton button) const override {
++    return l10n_util::GetStringUTF16(IDS_STEDDING_PEEK_NOTICE_GOT_IT);
++  }
++  std::u16string GetLinkText() const override {
++    return l10n_util::GetStringUTF16(IDS_STEDDING_PEEK_NOTICE_SETTINGS);
++  }
++  GURL GetLinkURL() const override { return GURL(kPeekSettingsURL); }
++  // A peek has no tabs: the page opens in a tab of a normal window.
++  bool LinkClicked(WindowOpenDisposition disposition) override {
++    MarkAnswered(prefs_);
++    ConfirmInfoBarDelegate::LinkClicked(
++        WindowOpenDisposition::NEW_FOREGROUND_TAB);
++    return true;
++  }
++  bool Accept() override {
++    MarkAnswered(prefs_);
++    return true;
++  }
++  void InfoBarDismissed() override { MarkAnswered(prefs_); }
++  // It stays while the peek follows links: it is about the window.
++  bool ShouldExpire(const NavigationDetails& details) const override {
++    return false;
++  }
++
++ private:
++  // The profile's, which outlives every page of it.
++  const raw_ptr<PrefService> prefs_;
++};
++
++infobars::InfoBar* FindNotice(content::WebContents* page) {
++  infobars::ContentInfoBarManager* const manager =
++      page ? infobars::ContentInfoBarManager::FromWebContents(page) : nullptr;
++  if (!manager) {
++    return nullptr;
++  }
++  for (infobars::InfoBar* const infobar : manager->infobars()) {
++    if (infobar->delegate()->GetIdentifier() ==
++        infobars::InfoBarDelegate::STEDDING_PEEK_NOTICE_INFOBAR_DELEGATE) {
++      return infobar;
++    }
++  }
++  return nullptr;
++}
++
++}  // namespace
++
++void MaybeShowPeekNotice(content::WebContents* page) {
++  PrefService* const prefs = PrefsOf(page);
++  if (!prefs || prefs->GetBoolean(prefs::kPeekNoticeAnswered) ||
++      prefs->GetInteger(prefs::kPeekNoticeShown) >=
++          prefs::kPeekNoticeMaxShown ||
++      FindNotice(page)) {
++    return;
++  }
++  infobars::ContentInfoBarManager* const manager =
++      infobars::ContentInfoBarManager::FromWebContents(page);
++  if (!manager) {
++    return;
++  }
++  prefs->SetInteger(prefs::kPeekNoticeShown,
++                    prefs->GetInteger(prefs::kPeekNoticeShown) + 1);
++  manager->AddInfoBar(
++      CreateConfirmInfoBar(std::make_unique<PeekNoticeDelegate>(prefs)));
++}
++
++void OnPeekPageKept(content::WebContents* page) {
++  // Keeping a peek shows it is understood, the note on it or not.
++  MarkAnswered(PrefsOf(page));
++  if (infobars::InfoBar* const notice = FindNotice(page)) {
++    notice->RemoveSelf();
++  }
++}
++
++bool HasPeekNoticeForTesting(content::WebContents* page) {
++  return FindNotice(page) != nullptr;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/peek_notice.h b/chrome/browser/ui/stedding/peek_notice.h
+new file mode 100644
+index 0000000000000..824ed22f21ef1
+--- /dev/null
++++ b/chrome/browser/ui/stedding/peek_notice.h
+@@ -0,0 +1,34 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_PEEK_NOTICE_H_
++#define CHROME_BROWSER_UI_STEDDING_PEEK_NOTICE_H_
++
++class Profile;
++
++namespace content {
++class WebContents;
++}  // namespace content
++
++namespace stedding {
++
++// docs/features/peek.md P19: a peek can come as a surprise to someone who
++// skipped the welcome flow, so the first peeks a profile opens carry a
++// one-line note at the top of the page -- what a peek is, that Open as Tab
++// keeps the page, and a link to the setting that turns peeks off or onto a
++// held press. It shows until it is answered, on at most
++// prefs::kPeekNoticeMaxShown peeks, and never again after.
++void MaybeShowPeekNotice(content::WebContents* page);
++
++// The page leaves its peek (Open as Tab, Open in Split View): that answers
++// the note, which is taken off the page so it does not follow it into the
++// window.
++void OnPeekPageKept(content::WebContents* page);
++
++// Whether `page` carries the note now (tests).
++bool HasPeekNoticeForTesting(content::WebContents* page);
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_PEEK_NOTICE_H_
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 116336c692be7..6d8775089684d 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -23,6 +23,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kPeekEnabled, true);
+   // peek P18: a click peeks until the user asks for a held press.
+   registry->RegisterIntegerPref(kPeekHoldDelayMs, 0);
++  // peek P19: the first peeks' note, not yet shown or answered.
++  registry->RegisterBooleanPref(kPeekNoticeAnswered, false);
++  registry->RegisterIntegerPref(kPeekNoticeShown, 0);
+   // Never by default: nothing closes a tab the user did not close unless
+   // they choose a time in Settings, the welcome flow's behaviour step or the
+   // command bar (archive A6; the owner, 2026-10-11). It was 12 hours.
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index db5803251d5d6..1e0d5ad28b98c 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -30,6 +30,13 @@ inline constexpr char kPeekEnabled[] = "stedding.peek.enabled";
+ // Settings and the welcome flow offer.
+ inline constexpr char kPeekHoldDelayMs[] = "stedding.peek.hold_delay_ms";
+ inline constexpr int kPeekHoldDelayChoices[] = {0, 300, 500};
++// peek P19: the note the first peeks carry, saying what a peek is and where
++// to change it. Answered once it is dismissed, "Got it" or its settings link
++// is pressed, or a peek is kept as a tab or in a split; until then it shows
++// on a profile's first kPeekNoticeMaxShown peeks and never again after.
++inline constexpr char kPeekNoticeAnswered[] = "stedding.peek.notice_answered";
++inline constexpr char kPeekNoticeShown[] = "stedding.peek.notice_shown";
++inline constexpr int kPeekNoticeMaxShown = 3;
+ 
+ // Hours an unpinned tab may sit unlooked-at before auto-archive closes it
+ // into the recently-closed list (docs/features/archive.md). 0 turns it off,
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index 2fb84af86b05c..b5bf5841886b1 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -56,6 +56,11 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   // peek P18: a click peeks until the user asks for a held press.
+   ASSERT_TRUE(service.FindPreference(kPeekHoldDelayMs));
+   EXPECT_EQ(0, service.GetInteger(kPeekHoldDelayMs));
++  // peek P19: the first peeks' note, neither shown nor answered yet.
++  ASSERT_TRUE(service.FindPreference(kPeekNoticeAnswered));
++  EXPECT_FALSE(service.GetBoolean(kPeekNoticeAnswered));
++  ASSERT_TRUE(service.FindPreference(kPeekNoticeShown));
++  EXPECT_EQ(0, service.GetInteger(kPeekNoticeShown));
+   // tabs R39: no tab sleeps on a timer until the user chooses a time.
+   ASSERT_TRUE(service.FindPreference(kTabsIdleSleepMinutes));
+   EXPECT_EQ(0, service.GetInteger(kTabsIdleSleepMinutes));
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index fe553da71fa82..a5d56c9c276bd 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -841,8 +841,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString(
+       "steddingSyncSubLabel",
+       "Keep your Spaces, pins and essentials the same on your computers. "
+-      "Your own sync tool or shared drive carries the file; Stedding has no "
+-      "server and no account and sends nothing anywhere.");
++      "Pick a folder that iCloud Drive, OneDrive, Dropbox, Google Drive or a "
++      "network share keeps on all of them, and the same folder on each: "
++      "that app carries the file. Stedding has no server and no account and "
++      "sends nothing anywhere.");
++  // Sf42 (GitHub issue 38): a folder nothing seems to sync.
++  html_source->AddString(
++      "steddingSyncNotShared",
++      "Nothing seems to sync this folder to your other computers: it is not "
++      "in iCloud Drive, OneDrive, Dropbox or Google Drive, or on a network "
++      "share. Stop syncing and pick one that is, unless another tool copies "
++      "it.");
+   html_source->AddString("steddingSyncSetUp", "Set up…");
+   html_source->AddString("steddingSyncDeviceLabel",
+                          "This computer’s name");
+diff --git a/chrome/test/stedding/peek_browsertest.cc b/chrome/test/stedding/peek_browsertest.cc
+index 2e6f09da4558b..1477faa13165b 100644
+--- a/chrome/test/stedding/peek_browsertest.cc
++++ b/chrome/test/stedding/peek_browsertest.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/spaces/space_model.h"
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/peek_notice.h"
+ #include "chrome/browser/ui/stedding/stedding_command_ids.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -35,6 +36,9 @@
+ #include "chrome/browser/ui/views/toolbar/stedding_little_promote_button.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/infobars/content/content_infobar_manager.h"
++#include "components/infobars/core/confirm_infobar_delegate.h"
++#include "components/infobars/core/infobar.h"
+ #include "components/input/native_web_keyboard_event.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -377,6 +381,54 @@ IN_PROC_BROWSER_TEST_F(PeekTest, OpenAsTabMovesThePageAsItIs) {
+   EXPECT_FALSE(page->IsLoading());
+   EXPECT_EQ(requests, Requests()) << "the page was asked for again";
+   EXPECT_FALSE(stedding::IsPeekWindow(browser()));
++  // P19: the first peek's note stays behind, and keeping the page answers it.
++  EXPECT_FALSE(stedding::HasPeekNoticeForTesting(page))
++      << "the note followed the page into the window";
++  EXPECT_TRUE(browser()->GetProfile()->GetPrefs()->GetBoolean(
++      stedding::prefs::kPeekNoticeAnswered));
++}
++
++// P19: the first peeks carry a note saying what a peek is; it shows until it
++// is answered, and then never again.
++IN_PROC_BROWSER_TEST_F(PeekTest, TheFirstPeeksSayWhatAPeekIs) {
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  const auto peek_page = [&]() -> content::WebContents* {
++    ClickLink();
++    BrowserWindowInterface* const peek = WaitForPeek();
++    return peek ? peek->GetTabStripModel()->GetActiveWebContents() : nullptr;
++  };
++  const auto close_peek = [&]() {
++    stedding::PeekOver(browser())->GetWindow()->Close();
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return stedding::PeekOver(browser()) == nullptr; }));
++  };
++
++  content::WebContents* page = peek_page();
++  ASSERT_TRUE(page);
++  EXPECT_TRUE(stedding::HasPeekNoticeForTesting(page)) << "the first peek";
++  EXPECT_EQ(1, prefs->GetInteger(stedding::prefs::kPeekNoticeShown));
++  ASSERT_NO_FATAL_FAILURE(close_peek());
++
++  page = peek_page();
++  ASSERT_TRUE(page);
++  ASSERT_TRUE(stedding::HasPeekNoticeForTesting(page))
++      << "closed unanswered, the note does not come back";
++  infobars::ContentInfoBarManager* const manager =
++      infobars::ContentInfoBarManager::FromWebContents(page);
++  ASSERT_TRUE(manager);
++  ASSERT_EQ(1u, manager->infobars().size());
++  infobars::InfoBar* const notice = manager->infobars()[0];
++  ASSERT_TRUE(notice->delegate()->AsConfirmInfoBarDelegate()->Accept());
++  notice->RemoveSelf();
++  EXPECT_TRUE(prefs->GetBoolean(stedding::prefs::kPeekNoticeAnswered));
++  ASSERT_NO_FATAL_FAILURE(close_peek());
++
++  page = peek_page();
++  ASSERT_TRUE(page);
++  EXPECT_FALSE(stedding::HasPeekNoticeForTesting(page)) << "answered, it came back";
++  EXPECT_EQ(2, prefs->GetInteger(stedding::prefs::kPeekNoticeShown));
+ }
+ 
+ // P7: Open as Tab from an essential shared by every Space puts the page in
+diff --git a/components/infobars/core/infobar_delegate.h b/components/infobars/core/infobar_delegate.h
+index 5c0c180b10215..2908bc4ce23bb 100644
+--- a/components/infobars/core/infobar_delegate.h
++++ b/components/infobars/core/infobar_delegate.h
+@@ -213,6 +213,8 @@ class InfoBarDelegate {
+     FORMS_AI_PRIVATE_INFERENCE_INFOBAR_DELEGATE_IOS = 138,
+     PASSWORD_SAVED_INFOBAR_DELEGATE_IOS = 139,
+     CONTEXTUAL_CUE_INFOBAR_DELEGATE_IOS = 140,
++    // Stedding (docs/features/peek.md P19): the first peeks' note.
++    STEDDING_PEEK_NOTICE_INFOBAR_DELEGATE = 141,
+   };
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/browser/enums.xml:InfoBarIdentifier)
+ 

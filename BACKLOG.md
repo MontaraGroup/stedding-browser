@@ -62,6 +62,11 @@ refer to `docs/features/<feature>.md`.
    archives.
 9. `S-313` **Settings › Stedding reorganised** (optional, if not too hard): today one long
    list; grouped and laid out more like the setup screen.
+10. **Release, then the pictures.** Both platforms' full runs and the installer, the release
+    on the owner's word; then every image and animation made from the product brought up to
+    date -- the README's GIF and stills (`docs/images/readme/`), the site's screenshots and
+    animations (with the site's own session for `ysalitrynskyi/stedding.dev`) -- since the
+    colours and the sidebar's foot changed.
 
 Commits land as each step does; a release only on the owner's word.
 
