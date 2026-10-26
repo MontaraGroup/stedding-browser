@@ -28,7 +28,12 @@ refer to `docs/features/<feature>.md`.
    setup is the same; drop tests that check what another test already checks; replace fixed
    waits with waits for the condition; move pure-logic checks from browser tests to unit tests.
    Every spec row keeps a test that names it. Done when the same coverage runs in clearly less
-   time, measured before and after on both machines.
+   time, measured before and after on both machines. **Mac, 2026-10-26:** the browser suite
+   runs four at a time (one at a time took 815 s for that leg; four take about 400 s; six were
+   slower and timed out a wait), and 106 tests that each started a browser for one short check
+   are 37 (patch 0108; those groups take 94 s where they took 208 s). The whole Mac run is now
+   about 14 minutes (unit 36 s, browser 409 s four at a time and 400 s one at a time), from
+   about 21. Windows: TBD, from this round's three builds.
 2. `S-307` **A review of all code and tests by other models**, read-only (nothing built or run
    by the reviewers). Done 2026-10-26 with Grok 4.7 through Cursor, in eight areas (Codex's
    free tier ran out before it reported). 19 findings: 15 fixed in the patches that own the
