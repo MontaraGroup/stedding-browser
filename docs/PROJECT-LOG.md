@@ -10,6 +10,10 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-26, late night -- 0.3.0 beta 20
+
+Released on the owner's word: the Settings rework, the wording pass, the Shortcuts list's remove buttons and sync that names any folder. Every Mac and Windows test passed in the release and DCHECK builds (no AddressSanitizer run); the installer went over beta 19; the feeds, the site and the cask carry it, and real updates came from beta 19 on both machines (Mac 48 s, Windows 20 s).
+
 ## 2026-10-26, night -- Settings with room
 
 The owner on beta 19's Settings page: "Super overcrowded", and too little changed. Asked how to lay it out, the owner kept one long page with more air. Every row now has room above and below its text (rows with a menu or a slider had none), about forty descriptions are one short line each where they ran two to four, the Spaces card gave its file, sync and Arc rows to a new Sync and import card with the file's buttons under its text, and each Space names its session switch (settings T13). The build tool measured free space with df, which counts only empty blocks: it read 19 GB where Finder showed 67, and refused a build with room to spare; on macOS it now reads what Finder reads, the purgeable space the system clears on demand included (`tooling/lib.sh`). Patch 0109 amended; the settings suites pass. Not released.
