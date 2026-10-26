@@ -63,10 +63,10 @@ Chromium's page info gains the same controls.
  .../hidden_row_controls_browsertest.cc        |  72 ++
  .../stedding/isolation_mark_browsertest.cc    |  98 ++
  .../stedding/site_controls_browsertest.cc     | 656 +++++++++++++
- chrome/test/stedding/space_jar_browsertest.cc | 180 ++++
+ chrome/test/stedding/space_jar_browsertest.cc | 211 +++++
  components/page_info/page_info.cc             |  11 +
  components/page_info/page_info_delegate.h     |   6 +
- 39 files changed, 3397 insertions(+), 34 deletions(-)
+ 39 files changed, 3428 insertions(+), 34 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/site_controls.cc
  create mode 100644 chrome/browser/ui/stedding/site_controls.h
  create mode 100644 chrome/browser/ui/stedding/site_controls_unittest.cc
@@ -3974,7 +3974,7 @@ index 0000000000000..99291a162656c
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/space_jar_browsertest.cc b/chrome/test/stedding/space_jar_browsertest.cc
-index 326c29e639aa7..7c31e0bb772fe 100644
+index 326c29e639aa7..e466aa666f33f 100644
 --- a/chrome/test/stedding/space_jar_browsertest.cc
 +++ b/chrome/test/stedding/space_jar_browsertest.cc
 @@ -27,6 +27,7 @@
@@ -4061,7 +4061,45 @@ index 326c29e639aa7..7c31e0bb772fe 100644
  }
  
  // A routed tab dragged to another window is not routed again, a slept tab of
-@@ -896,6 +943,139 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest, ClearingASitesCookiesStaysInThatJar) {
+@@ -532,6 +579,37 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest,
+     EXPECT_EQ("jar=work", FirstCookieFor("/echo?after-the-form"));
+   }
+ 
++  {
++    // sessions S21: a form sent with GET, a search form's way, goes in the
++    // session it was filled in too. Only a POST did: a GET form was made
++    // again in the other jar, and went out with that one's cookies.
++    SCOPED_TRACE("AGetFormFromAPageWithChangesUsesItsSession");
++    tabs::TabInterface* tab = nullptr;
++    ASSERT_NO_FATAL_FAILURE(OpenWebPage(home_, &tab));
++    content::WebContents* const page = tab->GetContents();
++    ASSERT_TRUE(content::ExecJs(
++        page,
++        "window.stay = e => { e.preventDefault(); e.returnValue = ''; };"
++        "window.addEventListener('beforeunload', window.stay);"));
++    model_->SetSpaceForTab(tab, work_);
++    base::RunLoop().RunUntilIdle();
++    ASSERT_EQ(page, tab->GetContents());
++
++    content::TestNavigationObserver sent(page);
++    ASSERT_TRUE(content::ExecJs(
++        page,
++        content::JsReplace(
++            "window.removeEventListener('beforeunload', window.stay);"
++            "document.body.innerHTML = '<form method=get action=' + $1 +"
++            "    '><input name=q value=get-form></form>';"
++            "document.forms[0].submit();",
++            Url("b.test", "/echo"))));
++    sent.Wait();
++    EXPECT_EQ("jar=shared", FirstCookieFor("/echo?q=get-form"))
++        << "the form goes with the page's own session";
++    EXPECT_EQ(page, tab->GetContents());
++  }
++
+   {
+     // A page that could ask "Leave site?" keeps its jar when it moves to an
+     // independent Space. Leaving it runs the next page in the new jar. Its
+@@ -896,6 +974,139 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest, ClearingASitesCookiesStaysInThatJar) {
    }
  }
  

@@ -90,7 +90,7 @@ the hover card).
  .../ui/page_action/page_action_triggers.h     |   7 +
  chrome/browser/ui/spaces/new_tab_space.cc     |  17 +-
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
- .../spaces/space_jar_navigation_throttle.cc   |   4 +-
+ .../spaces/space_jar_navigation_throttle.cc   |  10 +-
  chrome/browser/ui/spaces/space_model.cc       | 369 ++++++-----
  chrome/browser/ui/spaces/space_model.h        |  70 +-
  .../ui/spaces/space_model_window_unittest.cc  | 334 +++++++---
@@ -168,7 +168,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6117 insertions(+), 738 deletions(-)
+ 89 files changed, 6121 insertions(+), 740 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -461,10 +461,10 @@ index 46593bd33fe4c..e77a7cdc91fa7 100644
  };
  
 diff --git a/chrome/browser/ui/spaces/space_jar_navigation_throttle.cc b/chrome/browser/ui/spaces/space_jar_navigation_throttle.cc
-index 9cb917131b6fe..28a5f4733fed5 100644
+index 9cb917131b6fe..dfcf9a3178c2b 100644
 --- a/chrome/browser/ui/spaces/space_jar_navigation_throttle.cc
 +++ b/chrome/browser/ui/spaces/space_jar_navigation_throttle.cc
-@@ -74,8 +74,10 @@ SpaceJarNavigationThrottle::WillStartRequest() {
+@@ -74,14 +74,18 @@ SpaceJarNavigationThrottle::WillStartRequest() {
    SpaceModel* const model = ModelOf(tab);
    const std::optional<SpaceId> space =
        model ? model->FindSpaceForTab(tab) : std::nullopt;
@@ -476,6 +476,16 @@ index 9cb917131b6fe..28a5f4733fed5 100644
      return PROCEED;
    }
    // A form a web page sends goes with the session the page was filled in:
+   // made again in the other jar it could arrive signed out, and what was
+-  // typed would be lost. The tab moves at its next navigation instead.
+-  if (handle->IsPost() &&
++  // typed would be lost. A POST and a GET form alike (sessions S21: a search
++  // form went out with the other jar's cookies). The tab moves at its next
++  // navigation instead.
++  if ((handle->IsPost() || handle->IsFormSubmission()) &&
+       PageBelongsInSpaceJar(contents->GetLastCommittedURL())) {
+     return PROCEED;
+   }
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
 index a1f77f5eac7db..ba327b8732b42 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
