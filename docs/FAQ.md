@@ -110,8 +110,17 @@ the bar. The command bar's **Turn Bookmarks into Pinned Tabs** makes them pins a
 then hides the bar and the star, since the sidebar holds them; above 50 bookmarks it asks first.
 Settings → Stedding → Tabs → **Show the bookmark bar and the star** brings both back.
 
-**Where is Peek?**
-Switched off: its page came out blank, so it waits to be rebuilt with little windows (`S-93`).
+**A link opened in a little window over the page. What is that?**
+A peek. A link from a pinned tab or an essential to another site opens over the window, so
+the pinned tab stays where it was. Escape or ⌘W closes it; **Open as Tab** (⌘O) keeps the
+page as a tab. Settings → Stedding → Pages and menus → **Open a peek with** makes it a press
+held for 0.3 or 0.5 s, so a plain click follows the link in the tab; the switch above it turns
+Peek off.
+
+**Can I divide the sidebar with lines?**
+Yes. Right-click a tab or a pinned tab in a Space's list and choose **Add Separator Above**; a
+faint line goes above that row and stays after a restart. **Remove Separator** on the same
+menu takes it away.
 
 **What happens to tabs I do not close?**
 Nothing, until you choose a time in Settings → Stedding → Tabs → **Archive tabs nobody has
@@ -168,8 +177,9 @@ already have too.
 **Is there sync? Can I sync without an account?**
 There is no account anywhere in the product. Settings → Stedding → Spaces → Sync through a
 folder keeps your Spaces, pins, pinned folders and essentials the same on your computers
-through a folder you choose: one your own sync tool keeps (Syncthing, iCloud Drive, OneDrive)
-or a shared drive. Stedding has no server and sends nothing; your tool moves the files. Open
+through a folder you choose: one your own sync app keeps (iCloud Drive, OneDrive, Dropbox,
+Google Drive, Syncthing) or a shared drive. A folder nothing syncs keeps the file on this
+computer only, and Settings says so. Stedding has no server and sends nothing; your tool moves the files. Open
 tabs, history, passwords and sign-ins never travel. Or export a Space as a file (Export
 Space…) and import it on the other machine.
 
