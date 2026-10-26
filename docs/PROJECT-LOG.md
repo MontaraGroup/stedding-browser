@@ -10,6 +10,26 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-25, night -- 0.3.0 beta 17: issue 38, the sidebar's foot, issue 37
+
+GitHub issue 38 (asked to sign in to Google on Windows, not on the Mac) was a real fault.
+Chromium allows browser sign-in wherever an OAuth client is configured, and Google's
+`GOOGLE_DEFAULT_CLIENT_ID` and `GOOGLE_DEFAULT_CLIENT_SECRET` environment variables, which
+guides for Chromium builds tell people to set, configure one. Windows apps see the user's
+environment and apps opened from the Mac's Finder do not. Proven on the PC: the installed
+beta 16 on a fresh profile opened Stedding's welcome, and with the two variables set for that
+process it opened Chromium's sign-in screen (`chrome://intro`) instead; the fixed build opens
+the welcome either way. Patch 0104 never enables browser sign-in (privacy Q16) and never opens
+Chromium's first run (welcome W18). The owner's note on the sidebar's foot: History moved from
+the bottom row to the end of the Archived line, the line smaller and fainter; the bottom row
+keeps the downloads button and the "+" at its ends and centres the Space chips on the whole
+row (sidebar Y44; spacer sizes in a FlexLayout shift the chips unevenly, so the difference is
+a margin, clamped to what the row can spare). Issue 37: the command bar casts a shadow and has
+a hairline edge (commandbar K36). Issues 35 and 36 ask for features and wait for the owner
+(`S-304`, `S-305`); issue 14's reporter says it can be closed. The ASan pass owed from beta 16
+ran clean on Windows (r119), as did both of its timing fixes; F6's crash was fixed before it.
+A read of this week's folder-sync and shortcut patches found no fault.
+
 ## 2026-10-25, evening -- 0.3.0 beta 16 released
 
 The day's features and the owner's notes went out as 0.3.0 beta 16 (v0.3.0-beta.16, the
