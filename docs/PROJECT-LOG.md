@@ -10,6 +10,10 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-26, evening -- 0.3.0 beta 19
+
+The owner's word after reviewing the issues: fix the known bugs, build something new, release. Two review findings were real and fixed with tests that failed first: the Settings switch for a Space's own session turned it off at once when only apps used it, never naming them (it now asks the Space menu's question, sessions S10), and a key after a held press was taken for a peek (peek P18). Two were not defects (the archive keeps a window's last tab because it is the active one; a shared essential's Open as Tab goes to the Space that shows it, P7 now says so); one stays open (S-318, where a dormant jar's notification should open). New: "Mark pinned tabs that left their page", off by default (pins H28, GitHub issue 36), and Settings > Stedding as a card per group with the groups' names at the top (settings T13, S-313). Patch 0109, folds into 0102 and 0106. Released as 0.3.0 beta 19 on both platforms and both feeds; the site and the cask follow. The Mac's full run had one failure while a system keychain prompt held the focus (a throwaway copy without --use-mock-keychain raised it); it passed 3 of 3 alone. No AddressSanitizer run this round.
+
 ## 2026-10-26 -- 0.3.0 beta 18: the owner's round, a review by another model, then fixes
 
 The owner's requests of the day (BACKLOG Next, S-306 to S-313). Patch 0105: the active
