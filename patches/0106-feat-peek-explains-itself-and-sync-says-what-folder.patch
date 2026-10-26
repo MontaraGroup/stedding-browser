@@ -26,10 +26,10 @@ Removable when: never; to be folded into the patches that own the code.
  .../stedding_sync_section.html.ts             |   4 +
  .../stedding_page/stedding_sync_section.ts    |   2 +
  .../browser/resources/stedding_welcome/app.ts |  11 +-
- chrome/browser/ui/spaces/sidebar_sync_file.cc |  45 ++++++
+ chrome/browser/ui/spaces/sidebar_sync_file.cc |  50 +++++++
  chrome/browser/ui/spaces/sidebar_sync_file.h  |  13 ++
  .../browser/ui/spaces/sidebar_sync_service.cc |  18 +++
- .../ui/spaces/sidebar_sync_unittest.cc        |  33 +++++
+ .../ui/spaces/sidebar_sync_unittest.cc        |  45 ++++++
  chrome/browser/ui/stedding/BUILD.gn           |   5 +
  chrome/browser/ui/stedding/peek.cc            |   8 ++
  chrome/browser/ui/stedding/peek_notice.cc     | 136 ++++++++++++++++++
@@ -40,7 +40,7 @@ Removable when: never; to be folded into the patches that own the code.
  .../browser/ui/webui/settings/settings_ui.cc  |  13 +-
  chrome/test/stedding/peek_browsertest.cc      |  87 +++++++++++
  components/infobars/core/infobar_delegate.h   |   2 +
- 18 files changed, 430 insertions(+), 7 deletions(-)
+ 18 files changed, 447 insertions(+), 7 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/peek_notice.cc
  create mode 100644 chrome/browser/ui/stedding/peek_notice.h
 
@@ -128,10 +128,10 @@ index faf2d2299d070..8928ca72df2c2 100644
          [k('⌘T', 'Ctrl+T'), 'Open the bar: search, a URL, or any open tab'],
          [k('⌘S', 'Ctrl+S'), 'Collapse the sidebar to icons, or bring it back'],
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_file.cc b/chrome/browser/ui/spaces/sidebar_sync_file.cc
-index 77ed4a2a28133..217502f779f3e 100644
+index 77ed4a2a28133..6ff330d1fc668 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_file.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_file.cc
-@@ -242,6 +242,51 @@ std::string DefaultDeviceName(std::string_view install) {
+@@ -242,6 +242,56 @@ std::string DefaultDeviceName(std::string_view install) {
            .c_str());
  }
  
@@ -169,10 +169,15 @@ index 77ed4a2a28133..217502f779f3e 100644
 +    }
 +  }
 +  // A sync app's folder: its name whole, or followed by a space, as in
-+  // "Dropbox (Team)" and "OneDrive - Company"; "Boxes" is not synced.
++  // "Dropbox (Team)" and "OneDrive - Company"; "Boxes" is not synced. Any
++  // folder works for sync; these are the folders the common apps make, so
++  // that one of them gets no note (Syncthing's is "Sync").
 +  static constexpr std::string_view kSyncAppFolders[] = {
-+      "Dropbox", "OneDrive", "Google Drive", "GoogleDrive", "Box",
-+      "iCloudDrive", "iCloud Drive"};
++      "Dropbox",       "OneDrive",      "Google Drive",   "GoogleDrive",
++      "Box",           "iCloudDrive",   "iCloud Drive",   "Sync",
++      "Nextcloud",     "ownCloud",      "MEGA",           "MEGAsync",
++      "Seafile",       "SynologyDrive", "Synology Drive", "Proton Drive",
++      "Tresorit",      "pCloud Drive",  "Resilio Sync"};
 +  return std::ranges::any_of(kSyncAppFolders, [&](std::string_view name) {
 +    return base::StartsWith(first, name,
 +                            base::CompareCase::INSENSITIVE_ASCII) &&
@@ -264,15 +269,17 @@ index 82345e9088807..a4481fcb1e188 100644
    status.Set("ready", ready_);
    if (!enabled()) {
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
-index 8e9b276a4c92f..6a3535445c0da 100644
+index 8e9b276a4c92f..cfb790c9d6985 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
-@@ -515,6 +515,39 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
+@@ -515,6 +515,51 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
  }
  
  // Sf8: a picked folder that already is one is not nested.
 +// Sf42 (GitHub issue 38): a folder in the home folder that no sync app keeps
-+// is named; a sync app's folder, another volume or a share is not.
++// is named; a sync app's folder, another volume or a share is not. Only the
++// common apps' iCloud, Dropbox, OneDrive, Google Drive and Box folders were
++// known, so a Syncthing or Nextcloud folder got the note.
 +TEST(SidebarSyncFileTest, AFolderNothingSyncsIsNamed) {
 +  const base::FilePath home(FILE_PATH_LITERAL("/Users/someone"));
 +  const auto under = [&](const char* path) {
@@ -284,7 +291,8 @@ index 8e9b276a4c92f..6a3535445c0da 100644
 +  EXPECT_FALSE(LooksSynced(under("Library/Application Support/x"), home, {}));
 +  for (const char* const unsynced :
 +       {"Boxes/Stedding", "DocumentsBackup/Stedding", "Desktop2/Stedding",
-+        "Documents Backup/Stedding", "Desktop Archive/Stedding"}) {
++        "Documents Backup/Stedding", "Desktop Archive/Stedding",
++        "Syncing/Stedding", "MEGAphone/Stedding"}) {
 +    EXPECT_FALSE(LooksSynced(under(unsynced), home, {}))
 +        << unsynced << ": a name that only starts like a synced folder's";
 +  }
@@ -293,7 +301,16 @@ index 8e9b276a4c92f..6a3535445c0da 100644
 +        "Library/CloudStorage/OneDrive-Personal/Stedding", "Dropbox/Stedding",
 +        "OneDrive - Company/Stedding", "Dropbox (Team)/Stedding",
 +        "Google Drive/My Drive/Stedding",
-+        "Documents/Stedding", "Desktop/Stedding"}) {
++        "Documents/Stedding", "Desktop/Stedding",
++        // The folders other sync apps make by default: Syncthing's "Sync",
++        // Nextcloud, ownCloud, MEGA, Seafile, Synology Drive, Proton Drive,
++        // Tresorit, pCloud and Resilio. Any folder works; these only name
++        // no note.
++        "Sync/Stedding", "Nextcloud/Stedding", "ownCloud/Stedding",
++        "MEGA/Stedding", "MEGAsync/Stedding", "Seafile/Stedding",
++        "SynologyDrive/Stedding", "Synology Drive/Stedding",
++        "Proton Drive/Stedding", "Tresorit/Stedding",
++        "pCloud Drive/Stedding", "Resilio Sync/Stedding"}) {
 +    EXPECT_TRUE(LooksSynced(under(synced), home, {})) << synced;
 +  }
 +  EXPECT_TRUE(LooksSynced(base::FilePath(FILE_PATH_LITERAL("/Volumes/NAS/s")),
