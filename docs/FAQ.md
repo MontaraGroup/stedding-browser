@@ -113,7 +113,7 @@ Settings → Stedding → Tabs → **Show the bookmark bar and the star** brings
 **A link opened in a little window over the page. What is that?**
 A peek. A link from a pinned tab or an essential to another site opens over the window, so
 the pinned tab stays where it was. Escape or ⌘W closes it; **Open as Tab** (⌘O) keeps the
-page as a tab. Settings → Stedding → Pages and menus → **Open a peek with** makes it a press
+page as a tab. Settings → Stedding → Peek and little windows → **Open a peek with** makes it a press
 held for 0.3 or 0.5 s, so a plain click follows the link in the tab; the switch above it turns
 Peek off.
 
@@ -219,7 +219,7 @@ right-click menu has **New Split View with Current Tab**.
 A link from another app opens in a little window, to read and close, when Stedding is your
 default browser. Its **Open in Stedding** button, ⌘O (Ctrl+O on Windows), or the page's
 right-click menu moves the page into a tab of your window, without reloading it; ⇧⌘O
-(Ctrl+Shift+O) puts it in a split instead. Settings → Stedding → Pages and menus turns little
+(Ctrl+Shift+O) puts it in a split instead. Settings → Stedding → Peek and little windows turns little
 windows off. On Windows, since 0.3.0 beta 7, the little window keeps Windows' own title bar.
 
 **Why does ⌥⌘N open Arc?**

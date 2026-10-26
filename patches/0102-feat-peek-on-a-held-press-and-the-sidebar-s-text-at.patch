@@ -29,8 +29,8 @@ Removable when: never.
 ---
  .../api/settings_private/prefs_util.cc        |   2 +
  .../stedding_page/stedding_page.html.ts       |  18 ++-
- .../resources/stedding_welcome/app.css        |  26 ++++-
- .../browser/resources/stedding_welcome/app.ts |  67 ++++++++++-
+ .../resources/stedding_welcome/app.css        |  26 +++-
+ .../browser/resources/stedding_welcome/app.ts |  67 ++++++++-
  chrome/browser/ui/stedding/sidebar_density.cc |   4 +-
  chrome/browser/ui/stedding/stedding_prefs.cc  |   2 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   9 ++
@@ -39,18 +39,18 @@ Removable when: never.
  .../ui/stedding_ui_metrics_unittest.cc        |   7 +-
  chrome/browser/ui/tab_helpers.cc              |   3 +
  chrome/browser/ui/views/peek/BUILD.gn         |  11 +-
- .../ui/views/peek/peek_navigation_throttle.cc |  32 ++++--
+ .../ui/views/peek/peek_navigation_throttle.cc |  32 ++--
  .../ui/views/peek/peek_navigation_throttle.h  |   9 ++
- chrome/browser/ui/views/peek/peek_press.cc    | 106 ++++++++++++++++++
- chrome/browser/ui/views/peek/peek_press.h     |  74 ++++++++++++
- chrome/browser/ui/views/peek/peek_unittest.cc |  28 ++++-
+ chrome/browser/ui/views/peek/peek_press.cc    | 138 ++++++++++++++++++
+ chrome/browser/ui/views/peek/peek_press.h     |  74 ++++++++++
+ chrome/browser/ui/views/peek/peek_unittest.cc |  28 +++-
  .../common/stedding_tab_row_rules_unittest.cc |  10 +-
  .../browser/ui/webui/settings/settings_ui.cc  |  11 +-
- .../stedding_welcome_handler.cc               |  36 +++++-
- .../stedding_welcome_handler_unittest.cc      |  25 +++++
- chrome/test/stedding/peek_browsertest.cc      |  53 +++++++++
- chrome/test/stedding/welcome_browsertest.cc   |  77 +++++++++----
- 23 files changed, 563 insertions(+), 55 deletions(-)
+ .../stedding_welcome_handler.cc               |  36 ++++-
+ .../stedding_welcome_handler_unittest.cc      |  25 ++++
+ chrome/test/stedding/peek_browsertest.cc      |  53 +++++++
+ chrome/test/stedding/welcome_browsertest.cc   |  77 +++++++---
+ 23 files changed, 595 insertions(+), 55 deletions(-)
  create mode 100644 chrome/browser/ui/views/peek/peek_press.cc
  create mode 100644 chrome/browser/ui/views/peek/peek_press.h
 
@@ -517,10 +517,10 @@ index c3e12fd10a1b8..b8dd18c68a3f1 100644
  // True when a navigation with `signals` from `from` to `to` should open in a
 diff --git a/chrome/browser/ui/views/peek/peek_press.cc b/chrome/browser/ui/views/peek/peek_press.cc
 new file mode 100644
-index 0000000000000..e27e7530b8f0b
+index 0000000000000..4eaf7cf4fa8af
 --- /dev/null
 +++ b/chrome/browser/ui/views/peek/peek_press.cc
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,138 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -530,7 +530,9 @@ index 0000000000000..e27e7530b8f0b
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/web_contents.h"
 +#include "third_party/blink/public/common/input/web_input_event.h"
++#include "third_party/blink/public/common/input/web_keyboard_event.h"
 +#include "third_party/blink/public/common/input/web_mouse_event.h"
++#include "ui/events/keycodes/keyboard_codes.h"
 +
 +namespace stedding {
 +
@@ -543,6 +545,26 @@ index 0000000000000..e27e7530b8f0b
 +bool IsLeftButton(const blink::WebInputEvent& event) {
 +  return static_cast<const blink::WebMouseEvent&>(event).button ==
 +         blink::WebPointerProperties::Button::kLeft;
++}
++
++// A modifier held for a click is part of it, not a key of its own.
++bool IsModifierKey(const blink::WebInputEvent& event) {
++  switch (static_cast<const blink::WebKeyboardEvent&>(event).windows_key_code) {
++    case ui::VKEY_SHIFT:
++    case ui::VKEY_CONTROL:
++    case ui::VKEY_MENU:
++    case ui::VKEY_LWIN:
++    case ui::VKEY_RWIN:
++    case ui::VKEY_LSHIFT:
++    case ui::VKEY_RSHIFT:
++    case ui::VKEY_LCONTROL:
++    case ui::VKEY_RCONTROL:
++    case ui::VKEY_LMENU:
++    case ui::VKEY_RMENU:
++      return true;
++    default:
++      return false;
++  }
 +}
 +
 +}  // namespace
@@ -578,6 +600,16 @@ index 0000000000000..e27e7530b8f0b
 +    case blink::WebInputEvent::Type::kMouseUp:
 +      if (IsLeftButton(event) && !down_.is_null() && up_.is_null()) {
 +        up_ = base::TimeTicks::Now();
++      }
++      break;
++    case blink::WebInputEvent::Type::kRawKeyDown:
++    case blink::WebInputEvent::Type::kKeyDown:
++      // peek P18 (BACKLOG S-319): a key after the press -- Enter on a focused
++      // link -- is what follows the link, not the press: a press held to
++      // select text, then an Enter within the second, had peeked.
++      if (!IsModifierKey(event)) {
++        down_ = base::TimeTicks();
++        up_ = base::TimeTicks();
 +      }
 +      break;
 +    default:

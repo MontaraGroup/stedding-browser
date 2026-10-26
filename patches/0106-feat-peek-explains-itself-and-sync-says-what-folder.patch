@@ -38,9 +38,9 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/browser/ui/stedding/stedding_prefs.h   |   7 +
  .../ui/stedding/stedding_prefs_unittest.cc    |   5 +
  .../browser/ui/webui/settings/settings_ui.cc  |  13 +-
- chrome/test/stedding/peek_browsertest.cc      |  59 ++++++++
+ chrome/test/stedding/peek_browsertest.cc      |  87 +++++++++++
  components/infobars/core/infobar_delegate.h   |   2 +
- 18 files changed, 402 insertions(+), 7 deletions(-)
+ 18 files changed, 430 insertions(+), 7 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/peek_notice.cc
  create mode 100644 chrome/browser/ui/stedding/peek_notice.h
 
@@ -633,7 +633,7 @@ index 207eb2ecf3b17..ee57ec8a0dca8 100644
    html_source->AddString("steddingSyncDeviceLabel",
                           "This computer’s name");
 diff --git a/chrome/test/stedding/peek_browsertest.cc b/chrome/test/stedding/peek_browsertest.cc
-index 2e6f09da4558b..6a03f006deae5 100644
+index 2e6f09da4558b..1e5d867fa8279 100644
 --- a/chrome/test/stedding/peek_browsertest.cc
 +++ b/chrome/test/stedding/peek_browsertest.cc
 @@ -28,6 +28,7 @@
@@ -709,7 +709,42 @@ index 2e6f09da4558b..6a03f006deae5 100644
  }
  
  // P7: Open as Tab from an essential shared by every Space puts the page in
-@@ -673,12 +725,19 @@ IN_PROC_BROWSER_TEST_F(PeekTest, APeekFromAPrivateWindowStaysPrivate) {
+@@ -641,6 +693,34 @@ IN_PROC_BROWSER_TEST_F(PeekTest, WithAHoldSetOnlyAHeldPressPeeks) {
+   EXPECT_EQ(to, contents()->GetLastCommittedURL());
+ }
+ 
++// P18 (BACKLOG S-319): with a hold set, a press held beside the link -- as
++// when selecting text -- and then Enter on the focused link within the second
++// follows the link in the pin: the key, not the press, followed it. The
++// press was taken for the Enter's navigation, and the link peeked.
++IN_PROC_BROWSER_TEST_F(PeekTest, AnEnterAfterAHeldPressFollowsTheLinkInThePin) {
++  browser()->GetProfile()->GetPrefs()->SetInteger(
++      stedding::prefs::kPeekHoldDelayMs, 300);
++  const GURL to = Url("b.test", "/title3.html");
++  ASSERT_NO_FATAL_FAILURE(OpenPin(to));
++  tabs::TabInterface* const pin = tab();
++
++  Press(base::Milliseconds(450));
++  ASSERT_TRUE(content::ExecJs(contents(),
++                              "document.getElementById('link').focus();"));
++  content::TestNavigationObserver observer(
++      contents(), 1, content::MessageLoopRunner::QuitMode::IMMEDIATE,
++      /*ignore_uncommitted_navigations=*/false);
++  content::SimulateKeyPress(contents(), ui::DomKey::ENTER, ui::DomCode::ENTER,
++                            ui::VKEY_RETURN, /*control=*/false,
++                            /*shift=*/false, /*alt=*/false,
++                            /*command=*/false);
++  observer.WaitForNavigationFinished();
++  content::RunAllTasksUntilIdle();
++  EXPECT_FALSE(stedding::PeekOver(browser())) << "the Enter peeked";
++  EXPECT_EQ(pin, tab());
++  EXPECT_EQ(to, contents()->GetLastCommittedURL());
++}
++
+ // private V6: a peek from a private window is private, and Open as Tab
+ // keeps the page in that window.
+ IN_PROC_BROWSER_TEST_F(PeekTest, APeekFromAPrivateWindowStaysPrivate) {
+@@ -673,12 +753,19 @@ IN_PROC_BROWSER_TEST_F(PeekTest, APeekFromAPrivateWindowStaysPrivate) {
    content::WebContents* const page =
        peek->GetTabStripModel()->GetActiveWebContents();
    ASSERT_TRUE(content::WaitForLoadStop(page));

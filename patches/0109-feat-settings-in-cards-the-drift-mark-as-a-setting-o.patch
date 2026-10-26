@@ -1,0 +1,1273 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Mon, 26 Oct 2026 15:27:50 -0400
+Subject: feat: Settings in cards, the drift mark as a setting, one question
+ for a session
+
+Settings > Stedding was one long card with the groups under headings. It is
+now a card per group, named as the setup screen names its steps: Sidebar,
+Tabs, Peek and little windows (a card of its own, out of Pages), Spaces,
+Pages and menus, Privacy, Updates and Shortcuts. The first card carries
+the page's line and the groups' names, each a button that scrolls its
+card into view (settings T13).
+
+"Mark pinned tabs that left their page" (stedding.pins.mark_drifted, off
+by default) decides whether a pinned tab away from its home shows the dot
+on its essentials card and in the collapsed rail, and the reset control on
+the card under the pointer. Off, neither shows; a Space-pinned row keeps
+its slash, and Reset to Pinned Page stays on the tab's menu. It is in the
+Tabs card and the command bar, and reaches every row at once (pins H28,
+GitHub issue 36).
+
+A Space's session switch in Settings asks the question the Space menu and
+the command bar ask, SetSpaceIsolatedAfterAsking: it had a dialog of its
+own about open pages alone, so with only apps made in the Space it turned
+the session off at once and never named them (sessions S10).
+
+Why: the owner, 2026-10-26 (Settings grouped like the setup screen, S-313;
+issue 36's setting, off by default, S-305; review finding S-318).
+Removable when: never; to be folded into the patches that own the code.
+---
+ .../api/settings_private/prefs_util.cc        |   2 +
+ .../settings/stedding_page/stedding_page.css  |  27 +-
+ .../stedding_page/stedding_page.html.ts       | 380 +++++++++---------
+ .../settings/stedding_page/stedding_page.ts   |  97 ++---
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   3 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   5 +
+ .../ui/stedding/stedding_prefs_unittest.cc    |   3 +-
+ .../ui/views/commandbar/command_bar_view.cc   |   3 +
+ .../commandbar/command_bar_view_unittest.cc   |   6 +
+ .../frame/vertical_tab_strip_region_view.cc   |  49 ++-
+ .../browser/ui/views/tabs/common/tab_view.cc  |  23 +-
+ .../browser/ui/views/tabs/common/tab_view.h   |   7 +
+ .../browser/ui/webui/settings/settings_ui.cc  |  43 +-
+ .../webui/settings/stedding_spaces_handler.cc |  25 ++
+ .../webui/settings/stedding_spaces_handler.h  |   3 +
+ chrome/test/stedding/app_jar_browsertest.cc   |  74 ++++
+ .../stedding/settings_spaces_browsertest.cc   |  45 ++-
+ .../test/stedding/sidebar_rail_browsertest.cc |  85 ++++
+ 18 files changed, 566 insertions(+), 314 deletions(-)
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index b1ef9f2680ab7..9ce02f26b1d03 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -394,6 +394,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kMarkLocalTabs] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kMarkDriftedPins] =
++      settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kCtrlTabMru] =
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[stedding::prefs::kUndoToast] =
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.css b/chrome/browser/resources/settings/stedding_page/stedding_page.css
+index a9044a1a472ca..e44c5e2659f9a 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.css
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.css
+@@ -14,19 +14,30 @@
+   padding-bottom: 8px;
+ }
+ 
+-/* settings T13: the page's sections, Sidebar first. */
+-.section-header {
+-  align-items: flex-end;
++/* settings T13 (BACKLOG S-313): a card for each group, named as the setup
++ * screen names its steps, with the groups' names at the top to jump to. */
++#sectionJumps {
++  flex-wrap: wrap;
++  gap: 8px;
+   min-height: 0;
+-  padding-bottom: 8px;
+-  padding-top: 24px;
++  padding-bottom: 16px;
+ }
+ 
+-.section-header h2 {
+-  margin: 0;
++.section-jump {
++  --cr-button-height: 28px;
++  border-radius: 14px;
++  font-weight: 500;
++  padding: 0 14px;
++}
++
++.section-intro {
++  min-height: 0;
++  padding-bottom: 8px;
++  padding-top: 12px;
+ }
+ 
+-.section-header + .hr {
++settings-section > .hr:first-child,
++.section-intro + .hr {
+   border-top: none;
+ }
+ 
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index ffa043cc692f1..3b0b0ea6d2bb6 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -16,9 +16,15 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       $i18n{steddingPageIntro}
+     </div>
+   </div>
+-  <div class="cr-row section-header" id="sidebarHeader">
+-    <h2 class="cr-title-text">$i18n{steddingSidebarTitle}</h2>
++  <div class="cr-row" id="sectionJumps" role="navigation"
++      aria-label="$i18n{steddingSectionsLabel}">
++    ${this.sectionJumps_().map(jump => html`
++      <cr-button class="section-jump" data-target="${jump.target}"
++          @click="${this.onSectionJumpClick_}">${jump.title}</cr-button>`)}
+   </div>
++</settings-section>
++<settings-section id="sidebarSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingSidebarTitle}">
+   <div class="hr settings-box">
+     <div class="start" id="sidebarClosedFormLabel">
+       <div class="label">$i18n{steddingClosedFormLabel}</div>
+@@ -138,9 +144,9 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingMarkLocalTabsLabel}"
+       sub-label="$i18n{steddingMarkLocalTabsSubLabel}">
+   </settings-toggle-button>
+-  <div class="cr-row section-header" id="tabsHeader">
+-    <h2 class="cr-title-text">$i18n{steddingTabsTitle}</h2>
+-  </div>
++</settings-section>
++<settings-section id="tabsSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingTabsTitle}">
+   <settings-toggle-button
+       id="pinsCloseSleeps"
+       class="hr"
+@@ -148,6 +154,13 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingPinsCloseSleepsLabel}"
+       sub-label="$i18n{steddingPinsCloseSleepsSubLabel}">
+   </settings-toggle-button>
++  <settings-toggle-button
++      id="markDriftedPins"
++      class="hr"
++      pref-key="stedding.pins.mark_drifted"
++      label="$i18n{steddingMarkDriftedPinsLabel}"
++      sub-label="$i18n{steddingMarkDriftedPinsSubLabel}">
++  </settings-toggle-button>
+   <settings-toggle-button
+       id="undoToast"
+       class="hr"
+@@ -264,9 +277,162 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         ]}">
+     </settings-dropdown-menu>
+   </div>
+-  <div class="cr-row section-header" id="pagesHeader">
+-    <h2 class="cr-title-text">$i18n{steddingPagesTitle}</h2>
++</settings-section>
++<settings-section id="peekSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingPeekTitle}">
++  <div class="cr-row first section-intro">
++    <div class="flex cr-padded-text secondary">$i18n{steddingPeekIntro}</div>
++  </div>
++  <settings-toggle-button
++      id="littleWindow"
++      class="hr"
++      pref-key="stedding.little.enabled"
++      label="$i18n{steddingLittleLabel}"
++      sub-label="$i18n{steddingLittleSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="peek"
++      class="hr"
++      pref-key="stedding.peek.enabled"
++      label="$i18n{steddingPeekLabel}"
++      sub-label="$i18n{steddingPeekSubLabel}">
++  </settings-toggle-button>
++  <div class="hr settings-box">
++    <div class="start" id="peekHoldLabel">
++      <div class="label">$i18n{steddingPeekHoldLabel}</div>
++      <div class="secondary">$i18n{steddingPeekHoldSubLabel}</div>
++    </div>
++    <settings-dropdown-menu id="peekHold"
++        pref-key="stedding.peek.hold_delay_ms"
++        label="$i18n{steddingPeekHoldLabel}"
++        .menuOptions="${[
++          {value: 0, name: '$i18n{steddingPeekHoldClick}'},
++          {value: 300, name: '$i18n{steddingPeekHold300}'},
++          {value: 500, name: '$i18n{steddingPeekHold500}'},
++        ]}">
++    </settings-dropdown-menu>
++  </div>
++</settings-section>
++<settings-section id="spacesSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingSpacesTitle}">
++  <div class="cr-row first section-intro">
++    <div class="flex cr-padded-text secondary">$i18n{steddingSpacesIntro}</div>
++  </div>
++  <settings-toggle-button
++      id="spaceNotices"
++      class="hr"
++      pref-key="stedding.spaces.notices"
++      label="$i18n{steddingSpaceNoticesLabel}"
++      sub-label="$i18n{steddingSpaceNoticesSubLabel}">
++  </settings-toggle-button>
++  <settings-toggle-button
++      id="spacesOwnSession"
++      class="hr"
++      pref-key="stedding.spaces.own_session"
++      label="$i18n{steddingSpacesOwnSessionLabel}"
++      sub-label="$i18n{steddingSpacesOwnSessionSubLabel}"
++      @change="${this.onSpacesOwnSessionChange_}">
++  </settings-toggle-button>
++  <cr-dialog id="ownSessionDialog" @close="${this.onOwnSessionDialogClose_}">
++    <div slot="title">$i18n{steddingOwnSessionAllTitle}</div>
++    <div slot="body">
++      <div class="secondary">${this.ownSessionBody_()}</div>
++    </div>
++    <div slot="button-container">
++      <cr-button class="cancel-button" @click="${this.onOwnSessionCancelClick_}">
++        $i18n{steddingOwnSessionNewOnly}
++      </cr-button>
++      <cr-button class="action-button"
++          @click="${this.onOwnSessionConfirmClick_}">
++        $i18n{steddingOwnSessionAll}
++      </cr-button>
++    </div>
++  </cr-dialog>
++  <div class="hr settings-box" id="externalDefault">
++    <div class="flex">
++      <div class="label">$i18n{steddingExternalDefaultLabel}</div>
++      <div class="secondary">$i18n{steddingExternalDefaultSubLabel}</div>
++    </div>
++    <settings-dropdown-menu id="externalDefaultSpace"
++        pref-key="stedding.spaces.external_default"
++        label="$i18n{steddingExternalDefaultLabel}"
++        .menuOptions="${this.externalOptions_()}">
++    </settings-dropdown-menu>
++  </div>
++  ${this.spaces_.map(space => html`
++    <div class="settings-box continuation space-row">
++      <span class="space-swatch" style="background: ${space.color}"
++          aria-hidden="true">${space.icon}${space.isolationMark ? html`
++        <span class="isolation-mark" data-id="${space.id}"
++            title="${space.isolationMark}">
++          <cr-icon icon="privacy:cookie"></cr-icon>
++        </span>` : ''}</span>
++      <cr-input class="space-name" data-id="${space.id}"
++          .value="${space.name}" placeholder="${space.displayName}"
++          aria-label="${space.displayName}"
++          aria-description="${space.isolationMark}"
++          @change="${this.onSpaceNameChange_}">
++      </cr-input>
++      <cr-button class="space-edit" data-id="${space.id}"
++          aria-label="${this.editLabel_(space)}"
++          @click="${this.onEditSpaceClick_}">
++        $i18n{steddingEditSpace}
++      </cr-button>
++      ${space.canIsolate ? html`
++      <cr-toggle class="space-isolated" data-id="${space.id}"
++          ?checked="${space.isolated}"
++          title="$i18n{steddingIndependentSessionLabel}"
++          aria-label="$i18n{steddingIndependentSessionLabel}"
++          @change="${this.onSpaceIsolatedChange_}">
++      </cr-toggle>` : ''}
++      <cr-icon-button class="icon-delete-gray" data-id="${space.id}"
++          title="${this.deleteLabel_(space)}"
++          aria-label="${this.deleteLabel_(space)}"
++          ?disabled="${this.spaces_.length <= 1}"
++          @click="${this.onDeleteSpaceClick_}">
++      </cr-icon-button>
++    </div>
++    <div class="settings-box continuation route-row">
++      <div class="flex route-list">
++        <span class="secondary">$i18n{steddingRoutesLabel}</span>
++        ${space.routes.map(route => html`
++          <span class="route-chip">${route.pattern}
++            <cr-icon-button class="icon-clear" data-index="${route.index}"
++                title="$i18n{steddingRemoveRoute}"
++                @click="${this.onRemoveRouteClick_}">
++            </cr-icon-button>
++          </span>`)}
++      </div>
++      <cr-input class="route-add" data-id="${space.id}"
++          placeholder="$i18n{steddingRouteAddPlaceholder}"
++          aria-label="$i18n{steddingRouteAddPlaceholder}"
++          @change="${this.onRouteAddChange_}">
++      </cr-input>
++    </div>`)}
++  <div class="settings-box continuation" id="sidebarFiles">
++    <div class="flex">
++      <div class="label">$i18n{steddingSidebarFilesLabel}</div>
++      <div class="secondary">${this.exportStatus_ || '$i18n{steddingSidebarFilesSubLabel}'}</div>
++    </div>
++    <cr-button @click="${this.onExportSpaceClick_}">$i18n{steddingExportSpace}</cr-button>
++    <cr-button @click="${this.onExportAllClick_}">$i18n{steddingExportAllSpaces}</cr-button>
++    <cr-button @click="${this.onImportSidebarClick_}">$i18n{steddingImportSidebar}</cr-button>
+   </div>
++  <settings-stedding-sync-section></settings-stedding-sync-section>
++  ${this.arcSummary_ ? html`
++    <div class="settings-box continuation" id="arcImport">
++      <div class="flex">
++        <div class="label">$i18n{steddingImportArcLabel}</div>
++        <div class="secondary">${this.arcSummary_}</div>
++      </div>
++      <cr-button ?disabled="${this.arcImporting_}"
++          @click="${this.onImportArcClick_}">
++        $i18n{steddingImportArcButton}
++      </cr-button>
++    </div>` : ''}
++</settings-section>
++<settings-section id="pagesSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingPagesTitle}">
+   <settings-toggle-button
+       id="copyStripTracking"
+       class="hr"
+@@ -359,35 +525,6 @@ export function getHtml(this: SettingsSteddingPageElement) {
+         @change="${this.onDarkPagesAddChange_}">
+     </cr-input>
+   </div>
+-  <settings-toggle-button
+-      id="littleWindow"
+-      class="hr"
+-      pref-key="stedding.little.enabled"
+-      label="$i18n{steddingLittleLabel}"
+-      sub-label="$i18n{steddingLittleSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="peek"
+-      class="hr"
+-      pref-key="stedding.peek.enabled"
+-      label="$i18n{steddingPeekLabel}"
+-      sub-label="$i18n{steddingPeekSubLabel}">
+-  </settings-toggle-button>
+-  <div class="hr settings-box">
+-    <div class="start" id="peekHoldLabel">
+-      <div class="label">$i18n{steddingPeekHoldLabel}</div>
+-      <div class="secondary">$i18n{steddingPeekHoldSubLabel}</div>
+-    </div>
+-    <settings-dropdown-menu id="peekHold"
+-        pref-key="stedding.peek.hold_delay_ms"
+-        label="$i18n{steddingPeekHoldLabel}"
+-        .menuOptions="${[
+-          {value: 0, name: '$i18n{steddingPeekHoldClick}'},
+-          {value: 300, name: '$i18n{steddingPeekHold300}'},
+-          {value: 500, name: '$i18n{steddingPeekHold500}'},
+-        ]}">
+-    </settings-dropdown-menu>
+-  </div>
+   <settings-toggle-button
+       id="newTabHint"
+       class="hr"
+@@ -402,11 +539,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingNewTabShortcutsLabel}"
+       sub-label="$i18n{steddingNewTabShortcutsSubLabel}">
+   </settings-toggle-button>
+-  <div class="cr-row section-header" id="privacyHeader">
+-    <div class="flex">
+-      <h2 class="cr-title-text">$i18n{steddingPrivacyTitle}</h2>
+-      <div class="secondary">$i18n{steddingPrivacyIntro}</div>
+-    </div>
++</settings-section>
++<settings-section id="privacySection" class="cr-centered-card-container"
++    page-title="$i18n{steddingPrivacyTitle}">
++  <div class="cr-row first section-intro">
++    <div class="flex cr-padded-text secondary">$i18n{steddingPrivacyIntro}</div>
+   </div>
+   <div class="hr settings-box">
+     <div class="start" id="cookiesLabel">
+@@ -565,11 +702,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingSuggestLabel}"
+       sub-label="$i18n{steddingSuggestSubLabel}">
+   </settings-toggle-button>
+-  <div class="cr-row section-header" id="updatesHeader">
+-    <div class="flex">
+-      <h2 class="cr-title-text">$i18n{steddingUpdatesTitle}</h2>
+-      <div class="secondary">$i18n{steddingUpdatesIntro}</div>
+-    </div>
++</settings-section>
++<settings-section id="updatesSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingUpdatesTitle}">
++  <div class="cr-row first section-intro">
++    <div class="flex cr-padded-text secondary">$i18n{steddingUpdatesIntro}</div>
+   </div>
+   ${isMac || isWindows ? html`
+   <settings-toggle-button
+@@ -586,149 +723,14 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingThanksAfterUpdateLabel}"
+       sub-label="$i18n{steddingThanksAfterUpdateSubLabel}">
+   </settings-toggle-button>
+-  <div class="cr-row section-header" id="spacesHeader">
+-    <div class="flex">
+-      <h2 class="cr-title-text">$i18n{steddingSpacesTitle}</h2>
+-      <div class="secondary">$i18n{steddingSpacesIntro}</div>
+-    </div>
+-  </div>
+-  <settings-toggle-button
+-      id="spaceNotices"
+-      class="hr"
+-      pref-key="stedding.spaces.notices"
+-      label="$i18n{steddingSpaceNoticesLabel}"
+-      sub-label="$i18n{steddingSpaceNoticesSubLabel}">
+-  </settings-toggle-button>
+-  <settings-toggle-button
+-      id="spacesOwnSession"
+-      class="hr"
+-      pref-key="stedding.spaces.own_session"
+-      label="$i18n{steddingSpacesOwnSessionLabel}"
+-      sub-label="$i18n{steddingSpacesOwnSessionSubLabel}"
+-      @change="${this.onSpacesOwnSessionChange_}">
+-  </settings-toggle-button>
+-  <cr-dialog id="ownSessionDialog" @close="${this.onOwnSessionDialogClose_}">
+-    <div slot="title">$i18n{steddingOwnSessionAllTitle}</div>
+-    <div slot="body">
+-      <div class="secondary">${this.ownSessionBody_()}</div>
+-    </div>
+-    <div slot="button-container">
+-      <cr-button class="cancel-button" @click="${this.onOwnSessionCancelClick_}">
+-        $i18n{steddingOwnSessionNewOnly}
+-      </cr-button>
+-      <cr-button class="action-button"
+-          @click="${this.onOwnSessionConfirmClick_}">
+-        $i18n{steddingOwnSessionAll}
+-      </cr-button>
+-    </div>
+-  </cr-dialog>
+-  <div class="hr settings-box" id="externalDefault">
+-    <div class="flex">
+-      <div class="label">$i18n{steddingExternalDefaultLabel}</div>
+-      <div class="secondary">$i18n{steddingExternalDefaultSubLabel}</div>
+-    </div>
+-    <settings-dropdown-menu id="externalDefaultSpace"
+-        pref-key="stedding.spaces.external_default"
+-        label="$i18n{steddingExternalDefaultLabel}"
+-        .menuOptions="${this.externalOptions_()}">
+-    </settings-dropdown-menu>
+-  </div>
+-  <cr-dialog id="isolationDialog" @close="${this.onIsolationDialogClose_}">
+-    <div slot="title">${this.isolationTitle_()}</div>
+-    <div slot="body">
+-      <div class="label">${this.pendingIsolation_?.space.displayName || ''}</div>
+-      <div class="secondary">${this.isolationBody_()}</div>
+-    </div>
+-    <div slot="button-container">
+-      <cr-button class="cancel-button" @click="${this.onIsolationCancelClick_}">
+-        $i18n{cancel}
+-      </cr-button>
+-      <cr-button class="action-button" @click="${this.onIsolationConfirmClick_}">
+-        ${this.isolationAction_()}
+-      </cr-button>
+-    </div>
+-  </cr-dialog>
+-  ${this.spaces_.map(space => html`
+-    <div class="settings-box continuation space-row">
+-      <span class="space-swatch" style="background: ${space.color}"
+-          aria-hidden="true">${space.icon}${space.isolationMark ? html`
+-        <span class="isolation-mark" data-id="${space.id}"
+-            title="${space.isolationMark}">
+-          <cr-icon icon="privacy:cookie"></cr-icon>
+-        </span>` : ''}</span>
+-      <cr-input class="space-name" data-id="${space.id}"
+-          .value="${space.name}" placeholder="${space.displayName}"
+-          aria-label="${space.displayName}"
+-          aria-description="${space.isolationMark}"
+-          @change="${this.onSpaceNameChange_}">
+-      </cr-input>
+-      <cr-button class="space-edit" data-id="${space.id}"
+-          aria-label="${this.editLabel_(space)}"
+-          @click="${this.onEditSpaceClick_}">
+-        $i18n{steddingEditSpace}
+-      </cr-button>
+-      ${space.canIsolate ? html`
+-      <cr-toggle class="space-isolated" data-id="${space.id}"
+-          ?checked="${space.isolated}"
+-          title="$i18n{steddingIndependentSessionLabel}"
+-          aria-label="$i18n{steddingIndependentSessionLabel}"
+-          @change="${this.onSpaceIsolatedChange_}">
+-      </cr-toggle>` : ''}
+-      <cr-icon-button class="icon-delete-gray" data-id="${space.id}"
+-          title="${this.deleteLabel_(space)}"
+-          aria-label="${this.deleteLabel_(space)}"
+-          ?disabled="${this.spaces_.length <= 1}"
+-          @click="${this.onDeleteSpaceClick_}">
+-      </cr-icon-button>
+-    </div>
+-    <div class="settings-box continuation route-row">
+-      <div class="flex route-list">
+-        <span class="secondary">$i18n{steddingRoutesLabel}</span>
+-        ${space.routes.map(route => html`
+-          <span class="route-chip">${route.pattern}
+-            <cr-icon-button class="icon-clear" data-index="${route.index}"
+-                title="$i18n{steddingRemoveRoute}"
+-                @click="${this.onRemoveRouteClick_}">
+-            </cr-icon-button>
+-          </span>`)}
+-      </div>
+-      <cr-input class="route-add" data-id="${space.id}"
+-          placeholder="$i18n{steddingRouteAddPlaceholder}"
+-          aria-label="$i18n{steddingRouteAddPlaceholder}"
+-          @change="${this.onRouteAddChange_}">
+-      </cr-input>
+-    </div>`)}
+-  <div class="settings-box continuation" id="sidebarFiles">
+-    <div class="flex">
+-      <div class="label">$i18n{steddingSidebarFilesLabel}</div>
+-      <div class="secondary">${this.exportStatus_ || '$i18n{steddingSidebarFilesSubLabel}'}</div>
+-    </div>
+-    <cr-button @click="${this.onExportSpaceClick_}">$i18n{steddingExportSpace}</cr-button>
+-    <cr-button @click="${this.onExportAllClick_}">$i18n{steddingExportAllSpaces}</cr-button>
+-    <cr-button @click="${this.onImportSidebarClick_}">$i18n{steddingImportSidebar}</cr-button>
+-  </div>
+-  <settings-stedding-sync-section></settings-stedding-sync-section>
+-  ${this.arcSummary_ ? html`
+-    <div class="settings-box continuation" id="arcImport">
+-      <div class="flex">
+-        <div class="label">$i18n{steddingImportArcLabel}</div>
+-        <div class="secondary">${this.arcSummary_}</div>
+-      </div>
+-      <cr-button ?disabled="${this.arcImporting_}"
+-          @click="${this.onImportArcClick_}">
+-        $i18n{steddingImportArcButton}
+-      </cr-button>
+-    </div>` : ''}
+-  ${this.hasShortcutReference_ ? html`
+-  <div class="cr-row section-header" id="shortcutsHeader">
+-    <div class="flex">
+-      <h2 class="cr-title-text">$i18n{steddingShortcutsTitle}</h2>
+-      <div class="secondary">$i18n{steddingShortcutsIntro}</div>
+-    </div>
+-  </div>` : ''}
+-  ${this.hasShortcutReference_ ? html`
+-  <settings-stedding-shortcuts-editor></settings-stedding-shortcuts-editor>` :
+-      ''}
+ </settings-section>
++${this.hasShortcutReference_ ? html`
++<settings-section id="shortcutsSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingShortcutsTitle}">
++  <div class="cr-row first section-intro">
++    <div class="flex cr-padded-text secondary">$i18n{steddingShortcutsIntro}</div>
++  </div>
++  <settings-stedding-shortcuts-editor></settings-stedding-shortcuts-editor>
++</settings-section>` : ''}
+ <!--_html_template_end_-->`;
+ }
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+index 4e50099fe96da..df55099df2108 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
+@@ -139,7 +139,6 @@ export class SettingsSteddingPageElement extends
+       exportStatus_: {type: String},
+       arcImporting_: {type: Boolean},
+       hasShortcutReference_: {type: Boolean},
+-      pendingIsolation_: {type: Object},
+       pendingOwnSession_: {type: Object},
+       hoverDelayOptions_: {type: Array},
+       darkPages_: {type: Object},
+@@ -159,9 +158,6 @@ export class SettingsSteddingPageElement extends
+       loadTimeData.getBoolean('steddingHasShortcutReference');
+   protected accessor exportStatus_: string = '';
+   protected accessor arcImporting_: boolean = false;
+-  // PLAN.md SPC-9: the isolation change that waits on its dialog.
+-  protected accessor pendingIsolation_:
+-      {space: SteddingSpace, isolate: boolean, pages: number}|null = null;
+   // sessions S35 (BACKLOG S-274): the Spaces that still shared the session
+   // when "Give every new Space its own session" was turned on, and their
+   // open pages, while the question waits.
+@@ -396,71 +392,46 @@ export class SettingsSteddingPageElement extends
+     chrome.send('steddingRenameSpace', [input.dataset['id'], input.value]);
+   }
+ 
+-  protected async onSpaceIsolatedChange_(e: Event) {
+-    const toggle = e.target as CrToggleElement;
+-    const id = toggle.dataset['id'];
+-    const space = this.spaces_.find(each => each.id === id);
+-    const isolate = toggle.checked;
+-    if (!id || !space) {
+-      return;
+-    }
+-    // PLAN.md SPC-9: the Space's open pages reload in the other jar, so a
+-    // change that reloads any asks first. Until then the toggle keeps its
+-    // old state.
+-    const pages =
+-        Number(await sendWithPromise('steddingCountSpacePages', id)) || 0;
+-    if (pages === 0) {
+-      chrome.send('steddingSetSpaceIsolated', [id, isolate]);
+-      return;
+-    }
+-    toggle.checked = !isolate;
+-    this.pendingIsolation_ = {space, isolate, pages};
+-    await this.updateComplete;
+-    this.isolationDialog_().showModal();
+-  }
+-
+-  private isolationDialog_(): CrDialogElement {
+-    return this.shadowRoot.querySelector<CrDialogElement>(
+-        '#isolationDialog')!;
+-  }
+-
+-  protected isolationTitle_(): string {
+-    return loadTimeData.getString(
+-        this.pendingIsolation_?.isolate ? 'steddingIsolateSpaceTitle' :
+-                                          'steddingShareSpaceTitle');
+-  }
+-
+-  protected isolationBody_(): string {
+-    const pending = this.pendingIsolation_;
+-    if (!pending) {
+-      return '';
++  // settings T13 (BACKLOG S-313): the groups by name, each a jump to its
++  // card; Shortcuts only where the page shows it.
++  protected sectionJumps_(): Array<{target: string, title: string}> {
++    const jumps: Array<[string, string]> = [
++      ['sidebarSection', 'steddingSidebarTitle'],
++      ['tabsSection', 'steddingTabsTitle'],
++      ['peekSection', 'steddingPeekTitle'],
++      ['spacesSection', 'steddingSpacesTitle'],
++      ['pagesSection', 'steddingPagesTitle'],
++      ['privacySection', 'steddingPrivacyTitle'],
++      ['updatesSection', 'steddingUpdatesTitle'],
++    ];
++    if (this.hasShortcutReference_) {
++      jumps.push(['shortcutsSection', 'steddingShortcutsTitle']);
+     }
+-    const name = pending.isolate ? 'steddingIsolate' : 'steddingShare';
+-    return pending.pages === 1 ?
+-        loadTimeData.getString(`${name}OnePage`) :
+-        loadTimeData.getStringF(`${name}Pages`, String(pending.pages));
++    return jumps.map(
++        ([target, title]) => ({target, title: loadTimeData.getString(title)}));
+   }
+ 
+-  protected isolationAction_(): string {
+-    return loadTimeData.getString(
+-        this.pendingIsolation_?.isolate ? 'steddingTurnOn' : 'steddingTurnOff');
++  protected onSectionJumpClick_(e: Event) {
++    const target = (e.currentTarget as HTMLElement).dataset['target'];
++    const section =
++        target ? this.shadowRoot.querySelector<HTMLElement>(`#${target}`) :
++                 null;
++    section?.scrollIntoView({block: 'start'});
+   }
+ 
+-  protected onIsolationConfirmClick_() {
+-    const pending = this.pendingIsolation_;
+-    this.isolationDialog_().close();
+-    if (pending) {
+-      chrome.send(
+-          'steddingSetSpaceIsolated', [pending.space.id, pending.isolate]);
++  protected onSpaceIsolatedChange_(e: Event) {
++    const toggle = e.target as CrToggleElement;
++    const id = toggle.dataset['id'];
++    if (!id) {
++      return;
+     }
+-  }
+-
+-  protected onIsolationCancelClick_() {
+-    this.isolationDialog_().cancel();
+-  }
+-
+-  protected onIsolationDialogClose_() {
+-    this.pendingIsolation_ = null;
++    // sessions S10 (BACKLOG S-318): the browser asks the question the Space
++    // menu asks -- the pages that reload, the apps that keep the session --
++    // and the list follows the answer. Until then the switch keeps its old
++    // state.
++    const isolate = toggle.checked;
++    toggle.checked = !isolate;
++    chrome.send('steddingSetSpaceIsolatedAfterAsking', [id, isolate]);
+   }
+ 
+   // sessions S35 (BACKLOG S-274): turned on, the setting gives the Spaces
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 6d8775089684d..9dda84f84d758 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -51,6 +51,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // blocker Bk6.
+   registry->RegisterBooleanPref(kBlockerButton, true);
+   registry->RegisterBooleanPref(kPinsCloseSleeps, true);
++  // pins H28 (GitHub issue 36): the dot read as a notification, and the
++  // card's reset control drew clicks meant for the card.
++  registry->RegisterBooleanPref(kMarkDriftedPins, false);
+   // Never, until sleep refuses audible, capturing, picture-in-picture and
+   // form tabs. A 15-minute default discarded those.
+   registry->RegisterIntegerPref(kSpaceSleepMinutes, 0);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 1e0d5ad28b98c..04493368237e4 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -116,6 +116,11 @@ inline constexpr char kBlockerButton[] = "stedding.page.blocker_button";
+ // Cmd-W on a pinned tab puts it to sleep instead of closing it
+ // (docs/features/pins.md H3, H9).
+ inline constexpr char kPinsCloseSleeps[] = "stedding.pins.close_sleeps";
++// A pinned tab away from its pinned page wears the dot on its essentials card
++// and in the collapsed rail, and the card its reset control; off, neither
++// shows and the menu's Reset to Pinned Page stays (docs/features/pins.md
++// H4, H10, H28; GitHub issue 36).
++inline constexpr char kMarkDriftedPins[] = "stedding.pins.mark_drifted";
+ 
+ // Minutes after leaving a Space before its tabs sleep; 0 never
+ // (docs/features/tabs.md R6, R8).
+diff --git a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+index b5bf5841886b1..b51a5c12c09a7 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs_unittest.cc
+@@ -37,7 +37,8 @@ TEST(SteddingPrefsTest, EveryPreferenceRegistersWithItsDefault) {
+   }
+   for (const char* name :
+        {kToolbarHideWithSidebar, kSidebarPageFlush, kUndoToast,
+-        kSpaceNotices, kFullscreenHint, kNestChildTabs, kSpacesOwnSession}) {
++        kSpaceNotices, kFullscreenHint, kNestChildTabs, kSpacesOwnSession,
++        kMarkDriftedPins}) {
+     ASSERT_TRUE(service.FindPreference(name)) << name;
+     EXPECT_FALSE(service.GetBoolean(name)) << name;
+   }
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index 502742f77ac2b..ee5c2fd278614 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -1214,6 +1214,9 @@ void CommandBarView::BuildActions() {
+ #endif
+           // local tabs Lt13.
+           {stedding::prefs::kMarkLocalTabs, u"Mark local development tabs"},
++          // pins H28 (GitHub issue 36).
++          {stedding::prefs::kMarkDriftedPins,
++           u"Mark pinned tabs that left their page"},
+           // sidebar Y23 (BACKLOG S-124).
+           {stedding::prefs::kSidebarPageFlush,
+            u"Page flush against the window"},
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+index 9c3d0ff35cf87..61e6a6eedba8e 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -1356,6 +1356,12 @@ TEST_F(CommandBarViewTest, APreferenceRowCyclesItsValue) {
+        {u"Mark local development tabs: On",
+         u"Mark local development tabs: Off",
+         u"Mark local development tabs: On"}},
++      // pins H28 (GitHub issue 36): off by default, on, and off again.
++      {"marking drifted pins turns on and off", u"mark pinned", nullptr,
++       stedding::prefs::kMarkDriftedPins, 3, {0, 1, 0},
++       {u"Mark pinned tabs that left their page: Off",
++        u"Mark pinned tabs that left their page: On",
++        u"Mark pinned tabs that left their page: Off"}},
+       // tabs R39 (BACKLOG S-111): the four choices, wrapping back to Never.
+       {"Never, then 5 minutes, then 30 minutes", u"put tabs to sleep",
+        stedding::prefs::kTabsIdleSleepMinutes, nullptr, 3, {0, 5, 30},
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+index 78a8964f08912..ffa5c43d68b49 100644
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -900,27 +900,34 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+     // local tabs Lt13: "Mark local development tabs", set from Settings, the
+     // command bar or another window, reaches every row of this one at once,
+     // those of the Spaces not on screen too.
+-    closed_form_registrar_.Add(
+-        stedding::prefs::kMarkLocalTabs,
+-        base::BindRepeating(
+-            [](VerticalTabStripRegionView* region) {
+-              std::vector<TabCollectionNode*> pending;
+-              if (region->root_node()) {
+-                pending.push_back(region->root_node());
+-              }
+-              while (!pending.empty()) {
+-                TabCollectionNode* const node = pending.back();
+-                pending.pop_back();
+-                if (auto* const row =
+-                        views::AsViewClass<TabView>(node->view())) {
+-                  row->UpdateLocalMark();
+-                }
+-                for (const auto& child : node->children()) {
+-                  pending.push_back(child.get());
+-                }
+-              }
+-            },
+-            base::Unretained(this)));
++    // pins H28 (GitHub issue 36): "Mark pinned tabs that left their page"
++    // the same way.
++    for (const auto& [pref, update] :
++         {std::pair(stedding::prefs::kMarkLocalTabs, &TabView::UpdateLocalMark),
++          std::pair(stedding::prefs::kMarkDriftedPins,
++                    &TabView::UpdateDriftMark)}) {
++      closed_form_registrar_.Add(
++          pref, base::BindRepeating(
++                    [](VerticalTabStripRegionView* region,
++                       void (TabView::*update)()) {
++                      std::vector<TabCollectionNode*> pending;
++                      if (region->root_node()) {
++                        pending.push_back(region->root_node());
++                      }
++                      while (!pending.empty()) {
++                        TabCollectionNode* const node = pending.back();
++                        pending.pop_back();
++                        if (auto* const row =
++                                views::AsViewClass<TabView>(node->view())) {
++                          (row->*update)();
++                        }
++                        for (const auto& child : node->children()) {
++                          pending.push_back(child.get());
++                        }
++                      }
++                    },
++                    base::Unretained(this), update));
++    }
+     // sidebar Y34, Y36: the sidebar's side, set from Settings, a menu, the
+     // command bar or another window, moves this one at once. Read from the
+     // original profile: a private window follows the normal ones.
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
+index 0eda395fbc814..b64dc5355d2fa 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -1487,8 +1487,15 @@ void TabView::UpdateDriftDot() {
+   stedding::TabRowState drift_row;
+   drift_row.pinned = pinned_;
+   drift_row.narrow = IsRailRow(width());
+-  icon_->SetAttention(TabIcon::AttentionType::kNavigatedAwayFromHome,
+-                      stedding::ShowsDriftDot(drift_row, HasDriftedFromHome()));
++  icon_->SetAttention(
++      TabIcon::AttentionType::kNavigatedAwayFromHome,
++      DriftMarkWanted() &&
++          stedding::ShowsDriftDot(drift_row, HasDriftedFromHome()));
++}
++
++void TabView::UpdateDriftMark() {
++  UpdateDriftDot();
++  UpdateResetBadge();
+ }
+ 
+ void TabView::UpdateSeparator() {
+@@ -1662,7 +1669,7 @@ void TabView::UpdateResetBadge() {
+     return;
+   }
+   const bool show = pinned_ && hovered_ && !IsRailRow(width()) &&
+-                    HasDriftedFromHome() &&
++                    HasDriftedFromHome() && DriftMarkWanted() &&
+                     base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
+   if (show != reset_badge_->GetVisible()) {
+     if (show && !reset_badge_->layer()) {
+@@ -1744,6 +1751,16 @@ void TabView::UpdateLocalMark() {
+   InvalidateLayout();
+ }
+ 
++bool TabView::DriftMarkWanted() const {
++  tabs::TabInterface* const tab =
++      const_cast<tabs::TabInterface*>(GetTabInterface());
++  BrowserWindowInterface* const window =
++      tab ? tab->GetBrowserWindowInterface() : nullptr;
++  Profile* const profile = window ? window->GetProfile() : nullptr;
++  return profile &&
++         profile->GetPrefs()->GetBoolean(stedding::prefs::kMarkDriftedPins);
++}
++
+ bool TabView::HasDriftedFromHome() const {
+   if (!collection_node_) {
+     return false;
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view.h b/chrome/browser/ui/views/tabs/common/tab_view.h
+index c3a512abca43a..f2c092b344247 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -188,6 +188,11 @@ class TabView : public views::View,
+   // changes.
+   void UpdateLocalMark();
+ 
++  // Stedding (pins H28, GitHub issue 36): shows or hides the drift dot and
++  // the card's reset control by "Mark pinned tabs that left their page"; the
++  // sidebar calls it on every row when the setting changes.
++  void UpdateDriftMark();
++
+  private:
+   friend class TabViewVerticalLayout;
+   friend class TabViewHorizontalLayout;
+@@ -245,6 +250,8 @@ class TabView : public views::View,
+   void UpdateTabData(const tabs::TabData& tab);
+   // Stedding (pins H4): a pinned tab away from its home page.
+   bool HasDriftedFromHome() const;
++  // pins H28: whether the profile asks for the dot and the reset control.
++  bool DriftMarkWanted() const;
+ 
+   // pins H8: the hover card's "Pinned in <Space> · home <host>" line, or
+   // nothing for a tab without a home.
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index ee57ec8a0dca8..c0c0ec1fb2a52 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -703,6 +703,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingSidebarTitle", "Sidebar");
+   html_source->AddString("steddingTabsTitle", "Tabs");
+   html_source->AddString("steddingPagesTitle", "Pages and menus");
++  // settings T13 (BACKLOG S-313): a card of its own for Peek and the little
++  // windows, and the groups' names at the top of the page.
++  html_source->AddString("steddingPeekTitle", "Peek and little windows");
++  html_source->AddString(
++      "steddingPeekIntro",
++      "Pages that open over the one you are on, and leave your tabs as they "
++      "are.");
++  html_source->AddString("steddingSectionsLabel", "Sections");
+   // sidebar Y19.
+   html_source->AddString("steddingClosedFormLabel", "When the sidebar closes");
+   html_source->AddString(
+@@ -765,33 +773,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   // spaces B41: Edit Space, from the Space's row.
+   html_source->AddString("steddingEditSpace", "Edit\u2026");
+   html_source->AddString("steddingEditNamedSpace", "Edit $1");
+-  // PLAN.md SPC-9: before a change of a Space's jar reloads its pages.
+-  html_source->AddString("steddingIsolateSpaceTitle",
+-                         "Turn on an independent session?");
+-  html_source->AddString("steddingShareSpaceTitle",
+-                         "Turn off the independent session?");
+-  html_source->AddString(
+-      "steddingIsolateOnePage",
+-      "Its open page reloads with cookies of its own, signed out of the "
+-      "site it had open. A page holding changes you have not saved keeps "
+-      "them until you leave it.");
+-  html_source->AddString(
+-      "steddingIsolatePages",
+-      "Its $1 open pages reload with cookies of its own, signed out of the "
+-      "sites they had open. A page holding changes you have not saved keeps "
+-      "them until you leave it.");
+-  html_source->AddString(
+-      "steddingShareOnePage",
+-      "Its open page reloads with the cookies the other Spaces share. Its "
+-      "own session is kept for when you turn it on again. A page holding "
+-      "changes you have not saved keeps them until you leave it.");
+-  html_source->AddString(
+-      "steddingSharePages",
+-      "Its $1 open pages reload with the cookies the other Spaces share. Its "
+-      "own session is kept for when you turn it on again. A page holding "
+-      "changes you have not saved keeps them until you leave it.");
+-  html_source->AddString("steddingTurnOn", "Turn On");
+-  html_source->AddString("steddingTurnOff", "Turn Off");
+   html_source->AddString("steddingImportArcLabel", "Import from Arc");
+   html_source->AddString("steddingLittleLabel",
+                          "Open links from other apps in a small window");
+@@ -1378,6 +1359,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingPinsCloseSleepsSubLabel",
+                          "The row stays; unpin to remove it. Off closes the "
+                          "tab, as Chromium does.");
++  // pins H28 (GitHub issue 36).
++  html_source->AddString("steddingMarkDriftedPinsLabel",
++                         "Mark pinned tabs that left their page");
++  html_source->AddString(
++      "steddingMarkDriftedPinsSubLabel",
++      "A dot on the essential and in the collapsed sidebar, and a button on "
++      "the essential to go back. Reset to Pinned Page on the tab's menu does "
++      "that either way.");
+   // tabs R30, settings T17 (BACKLOG S-97).
+   html_source->AddString("steddingUndoToastLabel",
+                          "Offer Undo after closing tabs");
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+index 136f1328232bf..6bfe1190b1172 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
+@@ -112,6 +112,11 @@ void SteddingSpacesHandler::RegisterMessages() {
+       "steddingSetSpaceIsolated",
+       base::BindRepeating(&SteddingSpacesHandler::HandleSetSpaceIsolated,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingSetSpaceIsolatedAfterAsking",
++      base::BindRepeating(
++          &SteddingSpacesHandler::HandleSetSpaceIsolatedAfterAsking,
++          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "steddingCountSpacePages",
+       base::BindRepeating(&SteddingSpacesHandler::HandleCountSpacePages,
+@@ -291,6 +296,26 @@ void SteddingSpacesHandler::HandleSetSpaceIsolated(
+   model->SetSpaceIsolated(*id, args[1].GetBool());
+ }
+ 
++void SteddingSpacesHandler::HandleSetSpaceIsolatedAfterAsking(
++    const base::ListValue& args) {
++  if (args.size() != 2U) {
++    return;
++  }
++  AllowJavascript();
++  const std::optional<spaces::SpaceId> id = ParseId(args[0]);
++  if (!id || !args[1].is_bool()) {
++    return;
++  }
++  // The question counts the open pages and names the apps that keep the
++  // Space's session, and asks for them with no page open (web apps Wa13);
++  // the page asked about pages alone, so with only apps it turned the
++  // session off at once. The list follows the answer.
++  spaces::SetSpaceIsolatedAfterAsking(
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
++          web_ui()->GetWebContents()),
++      *id, args[1].GetBool());
++}
++
+ // Exports the Space this window shows when the user asks, not the one the
+ // page last drew as active.
+ void SteddingSpacesHandler::HandleExportSpace(const base::ListValue& args) {
+diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.h b/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
+index bd44d1d5b6d9b..d19345c742223 100644
+--- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
++++ b/chrome/browser/ui/webui/settings/stedding_spaces_handler.h
+@@ -57,6 +57,9 @@ class SteddingSpacesHandler : public settings::SettingsPageUIHandler,
+   void HandleGetSpaces(const base::ListValue& args);
+   void HandleRenameSpace(const base::ListValue& args);
+   void HandleSetSpaceIsolated(const base::ListValue& args);
++  // sessions S10 (BACKLOG S-318): a Space's switch asks the question the
++  // Space menu and the command bar ask, over the window this page is in.
++  void HandleSetSpaceIsolatedAfterAsking(const base::ListValue& args);
+   // PLAN.md SPC-9: steddingCountSpacePages(callback, spaceId) -> the open
+   // pages a change of that Space's jar reloads, which the page asks about
+   // before it changes one.
+diff --git a/chrome/test/stedding/app_jar_browsertest.cc b/chrome/test/stedding/app_jar_browsertest.cc
+index 1a007cfdd60d3..e01bd28b2b00a 100644
+--- a/chrome/test/stedding/app_jar_browsertest.cc
++++ b/chrome/test/stedding/app_jar_browsertest.cc
+@@ -523,6 +523,80 @@ IN_PROC_BROWSER_TEST_F(AppJarTest, TurningTheSessionOffNamesTheApps) {
+   EXPECT_EQ(work_jar, stedding::AppJarInUse(*profile()->GetPrefs(), first));
+ }
+ 
++// sessions S10 (BACKLOG S-318): the switch on a Space's row in
++// chrome://settings/stedding asks the question the Space menu and the command
++// bar ask, naming the apps, also when no page of the Space is open. It asked
++// its own question, about pages alone, so with only apps it turned the
++// session off at once and never named them.
++IN_PROC_BROWSER_TEST_F(AppJarTest, TheSettingsSwitchNamesTheAppsToo) {
++  ASSERT_NO_FATAL_FAILURE(SetUpSpaces());
++  const webapps::AppId app = MakeAppIn(work_);
++  ASSERT_FALSE(app.empty());
++  const std::u16string name =
++      base::UTF8ToUTF16(provider().registrar_unsafe().GetAppShortName(app));
++  for (int i = tabs()->count() - 1; i >= 0; --i) {
++    if (model_->FindSpaceForTab(tabs()->GetTabAtIndex(i)) == work_) {
++      tabs()->CloseWebContentsAt(i, TabCloseTypes::CLOSE_NONE);
++    }
++  }
++  ASSERT_TRUE(base::test::RunUntil(
++      [&]() { return model_->CountPagesAJarChangeReloads(work_) == 0; }));
++  ASSERT_TRUE(model_->SetActiveSpace(home_));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("chrome://settings/stedding")));
++  content::WebContents* const page = tabs()->GetActiveWebContents();
++  // Presses Work's switch, once the page lists the Spaces; false until then.
++  const std::string press = content::JsReplace(R"((() => {
++    const find = (root, selector) => {
++      const hit = root.querySelector(selector);
++      if (hit) {
++        return hit;
++      }
++      for (const element of root.querySelectorAll('*')) {
++        const inner = element.shadowRoot && find(element.shadowRoot, selector);
++        if (inner) {
++          return inner;
++        }
++      }
++      return null;
++    };
++    const toggle =
++        find(document, 'cr-toggle.space-isolated[data-id="' + $1 + '"]');
++    if (!toggle) {
++      return false;
++    }
++    toggle.click();
++    return true;
++  })())",
++                                               work_.ToString());
++  const auto press_the_switch = [&]() {
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return content::EvalJs(page, press).ExtractBool(); }))
++        << "the page never listed Work";
++  };
++
++  {
++    SCOPED_TRACE("cancelled, the session stays on");
++    const std::u16string text = QuestionDuring(
++        base::BindLambdaForTesting(press_the_switch), /*accept=*/false);
++    EXPECT_NE(std::u16string::npos,
++              text.find(name + u" will use the shared session while it is "
++                               u"off."))
++        << "no question, or one without the app: " << text;
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(model_->SpaceIsIsolated(work_));
++  }
++  {
++    SCOPED_TRACE("answered Turn Off, the session goes");
++    const std::u16string text = QuestionDuring(
++        base::BindLambdaForTesting(press_the_switch), /*accept=*/true);
++    EXPECT_FALSE(text.empty()) << "no question";
++    EXPECT_TRUE(base::test::RunUntil(
++        [&]() { return !model_->SpaceIsIsolated(work_); }));
++    EXPECT_EQ("", stedding::AppJarInUse(*profile()->GetPrefs(), app));
++  }
++}
++
+ // web apps Wa14: "Open in Stedding" puts the app's page in a tab of the Space
+ // that keeps its jar, as it is, and shows that Space; a page in the shared
+ // jar goes to the first Space that shares it when the one on screen does
+diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
+index 3a9463056dd89..213959cfb31e1 100644
+--- a/chrome/test/stedding/settings_spaces_browsertest.cc
++++ b/chrome/test/stedding/settings_spaces_browsertest.cc
+@@ -269,7 +269,7 @@ constexpr char kShortcutRow[] = R"(
+       }
+     };
+     walk(document);
+-    const header = all.find(element => element.id === 'shortcutsHeader');
++    const header = all.find(element => element.id === 'shortcutsSection');
+     const rows =
+         all.filter(element => element.classList.contains('shortcut-row'));
+     if (!header || header.offsetParent === null || !rows.length) {
+@@ -449,6 +449,47 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
+           "stedding.window.fullscreen_hint"}) {
+       EXPECT_NE(std::string::npos, keys.find(key)) << key << " in " << keys;
+     }
++    // pins H28, settings T35 (GitHub issue 36): the drift mark's switch.
++    EXPECT_NE(std::string::npos, keys.find("stedding.pins.mark_drifted"))
++        << keys;
++  }
++  {
++    // settings T13 (BACKLOG S-313): a card per group, in this order, each
++    // named at the top of the page, where its name jumps to it.
++    SCOPED_TRACE("the groups are cards, named at the top");
++    EXPECT_EQ(
++        "sidebarSection,tabsSection,peekSection,spacesSection,pagesSection,"
++        "privacySection,updatesSection,shortcutsSection|Sidebar,Tabs,Peek "
++        "and little windows,Spaces,Pages and menus,Privacy,Updates,Shortcuts",
++        content::EvalJs(page, OnThePage(R"(
++          const page = pick('settings-stedding-page');
++          const root = page && page.shadowRoot;
++          if (!root) {
++            return '';
++          }
++          const cards = [...root.querySelectorAll('settings-section[id]')]
++              .map(card => card.id);
++          const jumps = [...root.querySelectorAll('.section-jump')]
++              .map(jump => jump.textContent.trim());
++          return cards.join(',') + '|' + jumps.join(',');)")));
++    // A name scrolls its card to the top of the view. Polled from here: a
++    // page timer stalls while other windows cover this one.
++    EXPECT_EQ(true, content::EvalJs(page, OnThePage(R"(
++      const root = pick('settings-stedding-page').shadowRoot;
++      const jump =
++          root.querySelector('.section-jump[data-target="privacySection"]');
++      if (!jump) {
++        return false;
++      }
++      jump.click();
++      return true;)")));
++    EXPECT_TRUE(base::test::RunUntil([&]() {
++      return content::EvalJs(page, OnThePage(R"(
++        const top = pick('settings-stedding-page').shadowRoot
++            .querySelector('#privacySection').getBoundingClientRect().top;
++        return top >= -2 && top < window.innerHeight / 3;)"))
++          .ExtractBool();
++    })) << "Privacy's card did not come to the top";
+   }
+   {
+     // tabs R30, routing D4, toolbar T45: the hints are off on a fresh
+@@ -457,7 +498,7 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
+         "the hints' switches are off, Copy Link on");
+     for (const char* key :
+          {"stedding.tabs.undo_toast", "stedding.spaces.notices",
+-          "stedding.window.fullscreen_hint"}) {
++          "stedding.window.fullscreen_hint", "stedding.pins.mark_drifted"}) {
+       EXPECT_EQ(false,
+                 content::EvalJs(
+                     page, content::JsReplace("chrome.settingsPrivate.getPref($1)"
+diff --git a/chrome/test/stedding/sidebar_rail_browsertest.cc b/chrome/test/stedding/sidebar_rail_browsertest.cc
+index 5f5349a05df8a..6131af1688f45 100644
+--- a/chrome/test/stedding/sidebar_rail_browsertest.cc
++++ b/chrome/test/stedding/sidebar_rail_browsertest.cc
+@@ -331,12 +331,94 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest,
+   }
+ }
+ 
++// pins H28 (GitHub issue 36): "Mark pinned tabs that left their page" is off
++// on a fresh profile: a drifted essential's card shows no dot and, under the
++// pointer, no reset control, while a drifted Space pin's row keeps its slash.
++// Turned on, the dot and the control come at once, and go again when it is
++// turned off. The dot read as a notification, and the control drew clicks
++// meant for the card.
++IN_PROC_BROWSER_TEST_F(SidebarRailTest, TheDriftMarkIsTheSettingsChoice) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  ASSERT_FALSE(prefs->GetBoolean(stedding::prefs::kMarkDriftedPins));
++  const GURL home = embedded_test_server()->GetURL("/title1.html");
++  const GURL away = embedded_test_server()->GetURL("/title2.html");
++  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
++  ASSERT_TRUE(model);
++  TabStripModel* const strip = tab_strip_model();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), home));
++  tabs::TabInterface* const space_pin = strip->GetActiveTab();
++  model->SetSpacePinned(space_pin, true);
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), home, WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  tabs::TabInterface* const essential = strip->GetActiveTab();
++  strip->SetTabPinned(strip->GetIndexOfTab(essential), true);
++  for (tabs::TabInterface* const tab : {space_pin, essential}) {
++    strip->ActivateTabAt(strip->GetIndexOfTab(tab));
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), away));
++  }
++  AppendTab();
++
++  // The card's reset control, shown while the pointer rests on the card.
++  const auto reset_shown = [&]() {
++    views::test::RunScheduledLayout(browser_view()->GetWidget());
++    TabView* const card = stedding::test::FindDrawnRow(
++        browser_view()->GetWidget()->GetRootView(), essential);
++    EXPECT_TRUE(card) << "no card for the essential";
++    if (!card) {
++      return false;
++    }
++    const gfx::Point centre = card->GetLocalBounds().CenterPoint();
++    // As the window delivers it, through views::View.
++    views::View* const view = card;
++    view->OnMouseEntered(ui::MouseEvent(ui::EventType::kMouseEntered, centre,
++                                        centre, base::TimeTicks::Now(),
++                                        ui::EF_NONE, ui::EF_NONE));
++    bool shown = false;
++    for (const views::View* const child : card->children()) {
++      if (const auto* const label = views::AsViewClass<views::Label>(
++              const_cast<views::View*>(child));
++          label && label->GetText() == u"\u21BA") {
++        shown = label->GetVisible();
++      }
++    }
++    view->OnMouseExited(ui::MouseEvent(ui::EventType::kMouseExited, centre,
++                                       centre, base::TimeTicks::Now(),
++                                       ui::EF_NONE, ui::EF_NONE));
++    return shown;
++  };
++
++  {
++    SCOPED_TRACE("off, as on a fresh profile");
++    EXPECT_FALSE(MarksOf(essential).dot);
++    EXPECT_FALSE(reset_shown());
++    EXPECT_TRUE(MarksOf(space_pin).slash) << "the row's slash went too";
++  }
++  {
++    SCOPED_TRACE("turned on");
++    prefs->SetBoolean(stedding::prefs::kMarkDriftedPins, true);
++    EXPECT_TRUE(MarksOf(essential).dot);
++    EXPECT_TRUE(reset_shown());
++    EXPECT_TRUE(MarksOf(space_pin).slash);
++  }
++  {
++    SCOPED_TRACE("turned off again");
++    prefs->SetBoolean(stedding::prefs::kMarkDriftedPins, false);
++    EXPECT_FALSE(MarksOf(essential).dot);
++    EXPECT_FALSE(reset_shown());
++  }
++}
++
+ // PLAN.md TAB-2 (pins H4, H12): a drifted Space pin wears the dot in the
+ // rail and Arc's slash in a row with a title -- the hover-expanded rail's
+ // rows have one -- and never both, at any step of a collapse or an expand.
+ // A drifted essential is a card, with the dot in every form.
+ IN_PROC_BROWSER_TEST_F(SidebarRailTest, ADriftedPinShowsTheDotOrTheSlash) {
+   ASSERT_TRUE(embedded_test_server()->Start());
++  // pins H28: the dot is the setting's, off on a fresh profile.
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      stedding::prefs::kMarkDriftedPins, true);
+   const GURL home = embedded_test_server()->GetURL("/title1.html");
+   const GURL away = embedded_test_server()->GetURL("/title2.html");
+   spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
+@@ -420,6 +502,9 @@ IN_PROC_BROWSER_TEST_F(SidebarRailTest, ADriftedPinShowsTheDotOrTheSlash) {
+ // reached the favicon.
+ IN_PROC_BROWSER_TEST_F(SidebarRailTest, TheFaviconsFollowEveryDensity) {
+   ASSERT_TRUE(embedded_test_server()->Start());
++  // pins H28: the dot is the setting's, off on a fresh profile.
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      stedding::prefs::kMarkDriftedPins, true);
+   const GURL home = embedded_test_server()->GetURL("/title1.html");
+   const GURL away = embedded_test_server()->GetURL("/title2.html");
+   spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());

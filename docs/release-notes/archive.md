@@ -2,6 +2,73 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 18
+
+Separators in the sidebar, a calmer palette, and Peek that explains itself. On Chromium
+156.0.8078.48.
+
+### New
+
+- **Separators.** Right-click a tab or a pinned tab in a Space and choose **Add Separator
+  Above** to draw a faint line over it; **Remove Separator** takes it away (#19).
+- **Peek explains itself.** The first peeks carry a one-line note: what a peek is, that
+  **Open as Tab** keeps the page, and a link to its setting. The welcome's question says the
+  same.
+
+### Changed
+
+- **A neutral palette.** A Space's colour tints the sidebar and nothing else: Settings, menus
+  and the command bar keep neutral colours. The light look's ground is a soft grey.
+- **The command bar's rows light up under the pointer.**
+- **Sync through a folder names the folders that work**: one iCloud Drive, OneDrive, Dropbox
+  or Google Drive keeps. Settings says so when the chosen folder is not one of them (#38).
+
+### Fixed
+
+- A link Shift-clicked on an essential that belongs to one Space opened with another Space's
+  cookies.
+- The History and Downloads panels could stop at their first page.
+- A tab moved to another Space from its menu is now the tab you see there.
+- In a private window the command bar no longer offers to search your history.
+- A malformed Arc sidebar file could freeze the import.
+
+### Install
+
+- **macOS** (Apple silicon, macOS 13 or later): `Stedding-0.3.0-beta.18-arm64.dmg`, signed and
+  notarized. Open it and drag Stedding to Applications.
+- **Windows** (10 and 11, x64): `Stedding-0.3.0-beta.18-win-x64.exe`, installs for you alone.
+  It is not signed yet: in SmartScreen click **More info**, then **Run anyway**, once.
+
+Installed copies update themselves (Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19).
+
+### Checksums (SHA-256)
+
+```
+d9eb16f659424cdbd584b0d33de5fa68c5e82ae2f7edeba1c2640c6e644424ca  Stedding-0.3.0-beta.18-arm64.dmg
+d313bb40a55edebd9b863c286079919ec1a1c2446e7fa58cac7ada87db938d66  Stedding-0.3.0-beta.18-win-x64.exe
+```
+
+### Known limits
+
+- The Windows installer is unsigned (`S-56`).
+- Netflix, Disney+ and Spotify's web player do not play yet (`S-270`).
+- Chromium 156's built-in list of sites that must load over HTTPS lapses on 13 December 2026;
+  a release on a newer base comes before then.
+
+### How it was checked
+
+Every unit and browser test on the Mac (1244; 598, and 149 one at a time) and on Windows, in
+the release build, the build with DCHECKs and the AddressSanitizer build (each 1239 unit tests;
+558, and 155 one at a time). Under AddressSanitizer all passed; the release build failed one
+test and the DCHECK build three, and run again all but two passed. Those two caught the
+sidebar's text colour shifting a shade when a page's colour arrives, which comes next
+(`S-316`). A review of the code by another model found 19 issues: 15 are fixed here, each
+with a test seen failing first. Apple's distribution check passed the signed app, and
+Gatekeeper accepted it from the downloaded image. On Windows the installer went over an
+installed beta 17, was uninstalled keeping the profile and installed again. From the published
+feeds, a copy of beta 17 on the Mac offered this version 75 seconds after launch, and an
+installed beta 17 on Windows had it 25 seconds after launch and was on it after a restart.
+
 ## Stedding 0.3.0 beta 17
 
 No Google sign-in prompt on Windows, a tidier sidebar foot, and a command bar you can see on
