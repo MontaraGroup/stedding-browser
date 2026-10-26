@@ -23,18 +23,18 @@ the pointer).
 Removable when: never; to be folded into the patches that own the code.
 ---
  .../resources/stedding_archive/app.css        |  2 +-
- .../resources/stedding_welcome/app.css        | 50 ++++++++--------
+ .../resources/stedding_welcome/app.css        | 50 ++++++-------
  .../browser/resources/stedding_welcome/app.ts |  2 +-
- .../browser/ui/color/stedding_color_mixer.cc  | 21 ++++---
+ .../browser/ui/color/stedding_color_mixer.cc  | 21 +++---
  .../browser/ui/color/stedding_color_mixer.h   |  2 +-
- .../ui/color/stedding_color_mixer_unittest.cc | 35 ++++++++++-
+ .../ui/color/stedding_color_mixer_unittest.cc | 35 ++++++++-
  .../theme/page_bar_color_supplier_unittest.cc |  2 +-
- .../page_theme_color_controller_unittest.cc   | 24 ++++----
+ .../page_theme_color_controller_unittest.cc   | 24 +++----
  chrome/browser/ui/tabs/tab_favicon_theming.cc |  2 +-
  .../ui/tabs/tab_favicon_theming_unittest.cc   |  2 +-
- .../ui/views/commandbar/command_bar_view.cc   | 60 +++++++++++++++++--
+ .../ui/views/commandbar/command_bar_view.cc   | 70 +++++++++++++++---
  .../ui/views/commandbar/command_bar_view.h    |  2 +
- .../commandbar/command_bar_view_unittest.cc   | 41 +++++++++++++
+ .../commandbar/command_bar_view_unittest.cc   | 72 +++++++++++++++++++
  chrome/browser/ui/views/frame/browser_view.cc |  2 +-
  .../browser/ui/views/frame/browser_widget.cc  |  9 ++-
  .../views/frame/stedding_window_background.cc |  5 +-
@@ -42,7 +42,7 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/test/stedding/BUILD.gn                 |  1 +
  .../test/stedding/edit_space_browsertest.cc   | 12 ++++
  chrome/test/stedding/tab_drop_browsertest.cc  |  2 +-
- 20 files changed, 216 insertions(+), 62 deletions(-)
+ 20 files changed, 253 insertions(+), 66 deletions(-)
 
 diff --git a/chrome/browser/resources/stedding_archive/app.css b/chrome/browser/resources/stedding_archive/app.css
 index 1c9beb3beaa01..a8d9df2631c8e 100644
@@ -454,7 +454,7 @@ index 374386b113372..4daef010f86a9 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
-index 9e618bd4f8046..fbea7061d7bcc 100644
+index 9e618bd4f8046..502742f77ac2b 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
 @@ -13,6 +13,7 @@
@@ -526,7 +526,24 @@ index 9e618bd4f8046..fbea7061d7bcc 100644
  };
  
  BEGIN_METADATA(CommandBarView, ResultRow)
-@@ -1975,7 +2004,8 @@ const TemplateURL* CommandBarView::SiteSearchFor(
+@@ -1680,10 +1709,12 @@ void CommandBarView::UpdateResults(const std::u16string& query,
+       if (on_screen != active_space || (coat && !on_screen)) {
+         continue;
+       }
+-      // An essential is in every Space (spaces B6), so every "@Space" finds
+-      // it; it was found only under the Space it happened to be filed in
+-      // (PLAN.md SPC-15).
+-      if (spaces && parsed.space_prefix && !tab->IsPinned()) {
++      // An essential every Space shares is in every Space (spaces B6), so
++      // every "@Space" finds it; it was found only under the Space it
++      // happened to be filed in (PLAN.md SPC-15). A Space's own essential is
++      // in that Space alone, and found under its name only.
++      if (spaces && parsed.space_prefix &&
++          (!tab->IsPinned() || spaces->IsOwnEssential(tab))) {
+         if (!spaces::SpaceNameMatchesPrefix(
+                 spaces->DisplayName(spaces->SpaceForTab(tab)),
+                 *parsed.space_prefix)) {
+@@ -1975,7 +2006,8 @@ const TemplateURL* CommandBarView::SiteSearchFor(
    int best_rank = 0;
    for (const auto& entry : service->GetTemplateURLs()) {
      const TemplateURL* const site = entry.get();
@@ -536,7 +553,7 @@ index 9e618bd4f8046..fbea7061d7bcc 100644
        continue;
      }
      const std::optional<int> rank =
-@@ -2011,7 +2041,10 @@ const TemplateURL* CommandBarView::OfferedSiteSearch(
+@@ -2011,7 +2043,10 @@ const TemplateURL* CommandBarView::OfferedSiteSearch(
      return nullptr;
    }
    const TemplateURL* const site = service->GetTemplateURLForKeyword(keyword);
@@ -548,7 +565,7 @@ index 9e618bd4f8046..fbea7061d7bcc 100644
  }
  
  GURL CommandBarView::SiteSearchURL(const std::u16string& query) const {
-@@ -2117,6 +2150,8 @@ void CommandBarView::RebuildRows() {
+@@ -2117,6 +2152,8 @@ void CommandBarView::RebuildRows() {
      if (!row.mark.empty()) {
        view->SetIsolationMark(row.mark);
      }
@@ -557,7 +574,7 @@ index 9e618bd4f8046..fbea7061d7bcc 100644
      SetRowChosen(view.get(), i == selected_);
      contents->AddChildView(std::move(view));
    }
-@@ -2219,7 +2254,21 @@ void CommandBarView::StyleRow(ResultRow* row) {
+@@ -2219,7 +2256,21 @@ void CommandBarView::StyleRow(ResultRow* row) {
  }
  
  void CommandBarView::SetRowChosen(views::View* row, bool chosen) {
@@ -580,7 +597,7 @@ index 9e618bd4f8046..fbea7061d7bcc 100644
      row->SetBackground(nullptr);
      return;
    }
-@@ -2231,7 +2280,8 @@ void CommandBarView::SetRowChosen(views::View* row, bool chosen) {
+@@ -2231,7 +2282,8 @@ void CommandBarView::SetRowChosen(views::View* row, bool chosen) {
    const SkColor text =
        provider ? provider->GetColor(ui::kColorLabelForeground) : SK_ColorWHITE;
    row->SetBackground(views::CreateRoundedRectBackground(
@@ -604,7 +621,7 @@ index 4f501cfa25aa8..702055ccbc085 100644
    // Runs row `index`, as Enter or a click on it does.
    void RunRow(size_t index);
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
-index de7fc9abf55e0..e199050d5add3 100644
+index de7fc9abf55e0..9c3d0ff35cf87 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 @@ -68,6 +68,7 @@
@@ -615,7 +632,45 @@ index de7fc9abf55e0..e199050d5add3 100644
  #include "ui/views/controls/label.h"
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/controls/textfield/textfield.h"
-@@ -1023,6 +1024,38 @@ TEST_F(CommandBarViewTest, ANewDocumentNeverReplacesAPage) {
+@@ -298,6 +299,37 @@ TEST_F(CommandBarViewTest, AnEssentialMatchesEverySpacesFilter) {
+   EXPECT_LE(1u, work_rows) << "Work's own tab is missing under @Work";
+ }
+ 
++// commandbar K19, spaces B6: a Space's own essential is in that Space
++// alone, so "@Space" finds it under that Space's name only. It was let
++// through every filter as a shared one is, and Enter took the window to its
++// Space.
++TEST_F(CommandBarViewTest, AnOwnEssentialMatchesOnlyItsSpacesFilter) {
++  spaces::Space* const personal = model().AddSpace("Personal", SK_ColorBLUE);
++  model().SetSpaceIsolated(personal->id(), true);
++  model().SetActiveSpace(personal->id());
++  AddTab(browser(), GURL("https://bank.example/"));
++  tabs().SetTabPinned(0, true);
++  task_environment()->RunUntilIdle();
++  ASSERT_TRUE(model().IsOwnEssential(tabs().GetTabAtIndex(0)));
++  spaces::Space* const work = model().AddSpace("Work", SK_ColorRED);
++  model().SetActiveSpace(work->id());
++  AddTab(browser(), GURL("https://work.example/"));
++
++  const auto rows_naming = [&](const std::u16string& typed,
++                               const std::u16string& space) {
++    auto bar = std::make_unique<CommandBarView>(browser());
++    bar->PrefillForTesting(typed);
++    size_t count = 0;
++    for (size_t i = 0; i < bar->row_count_for_testing(); ++i) {
++      count += bar->row_detail_for_testing(i) == space;
++    }
++    return count;
++  };
++  EXPECT_EQ(0u, rows_naming(u"@Work ", u"Personal"))
++      << "Personal's own essential under @Work";
++  EXPECT_EQ(1u, rows_naming(u"@Personal ", u"Personal"));
++}
++
+ // commandbar K2, K5: a tab row keeps its tab, not its place in the strip. A
+ // tab closed while the bar is open moves no other tab under the chosen row,
+ // and a row whose tab has closed does nothing.
+@@ -1023,6 +1055,38 @@ TEST_F(CommandBarViewTest, ANewDocumentNeverReplacesAPage) {
              tabs().GetActiveWebContents()->GetVisibleURL());
  }
  
@@ -654,7 +709,7 @@ index de7fc9abf55e0..e199050d5add3 100644
  // commandbar K36 (GitHub issue 37): the bar stands off the page under it, a
  // white one in the light look too: a shadow under it, and a hairline round its
  // edge inside the panel's inset.
-@@ -2288,6 +2321,14 @@ TEST_F(CommandBarViewTest, AKeywordQueryOpensOnlyAnOfferedEngine) {
+@@ -2288,6 +2352,14 @@ TEST_F(CommandBarViewTest, AKeywordQueryOpensOnlyAnOfferedEngine) {
                private_bar->ClassifyForTesting(u"@past secret")
                    .destination.host())
          << "a private window's bar opened the normal profile's history";

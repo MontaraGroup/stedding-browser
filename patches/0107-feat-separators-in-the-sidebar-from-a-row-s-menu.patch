@@ -23,8 +23,8 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/browser/ui/stedding/BUILD.gn           |  11 +-
  chrome/browser/ui/stedding/menu_rules.cc      |   4 +
  chrome/browser/ui/stedding/pin_lifecycle.cc   |   2 +
- chrome/browser/ui/stedding/tab_menu_verbs.cc  |  43 +++++-
- .../ui/stedding/tab_menu_verbs_unittest.cc    |  77 +++++++++++
+ chrome/browser/ui/stedding/tab_menu_verbs.cc  |  48 ++++++-
+ .../ui/stedding/tab_menu_verbs_unittest.cc    |  89 +++++++++++++
  chrome/browser/ui/stedding/tab_separators.cc  | 124 ++++++++++++++++++
  chrome/browser/ui/stedding/tab_separators.h   |  54 ++++++++
  chrome/browser/ui/tabs/tab_menu_model.cc      |  11 ++
@@ -39,7 +39,7 @@ Removable when: never; to be folded into the patches that own the code.
  .../stedding/sidebar_click_browsertest.cc     |   2 +
  chrome/test/stedding/tab_drop_browsertest.cc  |  21 +++
  .../tabs/public/tab_context_menu_command.h    |   4 +
- 23 files changed, 527 insertions(+), 5 deletions(-)
+ 23 files changed, 544 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/tab_separators.cc
  create mode 100644 chrome/browser/ui/stedding/tab_separators.h
 
@@ -228,7 +228,7 @@ index 4c7ca186755c0..82fa940de9b92 100644
    // Asleep: no renderer, the dimmed row, a load when it is next shown.
    fresh->SetWasDiscarded(true);
 diff --git a/chrome/browser/ui/stedding/tab_menu_verbs.cc b/chrome/browser/ui/stedding/tab_menu_verbs.cc
-index e9ab2ba76080b..ec10df2b6d2f4 100644
+index e9ab2ba76080b..de949a95834a9 100644
 --- a/chrome/browser/ui/stedding/tab_menu_verbs.cc
 +++ b/chrome/browser/ui/stedding/tab_menu_verbs.cc
 @@ -21,9 +21,11 @@
@@ -252,7 +252,7 @@ index e9ab2ba76080b..ec10df2b6d2f4 100644
      case TabStripModel::CommandSteddingSleepTab:
      case TabStripModel::CommandSteddingSleepOthersInSpace:
      case TabStripModel::CommandSteddingResetToHome:
-@@ -145,6 +149,16 @@ bool IsTabMenuVerbEnabled(const TabStripModel& tabs,
+@@ -145,6 +149,20 @@ bool IsTabMenuVerbEnabled(const TabStripModel& tabs,
      }
      case TabStripModel::CommandSteddingRenameTab:
        return rename == RenameInPlace::kAvailable;
@@ -264,12 +264,16 @@ index e9ab2ba76080b..ec10df2b6d2f4 100644
 +             parent->type() == tabs::TabCollection::Type::UNPINNED &&
 +             !HasSeparatorAbove(tab->GetContents());
 +    }
-+    case TabStripModel::CommandSteddingRemoveSeparator:
-+      return HasSeparatorAbove(tab->GetContents());
++    case TabStripModel::CommandSteddingRemoveSeparator: {
++      // On a row of the Space's list, where the line is drawn.
++      const tabs::TabCollection* const parent = tab->GetParentCollection();
++      return parent && parent->type() == tabs::TabCollection::Type::UNPINNED &&
++             HasSeparatorAbove(tab->GetContents());
++    }
      case TabStripModel::CommandSteddingSleepTab:
        return !TabsToSleep(WindowOf(tabs), tab, SleepScope::kThisTab).empty();
      case TabStripModel::CommandSteddingSleepOthersInSpace:
-@@ -186,11 +200,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+@@ -186,11 +204,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
  
    if (IsMoveEntry(command_id)) {
      // menus M1: the i-th Space other than the active one. The selection
@@ -285,7 +289,7 @@ index e9ab2ba76080b..ec10df2b6d2f4 100644
      return;
    }
    if (IsRouteEntry(command_id)) {
-@@ -246,6 +262,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+@@ -246,6 +266,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
        // selection.
        ShowPinHomeDialog(window, tab);
        return;
@@ -299,7 +303,7 @@ index e9ab2ba76080b..ec10df2b6d2f4 100644
      case TabStripModel::CommandCopyURL:
      case TabStripModel::CommandSteddingCopyMarkdownLink:
        CopyLink(window, tab->GetContents(),
-@@ -262,6 +285,22 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+@@ -262,6 +289,23 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
  bool IsTabMenuRowVisible(const TabStripModel& tabs, int index, int command_id) {
    const tabs::TabInterface* const tab =
        tabs.ContainsIndex(index) ? tabs.GetTabAtIndex(index) : nullptr;
@@ -312,10 +316,11 @@ index e9ab2ba76080b..ec10df2b6d2f4 100644
 +    if (has != (command_id == TabStripModel::CommandSteddingRemoveSeparator)) {
 +      return false;
 +    }
++    // Either item: a row in a folder or a split draws no line, and Remove
++    // there cleared the mark the row takes back to the list.
 +    const tabs::TabCollection* const parent =
 +        tab ? tab->GetParentCollection() : nullptr;
-+    if (!has && (!parent ||
-+                 parent->type() != tabs::TabCollection::Type::UNPINNED)) {
++    if (!parent || parent->type() != tabs::TabCollection::Type::UNPINNED) {
 +      return false;
 +    }
 +  }
@@ -323,7 +328,7 @@ index e9ab2ba76080b..ec10df2b6d2f4 100644
    if (tab && tab->IsPinned()) {
      kind = TabRowKind::kEssential;
 diff --git a/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc b/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
-index 787368d8bac14..2d59308ca5409 100644
+index 787368d8bac14..6e773fe39e109 100644
 --- a/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
 +++ b/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
 @@ -29,6 +29,7 @@
@@ -376,7 +381,7 @@ index 787368d8bac14..2d59308ca5409 100644
  // copy-link L4, menus M8: outside a web app's window Copy Link is Stedding's
  // clean copy on the horizontal strip too. The model's own Copy URL is a web
  // app's: it hit a DCHECK in a normal window and copied the tracking
-@@ -286,6 +322,47 @@ TEST_F(TabMenuVerbsTest, CopyLinkIsTheCleanCopy) {
+@@ -286,6 +322,59 @@ TEST_F(TabMenuVerbsTest, CopyLinkIsTheCleanCopy) {
  // spaces B10, pins H1, H6, H13: the per-Space pin pair has exactly one row
  // enabled, and the pinned-page rows come with the pin; only a web page can be
  // made the pinned page.
@@ -397,6 +402,18 @@ index 787368d8bac14..2d59308ca5409 100644
 +  EXPECT_FALSE(Enabled(tab, add));
 +  EXPECT_TRUE(Enabled(tab, remove));
 +  EXPECT_FALSE(IsTabMenuRowVisible(tabs(), IndexOf(tab), add));
++  EXPECT_TRUE(IsTabMenuRowVisible(tabs(), IndexOf(tab), remove));
++
++  // In a folder no line is drawn, and neither item is offered: Remove
++  // cleared the mark the row takes back to the list (it was offered once the
++  // mark was set). The mark waits for the row's return.
++  ASSERT_TRUE(tabs().AddToNewFolder({IndexOf(tab)}));
++  EXPECT_FALSE(IsTabMenuRowVisible(tabs(), IndexOf(tab), add));
++  EXPECT_FALSE(IsTabMenuRowVisible(tabs(), IndexOf(tab), remove))
++      << "Remove Separator offered on a folder's row";
++  EXPECT_FALSE(Enabled(tab, remove));
++  EXPECT_TRUE(HasSeparatorAbove(tab->GetContents()));
++  tabs().MoveTabOutOfFolders(IndexOf(tab));
 +  EXPECT_TRUE(IsTabMenuRowVisible(tabs(), IndexOf(tab), remove));
 +
 +  // A replaced page keeps it (a sleep, a jar change), and a session brings
