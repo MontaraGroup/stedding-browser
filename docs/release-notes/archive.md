@@ -2,6 +2,60 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 17
+
+No Google sign-in prompt on Windows, a tidier sidebar foot, and a command bar you can see on
+white pages. On Chromium 156.0.8078.48.
+
+### Changed
+
+- **An even sidebar foot.** History moves up to the end of the Archived line, which is now
+  smaller and quieter. The row below has Downloads at one end, **+** at the other, and your
+  Spaces centred between them.
+
+### Fixed
+
+- Stedding on Windows no longer asks you to sign in to Google at the first start (#38). It
+  happened on computers with Google's OAuth environment variables set. Stedding has no
+  browser sign-in; signing in to Google's websites works as before.
+- The command bar has a shadow and an edge, so it stands out over a white page (#37).
+- Moving focus with F6 could crash on Windows.
+
+### Install
+
+- **macOS** (Apple silicon, macOS 13 or later): `Stedding-0.3.0-beta.17-arm64.dmg`, signed and
+  notarized. Open it and drag Stedding to Applications.
+- **Windows** (10 and 11, x64): `Stedding-0.3.0-beta.17-win-x64.exe`, installs for you alone.
+  It is not signed yet: in SmartScreen click **More info**, then **Run anyway**, once.
+
+Installed copies update themselves (Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19).
+
+### Checksums (SHA-256)
+
+```
+e7fa67f2a643bf87d994362b3ff1e5f11797489fdf67e9a27971eed95832a6f2  Stedding-0.3.0-beta.17-arm64.dmg
+b81f2a275c617b8cc2c4ff13c0bcb99c2eaa08dc1bb4938e17622ee42feba0a6  Stedding-0.3.0-beta.17-win-x64.exe
+```
+
+### Known limits
+
+- The Windows installer is unsigned (`S-56`).
+- Netflix, Disney+ and Spotify's web player do not play yet (`S-270`).
+- Chromium 156's built-in list of sites that must load over HTTPS lapses on 13 December 2026;
+  a release on a newer base comes before then.
+
+### How it was checked
+
+Every unit and browser test on the Mac (1239; 663, and 185 one at a time) and on Windows, in
+the release build, the build with DCHECKs and the AddressSanitizer build (each 1234 unit tests;
+624, and 192 one at a time). On Windows an installed 0.3.0 beta 16 opened Google's sign-in on a
+fresh profile with the OAuth variables set, and this build opens the welcome with or without
+them. Apple's distribution check passed the signed app, and Gatekeeper accepted it from the
+downloaded image. On Windows the installer went over an installed 0.3.0 beta 16, was
+uninstalled keeping the profile and installed again. From the published feeds, a copy of beta 16
+on the Mac downloaded this version and offered it 45 seconds after launch, and an installed
+beta 16 on Windows had it 25 seconds after launch and was on it after a restart.
+
 ## Stedding 0.3.0 beta 16
 
 Peek you can tune, History and Downloads in the sidebar, the sidebar on the right, links
