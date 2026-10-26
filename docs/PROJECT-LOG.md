@@ -30,6 +30,20 @@ a hairline edge (commandbar K36). Issues 35 and 36 ask for features and wait for
 ran clean on Windows (r119), as did both of its timing fixes; F6's crash was fixed before it.
 A read of this week's folder-sync and shortcut patches found no fault.
 
+Released as 0.3.0 beta 17 (v0.3.0-beta.17, latest), both platforms, both feeds. Checked on the
+release tree: Mac 1239 unit, 663 browser and 185 one at a time; Windows release, DCHECK and
+AddressSanitizer builds each 1234 unit, 624 browser and 192 one at a time, all passing. The
+signed app passed Apple's distribution check and Gatekeeper from the downloaded image; on a
+fresh profile it opens the welcome. The Windows installer upgraded an installed beta 16,
+uninstalled keeping the profile and installed again, its `chrome.dll` the tested build's. From
+the published feeds a beta 16 copy on the Mac offered beta 17 in 45 seconds; on Windows the
+first try, a minute after the feed was pushed, read GitHub's cached feed without it, and the
+second had it in 25 seconds and was on it after a restart. The Homebrew cask names beta 17.
+The site's Rebuild workflow did not start (GitHub refused the run over the account's billing),
+so an empty commit rebuilt it through Cloudflare's Git integration; stedding.dev serves beta 17,
+seen from outside. On the owner's home network stedding.dev now resolves to a filter that
+redirects it to a safebrowse.io warning, on both machines.
+
 ## 2026-10-25, evening -- 0.3.0 beta 16 released
 
 The day's features and the owner's notes went out as 0.3.0 beta 16 (v0.3.0-beta.16, the
