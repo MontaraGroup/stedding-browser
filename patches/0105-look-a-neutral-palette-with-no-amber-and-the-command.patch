@@ -25,9 +25,9 @@ Removable when: never; to be folded into the patches that own the code.
  .../resources/stedding_archive/app.css        |  2 +-
  .../resources/stedding_welcome/app.css        | 50 ++++++++--------
  .../browser/resources/stedding_welcome/app.ts |  2 +-
- .../browser/ui/color/stedding_color_mixer.cc  | 16 ++---
+ .../browser/ui/color/stedding_color_mixer.cc  | 21 ++++---
  .../browser/ui/color/stedding_color_mixer.h   |  2 +-
- .../ui/color/stedding_color_mixer_unittest.cc |  2 +-
+ .../ui/color/stedding_color_mixer_unittest.cc | 35 ++++++++++-
  .../theme/page_bar_color_supplier_unittest.cc |  2 +-
  .../page_theme_color_controller_unittest.cc   | 24 ++++----
  chrome/browser/ui/tabs/tab_favicon_theming.cc |  2 +-
@@ -42,7 +42,7 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/test/stedding/BUILD.gn                 |  1 +
  .../test/stedding/edit_space_browsertest.cc   | 12 ++++
  chrome/test/stedding/tab_drop_browsertest.cc  |  2 +-
- 20 files changed, 179 insertions(+), 61 deletions(-)
+ 20 files changed, 216 insertions(+), 62 deletions(-)
 
 diff --git a/chrome/browser/resources/stedding_archive/app.css b/chrome/browser/resources/stedding_archive/app.css
 index 1c9beb3beaa01..a8d9df2631c8e 100644
@@ -224,7 +224,7 @@ index 80c014ebbd5db..faf2d2299d070 100644
        // with the swatch chosen below.
        const looks = el('div', 'looks');
 diff --git a/chrome/browser/ui/color/stedding_color_mixer.cc b/chrome/browser/ui/color/stedding_color_mixer.cc
-index e118f03dc9f50..f2b5382c91249 100644
+index e118f03dc9f50..41ee0e89c3d3b 100644
 --- a/chrome/browser/ui/color/stedding_color_mixer.cc
 +++ b/chrome/browser/ui/color/stedding_color_mixer.cc
 @@ -21,10 +21,12 @@
@@ -257,7 +257,7 @@ index e118f03dc9f50..f2b5382c91249 100644
    // on the blue; opaque, since the strip paints a divider at its own opacity
    // whatever the colour's alpha.
    mixer[kColorNewTabButtonBackgroundFrameActive] = {SK_ColorTRANSPARENT};
-@@ -156,7 +158,7 @@ void AddSteddingColorMixer(ui::ColorProvider* provider,
+@@ -156,11 +158,14 @@ void AddSteddingColorMixer(ui::ColorProvider* provider,
    // and a translucent tint for the active one in dark. BlendForMinContrast
    // DCHECKs that its background is opaque and reads a transparent one as
    // black: in light mode the inactive rows' text came out a pale grey on the
@@ -266,6 +266,14 @@ index e118f03dc9f50..f2b5382c91249 100644
    // DCHECKs on stopped at its first window. The ratios are Chromium's own.
    {
      const ui::ColorTransform ground = {window};
+-    const ui::ColorTransform toolbar_text = {kColorToolbarText};
++    // Chromium's toolbar text before a page's colour: the page bar takes
++    // kColorToolbarText for the address row (toolbar T15), and rows measured
++    // from it shifted a shade whenever a page's colour arrived (BACKLOG S-316).
++    const ui::ColorTransform toolbar_text = {kColorToolbarTextDefault};
+     const auto on_ground = [&ground](ui::ColorTransform text, float contrast) {
+       return ui::BlendForMinContrast(std::move(text), ground,
+                                      ui::GetColorWithMaxContrast(ground),
 diff --git a/chrome/browser/ui/color/stedding_color_mixer.h b/chrome/browser/ui/color/stedding_color_mixer.h
 index 9f553181cab9e..2571e5cd3e963 100644
 --- a/chrome/browser/ui/color/stedding_color_mixer.h
@@ -280,10 +288,64 @@ index 9f553181cab9e..2571e5cd3e963 100644
  // still overrides it.
  // docs/features/private.md V1: a private window's ground, flat graphite in
 diff --git a/chrome/browser/ui/color/stedding_color_mixer_unittest.cc b/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
-index 5b8dfff1a5a7b..734ac7036e49f 100644
+index 5b8dfff1a5a7b..5485370dfe70d 100644
 --- a/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
 +++ b/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
-@@ -113,7 +113,7 @@ TEST(SteddingColorMixerTest, InactiveRowsHaveNoFill) {
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/color/stedding_color_mixer.h"
+ 
++#include <optional>
++
+ #include "base/test/scoped_feature_list.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/color/chrome_color_mixers.h"
+@@ -12,9 +14,12 @@
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/color/color_id.h"
++#include "ui/color/color_mixer.h"
+ #include "ui/color/color_provider.h"
+ #include "ui/color/color_mixers.h"
+ #include "ui/color/color_provider_key.h"
++#include "ui/color/color_recipe.h"
++#include "ui/color/color_transform.h"
+ #include "ui/gfx/color_utils.h"
+ 
+ namespace {
+@@ -109,11 +114,39 @@ TEST(SteddingColorMixerTest, InactiveRowsHaveNoFill) {
+   }
+ }
+ 
++// tabs R4, folders F12 (BACKLOG S-316): a page's colour does not reach the
++// rows' text. The page bar sets kColorToolbarText for the address row; rows
++// measured from it shifted a shade whenever a page's colour arrived, and a
++// folder's header was drawn again for it.
++TEST(SteddingColorMixerTest, APagesColourLeavesTheRowsTextAlone) {
++  base::test::ScopedFeatureList features(stedding::kArcStyleWindow);
++  for (const auto mode : {ui::ColorProviderKey::ColorMode::kDark,
++                          ui::ColorProviderKey::ColorMode::kLight}) {
++    ui::ColorProviderKey key;
++    key.color_mode = mode;
++    const auto row_text = [&](std::optional<SkColor> page_text) {
++      ui::ColorProvider provider;
++      ui::AddColorMixers(&provider, key);
++      AddChromeColorMixers(&provider, key);
++      // As the page bar's supplier does, after every other mixer.
++      if (page_text) {
++        provider.AddMixer()[kColorToolbarText] =
++            ui::ColorTransform(SkColor{*page_text});
++      }
++      provider.GenerateColorMapForTesting();
++      return provider.GetColor(kColorTabForegroundInactiveFrameActive);
++    };
++    const SkColor plain = row_text(std::nullopt);
++    EXPECT_EQ(plain, row_text(SK_ColorBLACK)) << "a light page's colour";
++    EXPECT_EQ(plain, row_text(SK_ColorWHITE)) << "a dark page's colour";
++  }
++}
++
+ // A row's text is read against the ground the rows sit on, in both colour
  // modes and both frame states. Chromium measures it against the row's own
  // fill, which Stedding leaves transparent (inactive rows) or translucent (the
  // active one in dark): BlendForMinContrast read that as black, so in light
