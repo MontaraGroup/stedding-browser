@@ -20,6 +20,32 @@ refer to `docs/features/<feature>.md`.
 
 ### Next
 
+**This round (the owner, 2026-10-26), in this order. Nothing new from GitHub issues meanwhile.**
+
+1. `S-306` **Shorter test runs.** The suites take too long (Mac about 40 minutes, Windows about
+   45 per build, three builds). Measure each suite's time per test first, then: merge browser
+   tests that start a browser for one assertion each into one test per behaviour group where the
+   setup is the same; drop tests that check what another test already checks; replace fixed
+   waits with waits for the condition; move pure-logic checks from browser tests to unit tests.
+   Every spec row keeps a test that names it. Done when the same coverage runs in clearly less
+   time, measured before and after on both machines.
+2. `S-307` **A review of all code and tests by other models**, read-only (nothing built or run
+   by the reviewers): Codex (gpt-5.5) and Cursor over the series by area, and over the tests
+   (wrong waits, assertions that cannot fail, tests that miss their spec row). Each finding is
+   checked in the code before it counts; real ones are fixed in the patch that owns the code,
+   each with a test, and committed as they land.
+3. `S-308` **Peek as Arc does it, explained.** Arc opens a peek on a plain click from a pinned
+   tab or Favorite to another site, and its Settings turn that off; so the default stays a click
+   (`docs/features/peek.md` P10, P18). The welcome's question says what a peek is, in one line,
+   with the choices (click, hold, off). The first peek a profile opens shows a one-time note in
+   the peek itself: what it is, ⌘O to keep it as a tab, and a link to the setting; it never
+   shows again once dismissed or acted on. Arc's Shift-click peek from any tab waits for the
+   owner.
+4. `S-309` **Docs brought up to date and trimmed**: every page true to the code after 1-3,
+   repeated or stale passages removed, history kept in `docs/PROJECT-LOG.md` and the archives.
+
+Commits land as each step does; a release only on the owner's word.
+
 Next (the owner, 2026-10-23, evening), in this order: Arc import on Windows (`S-81`, done 2026-10-24, before Arc users must move on December 22) and Peek (`S-93`). The pin moves to Chrome 157 once Google rolls it out to more than 1% of users (`S-278`, issue 21), between those as it lands. Then sync through a folder the user picks (`S-282`, issue 20). After those: built-in ad and tracker blocking (`S-88`) and Linux (`S-216`). Separators in the sidebar come later (`S-286`, issue 19). The field these come from is `docs/VISION.md`, "The Arc-style field after the sunset notice". The owner's own step waiting: the Widevine licence application (`S-270`).
 
 The owner's "wanted next" (2026-10-01). On 2026-10-18 the owner asked for everything Chrome does that Stedding does not to be implemented next, after the round under way, Windows-only items aside (a system install only if it makes sense, `S-169`). The rows below come from the comparison of 2026-10-18 (Chrome 156's code at the pin, Chrome's field-trial configuration of that day, and both browsers installed on the Mac); each says what Chrome does, what Stedding does, and the recommendation.
