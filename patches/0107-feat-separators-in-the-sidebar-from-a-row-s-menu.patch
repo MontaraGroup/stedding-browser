@@ -1,0 +1,871 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 22:37:55 -0400
+Subject: feat: separators in the sidebar, from a row's menu
+
+A row of the Space's list -- a Space pin or a tab -- can have a thin line
+above it, as faint as the Clear line, in a band that stands the row lower,
+to group the rows without a folder. Right-click a row for Add Separator
+Above, or Remove Separator on a row that has one; nothing else adds one.
+The line is the row's: it moves with it, goes when it closes, is carried
+when the row's page is replaced and comes back after a restart as a
+per-tab session value, as a tab's name does (sidebar Y45, GitHub issue
+19). Not yet: a label, separators in folders, in the export file and in
+folder sync.
+
+Why: the owner, 2026-10-26 (GitHub issue 19, "build it now").
+Removable when: never; to be folded into the patches that own the code.
+---
+ chrome/app/stedding_strings.grdp              |   8 ++
+ chrome/browser/ui/browser_tabrestore.cc       |   3 +
+ chrome/browser/ui/spaces/space_model.cc       |   3 +
+ .../ui/spaces/space_storage_partition.cc      |   3 +
+ chrome/browser/ui/stedding/BUILD.gn           |  11 +-
+ chrome/browser/ui/stedding/menu_rules.cc      |   4 +
+ chrome/browser/ui/stedding/pin_lifecycle.cc   |   2 +
+ chrome/browser/ui/stedding/tab_menu_verbs.cc  |  37 ++++++
+ .../ui/stedding/tab_menu_verbs_unittest.cc    |  42 ++++++
+ chrome/browser/ui/stedding/tab_separators.cc  | 124 ++++++++++++++++++
+ chrome/browser/ui/stedding/tab_separators.h   |  54 ++++++++
+ chrome/browser/ui/tabs/tab_menu_model.cc      |  11 ++
+ chrome/browser/ui/tabs/tab_strip_model.cc     |   4 +
+ .../tabs/common/root_tab_collection_node.cc   |   2 +
+ .../browser/ui/views/tabs/common/tab_view.cc  |  17 +++
+ .../browser/ui/views/tabs/common/tab_view.h   |   9 ++
+ .../common/unpinned_tab_container_view.cc     |  32 +++++
+ .../tabs/common/unpinned_tab_container_view.h |   3 +
+ .../unpinned_tab_container_view_layout.cc     |   9 ++
+ chrome/test/stedding/restore_browsertest.cc   |  52 ++++++++
+ .../stedding/sidebar_click_browsertest.cc     |   2 +
+ .../tabs/public/tab_context_menu_command.h    |   4 +
+ 22 files changed, 434 insertions(+), 2 deletions(-)
+ create mode 100644 chrome/browser/ui/stedding/tab_separators.cc
+ create mode 100644 chrome/browser/ui/stedding/tab_separators.h
+
+diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
+index bd11b31359865..93c867df2ac06 100644
+--- a/chrome/app/stedding_strings.grdp
++++ b/chrome/app/stedding_strings.grdp
+@@ -267,6 +267,14 @@
+     Show this page beside the pinned tab it came from
+   </message>
+ 
++  <!-- Separators in the sidebar (docs/features/sidebar.md Y45). -->
++  <message name="IDS_STEDDING_ADD_SEPARATOR" desc="In Title Case: Item of a sidebar row's context menu that draws a thin line above the row, to group the rows above it apart from the rows below without a folder.">
++    Add Separator Above
++  </message>
++  <message name="IDS_STEDDING_REMOVE_SEPARATOR" desc="In Title Case: Item of a sidebar row's context menu that takes away the thin line drawn above the row.">
++    Remove Separator
++  </message>
++
+   <!-- Peek's note on the first peeks (docs/features/peek.md P19). -->
+   <message name="IDS_STEDDING_PEEK_NOTICE" desc="A one-time notice at the top of a peek (a small window over the browser window that shows a link opened from a pinned tab), shown on the first peeks a person opens. It says what the window is and that the pinned tab stayed as it was. 'Open as Tab' is the name of the peek's button that keeps the page.">
+     A link from a pinned tab to another site opens here, in a peek, and the pinned tab stays as it was. Open as Tab keeps this page.
+diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
+index fbc1c21a108a0..a1963043fe19f 100644
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -25,6 +25,7 @@
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+@@ -125,6 +126,8 @@ std::unique_ptr<WebContents> CreateRestoredTab(
+ 
+   spaces::RestoreSpaceFromExtraData(web_contents.get(), extra_data);
+   stedding::RestoreTabNameFromExtraData(web_contents.get(), extra_data);
++  // sidebar Y45: and the separator above its row.
++  stedding::RestoreTabSeparatorFromExtraData(web_contents.get(), extra_data);
+   // tabs R58: the tab's place under the tab that opened it.
+   stedding::RestoreTabParentFromExtraData(web_contents.get(), extra_data);
+   // archive A1 (PLAN.md TST-18): a tab the session restores goes on from the
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 49d10c82b14ff..e76ee9e99376d 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -51,6 +51,7 @@
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/pin_home.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+@@ -253,6 +254,7 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+         "spaces", base::BindRepeating(&SpaceModel::AppendRebuildCommands));
+     // Tab names ride the same rebuild (docs/features/tabs.md R16).
+     stedding::RegisterTabNameSessionRebuild();
++    stedding::RegisterTabSeparatorSessionRebuild();
+     // So do child tabs' places (docs/features/tabs.md R58).
+     stedding::RegisterTabParentSessionRebuild();
+     return true;
+@@ -1328,6 +1330,7 @@ void SpaceModel::OnTabStripModelChanged(
+     // a turn later, outside this notification.
+     const TabStripModelChange::Replace* const replace = change.GetReplace();
+     stedding::CarryTabName(replace->old_contents, replace->new_contents);
++    stedding::CarryTabSeparator(replace->old_contents, replace->new_contents);
+     stedding::CarryTabParent(replace->old_contents, replace->new_contents);
+     CarryClosedFolderPlace(replace->old_contents, replace->new_contents);
+     // A rebind of this model's own already puts the contents in the Space's
+diff --git a/chrome/browser/ui/spaces/space_storage_partition.cc b/chrome/browser/ui/spaces/space_storage_partition.cc
+index 84ad428da9677..8fc5bd703ec5b 100644
+--- a/chrome/browser/ui/spaces/space_storage_partition.cc
++++ b/chrome/browser/ui/spaces/space_storage_partition.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/ui/spaces/space_registry.h"
+ #include "chrome/browser/ui/spaces/tab_space_restore_data.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "components/sessions/content/content_serialized_navigation_builder.h"
+@@ -308,6 +309,7 @@ void RebindTab(TabStripModel* tabs,
+   }
+   // The user's name for the tab rides on the contents (tabs R14).
+   stedding::CarryTabName(old_contents, fresh.get());
++  stedding::CarryTabSeparator(old_contents, fresh.get());
+   stedding::CarryTabParent(old_contents, fresh.get());
+   if (asleep) {
+     fresh->SetWasDiscarded(true);
+@@ -385,6 +387,7 @@ bool MoveFreshTabToSpaceJar(TabStripModel* tabs,
+   std::unique_ptr<content::WebContents> fresh =
+       content::WebContents::Create(params);
+   stedding::CarryTabName(old_contents, fresh.get());
++  stedding::CarryTabSeparator(old_contents, fresh.get());
+   stedding::CarryTabParent(old_contents, fresh.get());
+   // The old contents showed a new-tab page at most; they go now, before the
+   // address loads in their place.
+diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
+index ff0daee67c43f..31ad2c106a956 100644
+--- a/chrome/browser/ui/stedding/BUILD.gn
++++ b/chrome/browser/ui/stedding/BUILD.gn
+@@ -330,8 +330,14 @@ source_set("bookmarks_to_pins_dialog") {
+ 
+ # The one answer to "should this animate" (docs/features/motion.md).
+ source_set("tab_names") {
+-  public = [ "tab_names.h" ]
+-  sources = [ "tab_names.cc" ]
++  public = [
++    "tab_names.h",
++    "tab_separators.h",
++  ]
++  sources = [
++    "tab_names.cc",
++    "tab_separators.cc",
++  ]
+   deps = [
+     "//base",
+     "//chrome/browser/profiles:profile",
+@@ -524,6 +530,7 @@ source_set("tab_menu_verbs") {
+     ":pin_home_dialog",
+     ":pin_lifecycle",
+     ":sleep_tabs",
++    ":tab_names",
+     "//base",
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui/browser_window",
+diff --git a/chrome/browser/ui/stedding/menu_rules.cc b/chrome/browser/ui/stedding/menu_rules.cc
+index 2d22f17a9f7fe..51d408ab818b8 100644
+--- a/chrome/browser/ui/stedding/menu_rules.cc
++++ b/chrome/browser/ui/stedding/menu_rules.cc
+@@ -65,6 +65,10 @@ bool IsTabMenuCommandVisible(TabRowKind kind, int command_id) {
+     case TabStripModel::CommandSteddingEditHome:
+       // Only a pin of either tier has a home (pins H1, H15).
+       return kind != TabRowKind::kPlain;
++    case TabStripModel::CommandSteddingAddSeparator:
++    case TabStripModel::CommandSteddingRemoveSeparator:
++      // sidebar Y45: the essentials are a grid, not rows.
++      return kind != TabRowKind::kEssential;
+     case TabStripModel::CommandMoveTabToNewFolder:
+     case TabStripModel::CommandSteddingMoveToSpaceMenu:
+     case TabStripModel::CommandSteddingRouteToSpaceMenu:
+diff --git a/chrome/browser/ui/stedding/pin_lifecycle.cc b/chrome/browser/ui/stedding/pin_lifecycle.cc
+index 4c7ca186755c0..82fa940de9b92 100644
+--- a/chrome/browser/ui/stedding/pin_lifecycle.cc
++++ b/chrome/browser/ui/stedding/pin_lifecycle.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/ui/stedding/sleep_tabs.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/stedding/tab_parents.h"
+ #include "chrome/browser/ui/tabs/tab_change_type.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -178,6 +179,7 @@ void ReplaceWithHomeAsleep(TabStripModel* tabs,
+   fresh->GetController().Restore(0, content::RestoreType::kRestored, &entries);
+   // The name the user gave the pin rides on its contents (tabs R14).
+   CarryTabName(old_contents, fresh.get());
++  CarryTabSeparator(old_contents, fresh.get());
+   CarryTabParent(old_contents, fresh.get());
+   // Asleep: no renderer, the dimmed row, a load when it is next shown.
+   fresh->SetWasDiscarded(true);
+diff --git a/chrome/browser/ui/stedding/tab_menu_verbs.cc b/chrome/browser/ui/stedding/tab_menu_verbs.cc
+index e9ab2ba76080b..88b19e23d2870 100644
+--- a/chrome/browser/ui/stedding/tab_menu_verbs.cc
++++ b/chrome/browser/ui/stedding/tab_menu_verbs.cc
+@@ -21,9 +21,11 @@
+ #include "chrome/browser/ui/stedding/pin_home_dialog.h"
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/sleep_tabs.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+ #include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_collection.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "url/gurl.h"
+@@ -85,6 +87,8 @@ bool IsTabMenuVerb(const TabStripModel& tabs, int command_id) {
+     case TabStripModel::CommandSpacePin:
+     case TabStripModel::CommandSpaceUnpin:
+     case TabStripModel::CommandSteddingRenameTab:
++    case TabStripModel::CommandSteddingAddSeparator:
++    case TabStripModel::CommandSteddingRemoveSeparator:
+     case TabStripModel::CommandSteddingSleepTab:
+     case TabStripModel::CommandSteddingSleepOthersInSpace:
+     case TabStripModel::CommandSteddingResetToHome:
+@@ -145,6 +149,16 @@ bool IsTabMenuVerbEnabled(const TabStripModel& tabs,
+     }
+     case TabStripModel::CommandSteddingRenameTab:
+       return rename == RenameInPlace::kAvailable;
++    case TabStripModel::CommandSteddingAddSeparator: {
++      // sidebar Y45: a row of the Space's list itself -- not an essential,
++      // a split's pane or a folder's row -- that has none yet.
++      const tabs::TabCollection* const parent = tab->GetParentCollection();
++      return !tab->IsPinned() && parent &&
++             parent->type() == tabs::TabCollection::Type::UNPINNED &&
++             !HasSeparatorAbove(tab->GetContents());
++    }
++    case TabStripModel::CommandSteddingRemoveSeparator:
++      return HasSeparatorAbove(tab->GetContents());
+     case TabStripModel::CommandSteddingSleepTab:
+       return !TabsToSleep(WindowOf(tabs), tab, SleepScope::kThisTab).empty();
+     case TabStripModel::CommandSteddingSleepOthersInSpace:
+@@ -246,6 +260,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+       // selection.
+       ShowPinHomeDialog(window, tab);
+       return;
++    case TabStripModel::CommandSteddingAddSeparator:
++    case TabStripModel::CommandSteddingRemoveSeparator:
++      // sidebar Y45: above the row the menu was opened on.
++      SetSeparatorAbove(
++          window, tab,
++          command_id == TabStripModel::CommandSteddingAddSeparator);
++      return;
+     case TabStripModel::CommandCopyURL:
+     case TabStripModel::CommandSteddingCopyMarkdownLink:
+       CopyLink(window, tab->GetContents(),
+@@ -262,6 +283,22 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+ bool IsTabMenuRowVisible(const TabStripModel& tabs, int index, int command_id) {
+   const tabs::TabInterface* const tab =
+       tabs.ContainsIndex(index) ? tabs.GetTabAtIndex(index) : nullptr;
++  // sidebar Y45: the row shows the one of the pair that applies to it, and
++  // only a row of the Space's list itself takes one: not a split's pane or a
++  // folder's row.
++  if (command_id == TabStripModel::CommandSteddingAddSeparator ||
++      command_id == TabStripModel::CommandSteddingRemoveSeparator) {
++    const bool has = tab && HasSeparatorAbove(tab->GetContents());
++    if (has != (command_id == TabStripModel::CommandSteddingRemoveSeparator)) {
++      return false;
++    }
++    const tabs::TabCollection* const parent =
++        tab ? tab->GetParentCollection() : nullptr;
++    if (!has && (!parent ||
++                 parent->type() != tabs::TabCollection::Type::UNPINNED)) {
++      return false;
++    }
++  }
+   TabRowKind kind = TabRowKind::kPlain;
+   if (tab && tab->IsPinned()) {
+     kind = TabRowKind::kEssential;
+diff --git a/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc b/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
+index 787368d8bac14..88092383176ab 100644
+--- a/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
++++ b/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
+@@ -29,6 +29,7 @@
+ #include "chrome/browser/ui/spaces/space_storage_partition.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/tabs/tab_menu_model.h"
+ #include "chrome/browser/ui/tabs/tab_menu_model_delegate.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -286,6 +287,47 @@ TEST_F(TabMenuVerbsTest, CopyLinkIsTheCleanCopy) {
+ // spaces B10, pins H1, H6, H13: the per-Space pin pair has exactly one row
+ // enabled, and the pinned-page rows come with the pin; only a web page can be
+ // made the pinned page.
++// sidebar Y45 (GitHub issue 19): Add Separator Above on a row of the Space's
++// list puts a line above it, and Remove Separator takes it away; each row
++// shows the one that applies, and an essential shows neither.
++TEST_F(TabMenuVerbsTest, ASeparatorGoesAboveTheRowAndComesOff) {
++  tabs::TabInterface* const tab = OpenTab();
++  const int add = TabStripModel::CommandSteddingAddSeparator;
++  const int remove = TabStripModel::CommandSteddingRemoveSeparator;
++  EXPECT_TRUE(Enabled(tab, add));
++  EXPECT_FALSE(Enabled(tab, remove));
++  EXPECT_TRUE(IsTabMenuRowVisible(tabs(), IndexOf(tab), add));
++  EXPECT_FALSE(IsTabMenuRowVisible(tabs(), IndexOf(tab), remove));
++
++  Execute(tab, add);
++  EXPECT_TRUE(HasSeparatorAbove(tab->GetContents()));
++  EXPECT_FALSE(Enabled(tab, add));
++  EXPECT_TRUE(Enabled(tab, remove));
++  EXPECT_FALSE(IsTabMenuRowVisible(tabs(), IndexOf(tab), add));
++  EXPECT_TRUE(IsTabMenuRowVisible(tabs(), IndexOf(tab), remove));
++
++  // A replaced page keeps it (a sleep, a jar change), and a session brings
++  // it back.
++  std::unique_ptr<content::WebContents> fresh =
++      content::WebContents::Create(content::WebContents::CreateParams(
++          tab->GetContents()->GetBrowserContext()));
++  CarryTabSeparator(tab->GetContents(), fresh.get());
++  EXPECT_TRUE(HasSeparatorAbove(fresh.get()));
++  std::unique_ptr<content::WebContents> restored =
++      content::WebContents::Create(content::WebContents::CreateParams(
++          tab->GetContents()->GetBrowserContext()));
++  RestoreTabSeparatorFromExtraData(restored.get(),
++                                   {{kSessionTabSeparatorKey, "1"}});
++  EXPECT_TRUE(HasSeparatorAbove(restored.get()));
++
++  Execute(tab, remove);
++  EXPECT_FALSE(HasSeparatorAbove(tab->GetContents()));
++
++  tabs().SetTabPinned(IndexOf(tab), true);
++  EXPECT_FALSE(Enabled(tab, add)) << "an essential is a card, not a row";
++  EXPECT_FALSE(IsTabMenuRowVisible(tabs(), IndexOf(tab), add));
++}
++
+ TEST_F(TabMenuVerbsTest, SpacePinAndThePinnedPage) {
+   tabs::TabInterface* const tab = OpenTab();
+   EXPECT_TRUE(Enabled(tab, TabStripModel::CommandSpacePin));
+diff --git a/chrome/browser/ui/stedding/tab_separators.cc b/chrome/browser/ui/stedding/tab_separators.cc
+new file mode 100644
+index 0000000000000..b73575b82406e
+--- /dev/null
++++ b/chrome/browser/ui/stedding/tab_separators.cc
+@@ -0,0 +1,124 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "chrome/browser/ui/stedding/tab_separators.h"
++
++#include <tuple>
++
++#include "base/functional/bind.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_service.h"
++#include "chrome/browser/sessions/session_service_factory.h"
++#include "chrome/browser/sessions/stedding_session_rebuild.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_change_type.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/sessions/content/session_tab_helper.h"
++#include "components/sessions/core/session_service_commands.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace stedding {
++namespace {
++
++// The mark rides on the WebContents, so it is there before the TabInterface
++// exists on restore, as a tab's name is (tab_names.cc).
++class TabSeparatorData
++    : public content::WebContentsUserData<TabSeparatorData> {
++ public:
++  ~TabSeparatorData() override = default;
++
++ private:
++  friend class content::WebContentsUserData<TabSeparatorData>;
++  explicit TabSeparatorData(content::WebContents* contents)
++      : content::WebContentsUserData<TabSeparatorData>(*contents) {}
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(TabSeparatorData);
++
++// "1": a separator; nothing, or "", none. A label may come later under its
++// own key.
++constexpr char kSeparatorValue[] = "1";
++
++void AppendRebuildCommands(BrowserWindowInterface* browser,
++                           SessionRebuildCommands* commands) {
++  TabStripModel* const tabs = browser->GetTabStripModel();
++  for (int i = 0; i < tabs->count(); ++i) {
++    content::WebContents* const contents = tabs->GetWebContentsAt(i);
++    if (!HasSeparatorAbove(contents)) {
++      continue;
++    }
++    const SessionID tab_id = sessions::SessionTabHelper::IdForTab(contents);
++    if (!tab_id.is_valid()) {
++      continue;
++    }
++    commands->push_back(sessions::CreateAddTabExtraDataCommand(
++        tab_id, kSessionTabSeparatorKey, kSeparatorValue));
++  }
++}
++
++}  // namespace
++
++bool HasSeparatorAbove(const content::WebContents* contents) {
++  return contents && TabSeparatorData::FromWebContents(contents);
++}
++
++void SetSeparatorAbove(BrowserWindowInterface* browser,
++                       tabs::TabInterface* tab,
++                       bool separator) {
++  content::WebContents* const contents = tab ? tab->GetContents() : nullptr;
++  if (!contents || HasSeparatorAbove(contents) == separator) {
++    return;
++  }
++  if (separator) {
++    TabSeparatorData::CreateForWebContents(contents);
++  } else {
++    contents->RemoveUserData(TabSeparatorData::UserDataKey());
++  }
++  if (!browser) {
++    return;
++  }
++  if (SessionService* const session_service =
++          SessionServiceFactory::GetForProfile(browser->GetProfile())) {
++    const SessionID tab_id = sessions::SessionTabHelper::IdForTab(contents);
++    if (tab_id.is_valid()) {
++      session_service->AddTabExtraData(browser->GetSessionID(), tab_id,
++                                       kSessionTabSeparatorKey,
++                                       separator ? kSeparatorValue : "");
++    }
++  }
++  // The row reads the mark when its tab's data changes (TabView).
++  browser->GetTabStripModel()->NotifyTabChanged(tab, TabChangeType::kAll);
++}
++
++void CarryTabSeparator(content::WebContents* from, content::WebContents* to) {
++  if (to && HasSeparatorAbove(from) && !HasSeparatorAbove(to)) {
++    TabSeparatorData::CreateForWebContents(to);
++  }
++}
++
++void RestoreTabSeparatorFromExtraData(
++    content::WebContents* contents,
++    const std::map<std::string, std::string>& extra_data) {
++  const auto it = extra_data.find(kSessionTabSeparatorKey);
++  if (!contents || it == extra_data.end() || it->second != kSeparatorValue ||
++      HasSeparatorAbove(contents)) {
++    return;
++  }
++  TabSeparatorData::CreateForWebContents(contents);
++}
++
++void RegisterTabSeparatorSessionRebuild() {
++  static const bool registered = [] {
++    AddSessionRebuildProvider("tab_separators",
++                              base::BindRepeating(&AppendRebuildCommands));
++    return true;
++  }();
++  std::ignore = registered;
++}
++
++}  // namespace stedding
+diff --git a/chrome/browser/ui/stedding/tab_separators.h b/chrome/browser/ui/stedding/tab_separators.h
+new file mode 100644
+index 0000000000000..3d003a2ca0224
+--- /dev/null
++++ b/chrome/browser/ui/stedding/tab_separators.h
+@@ -0,0 +1,54 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_STEDDING_TAB_SEPARATORS_H_
++#define CHROME_BROWSER_UI_STEDDING_TAB_SEPARATORS_H_
++
++#include <map>
++#include <string>
++
++class BrowserWindowInterface;
++
++namespace content {
++class WebContents;
++}  // namespace content
++
++namespace tabs {
++class TabInterface;
++}  // namespace tabs
++
++namespace stedding {
++
++// docs/features/sidebar.md Y45 (GitHub issue 19): a sidebar row can have a
++// separator above it, a thin line that groups the rows above from the rows
++// below without a folder. It is the row's: it moves with the row, goes with
++// a closed row, and is kept across restarts as per-tab session extra data
++// under this key.
++inline constexpr char kSessionTabSeparatorKey[] = "stedding.separator_above";
++
++// Whether `contents`'s row has a separator above it.
++bool HasSeparatorAbove(const content::WebContents* contents);
++
++// Adds or removes the separator above `tab`'s row, writes it to the
++// session, and has the row drawn again.
++void SetSeparatorAbove(BrowserWindowInterface* browser,
++                       tabs::TabInterface* tab,
++                       bool separator);
++
++// The separator rides on the WebContents: a replaced tab's contents (a jar
++// change, a pin's reset) take it with them.
++void CarryTabSeparator(content::WebContents* from, content::WebContents* to);
++
++// Session restore: adopt the separator stored with a restored tab, if any.
++void RestoreTabSeparatorFromExtraData(
++    content::WebContents* contents,
++    const std::map<std::string, std::string>& extra_data);
++
++// Registers the session-rebuild provider once per process
++// (chrome/browser/sessions/stedding_session_rebuild.h).
++void RegisterTabSeparatorSessionRebuild();
++
++}  // namespace stedding
++
++#endif  // CHROME_BROWSER_UI_STEDDING_TAB_SEPARATORS_H_
+diff --git a/chrome/browser/ui/tabs/tab_menu_model.cc b/chrome/browser/ui/tabs/tab_menu_model.cc
+index fe868ce782e91..0a7b7ce187149 100644
+--- a/chrome/browser/ui/tabs/tab_menu_model.cc
++++ b/chrome/browser/ui/tabs/tab_menu_model.cc
+@@ -268,6 +268,12 @@ void TabMenuModel::BuildStedding(int index) {
+   AddItem(TabStripModel::CommandMoveTabToNewFolder,
+           l10n_util::GetPluralStringFUTF16(
+               IDS_STEDDING_TAB_CXMENU_MOVE_TO_NEW_FOLDER, num_tabs));
++  // sidebar Y45: a line above the row, or off again; beside the folder, the
++  // other way to group rows, and the row shows the one that applies.
++  AddItemWithStringId(TabStripModel::CommandSteddingAddSeparator,
++                      IDS_STEDDING_ADD_SEPARATOR);
++  AddItemWithStringId(TabStripModel::CommandSteddingRemoveSeparator,
++                      IDS_STEDDING_REMOVE_SEPARATOR);
+   // A split row arranges its panes; any other row can start a split (M7,
+   // splits J1).
+   if (tab_strip_->GetSplitForTab(index).has_value()) {
+@@ -793,6 +799,11 @@ void TabMenuModel::Build(int index) {
+     // Rename in place (docs/features/tabs.md R14).
+     AddItemWithStringId(TabStripModel::CommandSteddingRenameTab,
+                         IDS_STEDDING_RENAME_TAB);
++    // sidebar Y45: a line above the row, or off again.
++    AddItemWithStringId(TabStripModel::CommandSteddingAddSeparator,
++                        IDS_STEDDING_ADD_SEPARATOR);
++    AddItemWithStringId(TabStripModel::CommandSteddingRemoveSeparator,
++                        IDS_STEDDING_REMOVE_SEPARATOR);
+   }
+ 
+   if (features::IsMenuSimplificationEnabled()) {
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index ad393c9caca9f..d62b46e0669d0 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -2920,6 +2920,8 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+     case CommandSteddingSetHome:
+     case CommandSteddingEditHome:
+     case CommandSteddingRenameTab:
++    case CommandSteddingAddSeparator:
++    case CommandSteddingRemoveSeparator:
+     case CommandSteddingMoveToSpaceMenu:
+     case CommandSteddingMoveToSpaceFirst:
+     case CommandSteddingMoveToSpaceLast:
+@@ -3338,6 +3340,8 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+     case CommandSteddingSetHome:
+     case CommandSteddingEditHome:
+     case CommandSteddingRenameTab:
++    case CommandSteddingAddSeparator:
++    case CommandSteddingRemoveSeparator:
+     case CommandSteddingMoveToSpaceMenu:
+     case CommandSteddingMoveToSpaceFirst:
+     case CommandSteddingMoveToSpaceLast:
+diff --git a/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc b/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc
+index fdc80d6ee02de..c842ab155dfce 100644
+--- a/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc
++++ b/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc
+@@ -286,6 +286,8 @@ void RootTabCollectionNode::OnTabChangedAt(tabs::TabInterface* tab,
+   }
+   if (TabView* const row = RowOf(tab)) {
+     row->ReadTabDataAgain();
++    // sidebar Y45: a separator is the row's, not its tab data's.
++    row->UpdateSeparator();
+   }
+ }
+ 
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
+index ce03ac6580dd3..0eda395fbc814 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -36,6 +36,7 @@
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+@@ -1490,6 +1491,21 @@ void TabView::UpdateDriftDot() {
+                       stedding::ShowsDriftDot(drift_row, HasDriftedFromHome()));
+ }
+ 
++void TabView::UpdateSeparator() {
++  tabs::TabInterface* const tab =
++      const_cast<tabs::TabInterface*>(GetTabInterface());
++  const bool separator =
++      !pinned_ && tab && stedding::HasSeparatorAbove(tab->GetContents());
++  if (separator == separator_above_) {
++    return;
++  }
++  separator_above_ = separator;
++  if (views::View* const container = parent()) {
++    container->InvalidateLayout();
++    container->SchedulePaint();
++  }
++}
++
+ void TabView::OnTabStateChanged() {
+   CHECK(collection_node_);
+ 
+@@ -1586,6 +1602,7 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+   icon_->SetAttention(TabIcon::AttentionType::kTabWantsAttentionStatus,
+                       tab_data_.needs_attention);
+   UpdateDriftDot();
++  UpdateSeparator();
+   if (old_data.last_committed_url != tab_data_.last_committed_url) {
+     // The slash's visibility is decided at layout time.
+     InvalidateLayout();
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view.h b/chrome/browser/ui/views/tabs/common/tab_view.h
+index 484672a9accbf..c3a512abca43a 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -68,6 +68,13 @@ class TabView : public views::View,
+   friend class TabStyleViewDelegateImpl;
+ 
+  public:
++  // docs/features/sidebar.md Y45: whether the row has a separator above it.
++  // Its container lays it this much lower and draws the line in the band.
++  bool separator_above() const { return separator_above_; }
++  static constexpr int kSeparatorBand = 13;
++  // Reads the tab's separator and has the container lay out again.
++  void UpdateSeparator();
++
+   static constexpr base::TimeDelta kGlowHoverAnimationDuration =
+       base::Milliseconds(50);
+ 
+@@ -238,6 +245,7 @@ class TabView : public views::View,
+   void UpdateTabData(const tabs::TabData& tab);
+   // Stedding (pins H4): a pinned tab away from its home page.
+   bool HasDriftedFromHome() const;
++
+   // pins H8: the hover card's "Pinned in <Space> · home <host>" line, or
+   // nothing for a tab without a home.
+   std::u16string PinLineForHoverCard() const;
+@@ -350,6 +358,7 @@ class TabView : public views::View,
+   bool should_fill_background_tab_color_ = false;
+   // Stedding (local tabs Lt1): the sidebar marks this row as local.
+   bool local_ = false;
++  bool separator_above_ = false;
+   // Lt5: the title a local row's page shows when it names none of its own
+   // (stedding::UntitledLocalTitle), kept with the host line.
+   std::u16string untitled_title_;
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+index aad67bc0e490a..871c338171626 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_style.h"
+ #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
+ #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+@@ -326,8 +327,39 @@ void UnpinnedTabContainerView::ViewHierarchyChanged(
+   }
+ }
+ 
++void UnpinnedTabContainerView::PaintSeparators(const views::PaintInfo& info) {
++  std::vector<gfx::Rect> lines;
++  for (views::View* const child : children()) {
++    const auto* const row = views::AsViewClass<TabView>(child);
++    if (!row || !row->GetVisible() || !row->separator_above() ||
++        row->height() == 0) {
++      continue;
++    }
++    // On the rows' favicon column at either end, half the band up, as thin
++    // and faint as the Clear line (sidebar Y27).
++    constexpr int kInset = 8;
++    lines.emplace_back(row->x() + kInset,
++                       row->y() - (TabView::kSeparatorBand + 1) / 2,
++                       std::max(0, row->width() - 2 * kInset), 1);
++  }
++  if (lines.empty()) {
++    return;
++  }
++  ui::PaintRecorder recorder(info.context(), size());
++  const ui::ColorProvider* const provider = GetColorProvider();
++  const SkColor text =
++      provider ? provider->GetColor(kColorTabForegroundInactiveFrameActive)
++               : SK_ColorWHITE;
++  cc::PaintFlags flags;
++  flags.setColor(SkColorSetA(text, stedding::kSidebarQuietLineAlpha));
++  for (const gfx::Rect& line : lines) {
++    recorder.canvas()->DrawRect(line, flags);
++  }
++}
++
+ void UnpinnedTabContainerView::PaintChildren(const views::PaintInfo& info) {
+   TabCollectionZOrderManager::PaintChildren(info);
++  PaintSeparators(info);
+   if (!row_drop_indicator_y_) {
+     return;
+   }
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+index b9cc3e4217c64..855bf56284a48 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
+@@ -163,6 +163,9 @@ class UnpinnedTabContainerView
+ 
+   // views::View:
+   void PaintChildren(const views::PaintInfo& info) override;
++  // docs/features/sidebar.md Y45: the line in the band above each row that
++  // has a separator.
++  void PaintSeparators(const views::PaintInfo& info);
+   // pins H27 (BACKLOG S-289): a row leaving the list takes the room made
+   // before it to the end.
+   void ViewHierarchyChanged(
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+index 529408ba3c2fe..12894846fc87d 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_layout_utils.h"
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/horizontal/horizontal_tab_closing_helper.h"
+ #include "components/tab_groups/tab_group_id.h"
+@@ -504,6 +505,14 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+       continue;
+     }
+ 
++    // sidebar Y45: a row with a separator above it stands below the band
++    // its container draws the line in (UnpinnedTabContainerView).
++    if (!drag_data) {
++      if (const auto* const row = views::AsViewClass<TabView>(child);
++          row && row->separator_above()) {
++        height += TabView::kSeparatorBand;
++      }
++    }
+     bounds.set_y(drag_data ? drag_data->offset.y() : height);
+ 
+     if (size_bounds.width().is_bounded()) {
+diff --git a/chrome/test/stedding/restore_browsertest.cc b/chrome/test/stedding/restore_browsertest.cc
+index 5abb5fbeac9a5..f46f56a985ba6 100644
+--- a/chrome/test/stedding/restore_browsertest.cc
++++ b/chrome/test/stedding/restore_browsertest.cc
+@@ -72,6 +72,7 @@
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding/tab_names.h"
+ #include "chrome/browser/ui/stedding/tab_numbers.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/tab_ui_helper.h"
+ #include "chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+@@ -479,6 +480,57 @@ IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_PRE_TheSidebarComesBack) {
+       << "the new home is set in this run";
+ }
+ 
++// sidebar Y45 (GitHub issue 19): a separator above a row stands it a band
++// lower than the rows' usual gap, and it comes back after a restart. The
++// first row, the window's first tab, has none, so its gap is the usual one.
++namespace {
++int SeparatorGapFor(BrowserWindowInterface* browser,
++                    tabs::TabInterface* above,
++                    tabs::TabInterface* below) {
++  tabs::VerticalTabStripStateController::From(browser)->SetVerticalTabsEnabled(
++      true);
++  views::Widget* const widget =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetWidget();
++  EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget));
++  views::test::RunScheduledLayout(widget);
++  views::View* const top =
++      stedding::test::FindDrawnRow(widget->GetRootView(), above);
++  views::View* const bottom =
++      stedding::test::FindDrawnRow(widget->GetRootView(), below);
++  if (!top || !bottom) {
++    ADD_FAILURE() << "a row is not drawn";
++    return 0;
++  }
++  return bottom->GetBoundsInScreen().y() - top->GetBoundsInScreen().bottom();
++}
++}  // namespace
++
++IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_ASeparatorComesBack) {
++  tabs::TabInterface* const first = tabs()->GetTabAtIndex(0);
++  tabs::TabInterface* const one = Open("one.test");
++  tabs::TabInterface* const two = Open("two.test");
++  const int usual = SeparatorGapFor(browser(), first, one);
++  EXPECT_EQ(usual, SeparatorGapFor(browser(), one, two));
++  stedding::SetSeparatorAbove(browser(), two, true);
++  EXPECT_EQ(usual + TabView::kSeparatorBand,
++            SeparatorGapFor(browser(), one, two))
++      << "the row did not stand lower for the line";
++}
++
++IN_PROC_BROWSER_TEST_F(RestoreTest, ASeparatorComesBack) {
++  tabs::TabInterface* const one = Find("one.test");
++  tabs::TabInterface* const two = Find("two.test");
++  ASSERT_TRUE(one && two);
++  EXPECT_FALSE(stedding::HasSeparatorAbove(one->GetContents()));
++  ASSERT_TRUE(stedding::HasSeparatorAbove(two->GetContents()))
++      << "the separator did not come back";
++  tabs::TabInterface* const first = tabs()->GetTabAtIndex(0);
++  if (first != one) {
++    EXPECT_EQ(SeparatorGapFor(browser(), first, one) + TabView::kSeparatorBand,
++              SeparatorGapFor(browser(), one, two));
++  }
++}
++
+ IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_TheSidebarComesBack) {
+   ExpectTheSidebar(/*pins_changed=*/true);
+   ExpectTheSameFolderIds();
+diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
+index 5409ed7702dac..eea4e7242540e 100644
+--- a/chrome/test/stedding/sidebar_click_browsertest.cc
++++ b/chrome/test/stedding/sidebar_click_browsertest.cc
+@@ -1738,6 +1738,7 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, TheTabMenuOfEachKindOfRow) {
+         u"Move to Space ▸",
+         u"Always Open plain.test in ▸",
+         u"Move Tab to New Folder",
++        u"Add Separator Above",
+         split_this,
+         u"Sleep Tab",
+         u"Sleep Other Tabs in This Space",
+@@ -1762,6 +1763,7 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, TheTabMenuOfEachKindOfRow) {
+         u"Move to Space ▸",
+         u"Always Open pin.test in ▸",
+         u"Move Tab to New Folder",
++        u"Add Separator Above",
+         split_with,
+         u"Sleep Tab",
+         u"Sleep Other Tabs in This Space",
+diff --git a/components/tabs/public/tab_context_menu_command.h b/components/tabs/public/tab_context_menu_command.h
+index 48767b4afd720..d8bfd995e26c4 100644
+--- a/components/tabs/public/tab_context_menu_command.h
++++ b/components/tabs/public/tab_context_menu_command.h
+@@ -61,6 +61,10 @@ enum TabContextMenuCommand {
+   CommandSteddingEditHome,
+   // Stedding: rename the row in place (docs/features/tabs.md R14).
+   CommandSteddingRenameTab,
++  // Stedding: a line above the row that groups the rows without a folder
++  // (docs/features/sidebar.md Y45, GitHub issue 19).
++  CommandSteddingAddSeparator,
++  CommandSteddingRemoveSeparator,
+   // Stedding (docs/features/menus.md M1): "Move to Space", a row per other
+   // Space in switcher order, nine at most; the collection controller
+   // resolves the index and moves the selection.
