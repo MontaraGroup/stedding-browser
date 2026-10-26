@@ -1176,8 +1176,9 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     held open across a wait (the bar closes when its window loses focus, so another test's
     window taking the focus left a pointer to a closed bar). A failure there looks like a
     30 s timeout. They are `SERIAL_BROWSER_TESTS` in `tooling/dev`, run one at a time after
-    the rest run four at a time on Windows (one at a time on the Mac, until it is measured
-    there); eight jobs also slowed every test by contention. One more
+    the rest run four at a time, on Windows and, since 2026-10-26, on the Mac (397 s where
+    one at a time took 815 s; full-screen tests went to the serial list then); eight jobs
+    also slowed every test by contention. One more
     cause took an hour to see: a tab drag asks Windows which window is under each point
     (`WindowFinder`), and a new test window does not always get the foreground, so it can
     open behind the agent's own window, which covers the screen; the drag then finds that

@@ -155,6 +155,9 @@ SERIAL_BROWSER_TESTS="$SERIAL_BROWSER_TESTS:CleanLinksTest.TheCommandBarRowTurns
 # shortcuts Z11, Z19 (BACKLOG S-91): chords pressed into the window, and a
 # settings page that records while its window hands it the keys.
 SERIAL_BROWSER_TESTS="$SERIAL_BROWSER_TESTS:ShortcutRebindTest.*:ShortcutRecordTest.*:ShortcutSettingsTest.*"
+# macOS full screen takes the whole display, so another test's window beside it left the page
+# out of full screen (2026-10-26, four at a time on the Mac).
+SERIAL_BROWSER_TESTS="$SERIAL_BROWSER_TESTS:FullscreenHintTest.*"
 # Windows alone builds the clipboard-history fixture; a part that matches nothing would
 # stop the Mac's sweep (trap 80).
 if is_windows; then
@@ -514,10 +517,9 @@ cmd_test() {
       "$STEDDING_ROOT/tooling/park-cursor" || true
     fi
     if [ "$browser" = "*" ]; then
-      # Four at a time was measured on Windows (trap 88). The Mac runs one at a time until
-      # it is measured there: its background tabs and data clearing are slower (trap 66).
-      local jobs=1
-      if is_windows; then jobs=4; fi
+      # Four at a time, measured on Windows (trap 88) and on the Mac (2026-10-26: the
+      # leg took 397 s where it took 815 s one at a time, BACKLOG S-306).
+      local jobs=4
       run_leg stedding_browser_tests "*-$SERIAL_BROWSER_TESTS" \
         --test-launcher-jobs="${STEDDING_BROWSER_JOBS:-$jobs}" || status=$?
       # Again before the serial leg, which holds the hover and edge tests (trap 78): the
