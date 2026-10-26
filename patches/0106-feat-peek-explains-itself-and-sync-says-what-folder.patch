@@ -25,11 +25,11 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/app/stedding_strings.grdp              |  11 ++
  .../stedding_sync_section.html.ts             |   4 +
  .../stedding_page/stedding_sync_section.ts    |   2 +
- .../browser/resources/stedding_welcome/app.ts |   7 +-
- chrome/browser/ui/spaces/sidebar_sync_file.cc |  38 +++++
+ .../browser/resources/stedding_welcome/app.ts |  11 +-
+ chrome/browser/ui/spaces/sidebar_sync_file.cc |  45 ++++++
  chrome/browser/ui/spaces/sidebar_sync_file.h  |  13 ++
  .../browser/ui/spaces/sidebar_sync_service.cc |  18 +++
- .../ui/spaces/sidebar_sync_unittest.cc        |  32 +++++
+ .../ui/spaces/sidebar_sync_unittest.cc        |  33 +++++
  chrome/browser/ui/stedding/BUILD.gn           |   5 +
  chrome/browser/ui/stedding/peek.cc            |   8 ++
  chrome/browser/ui/stedding/peek_notice.cc     | 136 ++++++++++++++++++
@@ -40,7 +40,7 @@ Removable when: never; to be folded into the patches that own the code.
  .../browser/ui/webui/settings/settings_ui.cc  |  13 +-
  chrome/test/stedding/peek_browsertest.cc      |  59 ++++++++
  components/infobars/core/infobar_delegate.h   |   2 +
- 18 files changed, 392 insertions(+), 5 deletions(-)
+ 18 files changed, 402 insertions(+), 7 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/peek_notice.cc
  create mode 100644 chrome/browser/ui/stedding/peek_notice.h
 
@@ -95,7 +95,7 @@ index fa909cbe52401..f4dcaaeac5d11 100644
    problem?: string;
    problemDevice?: string;
 diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
-index faf2d2299d070..76797ea5cefb9 100644
+index faf2d2299d070..8928ca72df2c2 100644
 --- a/chrome/browser/resources/stedding_welcome/app.ts
 +++ b/chrome/browser/resources/stedding_welcome/app.ts
 @@ -110,13 +110,14 @@ const BEHAVIOURS: Array<{
@@ -116,11 +116,22 @@ index faf2d2299d070..76797ea5cefb9 100644
      ],
    },
  ];
+@@ -971,8 +972,8 @@ function renderStep(main: HTMLElement) {
+     case 'keys': {
+       heading('The keys worth knowing', 'The sidebar is the product; these get you around it.');
+       const keys = el('div', 'keys');
+-      // No Peek keys: Peek is withdrawn until it is rebuilt (PLAN.md,
+-      // decision 2), and the flow teaches only what a fresh profile has.
++      // No Peek keys: Open as Tab's chord is named where it acts, on the
++      // peek's row and in its first note (peek P19, welcome W6).
+       const shortcuts: Array<[string, string]> = [
+         [k('⌘T', 'Ctrl+T'), 'Open the bar: search, a URL, or any open tab'],
+         [k('⌘S', 'Ctrl+S'), 'Collapse the sidebar to icons, or bring it back'],
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_file.cc b/chrome/browser/ui/spaces/sidebar_sync_file.cc
-index 77ed4a2a28133..929634f7f9029 100644
+index 77ed4a2a28133..217502f779f3e 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_file.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_file.cc
-@@ -242,6 +242,44 @@ std::string DefaultDeviceName(std::string_view install) {
+@@ -242,6 +242,51 @@ std::string DefaultDeviceName(std::string_view install) {
            .c_str());
  }
  
@@ -150,12 +161,19 @@ index 77ed4a2a28133..929634f7f9029 100644
 +    return base::EqualsCaseInsensitiveASCII(second, "Mobile Documents") ||
 +           base::EqualsCaseInsensitiveASCII(second, "CloudStorage");
 +  }
-+  static constexpr std::string_view kSyncedNames[] = {
-+      "Dropbox", "OneDrive",  "Google Drive", "GoogleDrive", "Box",
-+      "iCloudDrive", "iCloud Drive", "Documents", "Desktop"};
-+  // The name whole, or followed by a space, as in "Dropbox (Team)" and
-+  // "OneDrive - Company"; "Boxes" and "DocumentsBackup" are not synced.
-+  return std::ranges::any_of(kSyncedNames, [&](std::string_view name) {
++  // The Mac's iCloud keeps Documents and Desktop themselves, by those names
++  // alone: "Documents Backup" is a folder of its own.
++  for (std::string_view name : {"Documents", "Desktop"}) {
++    if (base::EqualsCaseInsensitiveASCII(first, name)) {
++      return true;
++    }
++  }
++  // A sync app's folder: its name whole, or followed by a space, as in
++  // "Dropbox (Team)" and "OneDrive - Company"; "Boxes" is not synced.
++  static constexpr std::string_view kSyncAppFolders[] = {
++      "Dropbox", "OneDrive", "Google Drive", "GoogleDrive", "Box",
++      "iCloudDrive", "iCloud Drive"};
++  return std::ranges::any_of(kSyncAppFolders, [&](std::string_view name) {
 +    return base::StartsWith(first, name,
 +                            base::CompareCase::INSENSITIVE_ASCII) &&
 +           (first.size() == name.size() || first[name.size()] == ' ');
@@ -246,10 +264,10 @@ index 82345e9088807..a4481fcb1e188 100644
    status.Set("ready", ready_);
    if (!enabled()) {
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
-index 8e9b276a4c92f..8fa60c206e274 100644
+index 8e9b276a4c92f..6a3535445c0da 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
-@@ -515,6 +515,38 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
+@@ -515,6 +515,39 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
  }
  
  // Sf8: a picked folder that already is one is not nested.
@@ -265,7 +283,8 @@ index 8e9b276a4c92f..8fa60c206e274 100644
 +  EXPECT_FALSE(LooksSynced(under("Stedding Sidebar"), home, {}));
 +  EXPECT_FALSE(LooksSynced(under("Library/Application Support/x"), home, {}));
 +  for (const char* const unsynced :
-+       {"Boxes/Stedding", "DocumentsBackup/Stedding", "Desktop2/Stedding"}) {
++       {"Boxes/Stedding", "DocumentsBackup/Stedding", "Desktop2/Stedding",
++        "Documents Backup/Stedding", "Desktop Archive/Stedding"}) {
 +    EXPECT_FALSE(LooksSynced(under(unsynced), home, {}))
 +        << unsynced << ": a name that only starts like a synced folder's";
 +  }

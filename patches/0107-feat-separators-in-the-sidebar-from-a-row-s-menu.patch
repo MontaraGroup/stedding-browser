@@ -18,7 +18,7 @@ Removable when: never; to be folded into the patches that own the code.
 ---
  chrome/app/stedding_strings.grdp              |   8 ++
  chrome/browser/ui/browser_tabrestore.cc       |   3 +
- chrome/browser/ui/spaces/space_model.cc       |   7 +-
+ chrome/browser/ui/spaces/space_model.cc       |  12 +-
  .../ui/spaces/space_storage_partition.cc      |   3 +
  chrome/browser/ui/stedding/BUILD.gn           |  11 +-
  chrome/browser/ui/stedding/menu_rules.cc      |   4 +
@@ -35,11 +35,11 @@ Removable when: never; to be folded into the patches that own the code.
  .../common/unpinned_tab_container_view.cc     |  34 +++++
  .../tabs/common/unpinned_tab_container_view.h |   3 +
  .../unpinned_tab_container_view_layout.cc     |   8 ++
- chrome/test/stedding/restore_browsertest.cc   |  52 ++++++++
+ chrome/test/stedding/restore_browsertest.cc   |  76 +++++++++++
  .../stedding/sidebar_click_browsertest.cc     |   2 +
  chrome/test/stedding/tab_drop_browsertest.cc  |  21 +++
  .../tabs/public/tab_context_menu_command.h    |   4 +
- 23 files changed, 498 insertions(+), 5 deletions(-)
+ 23 files changed, 527 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/tab_separators.cc
  create mode 100644 chrome/browser/ui/stedding/tab_separators.h
 
@@ -84,7 +84,7 @@ index fbc1c21a108a0..a1963043fe19f 100644
    stedding::RestoreTabParentFromExtraData(web_contents.get(), extra_data);
    // archive A1 (PLAN.md TST-18): a tab the session restores goes on from the
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index 49d10c82b14ff..51cbd4516e1d4 100644
+index 49d10c82b14ff..500f25c95ca73 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -51,6 +51,7 @@
@@ -111,7 +111,19 @@ index 49d10c82b14ff..51cbd4516e1d4 100644
      stedding::CarryTabParent(replace->old_contents, replace->new_contents);
      CarryClosedFolderPlace(replace->old_contents, replace->new_contents);
      // A rebind of this model's own already puts the contents in the Space's
-@@ -2606,8 +2609,10 @@ void SpaceModel::FinishRoute(tabs::TabHandle handle,
+@@ -2415,6 +2418,11 @@ SpaceModel::SessionExtraDataForTab(const tabs::TabInterface* tab,
+       !name.empty()) {
+     data.emplace_back(stedding::kSessionTabNameKey, base::UTF16ToUTF8(name));
+   }
++  // The line above the row (sidebar Y45), for the same reason: it came back
++  // after one restart and was gone after the next.
++  if (stedding::HasSeparatorAbove(tab->GetContents())) {
++    data.emplace_back(stedding::kSessionTabSeparatorKey, "1");
++  }
+   return data;
+ }
+ 
+@@ -2606,8 +2614,10 @@ void SpaceModel::FinishRoute(tabs::TabHandle handle,
    if (!tab || !GetSpace(to)) {
      return;
    }
@@ -837,7 +849,7 @@ index 529408ba3c2fe..85b08f54d4ade 100644
  
      if (size_bounds.width().is_bounded()) {
 diff --git a/chrome/test/stedding/restore_browsertest.cc b/chrome/test/stedding/restore_browsertest.cc
-index 5abb5fbeac9a5..f46f56a985ba6 100644
+index 5abb5fbeac9a5..4129e6e4a162a 100644
 --- a/chrome/test/stedding/restore_browsertest.cc
 +++ b/chrome/test/stedding/restore_browsertest.cc
 @@ -72,6 +72,7 @@
@@ -848,7 +860,7 @@ index 5abb5fbeac9a5..f46f56a985ba6 100644
  #include "chrome/browser/ui/tab_ui_helper.h"
  #include "chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h"
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
-@@ -479,6 +480,57 @@ IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_PRE_TheSidebarComesBack) {
+@@ -479,6 +480,81 @@ IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_PRE_TheSidebarComesBack) {
        << "the new home is set in this run";
  }
  
@@ -877,7 +889,37 @@ index 5abb5fbeac9a5..f46f56a985ba6 100644
 +}
 +}  // namespace
 +
-+IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_ASeparatorComesBack) {
++// sidebar Y45: the line above a row comes back after a restart, and after
++// the next one: the session log is made again at each start, before the
++// restored tabs exist, so a key no one wrote again was gone after the second
++// (as a tab's name was, PLAN.md TST-4).
++namespace {
++void ExpectTheSeparatorBack(BrowserWindowInterface* browser) {
++  TabStripModel* const tabs = browser->GetTabStripModel();
++  tabs::TabInterface* one = nullptr;
++  tabs::TabInterface* two = nullptr;
++  for (int i = 0; i < tabs->count(); ++i) {
++    tabs::TabInterface* const tab = tabs->GetTabAtIndex(i);
++    const std::string_view host = tab->GetContents()->GetVisibleURL().host();
++    if (host == "one.test") {
++      one = tab;
++    } else if (host == "two.test") {
++      two = tab;
++    }
++  }
++  ASSERT_TRUE(one && two);
++  EXPECT_FALSE(stedding::HasSeparatorAbove(one->GetContents()));
++  ASSERT_TRUE(stedding::HasSeparatorAbove(two->GetContents()))
++      << "the separator did not come back";
++  tabs::TabInterface* const first = tabs->GetTabAtIndex(0);
++  if (first != one) {
++    EXPECT_EQ(SeparatorGapFor(browser, first, one) + TabView::kSeparatorBand,
++              SeparatorGapFor(browser, one, two));
++  }
++}
++}  // namespace
++
++IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_PRE_ASeparatorComesBack) {
 +  tabs::TabInterface* const first = tabs()->GetTabAtIndex(0);
 +  tabs::TabInterface* const one = Open("one.test");
 +  tabs::TabInterface* const two = Open("two.test");
@@ -889,18 +931,12 @@ index 5abb5fbeac9a5..f46f56a985ba6 100644
 +      << "the row did not stand lower for the line";
 +}
 +
++IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_ASeparatorComesBack) {
++  ExpectTheSeparatorBack(browser());
++}
++
 +IN_PROC_BROWSER_TEST_F(RestoreTest, ASeparatorComesBack) {
-+  tabs::TabInterface* const one = Find("one.test");
-+  tabs::TabInterface* const two = Find("two.test");
-+  ASSERT_TRUE(one && two);
-+  EXPECT_FALSE(stedding::HasSeparatorAbove(one->GetContents()));
-+  ASSERT_TRUE(stedding::HasSeparatorAbove(two->GetContents()))
-+      << "the separator did not come back";
-+  tabs::TabInterface* const first = tabs()->GetTabAtIndex(0);
-+  if (first != one) {
-+    EXPECT_EQ(SeparatorGapFor(browser(), first, one) + TabView::kSeparatorBand,
-+              SeparatorGapFor(browser(), one, two));
-+  }
++  ExpectTheSeparatorBack(browser());
 +}
 +
  IN_PROC_BROWSER_TEST_F(RestoreTest, PRE_TheSidebarComesBack) {
