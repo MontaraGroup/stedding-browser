@@ -84,14 +84,14 @@ Removable when: never; this is Stedding's sidebar.
  .../frame/vertical_tab_strip_region_view.cc   | 305 ++++++++++++-
  .../frame/vertical_tab_strip_region_view.h    |  48 +++
  .../vertical_tab_strip_top_container.cc       |  15 +-
- .../browser/ui/webui/settings/settings_ui.cc  |  27 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  29 +-
  .../settings/stedding_shortcuts_handler.cc    |  18 +-
  .../stedding_shortcuts_handler_unittest.cc    |  18 +
  chrome/test/stedding/BUILD.gn                 |   1 +
  .../test/stedding/command_bar_browsertest.cc  |  38 ++
  .../stedding/sidebar_forms_browsertest.cc     | 400 ++++++++++++++++++
  .../stedding/window_buttons_browsertest.mm    |  44 ++
- 40 files changed, 1536 insertions(+), 225 deletions(-)
+ 40 files changed, 1537 insertions(+), 226 deletions(-)
  create mode 100644 chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
  create mode 100644 chrome/test/stedding/sidebar_forms_browsertest.cc
 
@@ -2206,7 +2206,7 @@ index 1d0c53c24c9be..8a7ea766d0fb3 100644
        // do not want to add any extra padding to the top container.
        bool start_button_visible = combo_button_->start_button() &&
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 0a90267cabfa5..5f16aeeacad61 100644
+index 0a90267cabfa5..e6e3762f2f2b9 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -686,6 +686,21 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
@@ -2240,8 +2240,8 @@ index 0a90267cabfa5..5f16aeeacad61 100644
    html_source->AddString(
        "steddingDensitySubLabel",
 -      "Comfortable is Arc\u2019s measure; Compact and Dense fit more rows.");
-+      "Comfortable is Arc\u2019s measure; Compact and Dense fit more rows. "
-+      "Every window follows.");
++      "Comfortable gives each row the most room; Compact and Dense fit more "
++      "rows. Every window follows.");
    html_source->AddString("steddingDensityComfortable", "Comfortable");
    html_source->AddString("steddingDensityCompact", "Compact");
    html_source->AddString("steddingDensityDense", "Dense");
@@ -2254,7 +2254,7 @@ index 0a90267cabfa5..5f16aeeacad61 100644
    html_source->AddString(
        "steddingHoverDelaySubLabel",
        "How long the pointer rests on the rail before it opens; a click in "
-@@ -913,8 +929,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -913,12 +929,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "Expand the collapsed sidebar when the pointer rests on it");
    html_source->AddString(
        "steddingSidebarHoverSubLabel",
@@ -2266,6 +2266,11 @@ index 0a90267cabfa5..5f16aeeacad61 100644
    html_source->AddString("steddingNewTabShortcutsLabel",
                           "Show most-visited shortcuts on the new tab page");
    html_source->AddString("steddingNewTabShortcutsSubLabel",
+-                         "Off gives an empty page, as in Arc.");
++                         "Off gives an empty page.");
+   html_source->AddString("steddingCopyStripLabel",
+                          "Copy links without tracking parameters");
+   html_source->AddString(
 diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
 index c3063f0cbf835..c89c596ee7927 100644
 --- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
