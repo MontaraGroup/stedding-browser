@@ -50,8 +50,8 @@ its feature (windows, import, settings).
  .../browser/ui/webui/settings/settings_ui.cc  |  10 ++
  chrome/test/stedding/BUILD.gn                 |   1 +
  .../test/stedding/command_bar_browsertest.cc  | 160 +++++++++++++++++-
- .../test/stedding/space_switch_browsertest.cc |  28 +++
- 14 files changed, 396 insertions(+), 14 deletions(-)
+ .../test/stedding/space_switch_browsertest.cc |  37 +++-
+ 14 files changed, 404 insertions(+), 15 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/bookmarks_to_pins_dialog.cc
  create mode 100644 chrome/browser/ui/stedding/bookmarks_to_pins_dialog.h
 
@@ -638,10 +638,35 @@ index 9c86633355a72..ee19ab68e5127 100644
  // data: pages, which history does not keep, so the rows for a query are the
  // typed text, the tabs and the archived tabs, and nothing else.
 diff --git a/chrome/test/stedding/space_switch_browsertest.cc b/chrome/test/stedding/space_switch_browsertest.cc
-index 2962ecd2c8b4e..6e3f9409caa3d 100644
+index 2962ecd2c8b4e..a76d59eedf344 100644
 --- a/chrome/test/stedding/space_switch_browsertest.cc
 +++ b/chrome/test/stedding/space_switch_browsertest.cc
-@@ -3413,4 +3413,32 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchRtlTest, MoveLeftAndADragMoveTheChip) {
+@@ -2275,6 +2275,9 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchTest,
+       take_the_chips();
+     }
+     for (size_t i = 0; i < ids_.size(); ++i) {
++      // A chip dropped and not made again compared two nulls as equal.
++      EXPECT_TRUE(chips[i]->view())
++          << "chip " << i << " is gone at " << region->width() << " DIP";
+       EXPECT_EQ(chips[i]->view(), switcher->ChipForTesting(ids_[i]))
+           << "chip " << i << " was made again at " << region->width()
+           << " DIP";
+@@ -3403,14 +3406,46 @@ IN_PROC_BROWSER_TEST_F(SpaceSwitchRtlTest, MoveLeftAndADragMoveTheChip) {
+     ASSERT_TRUE(moved);
+     EXPECT_LT(moved->GetBoundsInScreen().CenterPoint().x(), before);
+ 
+-    // The leftmost chip cannot go further left.
++    // The leftmost chip cannot go further left: the row is there, disabled.
+     ui::SimpleMenuModel* const last = Switcher()->BuildMenuForTesting(ids_[1]);
++    ASSERT_TRUE(last);
++    bool row = false;
+     for (size_t i = 0; i < last->GetItemCount(); ++i) {
+       if (last->GetLabelAt(i) == u"Move Left") {
++        row = true;
+         EXPECT_FALSE(last->IsEnabledAt(i));
+       }
+     }
++    EXPECT_TRUE(row) << "the leftmost chip's menu has no Move Left row";
    }
  }
  

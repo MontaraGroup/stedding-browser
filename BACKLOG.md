@@ -30,10 +30,16 @@ refer to `docs/features/<feature>.md`.
    Every spec row keeps a test that names it. Done when the same coverage runs in clearly less
    time, measured before and after on both machines.
 2. `S-307` **A review of all code and tests by other models**, read-only (nothing built or run
-   by the reviewers): Codex (gpt-5.5) and Cursor over the series by area, and over the tests
-   (wrong waits, assertions that cannot fail, tests that miss their spec row). Each finding is
-   checked in the code before it counts; real ones are fixed in the patch that owns the code,
-   each with a test, and committed as they land.
+   by the reviewers). Done 2026-10-26 with Grok 4.7 through Cursor, in eight areas (Codex's
+   free tier ran out before it reported). 19 findings: 15 fixed in the patches that own the
+   code, each with a test seen failing before the fix (among them a Shift-click on a Space's
+   own essential that sent the first Space's cookies, sessions S26; an Arc sidebar file that
+   could build a tree doubling at each level, import I1; the History and Downloads panels
+   stopping at their first page, Pn6, Pn9; the Peek note counting in a private window's prefs,
+   P19; a dragged separator's band, Y45); one refuted (an IPv6 address's site pattern: the
+   host keeps its brackets, and a test already covers it); `S-314` and `S-315` hold two more;
+   the wheel's slide check stays skipped on a machine that asks for reduced motion, where the
+   switch it checks first must still be checked. The network and privacy area had none.
 3. `S-308` **Peek as Arc does it, explained.** Arc opens a peek on a plain click from a pinned
    tab or Favorite to another site, and its Settings turn that off; so the default stays a click
    (`docs/features/peek.md` P10, P18). The welcome's question says what a peek is, in one line,
@@ -87,6 +93,8 @@ Crashes and broken privacy promises first, then what a user sees.
 
 | Id | Item | Feature / spec | Notes |
 |---|---|---|---|
+| S-314 | A Space pin's place when another Space's tab sits inside the pinned run | `docs/features/pins.md` H14; `chrome/browser/ui/spaces/space_model.cc` (`MoveToSpacePinBoundary`) | Found by the review of 2026-10-26 (`S-307`): the walk to the end of the run stops at the first tab that is not a Space pin, so with another Space's loose tab between this Space's pins an unpin stays between them and a new pin lands before that tab. Not yet seen through the user's path: first show how a user brings another Space's tab between this Space's pins (a test through the interface), then fix by walking past other Spaces' tabs. Small |
+| S-315 | Two browser tests that only read constants | `chrome/test/stedding/motion_frames_browsertest.cc` (`MotionFramesTest.SidebarMotionsEaseOut`), `chrome/test/stedding/branding_browsertest.cc` (`ProductNameTest.EveryLanguageNamesStedding`) | Found by the review of 2026-10-26 (`S-307`): neither drives the window; each starts a browser to read a table (the motion's tween and durations, the packed strings). Unit tests can read the same, without a browser's start-up four times a round (`S-306`). Small |
 | S-302 | `AddressBandTest.EveryChipFitsTheField` times out now and then in the AddressSanitizer build on the PC | `docs/features/toolbar.md`; `chrome/test/stedding/address_band_browsertest.cc` | Found 2026-10-24 in 0.3.0 beta 15's `win-asan` pass: the wait for a chip and its icon to show (line 1613) ran out at about 100 seconds; run alone it then failed once and passed twice. The release and DCHECK builds pass it, and beta 14's ASan pass did; nothing in beta 15 touches the address row. Next: time the chip's appearance under ASan, and give the wait the room the ASan build needs, or find what it waits on. Small |
 | S-303 | `tooling\win\drive.ps1`'s `Drive-Shot` takes more than the window | `AGENTS.md` red lines (screen captures); `tooling/win/drive.ps1` | Found 2026-10-25: it copies the screen over the window's rectangle and 24 px around it (120 with `-Wide`, for menus beside the window), so a window near the edge of the screen, or one with a dialog, brought other applications' windows into the picture. The red lines want the window under test alone, by its window id. Until it does, check on Windows by window bounds, UI Automation and DevTools (`cdp.ps1`'s page screenshots), not by `Drive-Shot`. |
 | S-297 | `ArchiveUnreadSessionTest.AQuitsWindowAnUnreadSessionLeftIsArchived` times out now and then on the PC | `docs/features/archive.md`; `chrome/test/stedding/restore_browsertest.cc` | Found 2026-10-24 in 0.3.0 beta 13's `win-release` pass: the harness's wait for the first browser window to show (`InProcessBrowserTest::PreRunTestOnMainThread`, `WidgetVisibleWaiter`, `ui/views/test/widget_test.cc:277`) ran out. The test's launch has its session files deleted, so session restore opens a window of its own beside the startup's: the likely cause is the harness waiting on a window that never shows, a race that load decides (not proven). Run alone on the idle PC it passed 20 runs of 20, and five among its restore neighbours four at a time; it failed only under load (the full parallel leg, and once at its process's exit while a build ran). Since 2026-10-24 the Windows leg runs it one at a time (`tooling/dev` SERIAL_BROWSER_TESTS). Left: catch it with the windows' list logged when it happens, and wait on the window the launch shows |

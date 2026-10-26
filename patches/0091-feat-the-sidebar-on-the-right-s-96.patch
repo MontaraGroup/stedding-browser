@@ -41,7 +41,7 @@ layout flag and its tests stay together.
  .../ui/stedding/stedding_prefs_unittest.cc    |   4 +
  .../ui/views/commandbar/command_bar_view.cc   |   6 +
  .../commandbar/command_bar_view_unittest.cc   |  72 ++
- .../views/frame/base_tab_strip_region_view.cc |   8 +-
+ .../views/frame/base_tab_strip_region_view.cc |  16 +-
  .../views/frame/browser_native_widget_mac.mm  |  16 +
  .../layout/browser_view_tabbed_layout_impl.cc |  48 +-
  .../layout/stedding_browser_view_layout.cc    | 159 +++-
@@ -61,7 +61,7 @@ layout flag and its tests stay together.
  .../browser/ui/webui/settings/settings_ui.cc  |  11 +-
  .../stedding/sidebar_forms_browsertest.cc     | 700 +++++++++++++++++-
  .../stedding/window_buttons_browsertest.mm    | 123 +++
- 32 files changed, 1563 insertions(+), 67 deletions(-)
+ 32 files changed, 1569 insertions(+), 69 deletions(-)
 
 diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
 index bc9a21d00ed77..e4968f81b049f 100644
@@ -361,10 +361,10 @@ index c0e85ae431b8a..91af64ae9ce10 100644
  // from the omnibox's default match. The rest is selected with the caret
  // after what was typed, the typed row reads the site with "Open", and Enter
 diff --git a/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc
-index fd144abd62e24..7c1e68f03e746 100644
+index fd144abd62e24..971107af67b40 100644
 --- a/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc
-@@ -658,11 +658,13 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBounds(
+@@ -658,11 +658,15 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBounds(
          drop_bounds.Offset(0, drop_bounds.height() + height());
        }
      } else {
@@ -372,15 +372,29 @@ index fd144abd62e24..7c1e68f03e746 100644
 +      // Stedding (sidebar Y40): the strip can be at either edge of the
 +      // window in either layout direction, so the arrow turns by its own
 +      // direction, not by the layout's.
++      // A leftward arrow turned at the screen's edge points from inside the
++      // strip's left edge: it moves by the strip's width alone.
 +      if (*direction == DropArrow::Direction::kLeft) {
          *direction = DropArrow::Direction::kRight;
-         drop_bounds.Offset(-GetBoundsInScreen().width() - DropArrow::kSize, 0);
+-        drop_bounds.Offset(-GetBoundsInScreen().width() - DropArrow::kSize, 0);
 -      } else if (!base::i18n::IsRTL() &&
 -                 *direction == DropArrow::Direction::kRight) {
++        drop_bounds.Offset(-GetBoundsInScreen().width(), 0);
 +      } else if (*direction == DropArrow::Direction::kRight) {
          *direction = DropArrow::Direction::kLeft;
          drop_bounds.Offset(GetBoundsInScreen().width() + DropArrow::kSize, 0);
        }
+@@ -678,7 +682,9 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBoundsFromPosition(
+   if (direction == DropArrow::Direction::kRight) {
+     position.Offset(-DropArrow::kSize, -DropArrow::kSize / 2);
+   } else if (direction == DropArrow::Direction::kLeft) {
+-    position.Offset(DropArrow::kSize, -DropArrow::kSize / 2);
++    // Stedding (sidebar Y40): the tip, at the arrow's left, on `position`, as
++    // a rightward arrow's is; it stopped an arrow's width short of the strip.
++    position.Offset(0, -DropArrow::kSize / 2);
+   } else {
+     position.Offset(-DropArrow::kSize / 2, -DropArrow::kSize);
+   }
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 index 139d5b1821819..7770911851d25 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm

@@ -25,12 +25,12 @@ Removable when: never; to be folded into the patches that own the tests.
  chrome/test/stedding/downloads_browsertest.cc |    4 +-
  chrome/test/stedding/restore_browsertest.cc   |  683 +--
  .../stedding/settings_spaces_browsertest.cc   |    4 +-
- .../stedding/sidebar_click_browsertest.cc     | 4224 +++++++++--------
- .../stedding/sidebar_forms_browsertest.cc     | 1171 ++---
- .../stedding/sidebar_panels_browsertest.cc    | 1435 +++---
+ .../stedding/sidebar_click_browsertest.cc     | 4227 +++++++++--------
+ .../stedding/sidebar_forms_browsertest.cc     | 1187 ++---
+ .../stedding/sidebar_panels_browsertest.cc    | 1487 +++---
  .../test/stedding/sidebar_sync_browsertest.cc |  423 +-
  .../stedding/site_controls_browsertest.cc     |  762 +--
- 9 files changed, 5197 insertions(+), 4671 deletions(-)
+ 9 files changed, 5268 insertions(+), 4671 deletions(-)
 
 diff --git a/chrome/test/stedding/dark_pages_browsertest.cc b/chrome/test/stedding/dark_pages_browsertest.cc
 index 868fbd36fa912..64b15e02b23a6 100644
@@ -2010,7 +2010,7 @@ index dff0b8721622a..3a9463056dd89 100644
      ASSERT_TRUE(question);
  #if !BUILDFLAG(IS_MAC)
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index eea4e7242540e..3810f1efe6fd0 100644
+index eea4e7242540e..fb9d9aef66584 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
 @@ -15,6 +15,11 @@
@@ -2056,7 +2056,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
   private:
    // The 200 ms row grow must not run before a click.
    [[maybe_unused]] gfx::AnimationTestApi::RenderModeResetter rich_animations_ =
-@@ -554,1356 +572,1318 @@ class SidebarClickTest
+@@ -554,1356 +572,1321 @@ class SidebarClickTest
            gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
  };
  
@@ -4156,13 +4156,16 @@ index eea4e7242540e..3810f1efe6fd0 100644
 +      ui::SimpleMenuModel* const menu =
 +          switcher ? switcher->BuildMenuForTesting(play) : nullptr;
 +      // With one Space the switcher may not be drawn at all: then there is no
-+      // menu to delete it from either.
++      // menu to delete it from either. A menu there is has the row, disabled.
++      bool row = false;
 +      for (size_t i = 0; menu && i < menu->GetItemCount(); ++i) {
 +        if (menu->GetLabelAt(i) == u"Delete Space") {
++          row = true;
 +          EXPECT_FALSE(menu->IsEnabledAt(i)) << "the last Space can be deleted";
 +          EXPECT_EQ(u"The last Space", menu->GetMinorTextAt(i));
 +        }
        }
++      EXPECT_TRUE(row || !menu) << "the Space's menu has no Delete Space row";
 +      EXPECT_FALSE(question) << "the last Space asked";
      }
 -  };
@@ -4638,7 +4641,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
    const GURL home = embedded_test_server()->GetURL("home.test", "/title1.html");
    const GURL away = embedded_test_server()->GetURL("away.test", "/title2.html");
    spaces::SpaceModel* const model = spaces::SpaceModel::From(browser());
-@@ -1911,6 +1891,7 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
+@@ -1911,6 +1894,7 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), home));
    tabs::TabInterface* const space_pin = tab_strip_model()->GetActiveTab();
    model->SetSpacePinned(space_pin, true);
@@ -4646,7 +4649,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
    AppendTab();
    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), home));
    tabs::TabInterface* const essential = tab_strip_model()->GetActiveTab();
-@@ -1920,23 +1901,86 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
+@@ -1920,23 +1904,86 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
      tab_strip_model()->ActivateTabAt(tab_strip_model()->GetIndexOfTab(tab));
      ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), away));
      ASSERT_EQ(home, model->HomeUrl(tab).value_or(GURL()));
@@ -4747,7 +4750,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
        TabView* const row = RowFor(index);
        ASSERT_TRUE(row);
        EXPECT_EQ("the row of tab " + base::NumberToString(index),
-@@ -1944,467 +1988,125 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
+@@ -1944,467 +1991,125 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest,
            << "a real middle click there would not reach the row";
        MiddleClickRow(row);
        ASSERT_TRUE(base::test::RunUntil([&]() {
@@ -5321,7 +5324,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
    const GURL home = embedded_test_server()->GetURL("home.test", "/title1.html");
    const GURL away = embedded_test_server()->GetURL("away.test", "/title2.html");
    const GURL asks =
-@@ -2426,37 +2128,7 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinUnloadsItAtItsHome) {
+@@ -2426,37 +2131,7 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinUnloadsItAtItsHome) {
    tabs->SetTabPinned(tabs->GetIndexOfTab(essential), true);
    ASSERT_EQ(home, model->HomeUrl(pin).value_or(GURL()));
    ASSERT_EQ(home, model->HomeUrl(essential).value_or(GURL()));
@@ -5360,7 +5363,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
    // Rests the pointer on `tab`'s row and clicks the close button it shows.
    const auto press_close_button = [&](tabs::TabInterface* tab) {
      ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
-@@ -2469,254 +2141,748 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinUnloadsItAtItsHome) {
+@@ -2469,254 +2144,748 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinUnloadsItAtItsHome) {
      ClickAt(button->GetBoundsInScreen().CenterPoint());
    };
  
@@ -6330,7 +6333,7 @@ index eea4e7242540e..3810f1efe6fd0 100644
  }
  
  // PLAN.md TST-8 (tabs R20, R21): a selection never holds a row the user
-@@ -2927,104 +3093,4 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
+@@ -2927,104 +3096,4 @@ IN_PROC_BROWSER_TEST_F(SidebarSelectionTest,
    }
  }
  
@@ -6436,10 +6439,10 @@ index eea4e7242540e..3810f1efe6fd0 100644
 -
  }  // namespace
 diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
-index 92500b4ec4df0..0dd90abd0c581 100644
+index 92500b4ec4df0..72209daedf357 100644
 --- a/chrome/test/stedding/sidebar_forms_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
-@@ -1535,527 +1535,571 @@ class SidebarRightTest : public SidebarFormsTest {
+@@ -1535,527 +1535,587 @@ class SidebarRightTest : public SidebarFormsTest {
    }
  };
  
@@ -7203,12 +7206,12 @@ index 92500b4ec4df0..0dd90abd0c581 100644
 +      ASSERT_TRUE(reveal.IsRunning()) << "the right edge starts a reveal";
 +      EXPECT_EQ(base::Milliseconds(300), reveal.GetCurrentDelay())
 +          << "a longer rest than the left edge's";
-+      region()->PlayWindowPointerForTesting(
+       region()->PlayWindowPointerForTesting(
+-          gfx::Point(window.right() - 1, window.y() + buttons / 2),
 +          gfx::Point(window.right() - 1, window.CenterPoint().y()),
 +          /*pressed=*/true);
 +      EXPECT_FALSE(reveal.IsRunning()) << "a press drops it";
-       region()->PlayWindowPointerForTesting(
--          gfx::Point(window.right() - 1, window.y() + buttons / 2),
++      region()->PlayWindowPointerForTesting(
 +          gfx::Point(window.right() - 3, window.CenterPoint().y()),
            /*pressed=*/false);
 -      EXPECT_FALSE(reveal.IsRunning()) << "under the frame's own buttons";
@@ -7315,13 +7318,29 @@ index 92500b4ec4df0..0dd90abd0c581 100644
 -  EXPECT_EQ(DropArrow::Direction::kRight, direction) << "and from the left";
 -}
 +  // Y40: a link dragged in from outside the window points at the sidebar from
-+  // its right edge, leftward.
++  // its right edge, leftward, the arrow's tip on that edge.
 +  {
 +    SCOPED_TRACE("Y40: the drop arrow comes from the right");
++    // Room right of the window for the arrow.
++    const gfx::Rect screen =
++        display::Screen::Get()
++            ->GetDisplayNearestView(
++                browser_view()->GetWidget()->GetNativeView())
++            .bounds();
++    ui_test_utils::SetAndWaitForBounds(
++        *browser(), gfx::Rect(screen.x(), screen.y(),
++                              std::min(900, screen.width() - 100),
++                              std::min(700, screen.height())));
++    Settle();
 +    DropArrow::Direction direction = DropArrow::Direction::kDown;
 +    const gfx::Point at = region()->GetLinkDropArrowPosition(index, &direction);
 +    EXPECT_EQ(DropArrow::Direction::kLeft, direction);
 +    EXPECT_EQ(region()->GetBoundsInScreen().right(), at.x());
++    const gfx::Rect arrow =
++        region()->GetLinkDropBoundsForTesting(index, &direction);
++    EXPECT_EQ(DropArrow::Direction::kLeft, direction);
++    EXPECT_EQ(at.x(), arrow.x())
++        << "the arrow's tip stopped short of the sidebar";
  
 -// Y40: with the window against the screen's right edge, as a maximized one
 -// is, there is no room for the arrow right of the sidebar; it points at the
@@ -7463,7 +7482,7 @@ index 92500b4ec4df0..0dd90abd0c581 100644
 +    DropArrow::Direction direction = DropArrow::Direction::kDown;
 +    const gfx::Point at = region()->GetLinkDropArrowPosition(index, &direction);
 +    ASSERT_EQ(DropArrow::Direction::kLeft, direction);
-+    ASSERT_GT(at.x() + 2 * DropArrow::kSize, room.right())
++    ASSERT_GT(at.x() + DropArrow::kSize, room.right())
 +        << "the window does not reach the screen's right edge, so this "
 +           "checked nothing: the strip ends at "
 +        << at.x() << ", the screen at " << room.right();
@@ -7489,7 +7508,7 @@ index 92500b4ec4df0..0dd90abd0c581 100644
  
  // Y43: right to left, the sidebar is on the right by default, and Left
  // moves it to the window's left with every mirror above reversed: the
-@@ -2071,92 +2115,103 @@ class SidebarRightRtlTest : public SidebarFormsRtlTest {
+@@ -2071,92 +2131,103 @@ class SidebarRightRtlTest : public SidebarFormsRtlTest {
    }
  };
  
@@ -7674,10 +7693,10 @@ index 92500b4ec4df0..0dd90abd0c581 100644
  
  }  // namespace
 diff --git a/chrome/test/stedding/sidebar_panels_browsertest.cc b/chrome/test/stedding/sidebar_panels_browsertest.cc
-index c08916632e4cb..3697d51f8c0b4 100644
+index c08916632e4cb..4357981f5dcdc 100644
 --- a/chrome/test/stedding/sidebar_panels_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_panels_browsertest.cc
-@@ -18,6 +18,7 @@
+@@ -18,11 +18,13 @@
  #include "base/run_loop.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/synchronization/lock.h"
@@ -7685,7 +7704,21 @@ index c08916632e4cb..3697d51f8c0b4 100644
  #include "base/test/bind.h"
  #include "base/test/run_until.h"
  #include "base/test/test_future.h"
-@@ -184,6 +185,27 @@ class SidebarPanelsTest
+ #include "base/threading/thread_restrictions.h"
+ #include "base/time/time.h"
++#include "base/uuid.h"
+ #include "build/build_config.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+@@ -56,6 +58,7 @@
+ #include "components/safe_browsing/content/common/file_type_policies_test_util.h"
+ #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+ #include "content/public/browser/download_manager.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+@@ -184,6 +187,27 @@ class SidebarPanelsTest
                   .ExtractString() != "";
      });
    }
@@ -7713,7 +7746,7 @@ index c08916632e4cb..3697d51f8c0b4 100644
  
    int RowCount() {
      return content::EvalJs(panel_page(),
-@@ -239,6 +261,15 @@ class SidebarPanelsTest
+@@ -239,6 +263,15 @@ class SidebarPanelsTest
                                    /*typed_count=*/0, when, /*hidden=*/false,
                                    history::SOURCE_BROWSED);
    }
@@ -7729,7 +7762,7 @@ index c08916632e4cb..3697d51f8c0b4 100644
  
    // Starts a download that stays in progress until the test ends it.
    download::DownloadItem* StartSlowDownload() {
-@@ -273,6 +304,22 @@ class SidebarPanelsTest
+@@ -273,6 +306,22 @@ class SidebarPanelsTest
                 ? items.front().get()
                 : nullptr;
    }
@@ -7752,7 +7785,7 @@ index c08916632e4cb..3697d51f8c0b4 100644
  
    std::vector<ui::FileInfo> ClipboardFiles() {
      base::test::TestFuture<std::vector<ui::FileInfo>> files;
-@@ -282,698 +329,788 @@ class SidebarPanelsTest
+@@ -282,698 +331,838 @@ class SidebarPanelsTest
    }
  };
  
@@ -8639,6 +8672,23 @@ index c08916632e4cb..3697d51f8c0b4 100644
 +    EXPECT_TRUE(WaitForRows(2)) << RowCount();
 +  }();
 +
++  // Pn6: a first page that fits the list brings the next one by itself: with
++  // nothing to scroll, the observer had looked while the page loaded and the
++  // rest never came. Rows made two pixels tall fit fifty in any window.
++  [&] {
++    SCOPED_TRACE("a first page that fits the list brings the next");
++    Search("");
++    ASSERT_TRUE(content::ExecJs(
++        panel_page(),
++        "{ const style = document.createElement('style');"
++        "  style.textContent = '#list .row, #list h2 { height: 2px "
++        "!important; min-height: 0 !important; padding: 0 !important; "
++        "margin: 0 !important; overflow: hidden; }';"
++        "  document.head.append(style);"
++        "  document.querySelector('.chip[data-range=all]').click(); }"));
++    EXPECT_TRUE(WaitForRows(65)) << RowCount() << " rows, and no scroll";
++  }();
++
 +  ASSERT_TRUE(StartOver());
 +  ASSERT_TRUE(ClearHistory());
 +
@@ -8742,7 +8792,53 @@ index c08916632e4cb..3697d51f8c0b4 100644
 -#endif
 +    EXPECT_TRUE(outbound.empty()) << outbound.front();
 +  }();
-+
+ 
+-// Pn12: a dangerous download shows a warning and one action, which opens
+-// the Downloads page; the download stays as it was.
+-IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, ADangerousRowSendsToThePage) {
+-  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
+-                                                  false);
+-  safe_browsing::FileTypePoliciesTestOverlay dangerous =
+-      safe_browsing::ScopedMarkAllFilesDangerousForTesting();
+-  content::DownloadTestObserverTerminal waiter(
+-      manager(), 1, content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_QUIT);
+-  ui_test_utils::NavigateToURLWithDisposition(
+-      browser(),
+-      embedded_test_server()->GetURL("/downloads/dangerous/dangerous.swf"),
+-      WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NO_WAIT);
+-  waiter.WaitForFinished();
+-  content::DownloadManager::DownloadVector items;
+-  manager()->GetAllDownloads(&items);
+-  ASSERT_EQ(1u, items.size());
+-  download::DownloadItem* const item = items.front().get();
+-  ASSERT_TRUE(item->IsDangerous());
+-  const std::string id = base::NumberToString(item->GetId());
+-
+-  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_SHOW_DOWNLOADS));
+-  ASSERT_TRUE(WaitForPanel(SidebarPanel::kDownloads));
+-  ASSERT_TRUE(WaitForRows(1));
+-  EXPECT_TRUE(base::test::RunUntil([&]() {
+-    return content::EvalJs(panel_page(), RowFor("id", id) +
+-                                             ".classList.contains('dangerous')")
+-        .ExtractBool();
+-  }));
+-  EXPECT_EQ(1, content::EvalJs(panel_page(),
+-                               RowFor("id", id) +
+-                                   ".querySelectorAll('[data-action]').length"))
+-      << "a dangerous row offers more than the way to the page";
+-  EXPECT_EQ(false, content::EvalJs(panel_page(),
+-                                   "!!" + RowFor("id", id) +
+-                                       ".querySelector('.menu-button')"));
+-
+-  ASSERT_TRUE(content::ExecJs(
+-      panel_page(),
+-      RowFor("id", id) + ".querySelector('[data-action=review]').click()"));
+-  ASSERT_TRUE(WaitForPanel(SidebarPanel::kNone));
+-  EXPECT_TRUE(base::test::RunUntil([&]() {
+-    return tabs()->GetActiveWebContents()->GetVisibleURL().host() ==
+-           "downloads";
+-  }));
+-  EXPECT_TRUE(item->IsDangerous()) << "the panel decided for the user";
 +  ASSERT_TRUE(StartOver());
 +  ASSERT_TRUE(ClearHistory());
 +
@@ -8802,53 +8898,7 @@ index c08916632e4cb..3697d51f8c0b4 100644
 +      return tabs()->GetActiveWebContents()->GetLastCommittedURL() == a;
 +    })) << "the row did not open in the active tab";
 +    EXPECT_EQ(tab_count, tabs()->count());
- 
--// Pn12: a dangerous download shows a warning and one action, which opens
--// the Downloads page; the download stays as it was.
--IN_PROC_BROWSER_TEST_F(SidebarPanelsTest, ADangerousRowSendsToThePage) {
--  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled,
--                                                  false);
--  safe_browsing::FileTypePoliciesTestOverlay dangerous =
--      safe_browsing::ScopedMarkAllFilesDangerousForTesting();
--  content::DownloadTestObserverTerminal waiter(
--      manager(), 1, content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_QUIT);
--  ui_test_utils::NavigateToURLWithDisposition(
--      browser(),
--      embedded_test_server()->GetURL("/downloads/dangerous/dangerous.swf"),
--      WindowOpenDisposition::CURRENT_TAB, ui_test_utils::BROWSER_TEST_NO_WAIT);
--  waiter.WaitForFinished();
--  content::DownloadManager::DownloadVector items;
--  manager()->GetAllDownloads(&items);
--  ASSERT_EQ(1u, items.size());
--  download::DownloadItem* const item = items.front().get();
--  ASSERT_TRUE(item->IsDangerous());
--  const std::string id = base::NumberToString(item->GetId());
--
--  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_SHOW_DOWNLOADS));
--  ASSERT_TRUE(WaitForPanel(SidebarPanel::kDownloads));
--  ASSERT_TRUE(WaitForRows(1));
--  EXPECT_TRUE(base::test::RunUntil([&]() {
--    return content::EvalJs(panel_page(), RowFor("id", id) +
--                                             ".classList.contains('dangerous')")
--        .ExtractBool();
--  }));
--  EXPECT_EQ(1, content::EvalJs(panel_page(),
--                               RowFor("id", id) +
--                                   ".querySelectorAll('[data-action]').length"))
--      << "a dangerous row offers more than the way to the page";
--  EXPECT_EQ(false, content::EvalJs(panel_page(),
--                                   "!!" + RowFor("id", id) +
--                                       ".querySelector('.menu-button')"));
--
--  ASSERT_TRUE(content::ExecJs(
--      panel_page(),
--      RowFor("id", id) + ".querySelector('[data-action=review]').click()"));
--  ASSERT_TRUE(WaitForPanel(SidebarPanel::kNone));
--  EXPECT_TRUE(base::test::RunUntil([&]() {
--    return tabs()->GetActiveWebContents()->GetVisibleURL().host() ==
--           "downloads";
--  }));
--  EXPECT_TRUE(item->IsDangerous()) << "the panel decided for the user";
++
 +    ASSERT_TRUE(content::ExecJs(
 +        panel_page(),
 +        RowFor("url", b.spec()) +
@@ -9186,6 +9236,39 @@ index c08916632e4cb..3697d51f8c0b4 100644
 +             "downloads";
 +    }));
 +    EXPECT_TRUE(item->IsDangerous()) << "the panel decided for the user";
++  }();
++
++  ASSERT_TRUE(StartOver());
++  RemoveAllDownloads();
++
++  // Pn9: Chromium sends the list twenty rows at a time; the rest come as the
++  // list nears its end. The panel asked once and showed the newest twenty.
++  [&] {
++    SCOPED_TRACE("more than a chunk of downloads all show");
++    constexpr int kDownloads = 45;
++    const base::Time now = base::Time::Now();
++    for (int i = 0; i < kDownloads; ++i) {
++      const base::FilePath path = browser()->GetProfile()->GetPath().AppendASCII(
++          "listed-" + base::NumberToString(i) + ".txt");
++      manager()->CreateDownloadItem(
++          base::Uuid::GenerateRandomV4().AsLowercaseString(),
++          /*id=*/10000 + i, path, path,
++          {embedded_test_server()->GetURL(
++              "a.test", "/listed-" + base::NumberToString(i) + ".txt")},
++          GURL(),
++          content::StoragePartitionConfig::CreateDefault(
++              browser()->GetProfile()),
++          GURL(), GURL(), std::nullopt, "text/plain", "text/plain",
++          now - base::Minutes(i), now - base::Minutes(i), std::string(),
++          std::string(), /*received_bytes=*/10, /*total_bytes=*/10,
++          std::string(), download::DownloadItem::COMPLETE,
++          download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
++          download::DOWNLOAD_INTERRUPT_REASON_NONE, /*opened=*/false, now,
++          /*transient=*/false, {});
++    }
++    ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_SHOW_DOWNLOADS));
++    ASSERT_TRUE(WaitForPanel(SidebarPanel::kDownloads));
++    EXPECT_TRUE(ScrollUntilRows(kDownloads)) << RowCount() << " rows";
 +  }();
  }
  

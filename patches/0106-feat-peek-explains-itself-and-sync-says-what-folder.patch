@@ -32,15 +32,15 @@ Removable when: never; to be folded into the patches that own the code.
  .../ui/spaces/sidebar_sync_unittest.cc        |  32 +++++
  chrome/browser/ui/stedding/BUILD.gn           |   5 +
  chrome/browser/ui/stedding/peek.cc            |   8 ++
- chrome/browser/ui/stedding/peek_notice.cc     | 134 ++++++++++++++++++
+ chrome/browser/ui/stedding/peek_notice.cc     | 136 ++++++++++++++++++
  chrome/browser/ui/stedding/peek_notice.h      |  34 +++++
  chrome/browser/ui/stedding/stedding_prefs.cc  |   3 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   7 +
  .../ui/stedding/stedding_prefs_unittest.cc    |   5 +
  .../browser/ui/webui/settings/settings_ui.cc  |  13 +-
- chrome/test/stedding/peek_browsertest.cc      |  52 +++++++
+ chrome/test/stedding/peek_browsertest.cc      |  59 ++++++++
  components/infobars/core/infobar_delegate.h   |   2 +
- 18 files changed, 383 insertions(+), 5 deletions(-)
+ 18 files changed, 392 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/peek_notice.cc
  create mode 100644 chrome/browser/ui/stedding/peek_notice.h
 
@@ -361,10 +361,10 @@ index 812f71b301126..c04e0a801dcce 100644
  }
 diff --git a/chrome/browser/ui/stedding/peek_notice.cc b/chrome/browser/ui/stedding/peek_notice.cc
 new file mode 100644
-index 0000000000000..f19de93824172
+index 0000000000000..eb98731b292ba
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/peek_notice.cc
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,136 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -394,10 +394,12 @@ index 0000000000000..f19de93824172
 +// Settings, searched for the peek rows: the switch and "Open a peek with".
 +constexpr char kPeekSettingsURL[] = "chrome://settings/stedding?search=peek";
 +
++// The profile's own: a private window's prefs are forgotten when the last
++// private window closes, and the note would come back after it.
 +PrefService* PrefsOf(content::WebContents* page) {
 +  Profile* const profile =
 +      page ? Profile::FromBrowserContext(page->GetBrowserContext()) : nullptr;
-+  return profile ? profile->GetPrefs() : nullptr;
++  return profile ? profile->GetOriginalProfile()->GetPrefs() : nullptr;
 +}
 +
 +void MarkAnswered(PrefService* prefs) {
@@ -612,7 +614,7 @@ index 207eb2ecf3b17..ee57ec8a0dca8 100644
    html_source->AddString("steddingSyncDeviceLabel",
                           "This computer’s name");
 diff --git a/chrome/test/stedding/peek_browsertest.cc b/chrome/test/stedding/peek_browsertest.cc
-index 2e6f09da4558b..1477faa13165b 100644
+index 2e6f09da4558b..6a03f006deae5 100644
 --- a/chrome/test/stedding/peek_browsertest.cc
 +++ b/chrome/test/stedding/peek_browsertest.cc
 @@ -28,6 +28,7 @@
@@ -688,6 +690,26 @@ index 2e6f09da4558b..1477faa13165b 100644
  }
  
  // P7: Open as Tab from an essential shared by every Space puts the page in
+@@ -673,12 +725,19 @@ IN_PROC_BROWSER_TEST_F(PeekTest, APeekFromAPrivateWindowStaysPrivate) {
+   content::WebContents* const page =
+       peek->GetTabStripModel()->GetActiveWebContents();
+   ASSERT_TRUE(content::WaitForLoadStop(page));
++  // P19: the note counts and is answered in the profile's own prefs, not the
++  // private window's, which are forgotten when it closes.
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  EXPECT_TRUE(stedding::HasPeekNoticeForTesting(page));
++  EXPECT_EQ(1, prefs->GetInteger(stedding::prefs::kPeekNoticeShown));
+ 
+   chrome::ExecuteCommand(peek, IDC_STEDDING_LITTLE_PROMOTE);
+   ASSERT_TRUE(base::test::RunUntil(
+       [&]() { return stedding::PeekOver(incognito) == nullptr; }));
+   EXPECT_EQ(page, tabs->GetActiveWebContents())
+       << "the page left the private window";
++  EXPECT_TRUE(prefs->GetBoolean(stedding::prefs::kPeekNoticeAnswered))
++      << "Open as Tab answered only the private window's copy";
+ }
+ 
+ // P8: a link that asks for a new tab peeks too, and no tab is added.
 diff --git a/components/infobars/core/infobar_delegate.h b/components/infobars/core/infobar_delegate.h
 index 5c0c180b10215..2908bc4ce23bb 100644
 --- a/components/infobars/core/infobar_delegate.h

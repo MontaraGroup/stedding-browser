@@ -18,13 +18,13 @@ Removable when: never; to be folded into the patches that own the code.
 ---
  chrome/app/stedding_strings.grdp              |   8 ++
  chrome/browser/ui/browser_tabrestore.cc       |   3 +
- chrome/browser/ui/spaces/space_model.cc       |   3 +
+ chrome/browser/ui/spaces/space_model.cc       |   7 +-
  .../ui/spaces/space_storage_partition.cc      |   3 +
  chrome/browser/ui/stedding/BUILD.gn           |  11 +-
  chrome/browser/ui/stedding/menu_rules.cc      |   4 +
  chrome/browser/ui/stedding/pin_lifecycle.cc   |   2 +
- chrome/browser/ui/stedding/tab_menu_verbs.cc  |  37 ++++++
- .../ui/stedding/tab_menu_verbs_unittest.cc    |  42 ++++++
+ chrome/browser/ui/stedding/tab_menu_verbs.cc  |  43 +++++-
+ .../ui/stedding/tab_menu_verbs_unittest.cc    |  77 +++++++++++
  chrome/browser/ui/stedding/tab_separators.cc  | 124 ++++++++++++++++++
  chrome/browser/ui/stedding/tab_separators.h   |  54 ++++++++
  chrome/browser/ui/tabs/tab_menu_model.cc      |  11 ++
@@ -32,13 +32,14 @@ Removable when: never; to be folded into the patches that own the code.
  .../tabs/common/root_tab_collection_node.cc   |   2 +
  .../browser/ui/views/tabs/common/tab_view.cc  |  17 +++
  .../browser/ui/views/tabs/common/tab_view.h   |   9 ++
- .../common/unpinned_tab_container_view.cc     |  32 +++++
+ .../common/unpinned_tab_container_view.cc     |  34 +++++
  .../tabs/common/unpinned_tab_container_view.h |   3 +
- .../unpinned_tab_container_view_layout.cc     |   9 ++
+ .../unpinned_tab_container_view_layout.cc     |   8 ++
  chrome/test/stedding/restore_browsertest.cc   |  52 ++++++++
  .../stedding/sidebar_click_browsertest.cc     |   2 +
+ chrome/test/stedding/tab_drop_browsertest.cc  |  21 +++
  .../tabs/public/tab_context_menu_command.h    |   4 +
- 22 files changed, 434 insertions(+), 2 deletions(-)
+ 23 files changed, 498 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/tab_separators.cc
  create mode 100644 chrome/browser/ui/stedding/tab_separators.h
 
@@ -83,7 +84,7 @@ index fbc1c21a108a0..a1963043fe19f 100644
    stedding::RestoreTabParentFromExtraData(web_contents.get(), extra_data);
    // archive A1 (PLAN.md TST-18): a tab the session restores goes on from the
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index 49d10c82b14ff..e76ee9e99376d 100644
+index 49d10c82b14ff..51cbd4516e1d4 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -51,6 +51,7 @@
@@ -110,6 +111,18 @@ index 49d10c82b14ff..e76ee9e99376d 100644
      stedding::CarryTabParent(replace->old_contents, replace->new_contents);
      CarryClosedFolderPlace(replace->old_contents, replace->new_contents);
      // A rebind of this model's own already puts the contents in the Space's
+@@ -2606,8 +2609,10 @@ void SpaceModel::FinishRoute(tabs::TabHandle handle,
+   if (!tab || !GetSpace(to)) {
+     return;
+   }
++  // A foreground route shows the routed tab, which need not be the active
++  // one (routing D5, a background tab's menu).
+   if (foreground) {
+-    SetActiveSpace(to);
++    SetActiveSpace(to, tab);
+   }
+   observers_.Notify(&Observer::OnTabRouted, tab, from, to);
+ }
 diff --git a/chrome/browser/ui/spaces/space_storage_partition.cc b/chrome/browser/ui/spaces/space_storage_partition.cc
 index 84ad428da9677..8fc5bd703ec5b 100644
 --- a/chrome/browser/ui/spaces/space_storage_partition.cc
@@ -203,7 +216,7 @@ index 4c7ca186755c0..82fa940de9b92 100644
    // Asleep: no renderer, the dimmed row, a load when it is next shown.
    fresh->SetWasDiscarded(true);
 diff --git a/chrome/browser/ui/stedding/tab_menu_verbs.cc b/chrome/browser/ui/stedding/tab_menu_verbs.cc
-index e9ab2ba76080b..88b19e23d2870 100644
+index e9ab2ba76080b..ec10df2b6d2f4 100644
 --- a/chrome/browser/ui/stedding/tab_menu_verbs.cc
 +++ b/chrome/browser/ui/stedding/tab_menu_verbs.cc
 @@ -21,9 +21,11 @@
@@ -244,7 +257,23 @@ index e9ab2ba76080b..88b19e23d2870 100644
      case TabStripModel::CommandSteddingSleepTab:
        return !TabsToSleep(WindowOf(tabs), tab, SleepScope::kThisTab).empty();
      case TabStripModel::CommandSteddingSleepOthersInSpace:
-@@ -246,6 +260,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+@@ -186,11 +200,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+ 
+   if (IsMoveEntry(command_id)) {
+     // menus M1: the i-th Space other than the active one. The selection
+-    // moves and the window follows it, as the command bar's row does.
++    // moves and the window follows it, showing the tab the menu was opened
++    // on: it need not be the active tab, and the Space's own last tab came
++    // up instead.
+     const spaces::SpaceId target =
+         OtherSpaces(*space_model)[command_id - kMoveFirst];
+     space_model->MoveTabsToSpace(selection, target);
+-    space_model->SetActiveSpace(target);
++    space_model->SetActiveSpace(target, tab);
+     return;
+   }
+   if (IsRouteEntry(command_id)) {
+@@ -246,6 +262,13 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
        // selection.
        ShowPinHomeDialog(window, tab);
        return;
@@ -258,7 +287,7 @@ index e9ab2ba76080b..88b19e23d2870 100644
      case TabStripModel::CommandCopyURL:
      case TabStripModel::CommandSteddingCopyMarkdownLink:
        CopyLink(window, tab->GetContents(),
-@@ -262,6 +283,22 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
+@@ -262,6 +285,22 @@ void ExecuteTabMenuVerb(TabStripModel& tabs, int index, int command_id) {
  bool IsTabMenuRowVisible(const TabStripModel& tabs, int index, int command_id) {
    const tabs::TabInterface* const tab =
        tabs.ContainsIndex(index) ? tabs.GetTabAtIndex(index) : nullptr;
@@ -282,7 +311,7 @@ index e9ab2ba76080b..88b19e23d2870 100644
    if (tab && tab->IsPinned()) {
      kind = TabRowKind::kEssential;
 diff --git a/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc b/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
-index 787368d8bac14..88092383176ab 100644
+index 787368d8bac14..2d59308ca5409 100644
 --- a/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
 +++ b/chrome/browser/ui/stedding/tab_menu_verbs_unittest.cc
 @@ -29,6 +29,7 @@
@@ -293,7 +322,49 @@ index 787368d8bac14..88092383176ab 100644
  #include "chrome/browser/ui/tabs/tab_menu_model.h"
  #include "chrome/browser/ui/tabs/tab_menu_model_delegate.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
-@@ -286,6 +287,47 @@ TEST_F(TabMenuVerbsTest, CopyLinkIsTheCleanCopy) {
+@@ -262,6 +263,41 @@ TEST_F(TabMenuVerbsTest, TheThirdRouteEntryWritesTheRuleAndRoutesTheTab) {
+   EXPECT_EQ(1u, spaces::ReadRoutes(profile()->GetPrefs()).size());
+ }
+ 
++// menus M1, routing D5: a tab moved or routed from its menu is the tab the
++// window shows in the other Space, though it was not the active one: the
++// Space's own last tab came up instead.
++TEST_F(TabMenuVerbsTest, AMovedOrRoutedTabIsTheOneShown) {
++  tabs::TabInterface* const first = OpenTab(GURL("https://a.example/"));
++  HaveSpaces(3);
++  const spaces::SpaceId home = space_model().active_id();
++  const spaces::SpaceId other = space_model().spaces()[1]->id();
++  // The other Space has a last tab of its own.
++  tabs::TabInterface* const its_own = OpenTab(GURL("https://b.example/"));
++  Execute(its_own, kMoveFirst);
++  ASSERT_EQ(other, space_model().active_id());
++  ASSERT_EQ(its_own, tabs().GetActiveTab());
++
++  ASSERT_TRUE(space_model().SetActiveSpace(home));
++  tabs::TabInterface* const moved = OpenTab(GURL("https://c.example/"));
++  tabs().ActivateTabAt(IndexOf(first));
++  ASSERT_EQ(first, tabs().GetActiveTab());
++  Execute(moved, kMoveFirst);
++  EXPECT_EQ(other, space_model().active_id());
++  EXPECT_EQ(moved, tabs().GetActiveTab()) << "Move to Space";
++
++  ASSERT_TRUE(space_model().SetActiveSpace(home));
++  tabs::TabInterface* const routed = OpenTab(GURL("https://d.example/"));
++  tabs().ActivateTabAt(IndexOf(first));
++  ASSERT_EQ(first, tabs().GetActiveTab());
++  // The route entries are every Space in switcher order: the second is the
++  // other one.
++  Execute(routed, kRouteFirst + 1);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(other, space_model().SpaceForTab(routed));
++  EXPECT_EQ(other, space_model().active_id());
++  EXPECT_EQ(routed, tabs().GetActiveTab()) << "Always Open in";
++}
++
+ // copy-link L4, menus M8: outside a web app's window Copy Link is Stedding's
+ // clean copy on the horizontal strip too. The model's own Copy URL is a web
+ // app's: it hit a DCHECK in a normal window and copied the tracking
+@@ -286,6 +322,47 @@ TEST_F(TabMenuVerbsTest, CopyLinkIsTheCleanCopy) {
  // spaces B10, pins H1, H6, H13: the per-Space pin pair has exactly one row
  // enabled, and the pinned-page rows come with the pin; only a web page can be
  // made the pinned page.
@@ -672,7 +743,7 @@ index 484672a9accbf..c3a512abca43a 100644
    // (stedding::UntitledLocalTitle), kept with the host line.
    std::u16string untitled_title_;
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index aad67bc0e490a..871c338171626 100644
+index aad67bc0e490a..ce3105a9b9135 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 @@ -16,6 +16,7 @@
@@ -683,7 +754,7 @@ index aad67bc0e490a..871c338171626 100644
  #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
  #include "chrome/browser/ui/views/tabs/common/folder_view.h"
  #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
-@@ -326,8 +327,39 @@ void UnpinnedTabContainerView::ViewHierarchyChanged(
+@@ -326,8 +327,41 @@ void UnpinnedTabContainerView::ViewHierarchyChanged(
    }
  }
  
@@ -691,8 +762,10 @@ index aad67bc0e490a..871c338171626 100644
 +  std::vector<gfx::Rect> lines;
 +  for (views::View* const child : children()) {
 +    const auto* const row = views::AsViewClass<TabView>(child);
++    // A dragged row's line waits for the drop: drawn above the row at the
++    // pointer, it would cross the row there.
 +    if (!row || !row->GetVisible() || !row->separator_above() ||
-+        row->height() == 0) {
++        row->height() == 0 || GetVisualDataForDraggedView(*child)) {
 +      continue;
 +    }
 +    // On the rows' favicon column at either end, half the band up, as thin
@@ -738,7 +811,7 @@ index b9cc3e4217c64..855bf56284a48 100644
    // before it to the end.
    void ViewHierarchyChanged(
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index 529408ba3c2fe..12894846fc87d 100644
+index 529408ba3c2fe..85b08f54d4ade 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 @@ -20,6 +20,7 @@
@@ -749,17 +822,16 @@ index 529408ba3c2fe..12894846fc87d 100644
  #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/horizontal/horizontal_tab_closing_helper.h"
  #include "components/tab_groups/tab_group_id.h"
-@@ -504,6 +505,14 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -504,6 +505,13 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
        continue;
      }
  
 +    // sidebar Y45: a row with a separator above it stands below the band
-+    // its container draws the line in (UnpinnedTabContainerView).
-+    if (!drag_data) {
-+      if (const auto* const row = views::AsViewClass<TabView>(child);
-+          row && row->separator_above()) {
-+        height += TabView::kSeparatorBand;
-+      }
++    // its container draws the line in (UnpinnedTabContainerView). A dragged
++    // row keeps its band in the list, so the rows after it hold their places.
++    if (const auto* const row = views::AsViewClass<TabView>(child);
++        row && row->separator_above()) {
++      height += TabView::kSeparatorBand;
 +    }
      bounds.set_y(drag_data ? drag_data->offset.y() : height);
  
@@ -854,6 +926,43 @@ index 5409ed7702dac..eea4e7242540e 100644
          split_with,
          u"Sleep Tab",
          u"Sleep Other Tabs in This Space",
+diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
+index 2fb1fb309bfac..125fb11e660aa 100644
+--- a/chrome/test/stedding/tab_drop_browsertest.cc
++++ b/chrome/test/stedding/tab_drop_browsertest.cc
+@@ -50,6 +50,7 @@
+ #include "chrome/browser/ui/spaces/space_router.h"
+ #include "chrome/browser/ui/stedding/pin_lifecycle.h"
+ #include "chrome/browser/ui/stedding/stedding_prefs.h"
++#include "chrome/browser/ui/stedding/tab_separators.h"
+ #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/tabs/tab_enums.h"
+@@ -2670,4 +2671,24 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, APressWaitsAndADragKeepsThePage) {
+   }
+ }
+ 
++// sidebar Y45: a row with a separator above it keeps the band while it is
++// dragged, so the rows after it hold their places, and its line is not drawn
++// over the row the dragged one passes; the drop leaves the line on the row.
++IN_PROC_BROWSER_TEST_F(TabDropTest, ARowsSeparatorStaysPutWhileItIsDragged) {
++  Open("two.test");
++  tabs::TabInterface* const three = Open("three.test");
++  tabs::TabInterface* const four = Open("four.test");
++  stedding::SetSeparatorAbove(browser(), three, true);
++  const gfx::Point four_before = RowCentre(four);
++  const gfx::Point from = RowCentre(three);
++  // Sideways along the row: the drag starts and the order stays.
++  const gfx::Point to(from.x() + 40, from.y());
++  PointerPressAndMove(from, to);
++  EXPECT_EQ(four_before.y(), RowCentre(four).y())
++      << "the row after the dragged one moved up into its band";
++  Release(to);
++  EXPECT_TRUE(stedding::HasSeparatorAbove(three->GetContents()));
++  EXPECT_EQ(four_before.y(), RowCentre(four).y());
++}
++
+ }  // namespace
 diff --git a/components/tabs/public/tab_context_menu_command.h b/components/tabs/public/tab_context_menu_command.h
 index 48767b4afd720..d8bfd995e26c4 100644
 --- a/components/tabs/public/tab_context_menu_command.h

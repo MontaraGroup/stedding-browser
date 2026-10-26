@@ -35,8 +35,8 @@ sidebar's column.
  .../resources/stedding_library/app.css        | 293 ++++++
  .../browser/resources/stedding_library/app.ts |  71 ++
  .../resources/stedding_library/common.ts      | 173 ++++
- .../stedding_library/downloads_panel.ts       | 288 ++++++
- .../stedding_library/history_panel.ts         | 229 +++++
+ .../stedding_library/downloads_panel.ts       | 316 ++++++
+ .../stedding_library/history_panel.ts         | 234 +++++
  .../stedding_library/stedding_library.html    |  26 +
  chrome/browser/ui/BUILD.gn                    |   9 +
  .../browser/ui/browser_command_controller.cc  |  16 +
@@ -83,7 +83,7 @@ sidebar's column.
  .../stedding/sidebar_panels_browsertest.cc    | 956 ++++++++++++++++++
  .../test/stedding/sidebar_rail_browsertest.cc |   3 +
  tools/gritsettings/resource_ids.spec          |   5 +
- 58 files changed, 5278 insertions(+), 21 deletions(-)
+ 58 files changed, 5311 insertions(+), 21 deletions(-)
  create mode 100644 chrome/app/vector_icons/stedding_archive_box.icon
  create mode 100644 chrome/browser/resources/stedding_library/BUILD.gn
  create mode 100644 chrome/browser/resources/stedding_library/app.css
@@ -849,10 +849,10 @@ index 0000000000000..d57d5f57d4985
 +}
 diff --git a/chrome/browser/resources/stedding_library/downloads_panel.ts b/chrome/browser/resources/stedding_library/downloads_panel.ts
 new file mode 100644
-index 0000000000000..c497811c11537
+index 0000000000000..f5d216db69ed0
 --- /dev/null
 +++ b/chrome/browser/resources/stedding_library/downloads_panel.ts
-@@ -0,0 +1,288 @@
+@@ -0,0 +1,316 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -896,6 +896,11 @@ index 0000000000000..c497811c11537
 +  // Ids whose Move to Trash failed: the row says so (Pn11).
 +  private trashFailed_ = new Set<string>();
 +  private renderPending_ = false;
++  // Pn9: the list comes twenty rows at a time, the next twenty when asked
++  // again with the same terms, as the Downloads page asks while it scrolls.
++  private terms_: string[] = [];
++  private asking_ = false;
++  private mayHaveMore_ = false;
 +
 +  constructor(search: HTMLInputElement, list: HTMLElement, empty: HTMLElement) {
 +    this.search_ = search;
@@ -905,6 +910,11 @@ index 0000000000000..c497811c11537
 +    // Pn9: the list follows the downloads as they change.
 +    const router = this.proxy_.callbackRouter;
 +    router.insertItems.addListener((index: number, items: Data[]) => {
++      // Every request is answered by one insert, empty past the end.
++      if (this.asking_) {
++        this.asking_ = false;
++        this.mayHaveMore_ = items.length > 0;
++      }
 +      this.items_.splice(index, 0, ...items);
 +      this.scheduleRender_();
 +    });
@@ -923,14 +933,31 @@ index 0000000000000..c497811c11537
 +
 +    this.search_.addEventListener(
 +        'input', debounce(() => this.query_(), SEARCH_PAUSE_MS));
++    this.list_.addEventListener('scroll', () => this.askForMoreNearEnd_());
 +    this.query_();
 +  }
 +
 +  // Pn9: over the file's name and its address, as the Downloads page
 +  // searches.
 +  private query_() {
-+    const terms = this.search_.value.trim().split(/\s+/).filter(t => !!t);
-+    this.proxy_.handler.getDownloads(terms);
++    this.terms_ = this.search_.value.trim().split(/\s+/).filter(t => !!t);
++    this.ask_();
++  }
++
++  private ask_() {
++    this.asking_ = true;
++    this.proxy_.handler.getDownloads(this.terms_);
++  }
++
++  // The next rows, while the list is within 200 px of its end: after a
++  // scroll, and after a redraw, as a first chunk that fits the list leaves
++  // nothing to scroll.
++  private askForMoreNearEnd_() {
++    const list = this.list_;
++    if (!this.asking_ && this.mayHaveMore_ &&
++        list.scrollTop + list.clientHeight >= list.scrollHeight - 200) {
++      this.ask_();
++    }
 +  }
 +
 +  private scheduleRender_() {
@@ -941,6 +968,7 @@ index 0000000000000..c497811c11537
 +    requestAnimationFrame(() => {
 +      this.renderPending_ = false;
 +      this.render_();
++      this.askForMoreNearEnd_();
 +    });
 +  }
 +
@@ -1143,10 +1171,10 @@ index 0000000000000..c497811c11537
 +}
 diff --git a/chrome/browser/resources/stedding_library/history_panel.ts b/chrome/browser/resources/stedding_library/history_panel.ts
 new file mode 100644
-index 0000000000000..a634d5f3d4a6a
+index 0000000000000..1ab4b0bd05c3e
 --- /dev/null
 +++ b/chrome/browser/resources/stedding_library/history_panel.ts
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,234 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -1256,6 +1284,11 @@ index 0000000000000..a634d5f3d4a6a
 +    this.finished_ = !results.info || results.info.finished;
 +    this.loading_ = false;
 +    this.render_();
++    // A first page that fits the list leaves no scroll, and the observer
++    // had its look while this page loaded: the next one comes now.
++    if (this.nearEnd_()) {
++      this.more_();
++    }
 +  }
 +
 +  private async more_() {

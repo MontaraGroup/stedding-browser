@@ -88,7 +88,7 @@ the hover card).
  .../page_action_properties_provider.cc        |  11 +
  .../ui/page_action/page_action_triggers.cc    |   1 +
  .../ui/page_action/page_action_triggers.h     |   7 +
- chrome/browser/ui/spaces/new_tab_space.cc     |   4 +-
+ chrome/browser/ui/spaces/new_tab_space.cc     |  17 +-
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
  .../spaces/space_jar_navigation_throttle.cc   |   4 +-
  chrome/browser/ui/spaces/space_model.cc       | 369 ++++++-----
@@ -168,7 +168,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6081 insertions(+), 734 deletions(-)
+ 89 files changed, 6090 insertions(+), 738 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -399,10 +399,43 @@ index 05947c94ab4e0..efd87ec5ff3f4 100644
  
  #endif  // CHROME_BROWSER_UI_PAGE_ACTION_PAGE_ACTION_TRIGGERS_H_
 diff --git a/chrome/browser/ui/spaces/new_tab_space.cc b/chrome/browser/ui/spaces/new_tab_space.cc
-index 90bff3f9f19a7..f633da68b61b6 100644
+index 90bff3f9f19a7..14b7adbe6d03e 100644
 --- a/chrome/browser/ui/spaces/new_tab_space.cc
 +++ b/chrome/browser/ui/spaces/new_tab_space.cc
-@@ -81,7 +81,9 @@ std::optional<NewTabSpaceChoice> ChooseSpaceForNewTab(
+@@ -31,16 +31,17 @@ const ScopedServiceWorkerWindow* g_service_worker_window = nullptr;
+ 
+ // The Space of the tab `source` is, when it is a tab of a window with Spaces
+ // and `model` has that Space too: windows share their Spaces through the
+-// registry, a Blank Window has its own. An essential is in every Space and
+-// so gives none. Only a page that opened the tab, or an open into another
+-// window, follows its source (ChooseSpaceForNewTab).
++// registry, a Blank Window has its own. An essential every Space shares
++// gives none; one that is its Space's own, in that Space's session, gives
++// that Space (sessions S8). Only a page that opened the tab, or an open into
++// another window, follows its source (ChooseSpaceForNewTab).
+ std::optional<SpaceId> SourceSpace(SpaceModel& model,
+                                    BrowserWindowInterface* target_window,
+                                    content::WebContents* source,
+                                    bool opened_by_page) {
+   tabs::TabInterface* const tab =
+       source ? tabs::TabInterface::MaybeGetFromContents(source) : nullptr;
+-  if (!tab || tab->IsPinned()) {
++  if (!tab) {
+     return std::nullopt;
+   }
+   BrowserWindowInterface* const window = tab->GetBrowserWindowInterface();
+@@ -48,6 +49,10 @@ std::optional<SpaceId> SourceSpace(SpaceModel& model,
+     return std::nullopt;
+   }
+   SpaceModel* const source_model = window ? SpaceModel::From(window) : nullptr;
++  if (tab->IsPinned() &&
++      (!source_model || !source_model->IsOwnEssential(tab))) {
++    return std::nullopt;
++  }
+   // web apps Wa14: a link leaving an app's window opens in the Space whose
+   // jar the app's page lives in, so the page it opens keeps that session. An
+   // app window has no Spaces of its own to name one.
+@@ -81,7 +86,9 @@ std::optional<NewTabSpaceChoice> ChooseSpaceForNewTab(
        .space = essential ? model->active_id()
                           : SourceSpace(*model, window, source, opened_by_page)
                                 .value_or(model->active_id()),

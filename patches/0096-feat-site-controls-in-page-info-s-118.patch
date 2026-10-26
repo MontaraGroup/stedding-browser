@@ -63,10 +63,10 @@ Chromium's page info gains the same controls.
  .../hidden_row_controls_browsertest.cc        |  72 ++
  .../stedding/isolation_mark_browsertest.cc    |  98 ++
  .../stedding/site_controls_browsertest.cc     | 656 +++++++++++++
- chrome/test/stedding/space_jar_browsertest.cc | 152 +++
+ chrome/test/stedding/space_jar_browsertest.cc | 180 ++++
  components/page_info/page_info.cc             |  11 +
  components/page_info/page_info_delegate.h     |   6 +
- 39 files changed, 3369 insertions(+), 34 deletions(-)
+ 39 files changed, 3397 insertions(+), 34 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/site_controls.cc
  create mode 100644 chrome/browser/ui/stedding/site_controls.h
  create mode 100644 chrome/browser/ui/stedding/site_controls_unittest.cc
@@ -3974,7 +3974,7 @@ index 0000000000000..99291a162656c
 +
 +}  // namespace
 diff --git a/chrome/test/stedding/space_jar_browsertest.cc b/chrome/test/stedding/space_jar_browsertest.cc
-index 326c29e639aa7..649ef0a8bd70f 100644
+index 326c29e639aa7..7c31e0bb772fe 100644
 --- a/chrome/test/stedding/space_jar_browsertest.cc
 +++ b/chrome/test/stedding/space_jar_browsertest.cc
 @@ -27,6 +27,7 @@
@@ -4026,7 +4026,42 @@ index 326c29e639aa7..649ef0a8bd70f 100644
  #include "ui/views/widget/any_widget_observer.h"
  #include "ui/views/widget/widget.h"
  #include "ui/views/widget/widget_delegate.h"
-@@ -896,6 +915,139 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest, ClearingASitesCookiesStaysInThatJar) {
+@@ -384,6 +403,34 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest, TheFirstRequestCarriesTheSpacesJar) {
+     chrome::CloseWindow(params.browser);
+     ui_test_utils::WaitForBrowserToClose(params.browser);
+   }
++
++  {
++    // sessions S8, S26: a Shift-click on an essential that is Work's own
++    // opens a window showing Work, and the page carries Work's cookies, as
++    // from any tab of Work's; only an essential every Space shares gives none.
++    SCOPED_TRACE("ANewWindowFromASpacesOwnEssentialShowsThatSpace");
++    ASSERT_NO_FATAL_FAILURE(BackToTheTwoTabs());
++    ASSERT_TRUE(model_->SetActiveSpace(work_));
++    tabs::TabInterface* const tab = work_tab_.Get();
++    tabs()->SetTabPinned(tabs()->GetIndexOfTab(tab), true);
++    ASSERT_TRUE(
++        base::test::RunUntil([&]() { return model_->IsOwnEssential(tab); }));
++    NavigateParams params(browser(), Url("b.test", "/own-essential-window"),
++                          ui::PAGE_TRANSITION_LINK);
++    params.disposition = WindowOpenDisposition::NEW_WINDOW;
++    params.source_contents = tab->GetContents();
++    Navigate(&params);
++    EXPECT_EQ("jar=work", FirstCookieFor("/own-essential-window"))
++        << "the page left Work's own essential on another Space's cookies";
++    ASSERT_NE(browser(), params.browser);
++    spaces::SpaceModel* const other = spaces::SpaceModel::From(params.browser);
++    ASSERT_TRUE(other);
++    EXPECT_TRUE(
++        base::test::RunUntil([&]() { return other->active_id() == work_; }));
++    chrome::CloseWindow(params.browser);
++    ui_test_utils::WaitForBrowserToClose(params.browser);
++    tabs()->SetTabPinned(tabs()->GetIndexOfTab(tab), false);
++  }
+ }
+ 
+ // A routed tab dragged to another window is not routed again, a slept tab of
+@@ -896,6 +943,139 @@ IN_PROC_BROWSER_TEST_F(SpaceJarTest, ClearingASitesCookiesStaysInThatJar) {
    }
  }
  
