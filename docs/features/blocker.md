@@ -5,8 +5,7 @@ their tests passing on the Mac (2026-10-26); **Bk6 partial** (its live check not
 nothing has been seen live). **Bk0 partial**: the decision behind it,
 `docs/decisions/0030-ad-and-tracker-blocking.md`, is **Proposed** and waits for the owner; the
 feature stays off by default until then and after. **Bk20–Bk23 planned**. BACKLOG S-88.
-Owner docs: `docs/PRIVACY.md` (the connection it adds), `docs/ROADMAP.md` M10. Patch: not yet in
-the series.
+Owner docs: `docs/PRIVACY.md` (the connection it adds), `docs/ROADMAP.md` M10. Patch: 0098.
 
 One switch blocks the ads and trackers that the EasyList and EasyPrivacy filter lists name: their
 scripts, images, frames, requests and pings do not load. It is off until the user turns it on in

@@ -14,8 +14,7 @@ written went to another item of the round); the app window's card is S-165's.
 Owner docs: `docs/PRODUCT.md` §12 ("Progressive Web Apps"), `docs/PRIVACY.md` ("Apps made from
 pages"), `docs/decisions/0019-space-sessions-are-storage-partitions.md`,
 `docs/decisions/0025-apps-keep-their-spaces-session.md` (proposed: the session rule and the two
-records). Patch: not yet in the series (proposed: one new patch; the app window's card goes into
-the patches that own the card, 0059 and 0007, by `tooling/fold-fix`).
+records). Patch: 0072.
 
 Any web page can become an app of its own: a window with no browser around it, an icon in the
 Dock or the Start menu, and the session of the Space it was made in. On the Mac this is Safari's

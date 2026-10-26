@@ -5,8 +5,8 @@ the same day fixed (Cl3's empty `q=`, Cl12–Cl14, Cl4's browser test); released
 beta 16; their tests pass on the Mac (2026-10-26); not yet seen live.
 Owner docs: `docs/PRIVACY.md` (what Stedding does), `docs/features/copy-link.md` (L2, the
 shared table), `docs/features/privacy.md` (Q15), `docs/features/settings.md` (T31, T32).
-Patch: `patches/0089-feat-clean-links-on-every-page-opened-s-89.patch`; the review's fixes
-are not yet folded in.
+Patch: `patches/0089-feat-clean-links-on-every-page-opened-s-89.patch`, the review's fixes
+folded in.
 
 A page the user opens loads without the tracking parameters a copied link already loses
 (`utm_*`, `fbclid`, `gclid` and the rest of copy-link L2), so the site's server never

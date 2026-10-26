@@ -9,7 +9,7 @@ yet); the other rows' states are not yet brought up to that run, and nothing has
 live yet; each becomes built when its tests pass, Dk7 only once `dk_no_flash_light` passes too, and Dk23 once its cost on a heavy page is
 measured (TBD); Dk24's app-menu row is planned (the owner's call). BACKLOG S-100.
 Owner docs: `docs/PRODUCT.md` §13 ("Dark mode for web pages", M10), `docs/ROADMAP.md` M10,
-`docs/PRIVACY.md`. Patch: not yet in the series.
+`docs/PRIVACY.md`. Patch: 0072.
 
 For night work: one switch turns every website dark, in every window and Space of the profile,
 until it is turned off. It is Chromium's own automatic dark mode for web contents, driven by its

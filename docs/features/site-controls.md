@@ -4,7 +4,7 @@ Status: **Si1–Si11 partial**: written 2026-10-25 (BACKLOG S-118), with their t
 in 0.3.0 beta 16; Si11's tests pass on the Mac (2026-10-26); not yet seen live. **Si12
 planned**: its check is the acceptance script's, not yet run.
 Owner docs: `docs/PRODUCT.md` §12 (Site Control Center), `docs/features/toolbar.md` T47.
-Patch: not yet in the series.
+Patch: 0096.
 
 One panel for the site you are on. It is Chromium's page info, the panel the site chip at
 the address row's left opens (toolbar T5), with Stedding's controls in it: a strip under
