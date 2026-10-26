@@ -1514,7 +1514,7 @@ index c576d9b3ed3d3..7c44669a74efa 100644
        scroll_synchronizers_;
  
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index 423b767428950..aad67bc0e490a 100644
+index 3d2a88c9c61b5..c3b09c3b5946e 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 @@ -6,13 +6,18 @@
@@ -1553,7 +1553,7 @@ index 423b767428950..aad67bc0e490a 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/layout/layout_types.h"
-@@ -156,6 +165,130 @@ gfx::Rect RowDropIndicatorBounds(const views::View& container, int y) {
+@@ -158,6 +167,130 @@ gfx::Rect RowDropIndicatorBounds(const views::View& container, int y) {
  }
  }  // namespace
  
@@ -1684,7 +1684,7 @@ index 423b767428950..aad67bc0e490a 100644
  void UnpinnedTabContainerView::SetRowDropIndicator(std::optional<int> y) {
    if (row_drop_indicator_y_ == y) {
      return;
-@@ -182,6 +315,17 @@ void UnpinnedTabContainerView::SetListRoom(int list_room) {
+@@ -184,6 +317,17 @@ void UnpinnedTabContainerView::SetListRoom(int list_room) {
    InvalidateLayout();
  }
  
@@ -1703,7 +1703,7 @@ index 423b767428950..aad67bc0e490a 100644
    TabCollectionZOrderManager::PaintChildren(info);
    if (!row_drop_indicator_y_) {
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 1d3604386157e..b9cc3e4217c64 100644
+index 013d74352a6fe..693f2f60faec1 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 @@ -18,6 +18,14 @@
@@ -1721,9 +1721,9 @@ index 1d3604386157e..b9cc3e4217c64 100644
  class TabCollectionNode;
  class TabGroupView;
  class UnpinnedTabContainerViewLayout;
-@@ -80,6 +88,33 @@ class UnpinnedTabContainerView
-       std::unique_ptr<views::View> new_tab_row,
-       base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
+@@ -81,6 +89,33 @@ class UnpinnedTabContainerView
+       base::RepeatingCallback<bool(const views::View*)> is_space_pinned,
+       bool space_pins_allowed);
    views::View* space_boundary_clear_line() { return boundary_clear_line_; }
 +  // Stedding pins H27 (BACKLOG S-277, S-289, GitHub issue 16): where a
 +  // release at `screen_point` would put a row brought into this list from
@@ -1755,7 +1755,7 @@ index 1d3604386157e..b9cc3e4217c64 100644
    // Stedding (pins H14, BACKLOG S-271): while rows of this container are
    // dragged, whether a release here puts them in the Space's pinned run, over
    // the Clear line, or under it; nothing while no row of it is dragged. The
-@@ -128,6 +163,10 @@ class UnpinnedTabContainerView
+@@ -129,6 +164,10 @@ class UnpinnedTabContainerView
  
    // views::View:
    void PaintChildren(const views::PaintInfo& info) override;
@@ -1766,7 +1766,7 @@ index 1d3604386157e..b9cc3e4217c64 100644
  
   private:
    // DraggedTabsContainer:
-@@ -162,6 +201,13 @@ class UnpinnedTabContainerView
+@@ -166,6 +205,13 @@ class UnpinnedTabContainerView
  
    // Written by the layout, which is const; see dragged_rows_pinned().
    mutable std::optional<bool> dragged_rows_pinned_;
@@ -1781,7 +1781,7 @@ index 1d3604386157e..b9cc3e4217c64 100644
    // folders F38: where the drop indicator's bar is centred, if shown.
    std::optional<int> row_drop_indicator_y_;
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index 6d8fd6e13cfd2..ca554db94e824 100644
+index c2dbbbd694731..63cce480a256a 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 @@ -15,6 +15,7 @@
@@ -1805,7 +1805,7 @@ index 6d8fd6e13cfd2..ca554db94e824 100644
          continue;
        }
        if (tab_container_view->GetVisualDataForDraggedView(*child)) {
-@@ -356,7 +360,8 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -368,7 +372,8 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
      bool past_boundary = false;
      for (auto* child : children) {
        if (!IsChildVisibleInContainer(tab_container_view, focused_group_id,
@@ -1815,7 +1815,7 @@ index 6d8fd6e13cfd2..ca554db94e824 100644
          continue;
        }
        if (!is_space_pinned(child)) {
-@@ -408,12 +413,43 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -420,12 +425,43 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
      }
    };
  
@@ -1859,7 +1859,7 @@ index 6d8fd6e13cfd2..ca554db94e824 100644
      int x =
          views::AsViewClass<TabGroupView>(child) &&
                  collapse_state != tabs::VerticalTabStripCollapseState::kExpanded
-@@ -456,13 +492,22 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -468,13 +504,22 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
                         horizontal_padding);
      }
      layouts.child_layouts.emplace_back(child, true, bounds);

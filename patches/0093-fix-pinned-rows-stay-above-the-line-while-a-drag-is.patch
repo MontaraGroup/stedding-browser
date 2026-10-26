@@ -26,8 +26,8 @@ Removable when: the sidebar list keeps its drag state while a folder target hold
 ---
  .../ui/views/tabs/common/tab_drag_handler.cc  |  12 +
  .../unpinned_tab_container_view_layout.cc     |  29 +-
- .../test/stedding/pinned_run_browsertest.cc   | 254 ++++++++++++++++++
- 3 files changed, 290 insertions(+), 5 deletions(-)
+ .../test/stedding/pinned_run_browsertest.cc   | 456 ++++++++++++++++++
+ 3 files changed, 492 insertions(+), 5 deletions(-)
 
 diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 index d597168b26a02..22cb636c57240 100644
@@ -53,7 +53,7 @@ index d597168b26a02..22cb636c57240 100644
  
  void TabDragHandlerImpl::StartedDragging(
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index ca554db94e824..529408ba3c2fe 100644
+index 63cce480a256a..d367073c636e3 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 @@ -291,9 +291,23 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
@@ -104,7 +104,7 @@ index ca554db94e824..529408ba3c2fe 100644
        } else {
          // The run's edge, and the line and the New Tab row under it.
          const int edge = before ? before->bounds().bottom() : 0;
-@@ -348,8 +368,7 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -360,8 +380,7 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
    }
    tab_container_view->dragged_rows_pinned_ = dragged_pinned;
    const auto is_space_pinned = [&](views::View* child) {
@@ -115,10 +115,14 @@ index ca554db94e824..529408ba3c2fe 100644
      }
      return pinned_in_model(child);
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
-index 6955e55d61ed4..b850e4ed8ba77 100644
+index 6955e55d61ed4..ac7f228ac3541 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc
 +++ b/chrome/test/stedding/pinned_run_browsertest.cc
-@@ -12,6 +12,7 @@
+@@ -9,9 +9,11 @@
+ // Clear line stays between the run and the tabs below it. Expand Pinned Tabs
+ // brings the rows back, and the state is the Space's across a restart.
+ 
++#include <algorithm>
  #include <memory>
  #include <optional>
  #include <string>
@@ -126,7 +130,24 @@ index 6955e55d61ed4..b850e4ed8ba77 100644
  #include <vector>
  
  #include "base/functional/callback.h"
-@@ -1329,6 +1330,259 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ARowDroppedOnTheFirstRowTakesTheTop) {
+@@ -44,6 +46,7 @@
+ #include "chrome/browser/ui/views/tabs/common/folder_view.h"
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
++#include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/test/vertical_tabs_browser_test_mixin.h"
+@@ -66,6 +69,8 @@
+ #include "ui/events/event_constants.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/menus/simple_menu_model.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/scroll_view.h"
+ #include "ui/views/test/views_test_utils.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+@@ -1329,6 +1334,457 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ARowDroppedOnTheFirstRowTakesTheTop) {
    }
  }
  
@@ -381,6 +402,204 @@ index 6955e55d61ed4..b850e4ed8ba77 100644
 +    EXPECT_TRUE(IsAboveTheLine(l1));
 +    EXPECT_FALSE(IsAboveTheLine(l4));
 +  }
++}
++
++// pins H14 (GitHub issue 41): with no loose tab in the Space, a pin dragged
++// down past the run's end leaves it and is a tab under the line: dropped on
++// the New Tab row's upper half, its lower half, or the room under the list.
++// There was no line to cross, and the pin stayed in the run.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest, APinLeavesTheRunWithNoTabUnderIt) {
++  tabs::TabInterface* const a = tabs().GetActiveTab();
++  model().SetSpacePinned(a, true);
++  tabs::TabInterface* const b = AddBlankTab();
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  // Where to drop `b`'s row, from the New Tab row's bounds.
++  const struct {
++    const char* where;
++    int (*y)(const gfx::Rect& new_tab_row);
++  } kDrops[] = {
++      {"the New Tab row's upper half",
++       [](const gfx::Rect& r) { return r.y() + r.height() / 4; }},
++      {"the New Tab row's lower half",
++       [](const gfx::Rect& r) { return r.y() + r.height() * 3 / 4; }},
++      {"the room under the list",
++       [](const gfx::Rect& r) { return r.bottom() + r.height() * 2; }},
++  };
++  for (const auto& drop : kDrops) {
++    SCOPED_TRACE(drop.where);
++    model().SetSpacePinned(b, true);
++    ASSERT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    const TabView* const row =
++        stedding::test::FindDrawnRow(widget()->GetRootView(), b);
++    ASSERT_TRUE(row);
++    const auto* const list =
++        views::AsViewClass<UnpinnedTabContainerView>(row->parent());
++    ASSERT_TRUE(list);
++    const views::View* const new_tab_row =
++        list->space_boundary_new_tab_row();
++    ASSERT_TRUE(new_tab_row && new_tab_row->GetVisible());
++    // With no loose tab there is no Clear line: the run ends at the New Tab
++    // row.
++    ASSERT_FALSE(ClearLineShown());
++    const gfx::Rect under = new_tab_row->GetBoundsInScreen();
++    ASSERT_LE(row->GetBoundsInScreen().bottom(), under.y());
++
++    const gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++    const gfx::Point to(from.x(), drop.y(under));
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed,
++                                  from);
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, to);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    EXPECT_TRUE(model().IsSpacePinned(a));
++    EXPECT_FALSE(model().IsSpacePinned(b)) << "the pin stayed in the run";
++    EXPECT_FALSE(IsAboveTheLine(b));
++  }
++}
++
++// pins H14, H27 (GitHub issue 41): in a Space with no pin and no essential
++// yet, a tab dragged up over the Clear line becomes the run's first pin, and
++// one dragged above the list the first essential. A loose row joined only a
++// run that was there, a rule meant for a private window, which has none, and
++// so a new Space's first pin could not be made by a drag.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest,
++                       ANewSpacesFirstPinAndEssentialAreDraggedIn) {
++  spaces::Space* const second = model().AddSpace("Second", SK_ColorBLUE);
++  ASSERT_TRUE(model().SetActiveSpace(second->id()));
++  tabs::TabInterface* const x = AddBlankTab();
++  tabs::TabInterface* const y = AddBlankTab();
++  ASSERT_FALSE(model().IsSpacePinned(x));
++  ASSERT_FALSE(model().IsSpacePinned(y));
++  stedding::test::KeepAboveOtherWindows(widget());
++
++  // `tab`'s row, once the rows have settled.
++  const auto settled_row = [&](const tabs::TabInterface* tab) {
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    views::test::RunScheduledLayout(widget());
++    return stedding::test::FindDrawnRow(widget()->GetRootView(), tab);
++  };
++  // A press on `row` and a drag in steps to `to`, the window laying out
++  // between two, then the release there.
++  const auto drag_to = [&](const TabView* row, const gfx::Point& to) {
++    const gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMousePressed, from);
++    constexpr int kSteps = 20;
++    for (int i = 1; i <= kSteps; ++i) {
++      stedding::test::SendLeftMouse(
++          widget(), ui::EventType::kMouseDragged,
++          gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                     from.y() + (to.y() - from.y()) * i / kSteps));
++      EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++    }
++    stedding::test::SendLeftMouse(widget(), ui::EventType::kMouseReleased, to);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(widget()));
++  };
++
++  {
++    SCOPED_TRACE("a tab dragged over the line, with no pin there yet");
++    const TabView* const row = settled_row(y);
++    ASSERT_TRUE(row);
++    const views::View* const list = row->parent();
++    ASSERT_TRUE(views::IsViewClass<UnpinnedTabContainerView>(list));
++    // At the top of the list, where the run's first pin goes.
++    drag_to(row, gfx::Point(row->GetBoundsInScreen().CenterPoint().x(),
++                            list->GetBoundsInScreen().y() + 2));
++    EXPECT_TRUE(model().IsSpacePinned(y)) << "the tab stayed loose";
++    EXPECT_TRUE(IsAboveTheLine(y));
++    EXPECT_FALSE(model().IsSpacePinned(x));
++  }
++  {
++    SCOPED_TRACE("a tab dragged above the list, with no essential yet");
++    const TabView* const row = settled_row(x);
++    ASSERT_TRUE(row);
++    const views::View* view = row;
++    while (view && !views::IsViewClass<TabStripView>(view)) {
++      view = view->parent();
++    }
++    const TabStripView* const strip = views::AsViewClass<TabStripView>(view);
++    ASSERT_TRUE(strip && strip->unpinned_tabs_scroll_view());
++    // Over the empty essentials: above the Space's title, or the list when
++    // no title is drawn.
++    int top = strip->unpinned_tabs_scroll_view()->GetBoundsInScreen().y();
++    if (const views::View* const title = strip->GetSpaceTitleRow();
++        title && title->IsDrawn()) {
++      top = std::min(top, title->GetBoundsInScreen().y());
++    }
++    drag_to(row,
++            gfx::Point(row->GetBoundsInScreen().CenterPoint().x(), top - 4));
++    ASSERT_TRUE(base::test::RunUntil([&]() { return x->IsPinned(); }))
++        << "the tab did not become an essential";
++    EXPECT_FALSE(model().IsSpacePinned(x));
++    EXPECT_TRUE(model().IsSpacePinned(y)) << "the pin left the run";
++  }
++}
++
++// pins H14 (GitHub issue 41): a private window has no Space pins, so a tab
++// dragged to the top of its list takes the top as a tab, under the line:
++// only a Spaces window lets a row into an empty run.
++IN_PROC_BROWSER_TEST_F(PinnedRunTest,
++                       APrivateWindowsTabDraggedToTheTopStaysATab) {
++  BrowserWindowInterface* const incognito = CreateIncognitoBrowser();
++  ASSERT_TRUE(incognito);
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      incognito, GURL(url::kAboutBlankURL),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  TabStripModel* const private_tabs = incognito->GetTabStripModel();
++  ASSERT_EQ(2, private_tabs->count());
++  tabs::TabInterface* const second = private_tabs->GetTabAtIndex(1);
++  views::Widget* const private_widget =
++      BrowserView::GetBrowserViewForBrowser(incognito)->GetWidget();
++  stedding::test::KeepAboveOtherWindows(private_widget);
++  ASSERT_TRUE(stedding::test::WaitForRowsToSettle(private_widget));
++  views::test::RunScheduledLayout(private_widget);
++  const TabView* const row =
++      stedding::test::FindDrawnRow(private_widget->GetRootView(), second);
++  ASSERT_TRUE(row);
++  const auto* const list =
++      views::AsViewClass<UnpinnedTabContainerView>(row->parent());
++  ASSERT_TRUE(list);
++
++  const gfx::Point from = row->GetBoundsInScreen().CenterPoint();
++  const gfx::Point to(from.x(), list->GetBoundsInScreen().y() + 2);
++  stedding::test::SendLeftMouse(private_widget, ui::EventType::kMousePressed,
++                                from);
++  constexpr int kSteps = 20;
++  for (int i = 1; i <= kSteps; ++i) {
++    stedding::test::SendLeftMouse(
++        private_widget, ui::EventType::kMouseDragged,
++        gfx::Point(from.x() + (to.x() - from.x()) * i / kSteps,
++                   from.y() + (to.y() - from.y()) * i / kSteps));
++    EXPECT_TRUE(stedding::test::WaitForRowsToSettle(private_widget));
++  }
++  EXPECT_NE(std::optional<bool>(true), list->dragged_rows_pinned())
++      << "the line was drawn under the dragged row";
++  stedding::test::SendLeftMouse(private_widget, ui::EventType::kMouseReleased,
++                                to);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_TRUE(stedding::test::WaitForRowsToSettle(private_widget));
++  EXPECT_EQ(0, private_tabs->GetIndexOfTab(second)) << "not at the top";
++  EXPECT_FALSE(second->IsPinned());
++  views::test::RunScheduledLayout(private_widget);
++  const ClearTabsSeparator* const line =
++      stedding::test::FindDrawnClearLine(private_widget->GetRootView());
++  const TabView* const dropped =
++      stedding::test::FindDrawnRow(private_widget->GetRootView(), second);
++  ASSERT_TRUE(line && dropped);
++  EXPECT_LE(line->GetBoundsInScreen().bottom(),
++            dropped->GetBoundsInScreen().y())
++      << "the row is drawn over the line";
 +}
 +
  // pins H27 (BACKLOG S-277, GitHub issue 16): as in Arc, a tab's row dragged

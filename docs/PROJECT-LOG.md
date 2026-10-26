@@ -45,6 +45,14 @@ tests that failed first; a split test added; S-317 (which row a pin's Cmd-W and 
 waits for the owner, S-318 holds three findings not yet seen through the interface. The
 README's animation was not recorded again: it needs the owner's own Stedding closed.
 
+Later the same day: S-317 decided (a pin's Cmd-W and Sleep Tab follow issue 30's rule). GitHub
+issue 41: with no loose tab in the Space, a pin dropped on the New Tab row's upper half stayed
+in the run, and in a Space with no pin a tab dragged to the top stayed loose (a rule meant for a
+private window, which has no run). Where the list ends before the line can be crossed, the row
+now takes the other side halfway between its two places; a private window still has no run.
+Three tests, two failing before the fix; a tab dragged onto the empty essentials of a second
+Space already worked. Issues labelled; issues 13 and 40 logged as S-321 and S-320 for the owner.
+
 ## 2026-10-25, night -- 0.3.0 beta 17: issue 38, the sidebar's foot, issue 37
 
 GitHub issue 38 (asked to sign in to Google on Windows, not on the Mac) was a real fault.

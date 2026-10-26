@@ -109,7 +109,7 @@ the hover card).
  chrome/browser/ui/toasts/api/toast_id.cc      |   2 -
  chrome/browser/ui/toasts/api/toast_id.h       |   8 +-
  chrome/browser/ui/toasts/toast_service.cc     |  22 -
- .../frame/vertical_tab_strip_region_view.cc   |   6 +-
+ .../frame/vertical_tab_strip_region_view.cc   |  12 +-
  chrome/browser/ui/views/page_action/BUILD.gn  |   9 +
  .../ui/views/page_action/page_action_view.cc  |  17 +-
  ...edding_copy_link_page_action_controller.cc | 153 +++++
@@ -133,14 +133,14 @@ the hover card).
  .../tabs/common/stedding_tab_row_rules.h      |   7 +
  .../common/stedding_tab_row_rules_unittest.cc |  10 +
  .../ui/views/tabs/common/tab_drag_handler.cc  |  76 +++
- .../ui/views/tabs/common/tab_strip_view.cc    |  93 ++-
- .../ui/views/tabs/common/tab_strip_view.h     |   1 +
+ .../ui/views/tabs/common/tab_strip_view.cc    | 102 ++-
+ .../ui/views/tabs/common/tab_strip_view.h     |   7 +-
  .../tabs/common/tab_strip_view_layout.cc      |  14 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |  28 +-
  .../browser/ui/views/tabs/common/tab_view.h   |  14 +-
- .../common/unpinned_tab_container_view.cc     |  24 +
- .../tabs/common/unpinned_tab_container_view.h |  31 +
- .../unpinned_tab_container_view_layout.cc     |  77 ++-
+ .../common/unpinned_tab_container_view.cc     |  28 +-
+ .../tabs/common/unpinned_tab_container_view.h |  37 +-
+ .../unpinned_tab_container_view_layout.cc     |  89 ++-
  .../browser/ui/views/tabs/hovercard/BUILD.gn  |  29 +-
  .../views/tabs/hovercard/fade_footer_view.cc  |  38 +-
  .../views/tabs/hovercard/fade_footer_view.h   |  13 +
@@ -168,7 +168,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6121 insertions(+), 740 deletions(-)
+ 89 files changed, 6154 insertions(+), 750 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -2399,10 +2399,30 @@ index 0c52f9226f3aa..9104360257d55 100644
        ToastId::kSkillSaved,
        ToastSpecification::Builder(
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index c0bcdda294ca2..25654c0580dda 100644
+index c0bcdda294ca2..708f78de6ba80 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -2352,7 +2352,11 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTargetInsideTabStrip(
+@@ -2013,7 +2013,8 @@ void VerticalTabStripRegionView::AddTabStripView(
+           }
+           return pinned;
+         },
+-        base::Unretained(space_model)));
++        base::Unretained(space_model)),
++        /*space_pins_allowed=*/true);
+     // The Space's title above its tabs; pressing it opens the Space menu.
+     UpdateSpaceTitle();
+     strip->SetSeparatorClearCallback(
+@@ -2060,7 +2061,8 @@ void VerticalTabStripRegionView::AddTabStripView(
+           BrowserWindowInterface::Type::TYPE_NORMAL) {
+     TabStripView* const strip = static_cast<TabStripView*>(tab_strip_view());
+     strip->SetUpSpaceBoundary(
+-        base::BindRepeating([](const views::View*) { return false; }));
++        base::BindRepeating([](const views::View*) { return false; }),
++        /*space_pins_allowed=*/false);
+     UpdateSpaceTitle();
+     strip->SetSeparatorClearCallback(
+         base::BindRepeating(&VerticalTabStripRegionView::ClearCurrentSpaceTabs,
+@@ -2352,7 +2354,11 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTargetInsideTabStrip(
    FolderView* const view =
        folder_drag_target_->FolderViewAtScreenPoint(point_in_screen);
    if (!view) {
@@ -4895,7 +4915,7 @@ index e53bb14537161..334d188fb8da1 100644
  
  void TabDragHandlerImpl::HandleDraggedTabsIntoNode(
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index d88e45a66c970..76edb2058d43a 100644
+index d88e45a66c970..72025951ea59f 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 @@ -10,6 +10,7 @@
@@ -4969,15 +4989,33 @@ index d88e45a66c970..76edb2058d43a 100644
  };
  
  BEGIN_METADATA(SidebarRowButton)
-@@ -465,6 +506,7 @@ void TabStripView::SetUpSpaceBoundary(
+@@ -433,7 +474,8 @@ void TabStripView::SetNewTabCallback(base::RepeatingClosure callback) {
+ }
+ 
+ void TabStripView::SetUpSpaceBoundary(
+-    base::RepeatingCallback<bool(const views::View*)> is_space_pinned) {
++    base::RepeatingCallback<bool(const views::View*)> is_space_pinned,
++    bool space_pins_allowed) {
+   if (!unpinned_tabs_container_view_ || clear_line_) {
+     return;
+   }
+@@ -465,11 +507,12 @@ void TabStripView::SetUpSpaceBoundary(
  #else
    new_tab_row->SetTooltipText(u"New Tab (Ctrl+T)");
  #endif
 +  new_tab_row->SetRowFills(true);
    new_tab_row->SetVisible(false);
    new_tab_row_ = new_tab_row.get();
-   unpinned_tabs_container_view_->SetSpaceBoundary(std::move(clear_line),
-@@ -528,7 +570,7 @@ void TabStripView::ApplySpaceTitleForm() {
+-  unpinned_tabs_container_view_->SetSpaceBoundary(std::move(clear_line),
+-                                                  std::move(new_tab_row),
+-                                                  std::move(is_space_pinned));
++  unpinned_tabs_container_view_->SetSpaceBoundary(
++      std::move(clear_line), std::move(new_tab_row),
++      std::move(is_space_pinned), space_pins_allowed);
+ }
+ 
+ void TabStripView::SetSpaceTitle(const std::u16string& glyph,
+@@ -528,7 +571,7 @@ void TabStripView::ApplySpaceTitleForm() {
    // its title row in either form. The row's tooltip, which it had none of,
    // says what the mark means -- in the rail, where the row is the glyph
    // alone, after the Space's name, as the rail's chip does -- and that the
@@ -4986,7 +5024,7 @@ index d88e45a66c970..76edb2058d43a 100644
    // means is the row's accessible description, after the Space's name.
    row->SetIsolationMark(!space_title_mark_.empty(), rail_form_);
    std::u16string tooltip;
-@@ -607,6 +649,28 @@ void TabStripView::SetSpaceTitleIcon(const ui::ImageModel& icon) {
+@@ -607,6 +650,28 @@ void TabStripView::SetSpaceTitleIcon(const ui::ImageModel& icon) {
    }
  }
  
@@ -5015,7 +5053,7 @@ index d88e45a66c970..76edb2058d43a 100644
  void TabStripView::AddedToWidget() {
    views::Widget* const widget = GetWidget();
    widget_observation_.Observe(widget);
-@@ -1230,9 +1294,34 @@ void TabStripView::HideHoverCardOnScroll() {
+@@ -1230,9 +1295,34 @@ void TabStripView::HideHoverCardOnScroll() {
      return;
    }
  
@@ -5052,10 +5090,24 @@ index d88e45a66c970..76edb2058d43a 100644
          nullptr, TabSlotController::HoverCardUpdateType::kAnimating);
    }
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.h b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-index a09eacf4dad7e..2779dbc426576 100644
+index a09eacf4dad7e..cebd52a0dab12 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-@@ -120,6 +120,7 @@ class TabStripView final : public views::View,
+@@ -67,9 +67,11 @@ class TabStripView final : public views::View,
+   views::LabelButton* GetNewTabRow() const { return new_tab_row_; }
+ 
+   // Stedding: creates the Clear line and the "+ New Tab" row inside the
+-  // unpinned container, under the Space-pinned run `is_space_pinned` marks.
++  // unpinned container, under the Space-pinned run `is_space_pinned` marks;
++  // a row may be dragged into an empty run when `space_pins_allowed`.
+   void SetUpSpaceBoundary(
+-      base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
++      base::RepeatingCallback<bool(const views::View*)> is_space_pinned,
++      bool space_pins_allowed);
+ 
+   // Stedding: the Space title row above the pinned tabs -- the Space's
+   // glyph and its name, the glyph alone in the rail (sidebar Y13); both
+@@ -120,6 +122,7 @@ class TabStripView final : public views::View,
    bool IsPositionInWindowCaption(const gfx::Point& point);
  
    // views::View:
@@ -5172,10 +5224,22 @@ index 5d67ac6a1b0d8..484672a9accbf 100644
    bool local_ = false;
    // Lt5: the title a local row's page shows when it names none of its own
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index aa2f61cc204e2..423b767428950 100644
+index aa2f61cc204e2..3d2a88c9c61b5 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-@@ -174,6 +174,14 @@ UnpinnedTabContainerView::GetRowDropIndicatorBoundsInScreenForTesting() const {
+@@ -123,8 +123,10 @@ UnpinnedTabContainerView::UnpinnedTabContainerView(
+ void UnpinnedTabContainerView::SetSpaceBoundary(
+     std::unique_ptr<views::View> clear_line,
+     std::unique_ptr<views::View> new_tab_row,
+-    base::RepeatingCallback<bool(const views::View*)> is_space_pinned) {
++    base::RepeatingCallback<bool(const views::View*)> is_space_pinned,
++    bool space_pins_allowed) {
+   is_space_pinned_ = std::move(is_space_pinned);
++  space_pins_allowed_ = space_pins_allowed;
+   boundary_clear_line_ = AddChildView(std::move(clear_line));
+   boundary_new_tab_row_ = AddChildView(std::move(new_tab_row));
+   InvalidateLayout();
+@@ -174,6 +176,14 @@ UnpinnedTabContainerView::GetRowDropIndicatorBoundsInScreenForTesting() const {
    return bounds;
  }
  
@@ -5190,7 +5254,7 @@ index aa2f61cc204e2..423b767428950 100644
  void UnpinnedTabContainerView::PaintChildren(const views::PaintInfo& info) {
    TabCollectionZOrderManager::PaintChildren(info);
    if (!row_drop_indicator_y_) {
-@@ -433,6 +441,22 @@ const views::ProposedLayout& UnpinnedTabContainerView::GetLayoutForDrag()
+@@ -433,6 +443,22 @@ const views::ProposedLayout& UnpinnedTabContainerView::GetLayoutForDrag()
    return layout_manager_->target_layout();
  }
  
@@ -5214,7 +5278,7 @@ index aa2f61cc204e2..423b767428950 100644
      const gfx::Point& point_in_screen) {
    if (GetDragHandler().IsDraggingGroups()) {
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 958ed52e516cd..1d3604386157e 100644
+index 958ed52e516cd..013d74352a6fe 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 @@ -51,6 +51,8 @@ class UnpinnedTabContainerView
@@ -5226,9 +5290,13 @@ index 958ed52e516cd..1d3604386157e 100644
  
    std::optional<BrowserRootView::DropIndex> GetLinkDropIndex(
        const gfx::Point& point_in_local_coords);
-@@ -78,6 +80,13 @@ class UnpinnedTabContainerView
+@@ -76,8 +78,16 @@ class UnpinnedTabContainerView
+   void SetSpaceBoundary(
+       std::unique_ptr<views::View> clear_line,
        std::unique_ptr<views::View> new_tab_row,
-       base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
+-      base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
++      base::RepeatingCallback<bool(const views::View*)> is_space_pinned,
++      bool space_pins_allowed);
    views::View* space_boundary_clear_line() { return boundary_clear_line_; }
 +  // Stedding (pins H14, BACKLOG S-271): while rows of this container are
 +  // dragged, whether a release here puts them in the Space's pinned run, over
@@ -5240,7 +5308,7 @@ index 958ed52e516cd..1d3604386157e 100644
    bool IsAnimatingForTesting() const { return layout_manager_->is_animating(); }
  
    // Stedding (pins H17): the Space's pinned run is collapsed while it holds
-@@ -102,6 +111,21 @@ class UnpinnedTabContainerView
+@@ -102,6 +112,21 @@ class UnpinnedTabContainerView
    // The bar's bounds in screen coordinates, or nothing while none is shown.
    std::optional<gfx::Rect> GetRowDropIndicatorBoundsInScreenForTesting() const;
  
@@ -5262,7 +5330,7 @@ index 958ed52e516cd..1d3604386157e 100644
    // views::View:
    void PaintChildren(const views::PaintInfo& info) override;
  
-@@ -123,6 +147,10 @@ class UnpinnedTabContainerView
+@@ -123,15 +148,25 @@ class UnpinnedTabContainerView
    void ResetCollectionNode();
  
    raw_ptr<TabCollectionNode> collection_node_;
@@ -5273,7 +5341,12 @@ index 958ed52e516cd..1d3604386157e 100644
  
    raw_ptr<views::View> boundary_clear_line_ = nullptr;
  
-@@ -132,6 +160,9 @@ class UnpinnedTabContainerView
+   raw_ptr<views::View> boundary_new_tab_row_ = nullptr;
+ 
+   base::RepeatingCallback<bool(const views::View*)> is_space_pinned_;
++  // SetSpaceBoundary(): whether a row may be dragged into an empty run; a
++  // private or Guest window's list has no run.
++  bool space_pins_allowed_ = false;
  
    bool pinned_run_collapsed_ = false;
  
@@ -5284,7 +5357,7 @@ index 958ed52e516cd..1d3604386157e 100644
    std::optional<int> row_drop_indicator_y_;
  
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
-index 4b6552b2b1d2d..6d8fd6e13cfd2 100644
+index 4b6552b2b1d2d..c2dbbbd694731 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
 @@ -5,6 +5,7 @@
@@ -5295,7 +5368,7 @@ index 4b6552b2b1d2d..6d8fd6e13cfd2 100644
  #include <vector>
  
  #include "base/feature_list.h"
-@@ -276,10 +277,79 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -276,10 +277,91 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
    // it never puts the pins after it under the line (PLAN.md TAB-24, SPC-34).
    views::View* const clear_line = tab_container_view->boundary_clear_line_;
    views::View* const new_tab_row = tab_container_view->boundary_new_tab_row_;
@@ -5357,11 +5430,23 @@ index 4b6552b2b1d2d..6d8fd6e13cfd2 100644
 +        // was over it, and dropped there it became a pin (GitHub issue 26).
 +        const int middle =
 +            tab_container_view->GetDraggingViewsBounds().CenterPoint().y();
-+        // A loose row joins only a run that is there: with no pin over the
-+        // line, as in a private window, the line stays a line.
-+        dragged_pinned = pinned_in_model(first_dragged)
-+                             ? middle <= edge + dragged_height + boundary / 2
-+                             : before && middle < edge + boundary / 2;
++        // The rows cross when their edge passes the boundary's middle. At
++        // either end of the list they cannot be dragged that far, so there
++        // halfway between their two places is enough (GitHub issue 41): a
++        // pin with no loose row under it was kept in the run, and a Space's
++        // first pin could not be dragged in. A loose row joins only a run
++        // that is there or may be: a private window has none, and its line
++        // stays a line.
++        if (pinned_in_model(first_dragged)) {
++          dragged_pinned =
++              after ? middle <= edge + dragged_height + boundary / 2
++                    : middle <= edge + (dragged_height + boundary) / 2;
++        } else if (before) {
++          dragged_pinned = middle < edge + boundary / 2;
++        } else {
++          dragged_pinned = tab_container_view->space_pins_allowed_ &&
++                           middle < (dragged_height + boundary) / 2;
++        }
 +      }
 +    }
 +  }
@@ -5376,7 +5461,7 @@ index 4b6552b2b1d2d..6d8fd6e13cfd2 100644
    int visible_unpinned_after_boundary = 0;
    int visible_pinned_before_boundary = 0;
    {
-@@ -397,6 +467,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+@@ -397,6 +479,11 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
    if (height > 0) {
      height -= vertical_padding;
    }
