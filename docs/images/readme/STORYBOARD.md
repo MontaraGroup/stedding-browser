@@ -14,7 +14,7 @@ in [tooling/readme/steps/](../../../tooling/readme/steps/); how to run it is in
 | Window | 1400 × 880 points, the size `tooling/drive` opens, at the top left of the main display |
 | Colours | Light (slate) by default. Page colours read best against light pages, and the night gradient bands in a 256-colour GIF; `--scheme dark` makes the other one |
 | Frame | The window with its own rounded corners on the brand's slate (#2F4858), a 28 px margin at 1400 px wide |
-| Captions | A 64 px lane under the window: the keys in amber (#E8B04B), the words in cream (#F2E9DE), one caption per scene, a short blank between two |
+| Captions | A 64 px lane under the window: the keys in a pale teal (#99F6E4, Tailwind teal-200), the words near white (#F1F5F9), one caption per scene, a short blank between two |
 | Pointer | Visible. It glides between targets on an eased path (0.3 to 0.6 s) and never jumps; clicks draw no ring unless `--show-clicks` |
 | Length | 25 to 40 seconds: 38.6 in the take of 2026-10-21; `timeline.txt` gives a take's own |
 | Loop | The last frame is the first: Work, the GitHub page, the pointer at rest |
@@ -64,7 +64,7 @@ window wide: its top edge has to keep its colour at that width too.
 | OpenStreetMap | www.openstreetmap.org | A map, the colour of the Personal Space's scene; the preroll closes its welcome and any promotion in its side panel | The tiles have loaded; the side panel shows only the search |
 | NASA | www.nasa.gov | Reading's page, dark along its top at any width: the split's left half, its part of the row dark (until 2026-10-23 Arch Linux, which the owner found dated) | The row's left part is dark |
 | Apollo 11 | en.wikipedia.org/wiki/Apollo_11 | Reading's white page: the split's right half, its part of the row white; both halves go dark together (until 2026-10-23 LWN.net) | The page is white |
-| Sample app | localhost:5173 (`tooling/readme/pages/sample-app/`) | A local development page, amber across its top | The outline and host:port, once built |
+| Sample app | localhost:5173 (`tooling/readme/pages/sample-app/`) | A local development page, teal across its top (#14B8A6) | The outline and host:port, once built |
 | Sample API | localhost:8797 (`tooling/readme/pages/sample-api/`) | A second local page, for the still | |
 
 If a site's header has changed colour, pick another page whose top edge is one strong

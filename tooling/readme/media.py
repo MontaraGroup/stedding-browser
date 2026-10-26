@@ -259,14 +259,14 @@ def hex_color(text: str):
 
 
 def render_caption(path: str, width: int, height: int, keys: str, text: str) -> None:
-    """One caption strip: the brand's slate ground, the keys in amber, the
-    words in cream, centred; the font shrinks until the line fits."""
+    """One caption strip: the brand's slate ground, the keys in a light slate,
+    the words near white, centred; the font shrinks until the line fits."""
     from AppKit import (  # type: ignore[import-not-found]
         NSAttributedString, NSBitmapImageRep, NSDeviceRGBColorSpace, NSFont,
         NSFontAttributeName, NSFontWeightMedium, NSFontWeightSemibold,
         NSForegroundColorAttributeName, NSGraphicsContext, NSMakeRect,
         NSMutableAttributedString, NSRectFill)
-    ground, amber, cream = hex_color("#2F4858"), hex_color("#E8B04B"), hex_color("#F2E9DE")
+    ground, keys, words = hex_color("#2F4858"), hex_color("#99F6E4"), hex_color("#F1F5F9")
     rep = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(  # noqa: E501
         None, width, height, 8, 4, True, False, NSDeviceRGBColorSpace, 0, 0)
     context = NSGraphicsContext.graphicsContextWithBitmapImageRep_(rep)
@@ -281,12 +281,12 @@ def render_caption(path: str, width: int, height: int, keys: str, text: str) -> 
             line.appendAttributedString_(NSAttributedString.alloc().initWithString_attributes_(
                 keys + " ", {
                     NSFontAttributeName: NSFont.systemFontOfSize_weight_(size, NSFontWeightSemibold),
-                    NSForegroundColorAttributeName: amber}))
+                    NSForegroundColorAttributeName: keys}))
         if text:
             line.appendAttributedString_(NSAttributedString.alloc().initWithString_attributes_(
                 text, {
                     NSFontAttributeName: NSFont.systemFontOfSize_weight_(size, NSFontWeightMedium),
-                    NSForegroundColorAttributeName: cream}))
+                    NSForegroundColorAttributeName: words}))
         bounds = line.size()
         if bounds.width <= width - 2 * height or size <= 10:
             break
