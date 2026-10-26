@@ -93,7 +93,7 @@ the hover card).
  .../spaces/space_jar_navigation_throttle.cc   |   4 +-
  chrome/browser/ui/spaces/space_model.cc       | 369 ++++++-----
  chrome/browser/ui/spaces/space_model.h        |  70 +-
- .../ui/spaces/space_model_window_unittest.cc  | 307 ++++++---
+ .../ui/spaces/space_model_window_unittest.cc  | 334 +++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
  .../ui/spaces/tab_space_restore_data.h        |  16 +-
@@ -168,7 +168,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6090 insertions(+), 738 deletions(-)
+ 89 files changed, 6117 insertions(+), 738 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -1215,7 +1215,7 @@ index 6b4b84fc63b70..42eab14610eae 100644
    base::WeakPtrFactory<SpaceModel> weak_factory_{this};
  };
 diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
-index 474cd0b8598ca..f99b0cfd302b2 100644
+index 474cd0b8598ca..53f0a612d09eb 100644
 --- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
 +++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
 @@ -16,6 +16,7 @@
@@ -1276,7 +1276,41 @@ index 474cd0b8598ca..f99b0cfd302b2 100644
  // tabs R34: with no row of the Space used since the launch left -- rows
  // opened in the background count only once selected -- a close shows the
  // next row below, else the nearest one above; not the tab that opened the
-@@ -1499,6 +1543,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
+@@ -1018,6 +1062,33 @@ TEST_F(SpaceWindowTest, RecentTabsCountASplitOnce) {
+   EXPECT_EQ(a, recent[1]);
+ }
+ 
++// splits J9, tabs R36: closing the pane on screen, alone, leaves the other
++// pane on screen, whatever row was used before. A split is one row that
++// goes whole for every other close, and the Space showed the row used
++// before it, so the other pane left the screen still open.
++TEST_F(SpaceWindowTest, ClosingThePaneOnScreenShowsTheOtherPane) {
++  tabs::TabInterface* const a = OpenTab();
++  tabs::TabInterface* const b = OpenTab();
++  tabs::TabInterface* const c = OpenTab();
++  // a used, then the split of c (on screen) and b.
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(a),
++                       TabStripUserGestureDetails(
++                           TabStripUserGestureDetails::GestureType::kOther));
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(c),
++                       TabStripUserGestureDetails(
++                           TabStripUserGestureDetails::GestureType::kOther));
++  tabs().AddToNewSplit({tabs().GetIndexOfTab(b)},
++                       split_tabs::SplitTabVisualData(),
++                       split_tabs::SplitTabCreatedSource::kToolbarButton);
++  ASSERT_TRUE(b->IsSplit() && c->IsSplit());
++  ASSERT_EQ(c, tabs().GetActiveTab());
++  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(c),
++                            TabCloseTypes::CLOSE_USER_GESTURE);
++  task_environment()->RunUntilIdle();
++  EXPECT_EQ(b, tabs().GetActiveTab()) << "not a, the row used before";
++  EXPECT_FALSE(b->IsSplit());
++}
++
+ // splits J4: a split's panes take a Space, a pin and a sleep together.
+ TEST_F(SpaceWindowTest, SplitPanesTakeVerbsTogether) {
+   const SpaceId home = model().active_id();
+@@ -1499,6 +1570,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
              stedding::PinnedSiteFor(browser(), essential));
  }
  
@@ -1309,7 +1343,7 @@ index 474cd0b8598ca..f99b0cfd302b2 100644
  // pins H3, H9: Cmd-W on pins sleeps rather than closes, unless the setting
  // is off; a mixed selection closes.
  TEST_F(SpaceWindowTest, CloseOnPinnedTabSleepsIt) {
-@@ -1939,121 +2009,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
+@@ -1939,121 +2036,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
  }
  
  // sessions S8
@@ -1531,14 +1565,14 @@ index 474cd0b8598ca..f99b0cfd302b2 100644
 -    watcher.watched = {upper, lower};
 -    tabs().SetTabPinned(tabs().GetIndexOfTab(upper), true);
 -    tabs().SetTabPinned(tabs().GetIndexOfTab(lower), true);
--    task_environment()->RunUntilIdle();
++    SCOPED_TRACE("chosen from Work");
++    tabs().ActivateTabAt(tabs().GetIndexOfTab(shared));
+     task_environment()->RunUntilIdle();
 -    EXPECT_EQ(2u, watcher.heard.size()) << "one word for the turn";
 -    EXPECT_EQ((std::vector<bool>{true, true}),
 -              watcher.in_work_jar_when_heard.back());
 -    EXPECT_TRUE(model().UndoPinsOutOfSession());
-+    SCOPED_TRACE("chosen from Work");
-+    tabs().ActivateTabAt(tabs().GetIndexOfTab(shared));
-     task_environment()->RunUntilIdle();
+-    task_environment()->RunUntilIdle();
 -    EXPECT_FALSE(upper->IsPinned());
 -    EXPECT_FALSE(lower->IsPinned());
 -    EXPECT_EQ(work->id(), model().SpaceForTab(upper));
