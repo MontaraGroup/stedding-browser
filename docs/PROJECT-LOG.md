@@ -10,6 +10,41 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-26 -- 0.3.0 beta 18: the owner's round, a review by another model, then fixes
+
+The owner's requests of the day (BACKLOG Next, S-306 to S-313). Patch 0105: the active
+Space's colour reached the window as Chromium's accent and seeded its whole Material palette,
+so a warm Space turned Settings, menus and toggles brown and orange; it now tints the sidebar's
+ground and nothing else, the light ground is a grey (Tailwind slate-300), and the welcome page
+and the README's demo lose their amber; the command bar's rows light under the pointer.
+Patch 0106: the first peeks carry a one-line note on what a peek is (peek P19), the welcome's
+question says the same, and sync through a folder names the folders that work and notes one
+nothing syncs (issue 38's follow-up, Sf42). Patch 0107: separators in the sidebar from a row's
+menu (issue 19, sidebar Y45). Patch 0108 merged 106 browser tests that each started a browser
+for one short check into 37 (94 s where they took 208 s), and the Mac's browser tests run four
+at a time (six were slower); the Mac's whole run is about 14 minutes, from about 21. Product
+text no longer compares Stedding to another browser.
+
+A read-only review by Grok 4.7 through Cursor's command line, in eight areas, found 19 issues:
+15 fixed in the patches that own the code, each with a test seen failing first (a Shift-click
+on a Space's own essential sent the first Space's cookies; a malformed Arc sidebar could build
+a tree doubling at every level; the History and Downloads panels stopped at their first page;
+the Peek note counted in a private window's prefs; a private window offered the history
+scope's chip; a moved background tab was not the one shown; a dragged separator's band and the
+right sidebar's drop arrow), one refuted, the rest logged (S-314, S-315). Released as 0.3.0
+beta 18 (v0.3.0-beta.18, latest), both platforms and both feeds, the cask, the site with every
+picture retaken, the README's stills; the checks are in its notes.
+
+After the release, pushed and not released: the sidebar's row text had followed the page's
+colour through the toolbar's text id, a shade off whenever a page's colour arrived, which two
+Windows tests had caught (S-316; the rows now start from the toolbar's text before any page
+colour). Three more reviews, of the round's new code and of the specs against the code, found
+a separator lost at the second restart, a Documents Backup folder taken for a synced one, a GET
+form sent in the wrong jar and a closed own essential reopened in the wrong jar, all fixed with
+tests that failed first; a split test added; S-317 (which row a pin's Cmd-W and Sleep Tab show)
+waits for the owner, S-318 holds three findings not yet seen through the interface. The
+README's animation was not recorded again: it needs the owner's own Stedding closed.
+
 ## 2026-10-25, night -- 0.3.0 beta 17: issue 38, the sidebar's foot, issue 37
 
 GitHub issue 38 (asked to sign in to Google on Windows, not on the Mac) was a real fault.
