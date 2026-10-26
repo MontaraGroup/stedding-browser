@@ -7,9 +7,13 @@ Subject: feat: Settings in cards, the drift mark as a setting, one question
 Settings > Stedding was one long card with the groups under headings. It is
 now a card per group, named as the setup screen names its steps: Sidebar,
 Tabs, Peek and little windows (a card of its own, out of Pages), Spaces,
-Pages and menus, Privacy, Updates and Shortcuts. The first card carries
-the page's line and the groups' names, each a button that scrolls its
-card into view (settings T13).
+Sync and import (the sidebar file, sync through a folder and the Arc
+import, out of Spaces), Pages and menus, Privacy, Updates and Shortcuts.
+The first card carries the page's line and the groups' names, each a
+button that scrolls its card into view. Every row has room above and below
+its text, each row's line says what it does in one short sentence (most ran
+two to four lines), the sidebar file's buttons sit under its text, Spaces
+are parted by lines and each names its session switch (settings T13).
 
 "Mark pinned tabs that left their page" (stedding.pins.mark_drifted, off
 by default) decides whether a pinned tab away from its home shows the dot
@@ -24,14 +28,16 @@ the command bar ask, SetSpaceIsolatedAfterAsking: it had a dialog of its
 own about open pages alone, so with only apps made in the Space it turned
 the session off at once and never named them (sessions S10).
 
-Why: the owner, 2026-10-26 (Settings grouped like the setup screen, S-313;
+Why: the owner, 2026-10-26 (Settings grouped like the setup screen, S-313,
+and on beta 19's page: "Super overcrowded";
 issue 36's setting, off by default, S-305; review finding S-318).
 Removable when: never; to be folded into the patches that own the code.
 ---
  .../api/settings_private/prefs_util.cc        |   2 +
- .../settings/stedding_page/stedding_page.css  |  28 +-
- .../stedding_page/stedding_page.html.ts       | 380 +++++++++---------
- .../settings/stedding_page/stedding_page.ts   |  97 ++---
+ .../settings/stedding_page/stedding_page.css  |  64 ++-
+ .../stedding_page/stedding_page.html.ts       | 386 +++++++++---------
+ .../settings/stedding_page/stedding_page.ts   |  98 ++---
+ .../stedding_page/stedding_sync_section.css   |  13 +-
  chrome/browser/ui/stedding/stedding_prefs.cc  |   3 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   5 +
  .../ui/stedding/stedding_prefs_unittest.cc    |   3 +-
@@ -40,13 +46,13 @@ Removable when: never; to be folded into the patches that own the code.
  .../frame/vertical_tab_strip_region_view.cc   |  49 ++-
  .../browser/ui/views/tabs/common/tab_view.cc  |  23 +-
  .../browser/ui/views/tabs/common/tab_view.h   |   7 +
- .../browser/ui/webui/settings/settings_ui.cc  |  43 +-
+ .../browser/ui/webui/settings/settings_ui.cc  | 245 ++++-------
  .../webui/settings/stedding_spaces_handler.cc |  25 ++
  .../webui/settings/stedding_spaces_handler.h  |   3 +
  chrome/test/stedding/app_jar_browsertest.cc   |  74 ++++
- .../stedding/settings_spaces_browsertest.cc   |  45 ++-
+ .../stedding/settings_spaces_browsertest.cc   |  46 ++-
  .../test/stedding/sidebar_rail_browsertest.cc |  85 ++++
- 18 files changed, 567 insertions(+), 314 deletions(-)
+ 19 files changed, 686 insertions(+), 454 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index b1ef9f2680ab7..9ce02f26b1d03 100644
@@ -62,16 +68,46 @@ index b1ef9f2680ab7..9ce02f26b1d03 100644
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kUndoToast] =
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.css b/chrome/browser/resources/settings/stedding_page/stedding_page.css
-index a9044a1a472ca..242e8a2a91178 100644
+index a9044a1a472ca..58536dccd8fb0 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.css
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_page.css
-@@ -14,19 +14,31 @@
+@@ -14,19 +14,61 @@
    padding-bottom: 8px;
  }
  
 -/* settings T13: the page's sections, Sidebar first. */
 -.section-header {
 -  align-items: flex-end;
++/* settings T13 (BACKLOG S-313): every row has room above and below its
++ * text, and the text keeps clear of the control beside it. A row with a
++ * menu or a slider sat tight against the lines around it. */
++.settings-box {
++  padding-bottom: 12px;
++  padding-top: 12px;
++}
++
++.settings-box > .start,
++.settings-box > .flex {
++  padding-inline-end: 24px;
++}
++
++.settings-box .secondary {
++  padding-top: 2px;
++}
++
++/* A row whose buttons would crowd its text has them on a line under it. */
++.settings-box.stacked {
++  align-items: stretch;
++  flex-direction: column;
++}
++
++.button-row {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 8px;
++  padding-top: 12px;
++}
++
 +/* settings T13 (BACKLOG S-313): a card for each group, named as the setup
 + * screen names its steps, with the groups' names at the top to jump to. */
 +#sectionJumps {
@@ -105,8 +141,24 @@ index a9044a1a472ca..242e8a2a91178 100644
    border-top: none;
  }
  
+@@ -75,11 +117,13 @@
+   flex: 1;
+ }
+ 
+-.space-isolated {
++.space-isolated,
++.space-isolated-label {
+   flex: none;
+ }
+ 
+-/* routing D5: a Space's rules under its row. */
++/* routing D5: a Space's rules under its row; a list of sites under its
++ * switch. */
+ .route-row {
+   align-items: center;
+   gap: 12px;
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
-index ffa043cc692f1..3b0b0ea6d2bb6 100644
+index ffa043cc692f1..198ae9cbb6cdd 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 @@ -16,9 +16,15 @@ export function getHtml(this: SettingsSteddingPageElement) {
@@ -154,7 +206,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
    <settings-toggle-button
        id="undoToast"
        class="hr"
-@@ -264,9 +277,162 @@ export function getHtml(this: SettingsSteddingPageElement) {
+@@ -264,9 +277,168 @@ export function getHtml(this: SettingsSteddingPageElement) {
          ]}">
      </settings-dropdown-menu>
    </div>
@@ -243,7 +295,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
 +    </settings-dropdown-menu>
 +  </div>
 +  ${this.spaces_.map(space => html`
-+    <div class="settings-box continuation space-row">
++    <div class="settings-box hr space-row">
 +      <span class="space-swatch" style="background: ${space.color}"
 +          aria-hidden="true">${space.icon}${space.isolationMark ? html`
 +        <span class="isolation-mark" data-id="${space.id}"
@@ -262,6 +314,9 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
 +        $i18n{steddingEditSpace}
 +      </cr-button>
 +      ${space.canIsolate ? html`
++      <span class="secondary space-isolated-label" aria-hidden="true">
++        $i18n{steddingIndependentSessionLabel}
++      </span>
 +      <cr-toggle class="space-isolated" data-id="${space.id}"
 +          ?checked="${space.isolated}"
 +          title="$i18n{steddingIndependentSessionLabel}"
@@ -292,18 +347,21 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
 +          @change="${this.onRouteAddChange_}">
 +      </cr-input>
 +    </div>`)}
-+  <div class="settings-box continuation" id="sidebarFiles">
-+    <div class="flex">
-+      <div class="label">$i18n{steddingSidebarFilesLabel}</div>
-+      <div class="secondary">${this.exportStatus_ || '$i18n{steddingSidebarFilesSubLabel}'}</div>
++</settings-section>
++<settings-section id="syncSection" class="cr-centered-card-container"
++    page-title="$i18n{steddingSyncImportTitle}">
++  <div class="settings-box stacked" id="sidebarFiles">
++    <div class="label">$i18n{steddingSidebarFilesLabel}</div>
++    <div class="secondary">${this.exportStatus_ || '$i18n{steddingSidebarFilesSubLabel}'}</div>
++    <div class="button-row">
++      <cr-button @click="${this.onExportSpaceClick_}">$i18n{steddingExportSpace}</cr-button>
++      <cr-button @click="${this.onExportAllClick_}">$i18n{steddingExportAllSpaces}</cr-button>
++      <cr-button @click="${this.onImportSidebarClick_}">$i18n{steddingImportSidebar}</cr-button>
 +    </div>
-+    <cr-button @click="${this.onExportSpaceClick_}">$i18n{steddingExportSpace}</cr-button>
-+    <cr-button @click="${this.onExportAllClick_}">$i18n{steddingExportAllSpaces}</cr-button>
-+    <cr-button @click="${this.onImportSidebarClick_}">$i18n{steddingImportSidebar}</cr-button>
    </div>
 +  <settings-stedding-sync-section></settings-stedding-sync-section>
 +  ${this.arcSummary_ ? html`
-+    <div class="settings-box continuation" id="arcImport">
++    <div class="settings-box hr" id="arcImport">
 +      <div class="flex">
 +        <div class="label">$i18n{steddingImportArcLabel}</div>
 +        <div class="secondary">${this.arcSummary_}</div>
@@ -319,7 +377,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
    <settings-toggle-button
        id="copyStripTracking"
        class="hr"
-@@ -359,35 +525,6 @@ export function getHtml(this: SettingsSteddingPageElement) {
+@@ -359,35 +531,6 @@ export function getHtml(this: SettingsSteddingPageElement) {
          @change="${this.onDarkPagesAddChange_}">
      </cr-input>
    </div>
@@ -355,7 +413,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
    <settings-toggle-button
        id="newTabHint"
        class="hr"
-@@ -402,11 +539,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
+@@ -402,11 +545,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
        label="$i18n{steddingNewTabShortcutsLabel}"
        sub-label="$i18n{steddingNewTabShortcutsSubLabel}">
    </settings-toggle-button>
@@ -372,7 +430,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
    </div>
    <div class="hr settings-box">
      <div class="start" id="cookiesLabel">
-@@ -565,11 +702,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
+@@ -565,11 +708,11 @@ export function getHtml(this: SettingsSteddingPageElement) {
        label="$i18n{steddingSuggestLabel}"
        sub-label="$i18n{steddingSuggestSubLabel}">
    </settings-toggle-button>
@@ -389,7 +447,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
    </div>
    ${isMac || isWindows ? html`
    <settings-toggle-button
-@@ -586,149 +723,14 @@ export function getHtml(this: SettingsSteddingPageElement) {
+@@ -586,149 +729,14 @@ export function getHtml(this: SettingsSteddingPageElement) {
        label="$i18n{steddingThanksAfterUpdateLabel}"
        sub-label="$i18n{steddingThanksAfterUpdateSubLabel}">
    </settings-toggle-button>
@@ -548,7 +606,7 @@ index ffa043cc692f1..3b0b0ea6d2bb6 100644
  <!--_html_template_end_-->`;
  }
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
-index 4e50099fe96da..df55099df2108 100644
+index 4e50099fe96da..94f04c02bcf8e 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.ts
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_page.ts
 @@ -139,7 +139,6 @@ export class SettingsSteddingPageElement extends
@@ -569,7 +627,7 @@ index 4e50099fe96da..df55099df2108 100644
    // sessions S35 (BACKLOG S-274): the Spaces that still shared the session
    // when "Give every new Space its own session" was turned on, and their
    // open pages, while the question waits.
-@@ -396,71 +392,46 @@ export class SettingsSteddingPageElement extends
+@@ -396,71 +392,47 @@ export class SettingsSteddingPageElement extends
      chrome.send('steddingRenameSpace', [input.dataset['id'], input.value]);
    }
  
@@ -619,6 +677,7 @@ index 4e50099fe96da..df55099df2108 100644
 +      ['tabsSection', 'steddingTabsTitle'],
 +      ['peekSection', 'steddingPeekTitle'],
 +      ['spacesSection', 'steddingSpacesTitle'],
++      ['syncSection', 'steddingSyncImportTitle'],
 +      ['pagesSection', 'steddingPagesTitle'],
 +      ['privacySection', 'steddingPrivacyTitle'],
 +      ['updatesSection', 'steddingUpdatesTitle'],
@@ -675,6 +734,30 @@ index 4e50099fe96da..df55099df2108 100644
    }
  
    // sessions S35 (BACKLOG S-274): turned on, the setting gives the Spaces
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_sync_section.css b/chrome/browser/resources/settings/stedding_page/stedding_sync_section.css
+index d2cad8404f60a..3296ce9c9090c 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_sync_section.css
++++ b/chrome/browser/resources/settings/stedding_page/stedding_sync_section.css
+@@ -9,7 +9,18 @@
+  * #include=cr-shared-style-lit settings-shared-lit
+  * #css_wrapper_metadata_end */
+ 
+-/* sidebar-file Sf7: the "Sync through a folder" box under the files row. */
++/* sidebar-file Sf7: the "Sync through a folder" box under the files row,
++ * a row of the card with a line over it and room around its text. */
++#sidebarSync {
++  border-top: var(--cr-separator-line);
++  padding-bottom: 12px;
++  padding-top: 12px;
++}
++
++#sidebarSync .secondary {
++  padding-top: 2px;
++}
++
+ .sync-buttons {
+   display: flex;
+   flex-wrap: wrap;
 diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
 index 6d8775089684d..9dda84f84d758 100644
 --- a/chrome/browser/ui/stedding/stedding_prefs.cc
@@ -884,10 +967,10 @@ index c3a512abca43a..f2c092b344247 100644
    // pins H8: the hover card's "Pinned in <Space> · home <host>" line, or
    // nothing for a tab without a home.
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index ee57ec8a0dca8..c0c0ec1fb2a52 100644
+index ee57ec8a0dca8..5c1bee268421f 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -703,6 +703,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -703,16 +703,20 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingSidebarTitle", "Sidebar");
    html_source->AddString("steddingTabsTitle", "Tabs");
    html_source->AddString("steddingPagesTitle", "Pages and menus");
@@ -899,10 +982,67 @@ index ee57ec8a0dca8..c0c0ec1fb2a52 100644
 +      "Pages that open over the one you are on, and leave your tabs as they "
 +      "are.");
 +  html_source->AddString("steddingSectionsLabel", "Sections");
++  html_source->AddString("steddingSyncImportTitle", "Sync and import");
    // sidebar Y19.
    html_source->AddString("steddingClosedFormLabel", "When the sidebar closes");
    html_source->AddString(
-@@ -765,33 +773,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingClosedFormSubLabel",
+-      base::StrCat({key("\u2318S", "Ctrl+S"),
+-                    " and the sidebar\u2019s button close it this way. "
+-                    "Hidden, the page fills the window; touch the "
+-                    "window\u2019s edge on the sidebar\u2019s side with the "
+-                    "pointer and the "
+-                    "sidebar slides back over it."}));
++      "Hidden, point at the window\u2019s edge to bring it back.");
+   html_source->AddString("steddingClosedFormIcons", "Shrink to icons");
+   html_source->AddString("steddingClosedFormHidden", "Hide it completely");
+   // BACKLOG S-124 (sidebar Y23, settings T15).
+@@ -720,8 +724,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Page flush against the window");
+   html_source->AddString(
+       "steddingPageFlushSubLabel",
+-      "No margin and no rounded corners around the page beside the sidebar, "
+-      "as when the sidebar is hidden.");
++      "No margin or rounded corners around the page.");
+   // BACKLOG S-98 (sidebar-panels Pn14, settings T34).
+   html_source->AddString("steddingLibraryPanelsLabel",
+                          "Open History and Downloads in the sidebar");
+@@ -729,29 +732,23 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "steddingLibraryPanelsSubLabel",
+       base::StrCat({key("⌘Y", "Ctrl+H"), " and ",
+                     key("⇧⌘J", "Ctrl+J"),
+-                    " open them in the sidebar's column, in the place of the "
+-                    "tabs, and the downloads button opens Downloads there. "
+-                    "Off, they open as pages."}));
++                    " open them in place of the tabs. Off, as pages."}));
+   // BACKLOG S-96 (sidebar Y34, settings T33).
+   html_source->AddString("steddingSidebarOnRightLabel",
+                          "Sidebar on the right");
+   html_source->AddString(
+       "steddingSidebarOnRightSubLabel",
+-      "The sidebar, its edge and the page’s margin move to the "
+-      "window’s right. The sidebar’s own menu and the command bar "
+-      "move it too. With the tabs across the top it changes nothing.");
++      "The sidebar and its edge move to the window\u2019s right.");
+   html_source->AddString("steddingSidebarWidthLabel", "Sidebar width");
+   // sidebar Y22: a double click on the edge returns the default width.
+   html_source->AddString(
+       "steddingSidebarWidthSubLabel",
+-      "Dragging the sidebar's edge sets the same value, and a double click on "
+-      "the edge returns it to the default.");
++      "Dragging the sidebar\u2019s edge sets it; a double click resets it.");
+   html_source->AddString("steddingSpacesTitle", "Spaces");
+   html_source->AddString(
+       "steddingSpacesIntro",
+-      "This window's Spaces. Rename here; the sidebar's + adds one and its "
+-      "context menu sets icon and colour. Independent session gives a Space "
+-      "its own cookies, so you can sign into the same site twice.");
++      "Rename a Space here. Its own session keeps separate sign-ins and "
++      "cookies.");
+   html_source->AddString("steddingIndependentSessionLabel",
+                          "Independent session");
+   html_source->AddString(
+@@ -765,62 +762,26 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    // spaces B41: Edit Space, from the Space's row.
    html_source->AddString("steddingEditSpace", "Edit\u2026");
    html_source->AddString("steddingEditNamedSpace", "Edit $1");
@@ -936,7 +1076,347 @@ index ee57ec8a0dca8..c0c0ec1fb2a52 100644
    html_source->AddString("steddingImportArcLabel", "Import from Arc");
    html_source->AddString("steddingLittleLabel",
                           "Open links from other apps in a small window");
-@@ -1378,6 +1359,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString(
+       "steddingLittleSubLabel",
+-      base::StrCat({key("\u2318O", "Ctrl+O"),
+-                    " sends the page into your window\u2019s Space, ",
++      base::StrCat({key("\u2318O", "Ctrl+O"), " keeps the page as a tab, ",
+                     key("\u21E7\u2318O", "Ctrl+Shift+O"),
+-                    " into a split, Escape closes it; a site with a route "
+-                    "opens in its Space instead. Off opens such links as "
+-                    "tabs."}));
++                    " in a split. Off, they open as tabs."}));
+   // peek P1, P10.
+   html_source->AddString("steddingPeekLabel",
+                          "Open links from pinned tabs in a peek");
+   html_source->AddString(
+       "steddingPeekSubLabel",
+-      base::StrCat({"A link that leaves a pinned tab\u2019s site opens in a "
+-                    "window over this one, and the pinned tab stays where "
+-                    "it was. ",
+-                    key("\u2318O", "Ctrl+O"), " keeps the page as a tab, ",
+-                    key("\u21E7\u2318O", "Ctrl+Shift+O"),
+-                    " puts it beside the pinned tab; Escape or a click on this "
+-                    "window closes it."}));
++      base::StrCat({"A link to another site opens over the window; ",
++                    key("\u2318O", "Ctrl+O"), " keeps it as a tab."}));
+   // peek P18.
+   html_source->AddString("steddingPeekHoldLabel", "Open a peek with");
+   html_source->AddString(
+       "steddingPeekHoldSubLabel",
+-      "With a held press, a plain click follows the link in the pinned tab "
+-      "as before; keep the mouse button down on the link to peek.");
++      "Hold the mouse button on a link to peek; a click follows it.");
+   html_source->AddString("steddingPeekHoldClick", "A click");
+   html_source->AddString("steddingPeekHold300", "A press held for 0.3 s");
+   html_source->AddString("steddingPeekHold500", "A press held for 0.5 s");
+@@ -828,8 +789,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingSidebarFilesLabel", "Export and import");
+   html_source->AddString(
+       "steddingSidebarFilesSubLabel",
+-      "Export the active Space, or every Space with its pins, folders and "
+-      "essentials, as a file, and import it on any computer. No account.");
++      "Spaces, pins and essentials as a file. No account.");
+   html_source->AddString("steddingExportSpace", "Export Space\u2026");
+   // sidebar-file Sf6.
+   html_source->AddString("steddingExportAllSpaces", "Export all Spaces\u2026");
+@@ -840,11 +800,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingSyncLabel", "Sync through a folder");
+   html_source->AddString(
+       "steddingSyncSubLabel",
+-      "Keep your Spaces, pins and essentials the same on your computers. "
+-      "Pick a folder that iCloud Drive, OneDrive, Dropbox, Google Drive or a "
+-      "network share keeps on all of them, and the same folder on each: "
+-      "that app carries the file. Stedding has no server and no account and "
+-      "sends nothing anywhere.");
++      "A folder iCloud, OneDrive, Dropbox or Google Drive syncs. No account.");
+   // Sf42 (GitHub issue 38): a folder nothing seems to sync.
+   html_source->AddString(
+       "steddingSyncNotShared",
+@@ -985,8 +941,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingDensityLabel", "Tab row height");
+   html_source->AddString(
+       "steddingDensitySubLabel",
+-      "Comfortable gives each row the most room; Compact and Dense fit more "
+-      "rows. Every window follows.");
++      "Compact and Dense fit more rows.");
+   html_source->AddString("steddingDensityComfortable", "Comfortable");
+   html_source->AddString("steddingDensityCompact", "Compact");
+   html_source->AddString("steddingDensityDense", "Dense");
+@@ -1004,8 +959,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingCookiesLabel", "Third-party cookies");
+   html_source->AddString(
+       "steddingCookiesSubLabel",
+-      "Blocked in normal windows. When a site breaks, the eye icon in the "
+-      "address row allows them for that site.");
++      "If a site breaks, the eye in the address row allows them there.");
+   html_source->AddString("steddingCookiesBlock", "Block");
+   html_source->AddString("steddingCookiesPrivateOnly",
+                          "Block only in private windows");
+@@ -1023,16 +977,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingGpcLabel", "Send Global Privacy Control");
+   html_source->AddString(
+       "steddingGpcSubLabel",
+-      "Sec-GPC: 1 on every request, and navigator.globalPrivacyControl for "
+-      "pages. Takes effect after a restart.");
++      "Asks every site not to sell or share your data. After a restart.");
+   // clean-links Cl7, Cl9 (settings T31, T32).
+   html_source->AddString("steddingCleanLinksLabel",
+                          "Remove tracking from links you open");
+   html_source->AddString(
+       "steddingCleanLinksSubLabel",
+-      "Pages open without utm_ and ad-click parameters, and redirect pages "
+-      "that carry the address they lead to are skipped. The sites below keep "
+-      "theirs.");
++      "Links open without utm_ and ad-click parameters. The sites below "
++      "keep theirs.");
+   html_source->AddString("steddingCleanLinksKeptList",
+                          "Sites that keep their links:");
+   html_source->AddString("steddingCleanLinksKeptEmpty", "No sites");
+@@ -1049,10 +1001,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingBlockerLabel", "Block ads and trackers");
+   html_source->AddString(
+       "steddingBlockerSubLabel",
+-      "Off by default. On, Stedding downloads the lists below from "
+-      "easylist.to and blocks the scripts, images, frames and requests they "
+-      "name, on every site but the ones below. Nothing about you is sent "
+-      "with the download.");
++      "Uses the lists below on every site but the ones you add. Nothing "
++      "about you is sent.");
+   html_source->AddString("steddingBlockerEasyListWhat", "Ads.");
+   html_source->AddString("steddingBlockerEasyPrivacyWhat", "Trackers.");
+   html_source->AddString("steddingBlockerListSource",
+@@ -1112,9 +1062,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Update Stedding automatically");
+   html_source->AddString(
+       "steddingUpdatesAutomaticSubLabel",
+-      "Checks once a day and downloads a new version in the background; a "
+-      "restart installs it. Off, Stedding makes no update request unless "
+-      "you choose Check for Updates.");
++      "Downloads new versions in the background; a restart installs them. "
++      "Off, only when you ask.");
+   html_source->AddString("steddingThanksAfterUpdateLabel",
+                          "Show a thank-you page after an update");
+   html_source->AddString(
+@@ -1124,23 +1073,20 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Hide the address row with the sidebar");
+   html_source->AddString(
+       "steddingHideAddressRowSubLabel",
+-      base::StrCat({key("\u2318S", "Ctrl+S"), " collapses both; ",
++      base::StrCat({key("\u2318S", "Ctrl+S"), " hides both; ",
+                     key("\u21E7\u2318D", "Ctrl+Shift+D"),
+-                    " shows or hides the row on its own. A localhost page "
+-                    "always shows it."}));
++                    " the row alone."}));
+   html_source->AddString("steddingArchiveKeepLabel", "Keep archived tabs for");
+   html_source->AddString(
+       "steddingArchiveKeepSubLabel",
+-      "The Archived page and the command bar show tabs closed within this "
+-      "time; the sidebar's Archived row opens the page.");
++      "How long closed tabs stay on the Archived page.");
+   html_source->AddString("steddingArchiveKeep7d", "7 days");
+   // sidebar Y11.
+   html_source->AddString("steddingHoverDelayLabel",
+                          "Open the icons on hover");
+   html_source->AddString(
+       "steddingHoverDelaySubLabel",
+-      "How long the pointer rests on the rail before it opens; a click in "
+-      "the rail starts the wait again");
++      "How long the pointer rests on the icons before they open.");
+   html_source->AddString("steddingHoverDelayChromium",
+                          "After 0.35 seconds (Chromium's timing)");
+   html_source->AddString("steddingHoverDelay1s", "After 1 second");
+@@ -1160,8 +1106,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Give every new Space its own session");
+   html_source->AddString(
+       "steddingSpacesOwnSessionSubLabel",
+-      "A Space you add keeps its own sign-ins, cookies and essentials. The "
+-      "switch on each Space below still changes it.");
++      "New Spaces get their own sign-ins and cookies.");
+   html_source->AddString("steddingOwnSessionAllTitle",
+                          "Give your other Spaces their own sessions too?");
+   html_source->AddString(
+@@ -1196,9 +1141,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Archive tabs nobody has looked at for");
+   html_source->AddString(
+       "steddingArchiveSubLabel",
+-      base::StrCat({"Unpinned tabs outside folders close into the recently "
+-                    "closed list (",
+-                    key("\u21E7\u2318T", "Ctrl+Shift+T"), " brings one back)."}));
++      base::StrCat({"Unpinned tabs close; ",
++                    key("\u21E7\u2318T", "Ctrl+Shift+T"),
++                    " brings one back."}));
+   html_source->AddString("steddingArchiveNever", "Never");
+   html_source->AddString("steddingArchive6h", "6 hours");
+   html_source->AddString("steddingArchive12h", "12 hours");
+@@ -1209,8 +1154,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Put a Space to sleep after leaving it");
+   html_source->AddString(
+       "steddingSpaceSleepSubLabel",
+-      "Its tabs unload but keep their rows and come back on a click; "
+-      "essentials stay awake.");
++      "Its tabs unload and keep their rows.");
+   html_source->AddString("steddingSpaceSleepNever", "Never");
+   html_source->AddString("steddingSpaceSleep5m", "5 minutes");
+   html_source->AddString("steddingSpaceSleep15m", "15 minutes");
+@@ -1220,18 +1164,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Put tabs to sleep after");
+   html_source->AddString(
+       "steddingTabsIdleSleepSubLabel",
+-      "A tab you have not looked at for this long frees its memory and "
+-      "reloads when you open it. Essentials, and tabs playing sound, in a "
+-      "call or holding typed text, stay awake.");
++      "Essentials and busy tabs stay awake.");
+   html_source->AddString("steddingTabsIdleSleep30m", "30 minutes");
+   html_source->AddString("steddingTabsIdleSleep4h", "4 hours");
+   // tabs R45, settings T22 (BACKLOG S-110).
+   html_source->AddString("steddingStartupLoadLabel", "On startup, load");
+   html_source->AddString(
+       "steddingStartupLoadSubLabel",
+-      "Every other tab comes back asleep, keeps its row and loads when you "
+-      "open it. For “On startup: Continue where you left off”, and "
+-      "after a crash or an update.");
++      "The other tabs come back asleep and load when you open them.");
+   html_source->AddString("steddingStartupLoadSelected",
+                          "The selected tab only");
+   html_source->AddString("steddingStartupLoadEssentials",
+@@ -1240,9 +1180,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingMenusShortLabel", "Short context menus");
+   html_source->AddString(
+       "steddingMenusShortSubLabel",
+-      "Stedding\u2019s verbs first in the tab, page and app menus; "
+-      "Chromium\u2019s sync, Google and AI rows hidden. Off shows "
+-      "Chromium\u2019s full menus.");
++      "Stedding\u2019s items first; Chromium\u2019s sync, Google and AI "
++      "items hidden.");
+   html_source->AddString(
+       "steddingHoldCmdNumbersLabel",
+       base::StrCat({"Show row numbers while ", key("\u2318", "Ctrl"),
+@@ -1250,27 +1189,23 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString(
+       "steddingHoldCmdNumbersSubLabel",
+       base::StrCat({key("\u23181\u2013\u23189", "Ctrl+1\u2013Ctrl+9"),
+-                    " jump to the first eight rows you can see, and 9 to the"
+-                    " last one; hold ",
+-                    key("\u2318", "Ctrl"), " a moment to see which is which."}));
++                    " jump to rows; hold ", key("\u2318", "Ctrl"),
++                    " to see which."}));
+   // docs/features/local-tabs.md Lt13.
+   html_source->AddString("steddingMarkLocalTabsLabel",
+                          "Mark local development tabs");
+   html_source->AddString(
+       "steddingMarkLocalTabsSubLabel",
+-      "A tab on this computer's own server (localhost, *.localhost, 127.x or "
+-      "[::1]) gets a yellow and black outline while it is on screen, and its "
+-      "host and port under its title at the Comfortable density.");
++      "Tabs on localhost wear a yellow and black outline and show their "
++      "port.");
+   html_source->AddString(
+       "steddingCtrlTabMruLabel",
+       base::StrCat({key("\u2303\u21E5", "Ctrl+Tab"),
+                     " cycles the most recently used tabs"}));
+   html_source->AddString(
+       "steddingCtrlTabMruSubLabel",
+-      base::StrCat({"A tap goes to the previous tab of the Space; hold ",
+-                    key("\u2303", "Ctrl"), " to see the five most recent. Off, ",
+-                    key("\u2303\u21E5", "Ctrl+Tab"),
+-                    " walks the sidebar in order."}));
++      base::StrCat({key("\u2303\u21E5", "Ctrl+Tab"),
++                    " goes to the tab used last. Off, it walks the sidebar."}));
+   html_source->AddString("steddingNewTabHintLabel",
+                          "Show the command-bar hint on the new tab page");
+   html_source->AddString(
+@@ -1282,9 +1217,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       "Expand the collapsed sidebar when the pointer rests on it");
+   html_source->AddString(
+       "steddingSidebarHoverSubLabel",
+-      "With the sidebar shrunk to icons, resting the pointer on them slides "
+-      "it out. A hidden sidebar always comes back from the window\u2019s "
+-      "edge.");
++      "Resting the pointer on the icons slides the sidebar out.");
+   html_source->AddString("steddingNewTabShortcutsLabel",
+                          "Show most-visited shortcuts on the new tab page");
+   html_source->AddString("steddingNewTabShortcutsSubLabel",
+@@ -1294,27 +1227,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString(
+       "steddingCopyStripSubLabel",
+       base::StrCat({key("\u21E7\u2318C", "Ctrl+Shift+C"),
+-                    " copies the page\u2019s link with utm_, fbclid, gclid and "
+-                    "their kin removed; ",
++                    " copies the link without trackers; ",
+                     key("\u2325\u21E7\u2318C", "Ctrl+Alt+Shift+C"),
+-                    " copies it as Markdown."}));
++                    " as Markdown."}));
+   // copy-link L7, settings T28 (GitHub issue 11; the owner, 2026-10-22).
+   html_source->AddString("steddingCopyLinkButtonLabel",
+                          "Show the Copy Link button");
+   html_source->AddString(
+       "steddingCopyLinkButtonSubLabel",
+-      key("A button at the right end of the address field copies the "
+-          "page\u2019s link; Option-click copies it as Markdown.",
+-          "A button at the right end of the address field copies the "
+-          "page\u2019s link; Alt-click copies it as Markdown."));
++      key("A button in the address field copies the link; Option-click for "
++          "Markdown.",
++          "A button in the address field copies the link; Alt-click for "
++          "Markdown."));
+   html_source->AddString("steddingAnimateLabel",
+                          "Animate the sidebar and overlays");
+   html_source->AddString(
+       "steddingAnimateSubLabel",
+-      key("Follows macOS Reduce Motion; off stills Stedding whatever macOS "
+-          "says.",
+-          "Follows Windows\u2019 animation setting; off stills Stedding "
+-          "whatever Windows says."));
++      key("Follows macOS Reduce Motion. Off, nothing animates.",
++          "Follows Windows\u2019 animation setting. Off, nothing animates."));
+   // page U9, settings T16.
+   html_source->AddString("steddingLinkAddressLabel",
+                          "Show a link\u2019s address on hover");
+@@ -1327,25 +1257,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Show how to leave full screen");
+   html_source->AddString(
+       "steddingFullscreenHintSubLabel",
+-      key("With it on, full screen you start (\u2303\u2318F, the green "
+-          "button) shows a note at the top: press and hold Esc to leave. Off, "
+-          "\u2303\u2318F or a held Esc still leaves. A page that fills the "
+-          "screen by itself, such as a video, always shows its note.",
+-          "With it on, full screen you start (F11) shows a note at the top: "
+-          "press and hold Esc to leave. Off, F11 or a held Esc still leaves. "
+-          "A page that fills the screen by itself, such as a video, always "
+-          "shows its note."));
++      key("A note on leaving full screen you start with \u2303\u2318F. Videos "
++          "always show it.",
++          "A note on leaving full screen you start with F11. Videos always "
++          "show it."));
+   // dark-pages Dk1, Dk16, Dk17, Dk20.
+   html_source->AddString("steddingDarkPagesLabel", "Dark pages");
+   html_source->AddString(
+       "steddingDarkPagesSubLabel",
+-      base::StrCat(
+-          {"Every website is drawn dark: white backgrounds go dark and dark "
+-           "text light. Pictures and video keep "
+-           "their colours; Stedding\u2019s own pages, DevTools and extensions "
+-           "are left as they are. ",
+-           key("\u2325\u21e7\u2318D", "Ctrl+Alt+Shift+D"),
+-           " turns it on or off from any window."}));
++      base::StrCat({"Websites drawn dark; pictures keep their colours. ",
++                    key("\u2325\u21e7\u2318D", "Ctrl+Alt+Shift+D"),
++                    " turns it on or off."}));
+   html_source->AddString("steddingDarkPagesButtonLabel",
+                          "Show the dark pages button");
+   html_source->AddString(
+@@ -1355,8 +1277,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   html_source->AddString("steddingDarkPagesModeLabel", "Darken");
+   html_source->AddString(
+       "steddingDarkPagesModeSubLabel",
+-      "Which sites dark pages applies to. A right click on a page keeps its "
+-      "site light, or darkens it again.");
++      "Right-click a page to change its site.");
+   html_source->AddString("steddingDarkPagesModeAll", "All sites, except these");
+   html_source->AddString("steddingDarkPagesModeOnly", "Only these sites");
+   html_source->AddString("steddingDarkPagesExceptList", "Kept light:");
+@@ -1378,32 +1299,31 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingPinsCloseSleepsSubLabel",
                           "The row stays; unpin to remove it. Off closes the "
                           "tab, as Chromium does.");
@@ -945,12 +1425,60 @@ index ee57ec8a0dca8..c0c0ec1fb2a52 100644
 +                         "Mark pinned tabs that left their page");
 +  html_source->AddString(
 +      "steddingMarkDriftedPinsSubLabel",
-+      "A dot on the essential and in the collapsed sidebar, and a button on "
-+      "the essential to go back. Reset to Pinned Page on the tab's menu does "
-+      "that either way.");
++      "A dot and a back button on a pinned tab away from its page.");
    // tabs R30, settings T17 (BACKLOG S-97).
    html_source->AddString("steddingUndoToastLabel",
                           "Offer Undo after closing tabs");
+   html_source->AddString(
+       "steddingUndoToastSubLabel",
+-      base::StrCat({"After ", key("\u2318W", "Ctrl+W"),
+-                    ", a row\u2019s close button or Clear, the toast\u2019s "
+-                    "Undo puts the tabs back where they were, in their Space "
+-                    "and folder. Off, ",
+-                    key("\u21E7\u2318T", "Ctrl+Shift+T"),
+-                    " still reopens them one at a time."}));
++      base::StrCat({"Undo after ", key("\u2318W", "Ctrl+W"),
++                    " or Clear puts the tabs back where they were."}));
+   // tabs R56, settings T26 (the owner, 2026-10-21).
+   html_source->AddString("steddingNestChildTabsLabel",
+                          "Show tabs under the tab that opened them");
+   html_source->AddString(
+       "steddingNestChildTabsSubLabel",
+-      "A link opened in a new tab sits indented under its page in the "
+-      "sidebar. Off, every tab sits at the left.");
++      "Tabs opened from a page sit indented under it.");
+   // tabs R62, settings T30 (GitHub issue 22).
+   html_source->AddString("steddingNewTabsAtTopLabel",
+                          "Open new tabs at the top of the list");
+   html_source->AddString(
+       "steddingNewTabsAtTopSubLabel",
+-      "A new tab opens right under + New Tab, above the older tabs, so "
+-      "your pinned tabs stay in view. Off, it opens at the end of the "
+-      "list.");
++      "New tabs open under + New Tab, so pinned tabs stay in view.");
+   // import I14, settings T27 (WIN-15; decided 2026-10-22, the owner away
+   // and asking for a decision): the way back from Turn Bookmarks into Pinned
+   // Tabs.
+@@ -1411,16 +1331,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                          "Show the bookmark bar and the star");
+   html_source->AddString(
+       "steddingBookmarksShownSubLabel",
+-      "Turn Bookmarks into Pinned Tabs turns this off: the sidebar holds them "
+-      "then. On, the bar follows Show bookmarks bar again and the star "
+-      "bookmarks a page.");
++      "Turning bookmarks into pinned tabs hides the bar; on brings it "
++      "back.");
+   html_source->AddString("steddingShortcutsTitle", "Shortcuts");
+   // docs/features/shortcuts.md Z5, Z10-Z22: the block is editable.
+   html_source->AddString(
+       "steddingShortcutsIntro",
+-      "Add records new keys for a command, × takes one off, and the switch "
+-      "turns a command's keys off. Your shortcuts are this computer's: they "
+-      "apply to every profile and window.");
++      "Add, remove or turn off the keys of any command, for every window.");
+   html_source->AddString("steddingShortcutsSearch", "Search shortcuts");
+   html_source->AddString("steddingShortcutsGroup", "Show a group");
+   html_source->AddString("steddingShortcutsAllGroups", "All groups");
 diff --git a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc b/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
 index 136f1328232bf..6bfe1190b1172 100644
 --- a/chrome/browser/ui/webui/settings/stedding_spaces_handler.cc
@@ -1094,7 +1622,7 @@ index 1a007cfdd60d3..e01bd28b2b00a 100644
  // that keeps its jar, as it is, and shows that Space; a page in the shared
  // jar goes to the first Space that shares it when the one on screen does
 diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
-index 3a9463056dd89..213959cfb31e1 100644
+index 3a9463056dd89..1fb192ae4e609 100644
 --- a/chrome/test/stedding/settings_spaces_browsertest.cc
 +++ b/chrome/test/stedding/settings_spaces_browsertest.cc
 @@ -269,7 +269,7 @@ constexpr char kShortcutRow[] = R"(
@@ -1106,7 +1634,7 @@ index 3a9463056dd89..213959cfb31e1 100644
      const rows =
          all.filter(element => element.classList.contains('shortcut-row'));
      if (!header || header.offsetParent === null || !rows.length) {
-@@ -449,6 +449,47 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
+@@ -449,6 +449,48 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
            "stedding.window.fullscreen_hint"}) {
        EXPECT_NE(std::string::npos, keys.find(key)) << key << " in " << keys;
      }
@@ -1119,9 +1647,10 @@ index 3a9463056dd89..213959cfb31e1 100644
 +    // named at the top of the page, where its name jumps to it.
 +    SCOPED_TRACE("the groups are cards, named at the top");
 +    EXPECT_EQ(
-+        "sidebarSection,tabsSection,peekSection,spacesSection,pagesSection,"
-+        "privacySection,updatesSection,shortcutsSection|Sidebar,Tabs,Peek "
-+        "and little windows,Spaces,Pages and menus,Privacy,Updates,Shortcuts",
++        "sidebarSection,tabsSection,peekSection,spacesSection,syncSection,"
++        "pagesSection,privacySection,updatesSection,shortcutsSection|Sidebar,"
++        "Tabs,Peek and little windows,Spaces,Sync and import,Pages and menus,"
++        "Privacy,Updates,Shortcuts",
 +        content::EvalJs(page, OnThePage(R"(
 +          const page = pick('settings-stedding-page');
 +          const root = page && page.shadowRoot;
@@ -1154,7 +1683,7 @@ index 3a9463056dd89..213959cfb31e1 100644
    }
    {
      // tabs R30, routing D4, toolbar T45: the hints are off on a fresh
-@@ -457,7 +498,7 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
+@@ -457,7 +499,7 @@ IN_PROC_BROWSER_TEST_F(SettingsSpacesTest, ThePageBindsEveryControl) {
          "the hints' switches are off, Copy Link on");
      for (const char* key :
           {"stedding.tabs.undo_toast", "stedding.spaces.notices",

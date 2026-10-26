@@ -183,7 +183,7 @@ Betas up to 8 wrote a snapshot of the sidebar every hour into a `Sidebar Backups
 folder inside the profile: every tab's address and title, in plain JSON. Later
 builds no longer write it, and Clear browsing data does not remove it. Delete the
 folder by hand if you do not want to keep it, or import one of its files with
-**Import sidebar…** in Settings → Stedding → Spaces.
+**Import sidebar…** in Settings → Stedding → Sync and import.
 
 ### A Space's own cookies and Delete browsing data
 
@@ -363,7 +363,7 @@ consequences we will not hide:
 | Topics, Protected Audience, Attribution Reporting | Off | — |
 | Safe Browsing | The setting is on (hash-prefix only), but it does not protect in these builds: the list updates are refused without an API key (see above) | Turn off |
 | Google sync | Not available | — |
-| Sidebar sync through a folder | Off. Once a folder is chosen, this computer's file there holds its Spaces (name, icon, colours, order, whether it has its own session), pins (home address and the user's own name), pinned folders, essentials, a random install id and the computer's name ("Mac" or "Windows PC" and four characters, or what the user typed). Never open tabs, history, cookies, passwords, jars or the host name. Stedding makes no network request for it: the user's own sync tool or shared drive moves the file (`features/sidebar-file.md` Sf7–Sf41) | Settings → Stedding → Spaces → Sync through a folder; Stop syncing, with or without removing this computer's file |
+| Sidebar sync through a folder | Off. Once a folder is chosen, this computer's file there holds its Spaces (name, icon, colours, order, whether it has its own session), pins (home address and the user's own name), pinned folders, essentials, a random install id and the computer's name ("Mac" or "Windows PC" and four characters, or what the user typed). Never open tabs, history, cookies, passwords, jars or the host name. Stedding makes no network request for it: the user's own sync tool or shared drive moves the file (`features/sidebar-file.md` Sf7–Sf41) | Settings → Stedding → Sync and import → Sync through a folder; Stop syncing, with or without removing this computer's file |
 | WebRTC local IPs | Hidden (mDNS) | Stricter policies through an extension; no setting |
 | Global Privacy Control | On | Turn off |
 | Tracking parameters on links you open | Removed, and known redirect pages skipped; nothing fetched | Turn off; keep a site's in Settings |

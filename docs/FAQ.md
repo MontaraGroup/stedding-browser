@@ -175,7 +175,7 @@ Spaces → **Give every new Space its own session**; it offers to turn it on for
 already have too.
 
 **Is there sync? Can I sync without an account?**
-There is no account anywhere in the product. Settings → Stedding → Spaces → Sync through a
+There is no account anywhere in the product. Settings → Stedding → Sync and import → Sync through a
 folder keeps your Spaces, pins, pinned folders and essentials the same on your computers
 through a folder you choose: one your own sync app keeps (iCloud Drive, OneDrive, Dropbox,
 Google Drive, Syncthing) or a shared drive. A folder nothing syncs keeps the file on this

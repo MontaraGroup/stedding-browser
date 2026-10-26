@@ -94,9 +94,26 @@ find_app_bundle() {
   [ -n "$app" ] && printf '%s' "$app"
 }
 
-# Free space in GB on the volume holding $1.
+# Free space in GB on the volume holding $1. On macOS it is what Finder shows:
+# the free blocks plus the purgeable space (caches, iCloud files kept on the
+# Mac, local snapshots) that the system clears as soon as a write needs it. df
+# counts the free blocks alone, and on 2026-10-26 it read 19 GB where Finder
+# showed 67 GB, refusing an incremental build that had room to spare.
 free_gb() {
-  df -Pk "$1" | awk 'NR==2 { printf "%d", $4 / 1024 / 1024 }'
+  local bytes=""
+  if [ "$(uname -s)" = Darwin ] && [ -e "$1" ]; then
+    bytes="$(osascript -l JavaScript -e 'function run(argv) {
+      ObjC.import("Foundation");
+      var value = Ref();
+      $.NSURL.fileURLWithPath(argv[0]).getResourceValueForKeyError(
+          value, $.NSURLVolumeAvailableCapacityForImportantUsageKey, null);
+      return ObjC.unwrap(value[0]);
+    }' "$1" 2>/dev/null)"
+  fi
+  case "$bytes" in
+    ''|*[!0-9]*) df -Pk "$1" | awk 'NR==2 { printf "%d", $4 / 1024 / 1024 }' ;;
+    *) awk -v b="$bytes" 'BEGIN { printf "%d", b / 1024 / 1024 / 1024 }' ;;
+  esac
 }
 
 require_free_gb() {

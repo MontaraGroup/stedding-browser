@@ -484,7 +484,7 @@ yet.
 
 | Id | Do | Expect |
 |---|---|---|
-| `sy_join` | Mac: Settings → Stedding → Spaces → Set up…, pick the shared folder, Start syncing. PC: the same; tick the pairs; Combine. | The sheet names the Mac and its counts and the pairs; after Combine, one Space per pair on both, the Mac's pins unloaded on the PC; nothing open closed (Sf9, Sf10, Sf17). |
+| `sy_join` | Mac: Settings → Stedding → Sync and import → Set up…, pick the shared folder, Start syncing. PC: the same; tick the pairs; Combine. | The sheet names the Mac and its counts and the pairs; after Combine, one Space per pair on both, the Mac's pins unloaded on the PC; nothing open closed (Sf9, Sf10, Sf17). |
 | `sy_edit` | Mac: rename a Space; PC within the same minute: recolour it. Pin a page on the PC. | Both computers show the new name and colour within a few seconds of the sync tool moving the file; the pin arrives unloaded on the Mac (Sf13, Sf15). |
 | `sy_remove` | PC: unpin one pin; close a window holding pins; quit and relaunch. | The unpinned pin goes on the Mac (into Recently Closed if never opened there); the window's pins stay on the Mac (Sf18, Sf19, Sf21). |
 | `sy_bulk` | PC: unpin five pins at once; delete a Space. | The Mac shows one row for the five with Apply and Keep, and one for the Space with Delete here… and Keep; nothing goes until answered (Sf22, Sf23). |
