@@ -41,8 +41,27 @@ refer to `docs/features/<feature>.md`.
    the peek itself: what it is, ⌘O to keep it as a tab, and a link to the setting; it never
    shows again once dismissed or acted on. Arc's Shift-click peek from any tab waits for the
    owner.
-4. `S-309` **Docs brought up to date and trimmed**: every page true to the code after 1-3,
-   repeated or stale passages removed, history kept in `docs/PROJECT-LOG.md` and the archives.
+4. `S-310` **No amber anywhere; a neutral, designed palette** (the owner, 2026-10-26). The
+   active Space's colour reaches the window as Chromium's user colour marked as an accent, so
+   Chromium's whole Material palette -- Settings, toggles, menus, the command bar's chip -- was
+   generated from it: a warm Space turned Settings brown and orange. The Space colour keeps
+   tinting the sidebar's ground and nothing else; the rest of the UI takes a neutral palette.
+   The light look's sand ground (#C8B377) and the welcome page's amber go, for colours from
+   the same designer palettes the Space colours use (Radix, Tailwind). The amber dot in the
+   logo is brand artwork and stays unless the owner says otherwise.
+5. `S-311` **The command bar's rows show the pointer** (the owner): today a row lights only when
+   the arrow keys choose it; under the pointer it gives no sign, though a click works.
+6. `S-286` **Separators in the sidebar** (GitHub issue 19, the owner: build it now), added from
+   the right-click menu only, so they stay out of the way.
+7. `S-312` **Sync through a folder says what to pick** (GitHub issue 38's follow-up): there is
+   no provider to choose; the folder must be one a sync app keeps (iCloud Drive, OneDrive,
+   Dropbox, Google Drive). Name that in the row, and say so when the chosen folder is under
+   none of them.
+8. `S-309` **Docs brought up to date and trimmed**: every page true to the code after the
+   above, repeated or stale passages removed, history kept in `docs/PROJECT-LOG.md` and the
+   archives.
+9. `S-313` **Settings › Stedding reorganised** (optional, if not too hard): today one long
+   list; grouped and laid out more like the setup screen.
 
 Commits land as each step does; a release only on the owner's word.
 
