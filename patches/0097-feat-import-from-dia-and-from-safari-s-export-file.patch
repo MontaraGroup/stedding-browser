@@ -35,7 +35,7 @@ I32, I41) and Dia's sidebar (I33) build on this.
  .../browser/resources/stedding_welcome/app.ts | 231 +++++
  chrome/browser/ui/DEPS                        |   5 +
  chrome/browser/ui/spaces/BUILD.gn             |   8 +
- chrome/browser/ui/spaces/arc_data_importer.cc |  97 +-
+ chrome/browser/ui/spaces/arc_data_importer.cc | 104 ++-
  chrome/browser/ui/spaces/arc_data_importer.h  |  32 +-
  .../ui/spaces/chromium_family_importer.cc     | 820 ++++++++++++++++
  .../ui/spaces/chromium_family_importer.h      | 197 ++++
@@ -56,7 +56,7 @@ I32, I41) and Dia's sidebar (I33) build on this.
  chrome/test/stedding/BUILD.gn                 |  11 +
  .../stedding/safari_dia_import_browsertest.cc | 600 ++++++++++++
  .../user_data_importer/utility/BUILD.gn       |   3 +
- 24 files changed, 5383 insertions(+), 34 deletions(-)
+ 24 files changed, 5389 insertions(+), 35 deletions(-)
  create mode 100644 chrome/browser/ui/spaces/chromium_family_importer.cc
  create mode 100644 chrome/browser/ui/spaces/chromium_family_importer.h
  create mode 100644 chrome/browser/ui/spaces/chromium_family_importer_unittest.cc
@@ -402,7 +402,7 @@ index a614a8a4c019f..4a67cf73aaffc 100644
      "bookmarks_to_pins_unittest.cc",
      "folder_commands_unittest.cc",
 diff --git a/chrome/browser/ui/spaces/arc_data_importer.cc b/chrome/browser/ui/spaces/arc_data_importer.cc
-index 51a51dfc0293a..7f573da572160 100644
+index 51a51dfc0293a..4665abca0410d 100644
 --- a/chrome/browser/ui/spaces/arc_data_importer.cc
 +++ b/chrome/browser/ui/spaces/arc_data_importer.cc
 @@ -79,26 +79,17 @@ base::Time FromChromiumMicroseconds(int64_t value) {
@@ -510,7 +510,22 @@ index 51a51dfc0293a..7f573da572160 100644
    base::apple::ScopedCFTypeRef<CFTypeRef> result;
    if (SecItemCopyMatching(query.get(), result.InitializeInto()) !=
        errSecSuccess) {
-@@ -417,7 +444,8 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
+@@ -306,8 +333,13 @@ std::optional<std::string> ReadArcKeychainPassword() {
+ std::optional<std::vector<uint8_t>> ReadArcWindowsKey(
+     const base::FilePath& local_state) {
+ #if BUILDFLAG(IS_WIN)
++  // Local State holds the key near its start and stays a few megabytes; a
++  // larger file is not read whole.
++  constexpr size_t kMaxLocalStateBytes = 16 * 1024 * 1024;
+   std::string json;
+-  if (local_state.empty() || !base::ReadFileToString(local_state, &json)) {
++  if (local_state.empty() ||
++      !base::ReadFileToStringWithMaxSize(local_state, &json,
++                                         kMaxLocalStateBytes)) {
+     return std::nullopt;
+   }
+   const std::optional<base::DictValue> state =
+@@ -417,7 +449,8 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
      const base::FilePath& logins_copy,
      base::span<const uint8_t> key,
      size_t cap,
@@ -520,7 +535,7 @@ index 51a51dfc0293a..7f573da572160 100644
    std::vector<password_manager::PasswordForm> forms;
    if (logins_copy.empty() || !base::PathExists(logins_copy)) {
      return forms;
-@@ -466,11 +494,24 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
+@@ -466,11 +499,24 @@ std::vector<password_manager::PasswordForm> ReadArcLogins(
        form.username_element.clear();
        form.password_element.clear();
      } else {

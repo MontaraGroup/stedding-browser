@@ -797,7 +797,7 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
 56. **A Windows test binary started straight from a bash script under an agent's tool
     fails the tests that need a really active window.** On 2026-09-29
     `tooling/dev test browser --no-build` failed the same four of 150 on every run --
-    `SidebarClickTest.EveryPartOfEveryRowSelects`, the three `TabDropTest` drags, and
+    `SidebarClickTest.EachPartOfTheStripAnswersItsOwnPress`, the three `TabDropTest` drags, and
     sometimes `SleepInUseTest.LeavingASpaceAndSleepingOthersKeepWhatIsInUse`, whose typed keys never
     reached the page -- while the same binary with the same arguments passed all 150
     whenever `timeout` was its parent (`timeout N exe`, `timeout --foreground N exe`),
@@ -974,7 +974,7 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     and what it starts inherits that. That raises the processor priority only: the task's
     disk and memory priorities stay low unless the task itself is made at priority 4 (trap
     99). Even then the four tests that drag a row
-    (`SidebarClickTest.EveryPartOfEveryRowSelects` and the three `TabDropTest` drags, trap 56's
+    (`SidebarClickTest.EachPartOfTheStripAnswersItsOwnPress` and the three `TabDropTest` drags, trap 56's
     set) failed there on every run, most likely because Windows gives the mouse capture a drag
     needs only to the foreground window, and a task's window may not take the foreground from
     the window the operator left in front (2026-10-02). Run those at the desk, or say they were
@@ -1519,7 +1519,7 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     (`CopyBackgroundColorIfPresentFrom`), so `RenderWidgetHostView::GetBackgroundColor()` on
     the view a navigation has just made answers the new tab page's colour, not the coming
     page's. Found in the review of dark pages (2026-10-18, Dk7):
-    `DarkPagesTest.TheContentAreaIsDarkBeforeTheFirstFrame` read it and could not have passed
+    `DarkPagesTest.ADarkenedPageIsDarkBeforeItsFirstFrame` read it and could not have passed
     on Windows; it reads the content area's own solid-colour layer instead, which has not yet
     run.
 
@@ -1541,7 +1541,7 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     read, a screenshot, the row's edge sampler) comes back `rgba(0,0,0,0)`. The Mac draws
     regardless, so a pixel test passes there and waits out its 30 s on the PC; worse, a
     check that transparent black satisfies passes without testing anything
-    (`DarkPagesTest.AnErrorPageIsDark` asked `IsDark` of it). A fixture that reads a page's
+    (`DarkPagesTest.ThePagesOwnColourSchemeComesFirst` asked `IsDark` of it). A fixture that reads a page's
     pixels calls `EnablePixelOutput()` in its constructor (it also forces a scale factor of
     1). Found in BACKLOG S-242 (2026-10-19): six dark-page, page-colour and capture tests.
 

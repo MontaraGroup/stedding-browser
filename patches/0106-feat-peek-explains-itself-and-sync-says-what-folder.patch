@@ -26,10 +26,10 @@ Removable when: never; to be folded into the patches that own the code.
  .../stedding_sync_section.html.ts             |   4 +
  .../stedding_page/stedding_sync_section.ts    |   2 +
  .../browser/resources/stedding_welcome/app.ts |   7 +-
- chrome/browser/ui/spaces/sidebar_sync_file.cc |  34 +++++
+ chrome/browser/ui/spaces/sidebar_sync_file.cc |  38 +++++
  chrome/browser/ui/spaces/sidebar_sync_file.h  |  13 ++
- .../browser/ui/spaces/sidebar_sync_service.cc |  16 +++
- .../ui/spaces/sidebar_sync_unittest.cc        |  26 ++++
+ .../browser/ui/spaces/sidebar_sync_service.cc |  18 +++
+ .../ui/spaces/sidebar_sync_unittest.cc        |  32 +++++
  chrome/browser/ui/stedding/BUILD.gn           |   5 +
  chrome/browser/ui/stedding/peek.cc            |   8 ++
  chrome/browser/ui/stedding/peek_notice.cc     | 134 ++++++++++++++++++
@@ -40,7 +40,7 @@ Removable when: never; to be folded into the patches that own the code.
  .../browser/ui/webui/settings/settings_ui.cc  |  13 +-
  chrome/test/stedding/peek_browsertest.cc      |  52 +++++++
  components/infobars/core/infobar_delegate.h   |   2 +
- 18 files changed, 371 insertions(+), 5 deletions(-)
+ 18 files changed, 383 insertions(+), 5 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/peek_notice.cc
  create mode 100644 chrome/browser/ui/stedding/peek_notice.h
 
@@ -117,10 +117,10 @@ index faf2d2299d070..76797ea5cefb9 100644
    },
  ];
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_file.cc b/chrome/browser/ui/spaces/sidebar_sync_file.cc
-index 77ed4a2a28133..98f8762640e09 100644
+index 77ed4a2a28133..929634f7f9029 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_file.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_file.cc
-@@ -242,6 +242,40 @@ std::string DefaultDeviceName(std::string_view install) {
+@@ -242,6 +242,44 @@ std::string DefaultDeviceName(std::string_view install) {
            .c_str());
  }
  
@@ -153,8 +153,12 @@ index 77ed4a2a28133..98f8762640e09 100644
 +  static constexpr std::string_view kSyncedNames[] = {
 +      "Dropbox", "OneDrive",  "Google Drive", "GoogleDrive", "Box",
 +      "iCloudDrive", "iCloud Drive", "Documents", "Desktop"};
++  // The name whole, or followed by a space, as in "Dropbox (Team)" and
++  // "OneDrive - Company"; "Boxes" and "DocumentsBackup" are not synced.
 +  return std::ranges::any_of(kSyncedNames, [&](std::string_view name) {
-+    return base::StartsWith(first, name, base::CompareCase::INSENSITIVE_ASCII);
++    return base::StartsWith(first, name,
++                            base::CompareCase::INSENSITIVE_ASCII) &&
++           (first.size() == name.size() || first[name.size()] == ' ');
 +  });
 +}
 +
@@ -193,7 +197,7 @@ index 0a59368dbebf0..7d1a420b73320 100644
  enum class EntryKind {
    // This install's own file.
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_service.cc b/chrome/browser/ui/spaces/sidebar_sync_service.cc
-index 82345e9088807..f175480187114 100644
+index 82345e9088807..a4481fcb1e188 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_service.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_service.cc
 @@ -8,6 +8,7 @@
@@ -204,7 +208,14 @@ index 82345e9088807..f175480187114 100644
  #include "base/files/file_enumerator.h"
  #include "base/files/file_path_watcher.h"
  #include "base/files/file_util.h"
-@@ -21,6 +22,7 @@
+@@ -15,12 +16,14 @@
+ #include "base/functional/bind.h"
+ #include "base/json/json_writer.h"
+ #include "base/path_service.h"
++#include "base/strings/cstring_view.h"
+ #include "base/task/bind_post_task.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/task/thread_pool.h"
  #include "base/time/clock.h"
  #include "base/time/default_clock.h"
  #include "base/token.h"
@@ -212,7 +223,7 @@ index 82345e9088807..f175480187114 100644
  #include "chrome/browser/lifetime/application_lifetime_desktop.h"
  #include "chrome/browser/lifetime/browser_shutdown.h"
  #include "chrome/browser/profiles/profile.h"
-@@ -1639,6 +1641,20 @@ base::DictValue SidebarSyncService::GetStatus() {
+@@ -1639,6 +1642,21 @@ base::DictValue SidebarSyncService::GetStatus() {
    base::DictValue status;
    status.Set("enabled", enabled());
    status.Set("folder", folder().AsUTF8Unsafe());
@@ -220,8 +231,9 @@ index 82345e9088807..f175480187114 100644
 +  std::vector<base::FilePath> synced_roots;
 +#if BUILDFLAG(IS_WIN)
 +  std::unique_ptr<base::Environment> env = base::Environment::Create();
-+  for (const char* const name :
-+       {"OneDrive", "OneDriveConsumer", "OneDriveCommercial"}) {
++  for (const base::cstring_view name :
++       {base::cstring_view("OneDrive"), base::cstring_view("OneDriveConsumer"),
++        base::cstring_view("OneDriveCommercial")}) {
 +    if (std::optional<std::string> root = env->GetVar(name)) {
 +      synced_roots.push_back(base::FilePath::FromUTF8Unsafe(*root));
 +    }
@@ -234,10 +246,10 @@ index 82345e9088807..f175480187114 100644
    status.Set("ready", ready_);
    if (!enabled()) {
 diff --git a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
-index 8e9b276a4c92f..20bd252c7fc6f 100644
+index 8e9b276a4c92f..8fa60c206e274 100644
 --- a/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
 +++ b/chrome/browser/ui/spaces/sidebar_sync_unittest.cc
-@@ -515,6 +515,32 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
+@@ -515,6 +515,38 @@ TEST(SidebarSyncFileTest, OnlyExactNamesArePeers) {
  }
  
  // Sf8: a picked folder that already is one is not nested.
@@ -252,10 +264,16 @@ index 8e9b276a4c92f..20bd252c7fc6f 100644
 +      << "the issue's folder";
 +  EXPECT_FALSE(LooksSynced(under("Stedding Sidebar"), home, {}));
 +  EXPECT_FALSE(LooksSynced(under("Library/Application Support/x"), home, {}));
++  for (const char* const unsynced :
++       {"Boxes/Stedding", "DocumentsBackup/Stedding", "Desktop2/Stedding"}) {
++    EXPECT_FALSE(LooksSynced(under(unsynced), home, {}))
++        << unsynced << ": a name that only starts like a synced folder's";
++  }
 +  for (const char* const synced :
 +       {"Library/Mobile Documents/com~apple~CloudDocs/Stedding",
 +        "Library/CloudStorage/OneDrive-Personal/Stedding", "Dropbox/Stedding",
-+        "OneDrive - Company/Stedding", "Google Drive/My Drive/Stedding",
++        "OneDrive - Company/Stedding", "Dropbox (Team)/Stedding",
++        "Google Drive/My Drive/Stedding",
 +        "Documents/Stedding", "Desktop/Stedding"}) {
 +    EXPECT_TRUE(LooksSynced(under(synced), home, {})) << synced;
 +  }

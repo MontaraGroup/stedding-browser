@@ -25,14 +25,15 @@ Why: a review of the sidebar on the right (S-96) and of Export all Spaces
 (S-282).
 Removable when: never; to be folded into the patches that own the code.
 ---
- .../focus/browser_focus_controller_views.cc   | 12 +++--
- .../browser/ui/spaces/arc_sidebar_importer.cc | 37 +++++++++++++--
- .../ui/spaces/sidebar_backup_unittest.cc      | 29 ++++++++++++
- .../layout/stedding_browser_view_layout.cc    | 14 ++++++
- .../frame/vertical_tab_strip_region_view.cc   | 47 ++++++++++++-------
- .../vertical_tab_strip_top_container.cc       |  6 +++
- .../stedding/sidebar_forms_browsertest.cc     | 17 ++++++-
- 7 files changed, 136 insertions(+), 26 deletions(-)
+ .../focus/browser_focus_controller_views.cc   | 12 ++-
+ .../browser/ui/spaces/arc_sidebar_importer.cc | 85 ++++++++++++++-----
+ .../spaces/arc_sidebar_importer_unittest.cc   | 24 ++++++
+ .../ui/spaces/sidebar_backup_unittest.cc      | 29 +++++++
+ .../layout/stedding_browser_view_layout.cc    | 14 +++
+ .../frame/vertical_tab_strip_region_view.cc   | 47 ++++++----
+ .../vertical_tab_strip_top_container.cc       |  6 ++
+ .../stedding/sidebar_forms_browsertest.cc     | 17 +++-
+ 8 files changed, 192 insertions(+), 42 deletions(-)
 
 diff --git a/chrome/browser/ui/focus/browser_focus_controller_views.cc b/chrome/browser/ui/focus/browser_focus_controller_views.cc
 index 22f7e9ce399f6..08cf5677d0ca4 100644
@@ -61,7 +62,7 @@ index 22f7e9ce399f6..08cf5677d0ca4 100644
          if (auto* dialog = view->GetProperty(views::kAnchoredDialogKey);
              dialog && !user_education::HelpBubbleView::IsHelpBubble(dialog)) {
 diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer.cc b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
-index 8d1a12e18eea9..5dd957e292f53 100644
+index 8d1a12e18eea9..21ffbbf1e2263 100644
 --- a/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 +++ b/chrome/browser/ui/spaces/arc_sidebar_importer.cc
 @@ -10,6 +10,7 @@
@@ -82,7 +83,53 @@ index 8d1a12e18eea9..5dd957e292f53 100644
  #include "url/url_constants.h"
  
  namespace spaces {
-@@ -452,18 +453,36 @@ std::set<std::string> OpenIds(BrowserWindowInterface* browser) {
+@@ -228,17 +229,21 @@ std::optional<ArcItem> ParseItem(const base::DictValue& dict) {
+   return std::nullopt;
+ }
+ 
+-// The nodes under `parent`, in Arc's order; lists nest.
++// The nodes under `parent`, in Arc's order; lists nest. Each item comes
++// across once: a list that names itself, or an item named twice, would
++// otherwise build a tree that grows with every level (Arc's file is a tree,
++// so a well-formed one loses nothing).
+ std::vector<Node> BuildChildren(const ArcItem& parent,
+                                 const std::map<std::string, ArcItem>& items,
+-                                int depth) {
++                                int depth,
++                                std::set<std::string>& expanded) {
+   std::vector<Node> out;
+   if (depth > 16) {
+     return out;
+   }
+   for (const std::string& child_id : parent.children) {
+     const auto it = items.find(child_id);
+-    if (it == items.end()) {
++    if (it == items.end() || !expanded.insert(child_id).second) {
+       continue;
+     }
+     const ArcItem& child = it->second;
+@@ -254,13 +259,19 @@ std::vector<Node> BuildChildren(const ArcItem& parent,
+       out.push_back(std::move(node));
+     } else if (child.kind == ArcItem::Kind::kList) {
+       node.kind = Node::Kind::kFolder;
+-      node.children = BuildChildren(child, items, depth + 1);
++      node.children = BuildChildren(child, items, depth + 1, expanded);
+       out.push_back(std::move(node));
+     }
+   }
+   return out;
+ }
+ 
++std::vector<Node> BuildChildren(const ArcItem& parent,
++                                const std::map<std::string, ArcItem>& items) {
++  std::set<std::string> expanded = {parent.id};
++  return BuildChildren(parent, items, 0, expanded);
++}
++
+ // The Space's theme colour: Arc's snapped to the nearest swatch (I10); one
+ // a file Stedding wrote, `exact`, as it is (sidebar-file Sf2).
+ std::optional<SkColor> ThemeColor(const base::DictValue& space, bool exact) {
+@@ -452,18 +463,36 @@ std::set<std::string> OpenIds(BrowserWindowInterface* browser) {
    return ids;
  }
  
@@ -121,7 +168,7 @@ index 8d1a12e18eea9..5dd957e292f53 100644
      ctx.ids->Add(id);
    }
  }
-@@ -473,7 +492,8 @@ void Remember(ApplyContext& ctx, const std::string& id) {
+@@ -473,7 +502,8 @@ void Remember(ApplyContext& ctx, const std::string& id) {
  void AdoptToken(const ApplyContext& ctx,
                  tabs::TabInterface* tab,
                  const std::string& id) {
@@ -131,7 +178,7 @@ index 8d1a12e18eea9..5dd957e292f53 100644
      return;
    }
    if (const std::string token = TokenOf(id); !token.empty()) {
-@@ -700,10 +720,17 @@ std::vector<tabs::TabInterface*> InsertNodes(
+@@ -700,10 +730,17 @@ std::vector<tabs::TabInterface*> InsertNodes(
  // file that held it (docs/history/plan-2026-09-26.md WEB-F29).
  void InsertEssentials(ApplyContext& ctx,
                        const std::vector<Node>& nodes,
@@ -150,6 +197,124 @@ index 8d1a12e18eea9..5dd957e292f53 100644
    size_t in_row = 0;
    for (int i = 0; i < ctx.tabs->count(); ++i) {
      const tabs::TabInterface* const tab = ctx.tabs->GetTabAtIndex(i);
+@@ -856,7 +893,7 @@ std::optional<ArcImportPlan> ParseArcSidebar(std::string_view json) {
+       space.isolated = own->FindBool("isolated").value_or(false);
+       if (const auto it = items.find(StringAt(*own, "essentials"));
+           it != items.end()) {
+-        for (Node& node : BuildChildren(it->second, items, 0)) {
++        for (Node& node : BuildChildren(it->second, items)) {
+           if (node.kind == Node::Kind::kTab) {
+             space.essentials.push_back(std::move(node));
+           }
+@@ -886,7 +923,7 @@ std::optional<ArcImportPlan> ParseArcSidebar(std::string_view json) {
+         if (it == items.end() || which.empty()) {
+           continue;
+         }
+-        std::vector<Node> nodes = BuildChildren(it->second, items, 0);
++        std::vector<Node> nodes = BuildChildren(it->second, items);
+         if (which == "pinned") {
+           space.pinned = std::move(nodes);
+         } else {
+@@ -913,7 +950,7 @@ std::optional<ArcImportPlan> ParseArcSidebar(std::string_view json) {
+       if (it == items.end() || !top_seen.insert(id).second) {
+         continue;
+       }
+-      for (Node& node : BuildChildren(it->second, items, 0)) {
++      for (Node& node : BuildChildren(it->second, items)) {
+         if (node.kind == Node::Kind::kTab) {
+           plan.essentials.push_back(std::move(node));
+         }
+@@ -1011,8 +1048,12 @@ std::optional<std::string> ReadArcSidebar(const base::FilePath& path,
+   if (read_from) {
+     *read_from = copy.empty() ? path : copy;
+   }
++  // As an imported sidebar file (sidebar_backup.cc): a file larger than any
++  // real sidebar is refused before it is read whole.
++  constexpr size_t kMaxArcSidebarBytes = 64 * 1024 * 1024;
+   std::string json;
+-  if (!base::ReadFileToString(copy.empty() ? path : copy, &json)) {
++  if (!base::ReadFileToStringWithMaxSize(copy.empty() ? path : copy, &json,
++                                         kMaxArcSidebarBytes)) {
+     return std::nullopt;
+   }
+   return json;
+@@ -1221,16 +1262,18 @@ ArcSidebarInfo LoadInfoOnPool() {
+   return info;
+ }
+ 
++// The file is read and parsed on the pool: a large sidebar parses for long
++// enough to stall the window.
++std::optional<ArcImportPlan> ReadAndParseOnPool() {
++  const std::optional<std::string> json = ReadArcSidebar(ArcSidebarPath());
++  return json ? ParseArcSidebar(*json) : std::nullopt;
++}
++
+ void ApplyRead(base::WeakPtr<BrowserWindowInterface> browser,
+                ArcImportOptions options,
+                ArcImportDoneCallback done,
+-               std::optional<std::string> json) {
+-  if (!browser || !json) {
+-    std::move(done).Run(std::nullopt);
+-    return;
+-  }
+-  const std::optional<ArcImportPlan> plan = ParseArcSidebar(*json);
+-  if (!plan) {
++               std::optional<ArcImportPlan> plan) {
++  if (!browser || !plan) {
+     std::move(done).Run(std::nullopt);
+     return;
+   }
+@@ -1295,7 +1338,7 @@ void ImportFromArcAsync(BrowserWindowInterface* browser,
+       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+       // I27: where Arc is is found on the pool too: on Windows that lists
+       // the Store's packages, which the UI thread may not wait for.
+-      base::BindOnce([] { return ReadArcSidebar(ArcSidebarPath()); }),
++      base::BindOnce(&ReadAndParseOnPool),
+       base::BindOnce(&ApplyRead, browser->GetWeakPtr(), options,
+                      std::move(done)));
+ }
+diff --git a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+index 4db4fdfde19aa..e96c84892cb52 100644
+--- a/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
++++ b/chrome/browser/ui/spaces/arc_sidebar_importer_unittest.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/spaces/arc_sidebar_importer.h"
+ 
+ #include <string>
++#include <string_view>
+ #include <vector>
+ 
+ #include "base/files/file_util.h"
+@@ -125,6 +126,29 @@ TEST(ArcSidebarImporterTest, ParsesSpacesFoldersAndEssentials) {
+   EXPECT_FALSE(ParseArcSidebar("{\"nope\": 1}").has_value());
+ }
+ 
++// I1: a list that names itself, or an item named twice, comes across once;
++// before, each level of such a list doubled the tree, to sixteen levels.
++TEST(ArcSidebarImporterTest, AnItemNamedTwiceComesAcrossOnce) {
++  std::string sidebar(kSidebar);
++  constexpr std::string_view kDocs = R"("childrenIds": ["tab-b", "tab-c"])";
++  const size_t at = sidebar.find(kDocs);
++  ASSERT_NE(std::string::npos, at);
++  sidebar.replace(
++      at, kDocs.size(),
++      R"("childrenIds": ["tab-b", "list-docs", "tab-c", "list-docs", "tab-b"])");
++  const std::optional<ArcImportPlan> plan = ParseArcSidebar(sidebar);
++  ASSERT_TRUE(plan.has_value());
++  const ArcImportPlan::Space& work = plan->spaces[0];
++  ASSERT_EQ(2u, work.pinned.size());
++  const ArcImportPlan::Node& docs = work.pinned[1];
++  EXPECT_EQ(u"Docs", docs.title);
++  ASSERT_EQ(2u, docs.children.size()) << "the list holds B and C, once each";
++  EXPECT_EQ(u"B", docs.children[0].title);
++  EXPECT_EQ(u"C", docs.children[1].title);
++  EXPECT_EQ(1u, plan->folder_count());
++  EXPECT_EQ(3u, plan->pinned_tab_count());
++}
++
+ // I2, I8: the summary before anything is applied.
+ TEST(ArcSidebarImporterTest, SummaryCountsThePlan) {
+   const std::optional<ArcImportPlan> plan = ParseArcSidebar(kSidebar);
 diff --git a/chrome/browser/ui/spaces/sidebar_backup_unittest.cc b/chrome/browser/ui/spaces/sidebar_backup_unittest.cc
 index 71241ea897129..f1d9eccefc952 100644
 --- a/chrome/browser/ui/spaces/sidebar_backup_unittest.cc

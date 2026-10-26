@@ -1,7 +1,8 @@
 # Feature: Recent-tabs switcher
 
 Status: **X1, X2, X4, X5 built**; **X3 partial**: built before, the Windows way out written
-2026-10-18, tests not yet run. On Windows Ctrl+Esc stays the Start menu's and a run is backed
+2026-10-18, its tests passing on the PC's release build (2026-10-19) and on the Mac
+(2026-10-26). On Windows Ctrl+Esc stays the Start menu's and a run is backed
 out with Shift+Tab (X3, BACKLOG S-228); the Windows run passes both on the installed build
 (2026-10-19). Linux (KDE's Ctrl+Esc) planned.
 Owner docs: `docs/PRODUCT.md` §1. Patch: 0023.

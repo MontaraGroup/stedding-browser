@@ -1,7 +1,8 @@
 # Feature: Copy link
 
-Status: **L1–L6 built**; **L7 written** 2026-10-22 (the address field's button), not yet
-built, run or seen live.
+Status: **L1–L7 built** (L7, the address field's button, 2026-10-22 on the Mac, its tests
+passing on the release build and again on 2026-10-26; seen on a real build, its click not yet
+tried by hand).
 Owner docs: `docs/PRIVACY.md` (the tracking strip), `docs/PRODUCT.md`. Patch: 0016; L7 not
 yet in the series.
 
