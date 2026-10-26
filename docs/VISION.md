@@ -289,8 +289,11 @@ what daily use feels like.
 The mark and the palette exist. The mark is generated from one geometry file,
 `tooling/brand/mark.py`, into `branding/` (an arch over a hearth); its colours are slate
 `#2F4858`, cream `#F2E9DE`, amber `#E8B04B` and ink `#1C2B33`, deliberately not blue,
-since every Chromium browser is blue. The browser's own chrome is sand by day and a
-blue-to-plum gradient by night, each Space's colour tinting the sidebar (patch 0007). How
+since every Chromium browser is blue. The browser's own chrome is Tailwind's slate-300 by
+day (a sand until 2026-10-26, when the owner asked for no amber anywhere) and a blue-to-plum
+gradient by night, each Space's colour tinting the sidebar and nothing else; Chromium's own
+surfaces keep its baseline palette (patch 0007, BACKLOG S-310). The mark's amber dot is the
+one amber left, a question for the owner. How
 the assets are made and applied is `branding/README.md`. Neither the mark nor the palette
 has an ADR.
 

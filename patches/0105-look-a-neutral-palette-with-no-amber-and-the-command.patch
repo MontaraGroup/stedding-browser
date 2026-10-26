@@ -1,0 +1,676 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Sun, 25 Oct 2026 21:18:40 -0400
+Subject: look: a neutral palette with no amber, and the command bar's rows
+ under the pointer
+
+The active Space's colour reached the window as Chromium's user colour
+marked as an accent, so Chromium generated its whole Material palette
+from it: a warm Space turned Settings, menus, toggles and the command
+bar's chip brown and orange. The colour now keeps tinting the sidebar's
+ground and nothing else; the rest of the window keeps Chromium's
+baseline palette, as a window with no Space colour has (spaces B11).
+
+The light look's ground, a sand, is Tailwind's slate-300, and the
+welcome page's sand and amber are Tailwind's slate scale (welcome W15,
+VISION's visual direction). The mark's amber dot stays for now.
+
+A command bar row under the pointer shows a ground, fainter than the
+chosen row's; the pointer never moves the choice (commandbar K37).
+
+Why: the owner, 2026-10-26 (no amber anywhere; rows gave no sign under
+the pointer).
+Removable when: never; to be folded into the patches that own the code.
+---
+ .../resources/stedding_archive/app.css        |  2 +-
+ .../resources/stedding_welcome/app.css        | 50 ++++++++++---------
+ .../browser/resources/stedding_welcome/app.ts |  2 +-
+ .../browser/ui/color/stedding_color_mixer.cc  | 16 +++---
+ .../browser/ui/color/stedding_color_mixer.h   |  2 +-
+ .../ui/color/stedding_color_mixer_unittest.cc |  2 +-
+ .../theme/page_bar_color_supplier_unittest.cc |  2 +-
+ .../page_theme_color_controller_unittest.cc   | 24 ++++-----
+ chrome/browser/ui/tabs/tab_favicon_theming.cc |  2 +-
+ .../ui/tabs/tab_favicon_theming_unittest.cc   |  2 +-
+ .../ui/views/commandbar/command_bar_view.cc   | 42 +++++++++++++++-
+ .../ui/views/commandbar/command_bar_view.h    |  2 +
+ .../commandbar/command_bar_view_unittest.cc   | 33 ++++++++++++
+ chrome/browser/ui/views/frame/browser_view.cc |  2 +-
+ .../browser/ui/views/frame/browser_widget.cc  |  9 +++-
+ .../views/frame/stedding_window_background.cc |  5 +-
+ .../views/frame/stedding_window_background.h  |  2 +-
+ chrome/test/stedding/BUILD.gn                 |  1 +
+ .../test/stedding/edit_space_browsertest.cc   | 12 +++++
+ chrome/test/stedding/tab_drop_browsertest.cc  |  2 +-
+ 20 files changed, 156 insertions(+), 58 deletions(-)
+
+diff --git a/chrome/browser/resources/stedding_archive/app.css b/chrome/browser/resources/stedding_archive/app.css
+index 1c9beb3beaa01..a8d9df2631c8e 100644
+--- a/chrome/browser/resources/stedding_archive/app.css
++++ b/chrome/browser/resources/stedding_archive/app.css
+@@ -3,7 +3,7 @@
+  * found in the LICENSE file. */
+ 
+ /* The archived view (docs/features/archive.md A9): plain DOM, the page's
+- * colours from the system scheme, Stedding's sand and slate. */
++ * colours from the system scheme and Stedding's slate. */
+ 
+ :root {
+   --bg: #f6f2ea;
+diff --git a/chrome/browser/resources/stedding_welcome/app.css b/chrome/browser/resources/stedding_welcome/app.css
+index b9bb6e5411173..00631c2d8d503 100644
+--- a/chrome/browser/resources/stedding_welcome/app.css
++++ b/chrome/browser/resources/stedding_welcome/app.css
+@@ -8,25 +8,26 @@ body {
+   margin: 0;
+ }
+ 
+-/* The brand's palette (docs/VISION.md, "Visual direction"): sand by day, a
+- * blue-to-plum gradient by night, slate and amber from the mark. */
++/* The brand's palette (docs/VISION.md, "Visual direction"): Tailwind's slate
++ * by day, a blue-to-plum gradient by night, and the mark's deep slate for
++ * what is chosen. No amber (the owner, 2026-10-26). */
+ #app {
+-  --sand: #c8b377;
++  --ground: #e2e8f0;
+   --ink: #1f2330;
+   --ink-muted: rgba(31, 35, 48, 0.62);
+   --card: rgba(255, 255, 255, 0.72);
+   --card-strong: rgba(255, 255, 255, 0.9);
+   --line: rgba(31, 35, 48, 0.12);
+   --accent: #2f4858;
+-  --accent-ink: #f2e9de;
+-  --amber: #e8b04b;
+-  /* What is chosen: slate on sand, where amber would not show. */
++  --accent-ink: #f8fafc;
++  /* Edges that mark a note and the keyboard focus: slate-500. */
++  --mark: #64748b;
+   --select: #2f4858;
+   --shadow: 0 10px 28px rgba(31, 35, 48, 0.16);
+   --arch: rgba(47, 72, 88, 0.05);
+   background:
+-    radial-gradient(1200px 600px at 100% 0%, rgba(232, 176, 75, 0.18), transparent 60%),
+-    linear-gradient(180deg, #e9dfc2 0%, var(--sand) 100%);
++    radial-gradient(1200px 600px at 100% 0%, rgba(100, 116, 139, 0.14), transparent 60%),
++    linear-gradient(180deg, #f1f5f9 0%, var(--ground) 100%);
+   color: var(--ink);
+   display: block;
+   font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+@@ -44,11 +45,12 @@ body {
+     --line: rgba(255, 255, 255, 0.12);
+     --accent: #edebf2;
+     --accent-ink: #21263a;
+-    --select: #e8b04b;
++    --select: #cbd5e1;
++    --mark: #94a3b8;
+     --shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+-    --arch: rgba(242, 233, 222, 0.035);
++    --arch: rgba(226, 232, 240, 0.035);
+     background:
+-      radial-gradient(1200px 600px at 100% 0%, rgba(232, 176, 75, 0.1), transparent 60%),
++      radial-gradient(1200px 600px at 100% 0%, rgba(148, 163, 184, 0.08), transparent 60%),
+       linear-gradient(135deg, #21263a 0%, #31243a 100%);
+   }
+ }
+@@ -268,7 +270,7 @@ main.cover {
+ .note {
+   background: var(--card);
+   border: 1.5px solid var(--line);
+-  border-inline-start: 3px solid var(--amber);
++  border-inline-start: 3px solid var(--mark);
+   border-radius: 12px;
+   font-size: 13.5px;
+   margin: 4px 0 0;
+@@ -279,8 +281,8 @@ main.cover {
+ /* welcome W4, W14: a Stedding window drawn in boxes, sized in em so one
+  * font size scales the whole drawing. */
+ .mini {
+-  --m-frame: linear-gradient(180deg, #e9dfc2, #cdb980);
+-  --m-page: #fbf8f1;
++  --m-frame: linear-gradient(180deg, #f1f5f9, #cbd5e1);
++  --m-page: #f8fafc;
+   --m-chip: rgba(255, 255, 255, 0.55);
+   --m-mark: rgba(31, 35, 48, 0.5);
+   --m-bar: rgba(31, 35, 48, 0.15);
+@@ -308,7 +310,7 @@ main.cover {
+   --m-chip: rgba(255, 255, 255, 0.09);
+   --m-mark: rgba(237, 235, 242, 0.55);
+   --m-bar: rgba(237, 235, 242, 0.16);
+-  --m-arch: #f2e9de;
++  --m-arch: #e2e8f0;
+   --m-tint-alpha: 0.3;
+ }
+ 
+@@ -319,7 +321,7 @@ main.cover {
+     --m-chip: rgba(255, 255, 255, 0.09);
+     --m-mark: rgba(237, 235, 242, 0.55);
+     --m-bar: rgba(237, 235, 242, 0.16);
+-    --m-arch: #f2e9de;
++    --m-arch: #e2e8f0;
+     --m-tint-alpha: 0.3;
+   }
+ }
+@@ -389,19 +391,19 @@ main.cover {
+ }
+ 
+ .mini-essentials span:nth-child(1) {
+-  --dot: #e8b04b;
++  --dot: #0d9b8a;
+ }
+ 
+ .mini-essentials span:nth-child(2) {
+-  --dot: #5b7a99;
++  --dot: #0588f0;
+ }
+ 
+ .mini-essentials span:nth-child(3) {
+-  --dot: #6f9a7a;
++  --dot: #3e9b4f;
+ }
+ 
+ .mini-essentials span:nth-child(4) {
+-  --dot: #b5735a;
++  --dot: #ab4aba;
+ }
+ 
+ .mini-space {
+@@ -525,7 +527,7 @@ main.cover {
+ }
+ 
+ .mini-page svg circle {
+-  fill: #e8b04b;
++  fill: #64748b;
+   opacity: 0.85;
+ }
+ 
+@@ -826,7 +828,7 @@ button.cta:hover:not(:disabled) {
+ }
+ 
+ .message .link {
+-  background: var(--amber);
++  background: var(--mark);
+   border-radius: 4px;
+   display: block;
+   height: 7px;
+@@ -919,7 +921,7 @@ button:disabled {
+ button:focus-visible,
+ input:focus-visible,
+ a:focus-visible {
+-  outline: 2px solid var(--amber);
++  outline: 2px solid var(--mark);
+   outline-offset: 2px;
+ }
+ 
+@@ -940,7 +942,7 @@ a:focus-visible {
+ .arc-import {
+   background: var(--card);
+   border: 1.5px solid var(--line);
+-  border-inline-start: 3px solid var(--amber);
++  border-inline-start: 3px solid var(--mark);
+   border-radius: 14px;
+   display: grid;
+   gap: 8px;
+diff --git a/chrome/browser/resources/stedding_welcome/app.ts b/chrome/browser/resources/stedding_welcome/app.ts
+index 80c014ebbd5db..faf2d2299d070 100644
+--- a/chrome/browser/resources/stedding_welcome/app.ts
++++ b/chrome/browser/resources/stedding_welcome/app.ts
+@@ -802,7 +802,7 @@ function renderStep(main: HTMLElement) {
+     }
+     case 'appearance': {
+       heading('Light or dark',
+-              'Sand by day, a blue-to-plum gradient by night. Follow the system, or pick one.');
++              'Soft grey by day, deep blue to plum by night. Follow the system, or pick one.');
+       // welcome W4: each choice a drawing of the window in that look, tinted
+       // with the swatch chosen below.
+       const looks = el('div', 'looks');
+diff --git a/chrome/browser/ui/color/stedding_color_mixer.cc b/chrome/browser/ui/color/stedding_color_mixer.cc
+index e118f03dc9f50..f2b5382c91249 100644
+--- a/chrome/browser/ui/color/stedding_color_mixer.cc
++++ b/chrome/browser/ui/color/stedding_color_mixer.cc
+@@ -21,10 +21,12 @@
+ 
+ namespace {
+ 
+-// The window colours, from the operator: sand for light, deep blue for dark.
+-// The dark gradient's second stop lives in SteddingWindowBackground; these are
+-// the flat colours everything else derives from.
+-constexpr SkColor kSteddingLightWindow = SkColorSetRGB(0xC8, 0xB3, 0x77);
++// The window colours: Tailwind's slate-300 for light (MIT; the owner asked
++// for no amber and a designer's neutral, 2026-10-26, where it was a sand),
++// deep blue for dark. The dark gradient's second stop lives in
++// SteddingWindowBackground; these are the flat colours everything else
++// derives from.
++constexpr SkColor kSteddingLightWindow = SkColorSetRGB(0xCB, 0xD5, 0xE1);
+ constexpr SkColor kSteddingDarkWindow = SkColorSetRGB(0x21, 0x26, 0x3A);
+ 
+ // How much of the active Space's colour the window ground takes.
+@@ -106,10 +108,10 @@ void AddSteddingColorMixer(ui::ColorProvider* provider,
+   // The horizontal strip's controls sit on the ground as its tabs do (tabs
+   // R51): no disc or tile of their own -- the flat window colour drew a disc
+   // round the new tab button on the dark gradient, and Chromium's header
+-  // container a pale blue tile round the tab search chevron on sand -- and
++  // container a pale blue tile round the tab search chevron on the light ground -- and
+   // their glyphs in the tabs' text colour, not Chromium's blue; the ink drop
+   // still shows a hover. The dividers between tabs are a quarter of that
+-  // text colour over the ground, where Chromium's were blue on sand and grey
++  // text colour over the ground, where Chromium's were blue on the light ground and grey
+   // on the blue; opaque, since the strip paints a divider at its own opacity
+   // whatever the colour's alpha.
+   mixer[kColorNewTabButtonBackgroundFrameActive] = {SK_ColorTRANSPARENT};
+@@ -156,7 +158,7 @@ void AddSteddingColorMixer(ui::ColorProvider* provider,
+   // and a translucent tint for the active one in dark. BlendForMinContrast
+   // DCHECKs that its background is opaque and reads a transparent one as
+   // black: in light mode the inactive rows' text came out a pale grey on the
+-  // sand ground (real use on Windows, 2026-09-30), and every build with
++  // light ground (real use on Windows, 2026-09-30), and every build with
+   // DCHECKs on stopped at its first window. The ratios are Chromium's own.
+   {
+     const ui::ColorTransform ground = {window};
+diff --git a/chrome/browser/ui/color/stedding_color_mixer.h b/chrome/browser/ui/color/stedding_color_mixer.h
+index 9f553181cab9e..2571e5cd3e963 100644
+--- a/chrome/browser/ui/color/stedding_color_mixer.h
++++ b/chrome/browser/ui/color/stedding_color_mixer.h
+@@ -12,7 +12,7 @@ namespace ui {
+ class ColorProvider;
+ }  // namespace ui
+ 
+-// Stedding's palette: warm sand in light mode, deep blue in dark. Added after
++// Stedding's palette: a neutral slate in light mode, deep blue in dark. Added after
+ // every Chromium mixer so it wins, but before custom themes so a user theme
+ // still overrides it.
+ // docs/features/private.md V1: a private window's ground, flat graphite in
+diff --git a/chrome/browser/ui/color/stedding_color_mixer_unittest.cc b/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
+index 5b8dfff1a5a7b..734ac7036e49f 100644
+--- a/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
++++ b/chrome/browser/ui/color/stedding_color_mixer_unittest.cc
+@@ -113,7 +113,7 @@ TEST(SteddingColorMixerTest, InactiveRowsHaveNoFill) {
+ // modes and both frame states. Chromium measures it against the row's own
+ // fill, which Stedding leaves transparent (inactive rows) or translucent (the
+ // active one in dark): BlendForMinContrast read that as black, so in light
+-// mode inactive rows came out a pale grey on the sand ground, and a build with
++// mode inactive rows came out a pale grey on the light ground, and a build with
+ // DCHECKs on stopped at its first window (real use on Windows, 2026-09-30).
+ // The whole chain is built, Chromium's mixers under Stedding's.
+ TEST(SteddingColorMixerTest, RowTextIsReadableOnTheGround) {
+diff --git a/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc b/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
+index f103a67f3d402..4e27e0ce187fe 100644
+--- a/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
++++ b/chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
+@@ -110,7 +110,7 @@ TEST(PageBarColorSupplierTest, TheHoverAndThePressShowOnAnyRow) {
+                           ui::ColorProviderKey::ColorMode::kDark}) {
+     for (const SkColor page :
+          {SK_ColorWHITE, SK_ColorBLACK, SkColorSetRGB(0x77, 0x77, 0x77),
+-          SkColorSetRGB(0x10, 0x20, 0x30), SkColorSetRGB(0xC8, 0xB3, 0x77),
++          SkColorSetRGB(0x10, 0x20, 0x30), SkColorSetRGB(0xCB, 0xD5, 0xE1),
+           SkColorSetRGB(0xFF, 0xE0, 0xB2), SkColorSetRGB(0x3D, 0x8B, 0x7A)}) {
+       SCOPED_TRACE(color_utils::SkColorToRgbaString(page));
+       ui::ColorProviderKey key;
+diff --git a/chrome/browser/ui/stedding/theme/page_theme_color_controller_unittest.cc b/chrome/browser/ui/stedding/theme/page_theme_color_controller_unittest.cc
+index 03e5073f3bb15..bdc9b2cdb6a8d 100644
+--- a/chrome/browser/ui/stedding/theme/page_theme_color_controller_unittest.cc
++++ b/chrome/browser/ui/stedding/theme/page_theme_color_controller_unittest.cc
+@@ -176,14 +176,14 @@ TEST_F(PageThemeColorControllerTest, ClosingEveryTabReThemesAfterwards) {
+   EXPECT_FALSE(saw_closing_all);
+ }
+ 
+-// The pale sand of the light window's ground.
+-constexpr SkColor kSand = SkColorSetRGB(0xC8, 0xB3, 0x77);
++// The light window's ground, slate-300 (AddSteddingColorMixer).
++constexpr SkColor kGround = SkColorSetRGB(0xCB, 0xD5, 0xE1);
+ 
+-// The colours `supplier` gives a window whose ground is kSand.
+-std::unique_ptr<ui::ColorProvider> OnTheSand(
++// The colours `supplier` gives a window whose ground is kGround.
++std::unique_ptr<ui::ColorProvider> OnTheGround(
+     ui::ColorProviderKey::InitializerSupplier* supplier) {
+   auto provider = std::make_unique<ui::ColorProvider>();
+-  provider->AddMixer()[ui::kColorFrameActive] = {kSand};
++  provider->AddMixer()[ui::kColorFrameActive] = {kGround};
+   ui::ColorProviderKey key;
+   key.color_mode = ui::ColorProviderKey::ColorMode::kLight;
+   supplier->AddColorMixers(provider.get(), key);
+@@ -203,7 +203,7 @@ void SplitTheFirstTwo(TabStripModel* model) {
+ // toolbar T41: a split row's part over a page with no colour shows the
+ // window's ground, and the row's icons read on it and on the other part.
+ // With the active page dark and the other without a colour, the icons were
+-// the dark page's white on the sand; with the active page the one without,
++// the dark page's white on the ground; with the active page the one without,
+ // no supplier at all, and the theme's icons sat on the other's dark part.
+ TEST_F(PageThemeColorControllerTest, ASplitRowsIconsReadOnTheGroundBesideIt) {
+   AddTab(browser(), GURL("https://example.com/"));
+@@ -227,9 +227,9 @@ TEST_F(PageThemeColorControllerTest, ASplitRowsIconsReadOnTheGroundBesideIt) {
+     ui::ColorProviderKey::InitializerSupplier* const supplier =
+         controller->bar_supplier();
+     ASSERT_TRUE(supplier);
+-    const std::unique_ptr<ui::ColorProvider> provider = OnTheSand(supplier);
+-    // A grey of 2.8:1 on each; the navy's white has 2.1:1 on the sand.
+-    EXPECT_GE(reads_on(*provider, kSand), 2.5);
++    const std::unique_ptr<ui::ColorProvider> provider = OnTheGround(supplier);
++    // A grey that reads on each; the navy's white would not on the light ground.
++    EXPECT_GE(reads_on(*provider, kGround), 2.5);
+     EXPECT_GE(reads_on(*provider, kNavy), 2.5);
+     EXPECT_EQ(kNavy, provider->GetColor(kColorOmniboxResultsBackground))
+         << "the bar is still the active page's";
+@@ -241,10 +241,10 @@ TEST_F(PageThemeColorControllerTest, ASplitRowsIconsReadOnTheGroundBesideIt) {
+     ui::ColorProviderKey::InitializerSupplier* const supplier =
+         controller->bar_supplier();
+     ASSERT_TRUE(supplier) << "the row keeps the theme's icons";
+-    const std::unique_ptr<ui::ColorProvider> provider = OnTheSand(supplier);
+-    EXPECT_GE(reads_on(*provider, kSand), 2.5);
++    const std::unique_ptr<ui::ColorProvider> provider = OnTheGround(supplier);
++    EXPECT_GE(reads_on(*provider, kGround), 2.5);
+     EXPECT_GE(reads_on(*provider, kNavy), 2.5);
+-    EXPECT_EQ(kSand, provider->GetColor(kColorOmniboxResultsBackground))
++    EXPECT_EQ(kGround, provider->GetColor(kColorOmniboxResultsBackground))
+         << "the bar is the ground the active pane's part shows";
+   }
+   {
+diff --git a/chrome/browser/ui/tabs/tab_favicon_theming.cc b/chrome/browser/ui/tabs/tab_favicon_theming.cc
+index 5721c176aa554..da54a301e5330 100644
+--- a/chrome/browser/ui/tabs/tab_favicon_theming.cc
++++ b/chrome/browser/ui/tabs/tab_favicon_theming.cc
+@@ -21,7 +21,7 @@ namespace {
+ // at all. Read by its own channels the active row counted as white, and a
+ // single-colour icon on it -- the default globe -- was masked near-black,
+ // about 1.4:1 against the row; the inactive rows counted as black, which
+-// gave the icon white on the light sand ground.
++// gave the icon white on the light ground.
+ SkColor TabBackground(const ui::ColorProvider& color_provider,
+                       ui::ColorId id) {
+   const SkColor color = color_provider.GetColor(id);
+diff --git a/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc b/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
+index 374386b113372..4daef010f86a9 100644
+--- a/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
++++ b/chrome/browser/ui/tabs/tab_favicon_theming_unittest.cc
+@@ -64,7 +64,7 @@ TEST(TabFaviconThemingTest, ATranslucentRowIsReadOverTheFrame) {
+       << "the light sidebar's white card";
+   EXPECT_NE(SK_ColorWHITE,
+             Masked(ThemeMonochromeFaviconForTab(GreyIcon(), light, false)))
+-      << "the light sidebar's other rows, on the sand ground";
++      << "the light sidebar's other rows, on the light ground";
+ }
+ 
+ }  // namespace
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.cc b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+index 9e618bd4f8046..fbe6170269672 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.cc
+@@ -13,6 +13,7 @@
+ #include <vector>
+ 
+ #include "base/functional/bind.h"
++#include "base/functional/callback.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/memory/ptr_util.h"
+ #include "base/strings/string_split.h"
+@@ -170,6 +171,8 @@ constexpr char16_t kRowSeparator[] = u"   \u2014   ";
+ // dark), never the toolbar's. The chosen row is a quiet tint of the text
+ // colour, the way a menu highlights, rather than a block of accent colour.
+ constexpr SkAlpha kSelectedRowAlpha = 0x1F;
++// K37: the row under the pointer, fainter than the chosen one.
++constexpr SkAlpha kHoveredRowAlpha = 0x10;
+ 
+ // Stands in for the BrowserView in a test window (SetHostForTesting).
+ views::View* g_host_for_testing = nullptr;
+@@ -430,6 +433,22 @@ class CommandBarView::ResultRow : public views::LabelButton {
+   using views::LabelButton::LabelButton;
+   views::Label* row_label() { return label(); }
+ 
++  // K37: whether the keys have chosen this row, and who repaints its ground
++  // when that or the pointer's hover changes.
++  bool chosen() const { return chosen_; }
++  void set_chosen(bool chosen) { chosen_ = chosen; }
++  void SetGroundCallback(base::RepeatingCallback<void(views::View*)> ground) {
++    ground_ = std::move(ground);
++  }
++
++  // views::Button:
++  void StateChanged(ButtonState old_state) override {
++    views::LabelButton::StateChanged(old_state);
++    if (ground_) {
++      ground_.Run(this);
++    }
++  }
++
+   // sessions S32: the mark after the text of a row that names a Space with
+   // an Independent session, in the secondary label colour, quieter than the
+   // row's text; `mark` says it, as the row's tooltip and, after its text,
+@@ -473,6 +492,8 @@ class CommandBarView::ResultRow : public views::LabelButton {
+ 
+  private:
+   raw_ptr<stedding::IsolationMarkView> mark_ = nullptr;
++  bool chosen_ = false;
++  base::RepeatingCallback<void(views::View*)> ground_;
+ };
+ 
+ BEGIN_METADATA(CommandBarView, ResultRow)
+@@ -2117,6 +2138,8 @@ void CommandBarView::RebuildRows() {
+     if (!row.mark.empty()) {
+       view->SetIsolationMark(row.mark);
+     }
++    view->SetGroundCallback(base::BindRepeating(
++        &CommandBarView::PaintRowGround, base::Unretained(this)));
+     SetRowChosen(view.get(), i == selected_);
+     contents->AddChildView(std::move(view));
+   }
+@@ -2219,7 +2242,21 @@ void CommandBarView::StyleRow(ResultRow* row) {
+ }
+ 
+ void CommandBarView::SetRowChosen(views::View* row, bool chosen) {
+-  if (!chosen) {
++  if (auto* const result = views::AsViewClass<ResultRow>(row)) {
++    result->set_chosen(chosen);
++  }
++  PaintRowGround(row);
++}
++
++void CommandBarView::PaintRowGround(views::View* row) {
++  auto* const result = views::AsViewClass<ResultRow>(row);
++  const bool chosen = result && result->chosen();
++  // K37: the row under the pointer shows it, more faintly than the chosen
++  // one; the pointer never moves the choice, so Enter after typing still
++  // runs the typed row whatever the pointer rests on.
++  const bool hovered = result && result->GetEnabled() &&
++                       result->GetState() == views::Button::STATE_HOVERED;
++  if (!chosen && !hovered) {
+     row->SetBackground(nullptr);
+     return;
+   }
+@@ -2231,7 +2268,8 @@ void CommandBarView::SetRowChosen(views::View* row, bool chosen) {
+   const SkColor text =
+       provider ? provider->GetColor(ui::kColorLabelForeground) : SK_ColorWHITE;
+   row->SetBackground(views::CreateRoundedRectBackground(
+-      SkColorSetA(text, kSelectedRowAlpha), kRowRadius));
++      SkColorSetA(text, chosen ? kSelectedRowAlpha : kHoveredRowAlpha),
++      kRowRadius));
+ }
+ 
+ void CommandBarView::OnThemeChanged() {
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view.h b/chrome/browser/ui/views/commandbar/command_bar_view.h
+index 4f501cfa25aa8..702055ccbc085 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view.h
++++ b/chrome/browser/ui/views/commandbar/command_bar_view.h
+@@ -377,6 +377,8 @@ class CommandBarView : public views::View,
+   void StyleRow(ResultRow* row);
+   // Tints the chosen row.
+   void SetRowChosen(views::View* row, bool chosen);
++  // K37: the row's ground from its choice and the pointer's hover.
++  void PaintRowGround(views::View* row);
+ 
+   // Runs row `index`, as Enter or a click on it does.
+   void RunRow(size_t index);
+diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+index de7fc9abf55e0..4cb95d7212b57 100644
+--- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
++++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -68,6 +68,7 @@
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/gfx/range/range.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/textfield/textfield.h"
+@@ -1023,6 +1024,38 @@ TEST_F(CommandBarViewTest, ANewDocumentNeverReplacesAPage) {
+             tabs().GetActiveWebContents()->GetVisibleURL());
+ }
+ 
++// commandbar K37: the row under the pointer shows a ground, fainter than the
++// chosen row's, and drops it when the pointer leaves; the pointer never moves
++// the choice, so Enter still runs the chosen row.
++TEST_F(CommandBarViewTest, TheRowUnderThePointerShowsIt) {
++  AddTab(browser(), GURL("https://example.com/"));
++  auto bar = std::make_unique<CommandBarView>(browser());
++  bar->SetModeForTesting(CommandBarView::Mode::kActions);
++  ASSERT_GE(bar->row_count_for_testing(), 2u);
++  const size_t chosen = bar->selected_row_for_testing();
++  auto* const chosen_row =
++      views::AsViewClass<views::Button>(bar->row_view_for_testing(chosen));
++  auto* const other = views::AsViewClass<views::Button>(
++      bar->row_view_for_testing(chosen == 0 ? 1 : 0));
++  ASSERT_TRUE(chosen_row);
++  ASSERT_TRUE(other);
++  ASSERT_TRUE(chosen_row->GetBackground()) << "the chosen row shows no ground";
++  EXPECT_FALSE(other->GetBackground());
++
++  other->SetState(views::Button::STATE_HOVERED);
++  EXPECT_TRUE(other->GetBackground()) << "the row under the pointer shows nothing";
++  EXPECT_EQ(chosen, bar->selected_row_for_testing())
++      << "the pointer moved the choice";
++  EXPECT_TRUE(chosen_row->GetBackground());
++
++  other->SetState(views::Button::STATE_NORMAL);
++  EXPECT_FALSE(other->GetBackground()) << "the ground stayed after the pointer left";
++
++  chosen_row->SetState(views::Button::STATE_HOVERED);
++  chosen_row->SetState(views::Button::STATE_NORMAL);
++  EXPECT_TRUE(chosen_row->GetBackground()) << "the chosen row lost its ground";
++}
++
+ // commandbar K36 (GitHub issue 37): the bar stands off the page under it, a
+ // white one in the light look too: a shadow under it, and a hairline round its
+ // edge inside the panel's inset.
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index 03596abdbf2ca..356e90b266e54 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -6376,7 +6376,7 @@ void BrowserView::FrameColorsChanged() {
+   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
+       !GetIsWebAppType()) {
+     // The window ground: a top-left to bottom-right gradient in dark mode and
+-    // the flat sand colour in light. The sidebar, top container and content
++    // the flat light ground in light. The sidebar, top container and content
+     // mat paint nothing in Arc mode, so this single painter shows through them
+     // all with no seams.
+     SetBackground(std::make_unique<stedding::SteddingWindowBackground>(this));
+diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
+index 863ddd912f214..075cc146b6a3a 100644
+--- a/chrome/browser/ui/views/frame/browser_widget.cc
++++ b/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -505,7 +505,14 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
+   }
+   if (user_color_override().has_value()) {
+     key.user_color = user_color_override().value();
+-    key.user_color_source = ui::ColorProviderKey::UserColorSource::kAccent;
++    // Stedding (spaces B11, BACKLOG S-310): the override is the active
++    // Space's colour, and it tints the window's ground and nothing else
++    // (AddSteddingColorMixer reads key.user_color). As an accent it also
++    // seeded Chromium's whole Material palette, and a warm Space turned
++    // Settings, menus and toggles brown and orange (the owner, 2026-10-26):
++    // the rest of the window keeps the baseline palette it has with no Space
++    // colour at all.
++    key.user_color_source = ui::ColorProviderKey::UserColorSource::kBaseline;
+   }
+ 
+   // Apply BrowserWidget overrides:
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.cc b/chrome/browser/ui/views/frame/stedding_window_background.cc
+index c26258246b960..ebee00423fae2 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.cc
++++ b/chrome/browser/ui/views/frame/stedding_window_background.cc
+@@ -46,7 +46,8 @@
+ namespace stedding {
+ namespace {
+ 
+-constexpr SkColor kLight = SkColorSetRGB(0xC8, 0xB3, 0x77);
++// The light ground: Tailwind slate-300, as AddSteddingColorMixer has it.
++constexpr SkColor kLight = SkColorSetRGB(0xCB, 0xD5, 0xE1);
+ constexpr SkColor kDarkFrom = SkColorSetRGB(0x21, 0x26, 0x3A);
+ constexpr SkColor kDarkTo = SkColorSetRGB(0x31, 0x24, 0x3A);
+ 
+@@ -124,7 +125,7 @@ void SteddingWindowBackground::Paint(gfx::Canvas* canvas,
+   // The provider was built for the browser's own scheme (the window's
+   // delegate keys it from the theme service), and its primary background is
+   // white or near-black by that scheme. Not the frame colour's luminance:
+-  // sand sits just under color_utils::IsDark's line.
++  // a mid-light ground can sit just under color_utils::IsDark's line.
+   const bool dark =
+       provider
+           ? color_utils::IsDark(provider->GetColor(ui::kColorPrimaryBackground))
+diff --git a/chrome/browser/ui/views/frame/stedding_window_background.h b/chrome/browser/ui/views/frame/stedding_window_background.h
+index 1baa588dfc651..f702017989c20 100644
+--- a/chrome/browser/ui/views/frame/stedding_window_background.h
++++ b/chrome/browser/ui/views/frame/stedding_window_background.h
+@@ -25,7 +25,7 @@ class View;
+ namespace stedding {
+ 
+ // The ground every piece of window chrome sits on: a #21263A to #31243A
+-// gradient running top-left to bottom-right in dark mode, flat #C8B377 sand in
++// gradient running top-left to bottom-right in dark mode, flat #CBD5E1 slate in
+ // light. The sidebar, the top container and the content mat are transparent in
+ // Arc mode, so this paints once for all of them and nothing seams.
+ // Whether the page bar can be painted on `painted`'s canvas: the toolbar and
+diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
+index 24f8973dcb708..ec2a2a3f4ffe1 100644
+--- a/chrome/test/stedding/BUILD.gn
++++ b/chrome/test/stedding/BUILD.gn
+@@ -327,6 +327,7 @@ test("stedding_browser_tests") {
+     "//ui/base/clipboard:clipboard_test_support",
+     # copy-link L7: the test clipboard that records a private copy's flags.
+     "//ui/base/data_transfer_policy",
++    "//ui/color",
+     "//ui/compositor",
+     "//ui/display",
+     "//ui/events:test_support",
+diff --git a/chrome/test/stedding/edit_space_browsertest.cc b/chrome/test/stedding/edit_space_browsertest.cc
+index ed21d4794c432..be8d107032fee 100644
+--- a/chrome/test/stedding/edit_space_browsertest.cc
++++ b/chrome/test/stedding/edit_space_browsertest.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "content/public/test/browser_test.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "ui/color/color_provider_key.h"
+ #include "ui/views/controls/textfield/textfield.h"
+ #include "ui/views/test/widget_test.h"
+ #include "ui/views/widget/widget.h"
+@@ -168,6 +169,17 @@ IN_PROC_BROWSER_TEST_F(EditSpaceTest, ALightAndDarkPairTintsEachLook) {
+       return window->user_color_override() == std::optional<SkColor>(kDark);
+     })) << "the window does not wear the dark look's colour";
+   }
++  {
++    // spaces B11 (BACKLOG S-310): the Space's colour tints the ground and no
++    // more. Chromium's own surfaces -- Settings, menus, toggles -- keep the
++    // baseline palette: as an accent, a coral Space turned them orange.
++    SCOPED_TRACE("Chromium's own surfaces");
++    const ui::ColorProviderKey key = window->GetColorProviderKeyForTesting();
++    EXPECT_EQ(std::optional<SkColor>(kDark), key.user_color);
++    EXPECT_EQ(ui::ColorProviderKey::UserColorSource::kBaseline,
++              key.user_color_source)
++        << "the Space's colour seeds the whole palette";
++  }
+   {
+     SCOPED_TRACE("one colour again");
+     view = spaces::ShowEditSpaceDialog(browser(), id);
+diff --git a/chrome/test/stedding/tab_drop_browsertest.cc b/chrome/test/stedding/tab_drop_browsertest.cc
+index 136d67cff34c6..2fb1fb309bfac 100644
+--- a/chrome/test/stedding/tab_drop_browsertest.cc
++++ b/chrome/test/stedding/tab_drop_browsertest.cc
+@@ -807,7 +807,7 @@ IN_PROC_BROWSER_TEST_F(TabDropTest, TheDropHighlightIsInTheSidebarsColours) {
+         provider->GetColor(kColorTabForegroundActiveFrameActive);
+     EXPECT_EQ(SkColorSetA(text, 0x2E), lit)
+         << "the highlight is not the rows' tint";
+-    // Over the sand the sidebar sits on, as the rows' tints darken it.
++    // Over the light ground the sidebar sits on, as the rows' tints darken it.
+     const SkColor ground = provider->GetColor(ui::kColorFrameActive);
+     EXPECT_LT(color_utils::GetRelativeLuminance(
+                   color_utils::GetResultingPaintColor(lit, ground)),

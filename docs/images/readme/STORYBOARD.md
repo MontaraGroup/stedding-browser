@@ -12,7 +12,7 @@ in [tooling/readme/steps/](../../../tooling/readme/steps/); how to run it is in
 | | |
 |---|---|
 | Window | 1400 × 880 points, the size `tooling/drive` opens, at the top left of the main display |
-| Colours | Light (sand) by default. Page colours read best against light pages, and the night gradient bands in a 256-colour GIF; `--scheme dark` makes the other one |
+| Colours | Light (slate) by default. Page colours read best against light pages, and the night gradient bands in a 256-colour GIF; `--scheme dark` makes the other one |
 | Frame | The window with its own rounded corners on the brand's slate (#2F4858), a 28 px margin at 1400 px wide |
 | Captions | A 64 px lane under the window: the keys in amber (#E8B04B), the words in cream (#F2E9DE), one caption per scene, a short blank between two |
 | Pointer | Visible. It glides between targets on an eased path (0.3 to 0.6 s) and never jumps; clicks draw no ring unless `--show-clicks` |
