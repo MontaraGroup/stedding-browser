@@ -2,6 +2,72 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 19
+
+Settings in cards, a quieter essential, and pinned tabs that drag where you expect. On
+Chromium 156.0.8078.48.
+
+### New
+
+- **Settings › Stedding in cards.** Sidebar, Tabs, Peek and little windows, Spaces, Pages and
+  menus, Privacy, Updates and Shortcuts each have a card, and their names at the top of the
+  page jump to them.
+- **Mark pinned tabs that left their page**, in Settings › Stedding › Tabs and the command
+  bar. It is off: an essential that moved away from its page no longer shows a dot or a reset
+  button. **Reset to Pinned Page** stays on the tab's menu (#36).
+
+### Fixed
+
+- With no tabs under the pinned ones, a pinned tab dragged onto the New Tab row stayed pinned.
+  Now it leaves the pinned tabs (#41).
+- In a Space with no pinned tabs, a tab dragged to the top did not become pinned (#41).
+- Turning off a Space's own session in Settings did not ask when only apps used it, and never
+  named them. It now asks the same question as the Space's menu.
+- With **Open a peek with** set to a held press, a press held to select text followed by
+  Enter on a link opened a peek.
+- The sidebar's text shifted a shade when a page's colour arrived.
+- A separator could vanish after the second restart.
+- A form that sends its search in the address went out with the wrong Space's cookies.
+- An essential of one Space, closed, came back in another Space.
+- **@Space** in the command bar listed another Space's own essentials.
+- Folders and split views offered separator items they cannot use.
+
+### Install
+
+- **macOS** (Apple silicon, macOS 13 or later): `Stedding-0.3.0-beta.19-arm64.dmg`, signed and
+  notarized. Open it and drag Stedding to Applications.
+- **Windows** (10 and 11, x64): `Stedding-0.3.0-beta.19-win-x64.exe`, installs for you alone.
+  It is not signed yet: in SmartScreen click **More info**, then **Run anyway**, once.
+
+Installed copies update themselves (Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19).
+
+### Checksums (SHA-256)
+
+```
+7e60b9533d3ffda16f73b036c500f7aa112c458591b0774e763ff0b84d455d08  Stedding-0.3.0-beta.19-arm64.dmg
+76a0be430965cc0229ae79388768bd2000a5e18fb265070db71c027099153ba0  Stedding-0.3.0-beta.19-win-x64.exe
+```
+
+### Known limits
+
+- The Windows installer is unsigned (`S-56`).
+- Netflix, Disney+ and Spotify's web player do not play yet (`S-270`).
+- Chromium 156's built-in list of sites that must load over HTTPS lapses on 13 December 2026;
+  a release on a newer base comes before then.
+
+### How it was checked
+
+Every unit and browser test on the Mac (1248 unit and 56 component tests; 605 browser tests,
+and 150 one at a time) and on Windows, in the release build and the build with DCHECKs (each
+1243 unit tests; 565 browser tests, and 156 one at a time). On Windows all passed. On the Mac
+one keyboard test failed once while a system prompt held the focus, and passed three times of
+three on its own. The AddressSanitizer build was not run this round. Each fix has a test that
+failed before it. Apple's distribution check passed the signed app, and Gatekeeper accepted
+it from the downloaded image. On Windows the installer went over an installed beta 18, after an
+uninstall that kept the profile, and the installed program is the one the tests ran. From the
+published feeds, a copy of beta 18 on the Mac offered this version 71 seconds after launch, and
+an installed beta 18 on Windows had it 20 seconds after launch and was on it after a restart.
+
 ## Stedding 0.3.0 beta 18
 
 Separators in the sidebar, a calmer palette, and Peek that explains itself. On Chromium
