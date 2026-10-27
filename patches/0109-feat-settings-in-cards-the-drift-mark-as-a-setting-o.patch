@@ -55,14 +55,15 @@ Removable when: never; to be folded into the patches that own the code.
  .../frame/vertical_tab_strip_region_view.cc   |  49 ++-
  .../browser/ui/views/tabs/common/tab_view.cc  |  23 +-
  .../browser/ui/views/tabs/common/tab_view.h   |   7 +
- .../browser/ui/webui/settings/settings_ui.cc  | 327 ++++++---------
+ .../browser/ui/webui/settings/settings_ui.cc  | 328 ++++++---------
  .../settings/stedding_shortcuts_handler.cc    |   8 +-
  .../webui/settings/stedding_spaces_handler.cc |  25 ++
  .../webui/settings/stedding_spaces_handler.h  |   3 +
  chrome/test/stedding/app_jar_browsertest.cc   |  74 ++++
+ chrome/test/stedding/blocker_browsertest.cc   |  26 ++
  .../stedding/settings_spaces_browsertest.cc   |  48 ++-
  .../test/stedding/sidebar_rail_browsertest.cc |  85 ++++
- 22 files changed, 758 insertions(+), 514 deletions(-)
+ 23 files changed, 785 insertions(+), 514 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index b1ef9f2680ab7..9ce02f26b1d03 100644
@@ -1078,7 +1079,7 @@ index c3a512abca43a..f2c092b344247 100644
    // pins H8: the hover card's "Pinned in <Space> · home <host>" line, or
    // nothing for a tab without a home.
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index ee57ec8a0dca8..664454523e9ea 100644
+index ee57ec8a0dca8..b6d8012237456 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -703,16 +703,20 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
@@ -1336,7 +1337,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingCleanLinksKeptList",
                           "Sites that keep their links:");
    html_source->AddString("steddingCleanLinksKeptEmpty", "No sites");
-@@ -1049,25 +1000,23 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1049,25 +1000,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingBlockerLabel", "Block ads and trackers");
    html_source->AddString(
        "steddingBlockerSubLabel",
@@ -1344,8 +1345,9 @@ index ee57ec8a0dca8..664454523e9ea 100644
 -      "easylist.to and blocks the scripts, images, frames and requests they "
 -      "name, on every site but the ones below. Nothing about you is sent "
 -      "with the download.");
-+      "Uses the lists below on every site but the ones you add. Nothing "
-+      "about you is sent.");
++      "Blocks requests to the ads and trackers on the lists below, on every "
++      "site but the ones you add. Ads a site serves itself, such as promoted "
++      "posts, still show.");
    html_source->AddString("steddingBlockerEasyListWhat", "Ads.");
    html_source->AddString("steddingBlockerEasyPrivacyWhat", "Trackers.");
    html_source->AddString("steddingBlockerListSource",
@@ -1368,7 +1370,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingBlockerUpdateNow", "Update lists now");
    html_source->AddString("steddingBlockerExceptionsList",
                           "Sites where blocking is off:");
-@@ -1087,21 +1036,25 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1087,21 +1037,25 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "for the site you are on.");
    html_source->AddString("steddingQuietNotificationsLabel",
                           "Quiet notification prompts");
@@ -1402,7 +1404,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    // updates Up1, Up6, Up10 (docs/features/updates.md).
    html_source->AddString("steddingUpdatesTitle", "Updates");
    html_source->AddString(
-@@ -1112,9 +1065,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1112,9 +1066,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Update Stedding automatically");
    html_source->AddString(
        "steddingUpdatesAutomaticSubLabel",
@@ -1414,7 +1416,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingThanksAfterUpdateLabel",
                           "Show a thank-you page after an update");
    html_source->AddString(
-@@ -1124,25 +1076,22 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1124,25 +1077,22 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Hide the address row with the sidebar");
    html_source->AddString(
        "steddingHideAddressRowSubLabel",
@@ -1448,7 +1450,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingHoverDelay1s", "After 1 second");
    html_source->AddString("steddingHoverDelay2s", "After 2 seconds");
    html_source->AddString("steddingHoverDelay5s", "After 5 seconds");
-@@ -1160,8 +1109,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1160,8 +1110,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Give every new Space its own session");
    html_source->AddString(
        "steddingSpacesOwnSessionSubLabel",
@@ -1458,7 +1460,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingOwnSessionAllTitle",
                           "Give your other Spaces their own sessions too?");
    html_source->AddString(
-@@ -1180,25 +1128,26 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1180,25 +1129,26 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "steddingOwnSessionPages",
        "$1 open pages reload. A page holding changes you have not saved "
        "keeps them until you leave it.");
@@ -1492,7 +1494,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingArchiveNever", "Never");
    html_source->AddString("steddingArchive6h", "6 hours");
    html_source->AddString("steddingArchive12h", "12 hours");
-@@ -1209,8 +1158,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1209,8 +1159,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Put a Space to sleep after leaving it");
    html_source->AddString(
        "steddingSpaceSleepSubLabel",
@@ -1502,7 +1504,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingSpaceSleepNever", "Never");
    html_source->AddString("steddingSpaceSleep5m", "5 minutes");
    html_source->AddString("steddingSpaceSleep15m", "15 minutes");
-@@ -1220,18 +1168,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1220,18 +1169,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Put tabs to sleep after");
    html_source->AddString(
        "steddingTabsIdleSleepSubLabel",
@@ -1523,7 +1525,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingStartupLoadSelected",
                           "The selected tab only");
    html_source->AddString("steddingStartupLoadEssentials",
-@@ -1240,37 +1184,32 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1240,37 +1185,32 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingMenusShortLabel", "Short context menus");
    html_source->AddString(
        "steddingMenusShortSubLabel",
@@ -1570,7 +1572,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingNewTabHintLabel",
                           "Show the command-bar hint on the new tab page");
    html_source->AddString(
-@@ -1279,42 +1218,38 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1279,42 +1219,38 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                      "\u201d line."}));
    html_source->AddString(
        "steddingSidebarHoverLabel",
@@ -1626,7 +1628,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    // page U9, settings T16.
    html_source->AddString("steddingLinkAddressLabel",
                           "Show a link\u2019s address on hover");
-@@ -1327,25 +1262,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1327,25 +1263,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Show how to leave full screen");
    html_source->AddString(
        "steddingFullscreenHintSubLabel",
@@ -1657,7 +1659,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingDarkPagesButtonLabel",
                           "Show the dark pages button");
    html_source->AddString(
-@@ -1355,8 +1280,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1355,8 +1281,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingDarkPagesModeLabel", "Darken");
    html_source->AddString(
        "steddingDarkPagesModeSubLabel",
@@ -1667,7 +1669,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingDarkPagesModeAll", "All sites, except these");
    html_source->AddString("steddingDarkPagesModeOnly", "Only these sites");
    html_source->AddString("steddingDarkPagesExceptList", "Kept light:");
-@@ -1378,32 +1302,31 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1378,32 +1303,31 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingPinsCloseSleepsSubLabel",
                           "The row stays; unpin to remove it. Off closes the "
                           "tab, as Chromium does.");
@@ -1710,7 +1712,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    // import I14, settings T27 (WIN-15; decided 2026-10-22, the owner away
    // and asking for a decision): the way back from Turn Bookmarks into Pinned
    // Tabs.
-@@ -1411,16 +1334,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1411,16 +1335,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Show the bookmark bar and the star");
    html_source->AddString(
        "steddingBookmarksShownSubLabel",
@@ -1730,7 +1732,7 @@ index ee57ec8a0dca8..664454523e9ea 100644
    html_source->AddString("steddingShortcutsSearch", "Search shortcuts");
    html_source->AddString("steddingShortcutsGroup", "Show a group");
    html_source->AddString("steddingShortcutsAllGroups", "All groups");
-@@ -1447,8 +1367,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1447,8 +1368,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingShortcutsOff", "Off");
    html_source->AddString("steddingShortcutsFixed", "Fixed");
    html_source->AddString("steddingShortcutsDefault", "Default: $1");
@@ -1917,6 +1919,43 @@ index 1a007cfdd60d3..e01bd28b2b00a 100644
  // web apps Wa14: "Open in Stedding" puts the app's page in a tab of the Space
  // that keeps its jar, as it is, and shows that Space; a page in the shared
  // jar goes to the first Space that shares it when the one on screen does
+diff --git a/chrome/test/stedding/blocker_browsertest.cc b/chrome/test/stedding/blocker_browsertest.cc
+index b8f595887b641..4b3dff2b6f055 100644
+--- a/chrome/test/stedding/blocker_browsertest.cc
++++ b/chrome/test/stedding/blocker_browsertest.cc
+@@ -487,6 +487,32 @@ IN_PROC_BROWSER_TEST_F(SettingsBlockerTest,
+                                                               false)))
+         << key;
+   }
++  // The switch says what request blocking leaves: ads a site serves itself
++  // (GitHub issue 46).
++  EXPECT_EQ(
++      "Blocks requests to the ads and trackers on the lists below, on every "
++      "site but the ones you add. Ads a site serves itself, such as promoted "
++      "posts, still show.",
++      content::EvalJs(page, R"(
++        (() => {
++          const find = root => {
++            for (const element of root.querySelectorAll('*')) {
++              if (element.getAttribute('pref-key') ===
++                  'stedding.blocker.enabled') {
++                return element;
++              }
++              if (element.shadowRoot) {
++                const found = find(element.shadowRoot);
++                if (found) {
++                  return found;
++                }
++              }
++            }
++            return null;
++          };
++          return find(document)?.subLabel ?? '';
++        })())")
++          .ExtractString());
+   const size_t before = ListRequests().size();
+   EXPECT_EQ(true, content::EvalJs(page, content::JsReplace(
+                                             kFind, "blockerUpdateNow", true)));
 diff --git a/chrome/test/stedding/settings_spaces_browsertest.cc b/chrome/test/stedding/settings_spaces_browsertest.cc
 index 3a9463056dd89..22f1c666b6e96 100644
 --- a/chrome/test/stedding/settings_spaces_browsertest.cc

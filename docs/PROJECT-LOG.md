@@ -10,6 +10,37 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-27 -- GitHub issues 42 to 46
+
+The owner asked for the open issues' bugs fixed, and for Settings to say that blocking covers
+requests only. Each fix has a test that failed on the build without it.
+
+- Issue 44, a crash on "Sign in with Google": a popup or a new window opened from a tab inside a
+  folder was filed into the opener's folder, in the opener's window, which left the new window's
+  strip empty, and the browser stopped at `TabCollection::GetTabAtIndexRecursive`'s NOTREACHED.
+  An opener in another window is no anchor now (folders F25,
+  `FolderTabsTest.AWindowAFolderTabOpensHoldsItsPage`, which crashed with the reporter's line).
+- Issue 43, an empty window at every launch: on the Mac, the last window closed with its close
+  button while the browser ran on, then the Dock's icon opened a new tab page and left the window
+  in Recently Closed, as upstream does. With "Continue where you left off", the default, the Dock
+  now brings the window back (windows G9, `DockReopenTest.TheDockBringsTheLastWindowBack`; seen
+  on the release build too). The reporter's "⌘Q too" is not reproduced (BACKLOG S-323).
+- Issue 42, a Space switch landing on a seemingly random tab: with the tab used last in the
+  Space gone, or after a launch, the switch took the Space's first tab, often a pinned tab
+  asleep. It takes the tab used most recently now (spaces B3, two `SpaceWindowTest` cases).
+- Issue 46: the blocker's switch says that ads a site serves itself, such as promoted posts,
+  still show until element hiding is built (blocker Bk9, Bk21).
+- A crash after ⌘Y and ⌘S, reported in a comment on issue 44, did not happen in a new browser
+  test nor by hand on the Mac's release build in any sidebar state (BACKLOG S-322); the test
+  stays as a guard.
+- The archive test that cleared a loose tab opened it from the tab on screen; with the new
+  switch rule that is the folder's tab used last, so the new tab joined the folder (F25). The
+  test now adds its loose tab first. It showed that ⌘T on a folder's last tab, the window's
+  last, opens inside the folder (BACKLOG S-324).
+- Mac, release build: 1250 unit tests pass; of 758 browser tests one failed, the archive test
+  above, which passes with the Space switch tests since its fix. Nothing ran on Windows this
+  round.
+
 ## 2026-10-26, late night -- 0.3.0 beta 20
 
 Released on the owner's word: the Settings rework, the wording pass, the Shortcuts list's remove buttons and sync that names any folder. Every Mac and Windows test passed in the release and DCHECK builds (no AddressSanitizer run); the installer went over beta 19; the feeds, the site and the cask carry it, and real updates came from beta 19 on both machines (Mac 48 s, Windows 20 s).

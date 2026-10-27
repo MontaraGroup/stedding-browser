@@ -65,7 +65,7 @@ of its own (patches/README.md).
  .../ui/cocoa/main_menu_builder_unittest.mm    |  33 +
  .../ui/page_action/page_action_controller.cc  |  12 +
  .../ui/page_action/page_action_controller.h   |  10 +
- chrome/browser/ui/spaces/space_model.cc       | 157 +++-
+ chrome/browser/ui/spaces/space_model.cc       | 199 ++++-
  chrome/browser/ui/spaces/space_model.h        |  28 +
  .../ui/spaces/space_model_window_unittest.cc  | 420 ++++++++++
  chrome/browser/ui/stedding/BUILD.gn           |  21 +
@@ -130,7 +130,7 @@ of its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |  25 +
  .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
  chrome/test/stedding/tab_drop_browsertest.cc  | 322 +++++++-
- 90 files changed, 6796 insertions(+), 103 deletions(-)
+ 90 files changed, 6835 insertions(+), 106 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -1205,7 +1205,7 @@ index 73af530de2f3e..4d58a737cc3e5 100644
    base::OnceCallbackList<void(PageActionController&)>
        on_will_destroy_callback_list_;
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index b37f2da5ac8d6..d08b9f63e5c52 100644
+index b37f2da5ac8d6..4b86a8cf289e2 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -28,6 +28,7 @@
@@ -1246,7 +1246,62 @@ index b37f2da5ac8d6..d08b9f63e5c52 100644
  
    // Membership is decided on insertion (B1). The window's features are built
    // before its first tab, so this normally observes an empty strip; any tab
-@@ -1040,11 +1057,14 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+@@ -1020,8 +1037,17 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+   }
+ 
+   // A tab that belongs to the Space beats an essentials tab, which is visible
+-  // everywhere and so tells the user nothing about where they are.
++  // everywhere and so tells the user nothing about where they are. Of the
++  // Space's own tabs, the one used most recently: this run's uses first,
++  // then the time each was last on screen, which a session restore brings
++  // back, and the first in the list only when nothing tells them apart. The
++  // first in the list had been the rule, after a launch or once the tab used
++  // last had closed: often a pinned tab asleep since the launch before
++  // (GitHub issue 42).
+   int essentials = TabStripModel::kNoTab;
++  int first_own = TabStripModel::kNoTab;
++  int latest_own = TabStripModel::kNoTab;
++  base::Time latest_shown;
+   for (int i = 0; i < tab_strip_model_->count(); ++i) {
+     tabs::TabInterface* const tab = tab_strip_model_->GetTabAtIndex(i);
+     if (!IsTabInActiveSpace(tab) || tab_strip_model_->IsTabHidden(i)) {
+@@ -1033,18 +1059,48 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+       }
+       continue;
+     }
++    if (first_own == TabStripModel::kNoTab) {
++      first_own = i;
++    }
++    const base::Time shown = tab->GetContents()->GetLastActiveTime();
++    if (!shown.is_null() &&
++        (latest_own == TabStripModel::kNoTab || shown > latest_shown)) {
++      latest_own = i;
++      latest_shown = shown;
++    }
++  }
++  if (first_own != TabStripModel::kNoTab) {
++    int own = TabStripModel::kNoTab;
++    if (const auto it = history_.find(active_id_); it != history_.end()) {
++      for (const tabs::TabHandle& handle : it->second) {
++        tabs::TabInterface* const used = handle.Get();
++        const int index =
++            used ? tab_strip_model_->GetIndexOfTab(used) : TabStripModel::kNoTab;
++        if (index != TabStripModel::kNoTab && !used->IsPinned() &&
++            IsTabInActiveSpace(used) && !tab_strip_model_->IsTabHidden(index)) {
++          own = index;
++          break;
++        }
++      }
++    }
++    if (own == TabStripModel::kNoTab) {
++      own = latest_own != TabStripModel::kNoTab ? latest_own : first_own;
++    }
+     tab_strip_model_->ActivateTabAt(
+-        i, TabStripUserGestureDetails(
+-               TabStripUserGestureDetails::GestureType::kOther));
++        own, TabStripUserGestureDetails(
++                 TabStripUserGestureDetails::GestureType::kOther));
+     return;
    }
    if (essentials != TabStripModel::kNoTab) {
      // No tab of the Space's own: an essential on screen stays there, and
@@ -1264,7 +1319,7 @@ index b37f2da5ac8d6..d08b9f63e5c52 100644
      }
      return;
    }
-@@ -1356,6 +1376,36 @@ void SpaceModel::RecordActivation(tabs::TabInterface* tab) {
+@@ -1356,6 +1412,36 @@ void SpaceModel::RecordActivation(tabs::TabInterface* tab) {
    if (!tab || cycle_ || !IsTabInActiveSpace(tab)) {
      return;
    }
@@ -1301,7 +1356,7 @@ index b37f2da5ac8d6..d08b9f63e5c52 100644
    std::vector<tabs::TabHandle>& history = history_[active_id_];
    std::erase(history, tab->GetHandle());
    history.insert(history.begin(), tab->GetHandle());
-@@ -1415,6 +1465,107 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
+@@ -1415,6 +1501,107 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
    return out;
  }
  
@@ -2918,10 +2973,10 @@ index a8d74eb81091b..d0c12991088cd 100644
    }
  }
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 82fac882c4974..1f2befba8ba1e 100644
+index bee712f05a5aa..4a6ee3b018970 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -6618,13 +6618,35 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+@@ -6622,13 +6622,35 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
    const gfx::Range block_tabs =
        gfx::Range(start_index, start_index + block_size);
  
@@ -2959,7 +3014,7 @@ index 82fac882c4974..1f2befba8ba1e 100644
        -> std::optional<int> {
      // Focus mode is the only restriction that applies to a tab which is
      // otherwise a legitimate selection, so it is kept separate from the
-@@ -6644,6 +6666,14 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+@@ -6648,6 +6670,14 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
        return !IsTabHidden(index) && is_valid_for_focus(index);
      };
  

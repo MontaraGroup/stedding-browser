@@ -91,9 +91,9 @@ the hover card).
  chrome/browser/ui/spaces/new_tab_space.cc     |  17 +-
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
  .../spaces/space_jar_navigation_throttle.cc   |  10 +-
- chrome/browser/ui/spaces/space_model.cc       | 369 ++++++-----
+ chrome/browser/ui/spaces/space_model.cc       | 369 ++++++----
  chrome/browser/ui/spaces/space_model.h        |  70 +-
- .../ui/spaces/space_model_window_unittest.cc  | 334 +++++++---
+ .../ui/spaces/space_model_window_unittest.cc  | 394 ++++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
  .../ui/spaces/tab_space_restore_data.h        |  16 +-
@@ -105,15 +105,15 @@ the hover card).
  chrome/browser/ui/tabs/tab_features.cc        |  14 +
  chrome/browser/ui/tabs/tab_strip_model.cc     |  79 +++
  chrome/browser/ui/tabs/tab_strip_model.h      |  18 +
- .../ui/tabs/tab_strip_model_unittest.cc       | 223 +++++++
+ .../ui/tabs/tab_strip_model_unittest.cc       | 223 ++++++
  chrome/browser/ui/toasts/api/toast_id.cc      |   2 -
  chrome/browser/ui/toasts/api/toast_id.h       |   8 +-
  chrome/browser/ui/toasts/toast_service.cc     |  22 -
  .../frame/vertical_tab_strip_region_view.cc   |  12 +-
  chrome/browser/ui/views/page_action/BUILD.gn  |   9 +
  .../ui/views/page_action/page_action_view.cc  |  17 +-
- ...edding_copy_link_page_action_controller.cc | 153 +++++
- ...tedding_copy_link_page_action_controller.h | 115 ++++
+ ...edding_copy_link_page_action_controller.cc | 153 ++++
+ ...tedding_copy_link_page_action_controller.h | 115 +++
  .../ui/views/spaces/space_drag_target.cc      | 127 +++-
  .../ui/views/spaces/space_drag_target.h       |  47 +-
  .../ui/views/spaces/space_switcher_rules.cc   |  26 +
@@ -125,14 +125,14 @@ the hover card).
  .../spaces/space_tab_visibility_controller.h  |   4 +
  .../views/tabs/common/folder_drag_target.cc   |  96 ++-
  .../ui/views/tabs/common/folder_drag_target.h |  19 +-
- .../ui/views/tabs/common/folder_view.cc       | 522 ++++++++++++---
+ .../ui/views/tabs/common/folder_view.cc       | 522 +++++++++++---
  .../ui/views/tabs/common/folder_view.h        |  98 ++-
  .../views/tabs/common/folder_view_unittest.cc |  48 +-
  .../tabs/common/pinned_tab_container_view.cc  |  24 +-
  .../tabs/common/stedding_tab_row_rules.cc     |   4 +
  .../tabs/common/stedding_tab_row_rules.h      |   7 +
  .../common/stedding_tab_row_rules_unittest.cc |  10 +
- .../ui/views/tabs/common/tab_drag_handler.cc  |  76 +++
+ .../ui/views/tabs/common/tab_drag_handler.cc  |  76 ++
  .../ui/views/tabs/common/tab_strip_view.cc    | 102 ++-
  .../ui/views/tabs/common/tab_strip_view.h     |   7 +-
  .../tabs/common/tab_strip_view_layout.cc      |  14 +-
@@ -149,26 +149,26 @@ the hover card).
  .../hovercard/tab_hover_card_controller.cc    | 162 +++++
  .../hovercard/tab_hover_card_controller.h     |  56 ++
  .../views/tabs/hovercard/tab_resource_line.cc | 171 +++++
- .../views/tabs/hovercard/tab_resource_line.h  | 112 ++++
+ .../views/tabs/hovercard/tab_resource_line.h  | 112 +++
  .../hovercard/tab_resource_line_unittest.cc   | 139 ++++
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
  chrome/test/stedding/copy_link_browsertest.cc | 350 +++++++++-
- .../test/stedding/folder_tabs_browsertest.cc  | 612 +++++++++++++++++-
- .../hover_card_picture_browsertest.cc         | 255 +++++++-
+ .../test/stedding/folder_tabs_browsertest.cc  | 655 +++++++++++++++++-
+ .../hover_card_picture_browsertest.cc         | 255 ++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
  .../test/stedding/pinned_run_browsertest.cc   | 194 ++++++
  .../stedding/settings_spaces_browsertest.cc   |  19 +-
- .../stedding/sidebar_click_browsertest.cc     | 266 +++++++-
+ .../stedding/sidebar_click_browsertest.cc     | 266 ++++++-
  chrome/test/stedding/sidebar_test_util.cc     |  20 +
  chrome/test/stedding/sidebar_test_util.h      |   8 +
  chrome/test/stedding/space_jar_browsertest.cc |  23 +-
- chrome/test/stedding/tab_drop_browsertest.cc  | 594 ++++++++++++++++-
+ chrome/test/stedding/tab_drop_browsertest.cc  | 594 +++++++++++++++-
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6154 insertions(+), 750 deletions(-)
+ 89 files changed, 6257 insertions(+), 750 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -487,7 +487,7 @@ index 9cb917131b6fe..dfcf9a3178c2b 100644
      return PROCEED;
    }
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index a1f77f5eac7db..ba327b8732b42 100644
+index 3f7881b4ddf32..f65e286c9c573 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -638,6 +638,11 @@ void SpaceModel::SyncWithRegistry(bool seed) {
@@ -515,7 +515,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
    for (const SpaceId& id : jar_moved) {
      RebindTabsInSpace(id);
      observers_.Notify(&Observer::OnSpaceMetadataChanged, id);
-@@ -1080,7 +1091,9 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+@@ -1116,7 +1127,9 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
      // No tab of the Space's own: an essential on screen stays there, and
      // otherwise the one the Space used last shows, else the first, so no new
      // tab opens: what the close that emptied it showed (tabs R37).
@@ -526,7 +526,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
        tabs::TabInterface* const essential = EssentialToShow({});
        tab_strip_model_->ActivateTabAt(
            essential ? tab_strip_model_->GetIndexOfTab(essential) : essentials,
-@@ -1235,23 +1248,32 @@ void SpaceModel::OnTabStripModelChanged(
+@@ -1271,23 +1284,32 @@ void SpaceModel::OnTabStripModelChanged(
    if (selection.active_tab_changed() &&
        change.type() != TabStripModelChange::Type::kRemoved &&
        change.type() != TabStripModelChange::Type::kReplaced) {
@@ -565,7 +565,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
                  },
                  weak_factory_.GetWeakPtr(), active->GetHandle(), *space));
        }
-@@ -1298,15 +1320,22 @@ void SpaceModel::OnTabStripModelChanged(
+@@ -1334,15 +1356,22 @@ void SpaceModel::OnTabStripModelChanged(
            !TabSpaceRestoreData::FromWebContents(removed.tab->GetContents())) {
          const bool space_pinned = IsSpacePinned(removed.tab);
          const std::optional<GURL> home = HomeUrl(removed.tab);
@@ -591,7 +591,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
        homes_before_commit_.erase(removed.tab->GetHandle());
        routed_on_insert_.erase(removed.tab->GetHandle());
        for (auto& [space, history] : history_) {
-@@ -1443,10 +1472,15 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
+@@ -1479,10 +1508,15 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
      return out;
    }
    std::vector<split_tabs::SplitTabId> splits_seen;
@@ -610,7 +610,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
        const auto member = tab_spaces_.find(tab->GetHandle());
        if (member == tab_spaces_.end() || member->second != id) {
          return false;
-@@ -1516,17 +1550,23 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
+@@ -1552,17 +1586,23 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
             !tab_strip_model_->IsTabHidden(index) && !IsLeaving(tab, leaving);
    };
    // switcher X1's history: the row a Ctrl-Tab tap shows. A split's entry is
@@ -638,7 +638,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
    tabs::TabInterface* const active = tab_strip_model_->GetActiveTab();
    const int from = tab_strip_model_->GetIndexOfTab(
        active && IsLeaving(active, leaving) ? active : leaving.front());
-@@ -1548,6 +1588,10 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
+@@ -1584,6 +1624,10 @@ tabs::TabInterface* SpaceModel::RowToShowAfter(
    return nullptr;
  }
  
@@ -649,7 +649,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
  tabs::TabInterface* SpaceModel::TabToShowAsTabsLeave(
      const std::vector<tabs::TabInterface*>& leaving) const {
    if (tabs::TabInterface* const row = RowToShowAfter(leaving)) {
-@@ -2195,15 +2239,20 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
+@@ -2231,15 +2275,20 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
    // A tab rebuilt from a session carries the Space it was in. Collect it here,
    // the first time anything asks, because at the point the tab was rebuilt
    // there was no window yet and so no model to tell.
@@ -670,7 +670,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
        // A stored home that is no web page (an old session, TAB-17) comes
        // back as none.
        const GURL home(tagged->home());
-@@ -2221,6 +2270,12 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
+@@ -2257,6 +2306,12 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
          // Only if that Space came back too; otherwise the tab would belong to
          // nothing and never be visible again (B2).
          if (GetSpace(id)) {
@@ -683,7 +683,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
            return id;
          }
        }
-@@ -2235,9 +2290,17 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
+@@ -2271,9 +2326,17 @@ SpaceId SpaceModel::SpaceIdForNewTab(tabs::TabInterface* tab) {
          routed_on_insert_.insert_or_assign(tab->GetHandle(),
                                             *made_for->routed_from);
        }
@@ -701,7 +701,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
    return active_id_;
  }
  
-@@ -2275,6 +2338,13 @@ SpaceModel::SessionExtraDataForTab(const tabs::TabInterface* tab,
+@@ -2311,6 +2374,13 @@ SpaceModel::SessionExtraDataForTab(const tabs::TabInterface* tab,
                                     const SpaceId& id) const {
    std::vector<std::pair<std::string, std::string>> data;
    data.emplace_back(kSessionTabSpaceKey, id.ToString());
@@ -715,7 +715,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
    if (IsSpacePinned(tab)) {
      data.emplace_back(kSessionTabSpacePinKey, "1");
    }
-@@ -2398,17 +2468,6 @@ void SpaceModel::MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
+@@ -2434,17 +2504,6 @@ void SpaceModel::MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
  SpaceModel::LastRoute::LastRoute(tabs::TabHandle tab, SpaceId from, SpaceId to)
      : tab(tab), from(from), to(to) {}
  
@@ -733,7 +733,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
  SpaceModel::ScopedRoutingPause::ScopedRoutingPause(SpaceModel* model)
      : model_(model) {
    if (model_) {
-@@ -2582,100 +2641,6 @@ bool SpaceModel::UndoLastRoute() {
+@@ -2618,100 +2677,6 @@ bool SpaceModel::UndoLastRoute() {
    return true;
  }
  
@@ -834,7 +834,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
  bool SpaceModel::IsTabInActiveSpace(const tabs::TabInterface* tab) const {
    if (!tab) {
      return true;
-@@ -2683,9 +2648,17 @@ bool SpaceModel::IsTabInActiveSpace(const tabs::TabInterface* tab) const {
+@@ -2719,9 +2684,17 @@ bool SpaceModel::IsTabInActiveSpace(const tabs::TabInterface* tab) const {
    // Pinned tabs sit above all Spaces -- the "essentials" row at the top of the
    // sidebar, which stays put whichever Space is active. Chromium's pin state is
    // per-window, which is exactly the scope that needs, so pinning a tab is what
@@ -854,7 +854,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
    }
    const auto it = tab_spaces_.find(tab->GetHandle());
    // A tab this model has never seen is shown. Assigning it here would mean
-@@ -2698,6 +2671,53 @@ bool SpaceModel::IsSpacePinned(const tabs::TabInterface* tab) const {
+@@ -2734,6 +2707,53 @@ bool SpaceModel::IsSpacePinned(const tabs::TabInterface* tab) const {
    return tab && space_pin_homes_.contains(tab->GetHandle());
  }
  
@@ -908,7 +908,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
  bool SpaceModel::ArePinsCollapsed(const SpaceId& id) const {
    const auto it = std::ranges::find_if(
        spaces_,
-@@ -2819,8 +2839,15 @@ void SpaceModel::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
+@@ -2855,8 +2875,15 @@ void SpaceModel::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
      essential_homes_.erase(tab->GetHandle());
    }
    if (tab->IsPinned()) {
@@ -926,7 +926,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
      // An essential sits above every Space, so it is no Space's pin: a pin it
      // had goes, and the session hears so. The pin's home becomes the
      // essential's, so the tab still goes back to the page the user pinned
-@@ -2832,6 +2859,9 @@ void SpaceModel::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
+@@ -2868,6 +2895,9 @@ void SpaceModel::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
        }
        SetSpacePinnedOnOneTab(tab, /*pinned=*/false, /*move=*/false);
      }
@@ -936,7 +936,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
    } else if (const auto it = tab_spaces_.find(tab->GetHandle());
               it != tab_spaces_.end() && it->second != active_id_) {
      // An essential is in every Space, so the Space it was filed in before
-@@ -2880,7 +2910,21 @@ void SpaceModel::NoteHomeTakenBeforeCommit(const tabs::TabInterface* tab) {
+@@ -2916,7 +2946,21 @@ void SpaceModel::NoteHomeTakenBeforeCommit(const tabs::TabInterface* tab) {
  
  void SpaceModel::OnTabChangedAt(tabs::TabInterface* tab,
                                  TabChangeType change_type) {
@@ -959,7 +959,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
      return;
    }
    content::WebContents* const contents = tab->GetContents();
-@@ -2928,21 +2972,6 @@ void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
+@@ -2964,21 +3008,6 @@ void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
                                         tab) == TabStripModel::kNoTab) {
                           return;
                         }
@@ -981,7 +981,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
                         content::WebContents* const contents =
                             tab->GetContents();
                         const SpaceId id = model->SpaceForTab(tab);
-@@ -2950,7 +2979,7 @@ void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
+@@ -2986,7 +3015,7 @@ void SpaceModel::MaybeRebindTabJar(tabs::TabInterface* tab) {
                                            contents ? contents->GetVisibleURL()
                                                     : GURL(),
                                            model->registry_, id,
@@ -990,7 +990,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
                           return;
                         }
                         // PLAN.md SPC-9: a page holding changes the user has
-@@ -3006,8 +3035,8 @@ int SpaceModel::CountPagesAJarChangeReloads(const SpaceId& id) const {
+@@ -3042,8 +3071,8 @@ int SpaceModel::CountPagesAJarChangeReloads(const SpaceId& id) const {
        tabs::TabInterface* const tab = tabs->GetTabAtIndex(i);
        content::WebContents* const contents = tab->GetContents();
        // A new-tab page reloads too, but holds nothing to tell anyone.
@@ -1001,7 +1001,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
            PageBelongsInSpaceJar(contents->GetVisibleURL()) &&
            !IsFreshTabUrl(contents->GetVisibleURL())) {
          ++pages;
-@@ -3038,7 +3067,7 @@ int SpaceModel::CountTabsOf(const SpaceId& id, bool every_window) const {
+@@ -3074,7 +3103,7 @@ int SpaceModel::CountTabsOf(const SpaceId& id, bool every_window) const {
      }
      for (int i = 0; i < strip->count(); ++i) {
        tabs::TabInterface* const tab = strip->GetTabAtIndex(i);
@@ -1010,7 +1010,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
          ++count;
        }
      }
-@@ -3086,6 +3115,15 @@ void SpaceModel::SetSpacePinned(tabs::TabInterface* tab, bool pinned) {
+@@ -3122,6 +3151,15 @@ void SpaceModel::SetSpacePinned(tabs::TabInterface* tab, bool pinned) {
    }
  }
  
@@ -1026,7 +1026,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
  bool SpaceModel::IsFolderSpacePinned(
      const tabs::FolderTabCollection* folder) const {
    if (!folder) {
-@@ -3205,6 +3243,27 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
+@@ -3241,6 +3279,27 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
    }
    return parent && parent->type() == tabs::TabCollection::Type::UNPINNED;
  }
@@ -1054,7 +1054,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
  }  // namespace
  
  bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
-@@ -3215,14 +3274,12 @@ bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
+@@ -3251,14 +3310,12 @@ bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
    // folders F38: a loose tab in a pinned folder -- a link opened from one of
    // its pins, which the folder takes in (F25) -- leaves it for the rows
    // under the line, as one opened from a pin does; the folder would else
@@ -1074,7 +1074,7 @@ index a1f77f5eac7db..ba327b8732b42 100644
        if (each == tab) {
          continue;
        }
-@@ -3259,6 +3316,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
+@@ -3295,6 +3352,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
        !tab_strip_model_->delegate()->IsTabStripEditable()) {
      return;
    }
@@ -1225,7 +1225,7 @@ index 6b4b84fc63b70..42eab14610eae 100644
    base::WeakPtrFactory<SpaceModel> weak_factory_{this};
  };
 diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
-index 474cd0b8598ca..53f0a612d09eb 100644
+index 474cd0b8598ca..2f6dd38a3506f 100644
 --- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
 +++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
 @@ -16,6 +16,7 @@
@@ -1236,7 +1236,74 @@ index 474cd0b8598ca..53f0a612d09eb 100644
  #include "base/json/json_writer.h"
  #include "base/run_loop.h"
  #include "base/test/bind.h"
-@@ -483,6 +484,49 @@ TEST_F(SpaceWindowTest, ClosingTheTabOnScreenShowsTheSpacesMostRecentRow) {
+@@ -312,6 +313,66 @@ TEST_F(SpaceWindowTest, ComingBackLandsOnATabThatArrivedActive) {
+   EXPECT_EQ(arrived, tabs().GetActiveTab());
+ }
+ 
++// B3 (GitHub issue 42): when the tab left in a Space is gone, coming back
++// lands on the Space's tab used most recently, not on its first: this run's
++// uses decide, ahead of the time a tab was last on screen.
++TEST_F(SpaceWindowTest, ComingBackWithoutTheTabLeftLandsOnTheOneUsedBefore) {
++  const SpaceId home = model().active_id();
++  OpenTab();
++  Space* const work = model().AddSpace("Work", kBlue);
++  model().SetActiveSpace(work->id());
++  // OpenTab inserts at the front: c, b, then the tab the switch opened.
++  tabs::TabInterface* const opened = tabs().GetActiveTab();
++  tabs::TabInterface* const b = OpenTab();
++  tabs::TabInterface* const c = OpenTab();
++  ASSERT_EQ(c, tabs().GetTabAtIndex(0)) << "c is not Work's first tab";
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(opened));
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(b));
++
++  model().SetActiveSpace(home);
++  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(b),
++                            TabCloseTypes::CLOSE_USER_GESTURE);
++  model().SetActiveSpace(work->id());
++  EXPECT_EQ(opened, tabs().GetActiveTab())
++      << "not the tab used before the one that closed";
++}
++
++// B3 (GitHub issue 42): with no use of a Space's tabs in this run to go by,
++// as after a launch, coming back lands on the tab last on screen, by the
++// time a session restore brings back; the first tab had been the rule,
++// often a pinned tab asleep since the launch before.
++TEST_F(SpaceWindowTest, ComingBackWithNoUseThisRunLandsOnTheTabLastShown) {
++  const SpaceId home = model().active_id();
++  OpenTab();
++  Space* const work = model().AddSpace("Work", kBlue);
++  model().SetActiveSpace(work->id());
++  // The tab the switch opened, the only one of Work used in this run, and
++  // two that arrived in the background, as a restore brings them asleep.
++  tabs::TabInterface* const used = tabs().GetActiveTab();
++  const base::Time now = base::Time::Now();
++  const auto add_shown_at = [&](base::Time shown) {
++    content::WebContents::CreateParams params(profile());
++    params.last_active_time = shown;
++    tabs().AppendTab(std::make_unique<tabs::TabModel>(
++                         content::WebContents::Create(params), &tabs()),
++                     /*foreground=*/false);
++    return tabs().GetTabAtIndex(tabs().count() - 1);
++  };
++  tabs::TabInterface* const older = add_shown_at(now - base::Days(2));
++  tabs::TabInterface* const newer = add_shown_at(now - base::Days(1));
++  ASSERT_EQ(work->id(), model().SpaceForTab(older));
++  ASSERT_EQ(work->id(), model().SpaceForTab(newer));
++  ASSERT_LT(tabs().GetIndexOfTab(older), tabs().GetIndexOfTab(newer))
++      << "the tab last shown is not after Work's first";
++
++  model().SetActiveSpace(home);
++  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(used),
++                            TabCloseTypes::CLOSE_USER_GESTURE);
++  model().SetActiveSpace(work->id());
++  EXPECT_EQ(newer, tabs().GetActiveTab())
++      << "not the tab last on screen";
++}
++
+ // B3
+ TEST_F(SpaceWindowTest, SwitchingToAnEmptySpaceOpensANewTabThere) {
+   tabs::TabInterface* const a = OpenTab();
+@@ -483,6 +544,49 @@ TEST_F(SpaceWindowTest, ClosingTheTabOnScreenShowsTheSpacesMostRecentRow) {
    }
  }
  
@@ -1286,7 +1353,7 @@ index 474cd0b8598ca..53f0a612d09eb 100644
  // tabs R34: with no row of the Space used since the launch left -- rows
  // opened in the background count only once selected -- a close shows the
  // next row below, else the nearest one above; not the tab that opened the
-@@ -1018,6 +1062,33 @@ TEST_F(SpaceWindowTest, RecentTabsCountASplitOnce) {
+@@ -1018,6 +1122,33 @@ TEST_F(SpaceWindowTest, RecentTabsCountASplitOnce) {
    EXPECT_EQ(a, recent[1]);
  }
  
@@ -1320,7 +1387,7 @@ index 474cd0b8598ca..53f0a612d09eb 100644
  // splits J4: a split's panes take a Space, a pin and a sleep together.
  TEST_F(SpaceWindowTest, SplitPanesTakeVerbsTogether) {
    const SpaceId home = model().active_id();
-@@ -1499,6 +1570,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
+@@ -1499,6 +1630,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
              stedding::PinnedSiteFor(browser(), essential));
  }
  
@@ -1353,7 +1420,7 @@ index 474cd0b8598ca..53f0a612d09eb 100644
  // pins H3, H9: Cmd-W on pins sleeps rather than closes, unless the setting
  // is off; a mixed selection closes.
  TEST_F(SpaceWindowTest, CloseOnPinnedTabSleepsIt) {
-@@ -1939,121 +2036,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
+@@ -1939,121 +2096,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
  }
  
  // sessions S8
@@ -1575,14 +1642,14 @@ index 474cd0b8598ca..53f0a612d09eb 100644
 -    watcher.watched = {upper, lower};
 -    tabs().SetTabPinned(tabs().GetIndexOfTab(upper), true);
 -    tabs().SetTabPinned(tabs().GetIndexOfTab(lower), true);
-+    SCOPED_TRACE("chosen from Work");
-+    tabs().ActivateTabAt(tabs().GetIndexOfTab(shared));
-     task_environment()->RunUntilIdle();
+-    task_environment()->RunUntilIdle();
 -    EXPECT_EQ(2u, watcher.heard.size()) << "one word for the turn";
 -    EXPECT_EQ((std::vector<bool>{true, true}),
 -              watcher.in_work_jar_when_heard.back());
 -    EXPECT_TRUE(model().UndoPinsOutOfSession());
--    task_environment()->RunUntilIdle();
++    SCOPED_TRACE("chosen from Work");
++    tabs().ActivateTabAt(tabs().GetIndexOfTab(shared));
+     task_environment()->RunUntilIdle();
 -    EXPECT_FALSE(upper->IsPinned());
 -    EXPECT_FALSE(lower->IsPinned());
 -    EXPECT_EQ(work->id(), model().SpaceForTab(upper));
@@ -1967,7 +2034,7 @@ index cdd4c62080fb1..a29d75981140b 100644
            record_replay::features::kRecordReplayBase) &&
        page_action_controller_->ActionExists(kActionRecordReplay)) {
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 880ffbca3812d..97499408a2c04 100644
+index 98864f58c3265..4a9f0d34fd0b3 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -60,6 +60,7 @@
@@ -6507,7 +6574,7 @@ index ea21a02ea4403..900883c695445 100644
                           "Animate the sidebar and overlays");
    html_source->AddString(
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
-index e1a03acdc4946..558d502d89c7e 100644
+index 9bf9a44739504..dba2691044b12 100644
 --- a/chrome/test/stedding/BUILD.gn
 +++ b/chrome/test/stedding/BUILD.gn
 @@ -135,6 +135,9 @@ test("stedding_browser_tests") {
@@ -6964,7 +7031,7 @@ index 81eddea0a4a79..038dee03a5a29 100644
  // PLAN.md WIN-5 on Windows: what a copy made in a private window leaves on the
  // machine's own clipboard so that Win+V's history and the cloud clipboard skip
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index 291f9f1a8a074..91b6ea3ee78a5 100644
+index 291f9f1a8a074..272d92d51f73d 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -16,10 +16,13 @@
@@ -7177,7 +7244,57 @@ index 291f9f1a8a074..91b6ea3ee78a5 100644
    // Tabs of the folder titled `title`, in the strip's order, by host. A pane
    // of a split is marked with `|` when `mark_splits` is set.
    std::string HostsInFolder(const std::string& title, bool mark_splits) {
-@@ -716,11 +845,12 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ACollapsedFolderKeepsItsRows) {
+@@ -573,6 +702,49 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
+   }
+ }
+ 
++// folders F25: a window a folder's tab opens -- a sign-in popup from
++// window.open with a user's click, a link opened in a new window -- holds
++// its page itself, and the folder keeps its two tabs. The opener's folder is
++// in another window's strip, and the new tab went into it: the window's own
++// strip stayed empty and the browser stopped at once (GitHub issue 44).
++IN_PROC_BROWSER_TEST_F(FolderTabsTest, AWindowAFolderTabOpensHoldsItsPage) {
++  for (const WindowOpenDisposition disposition :
++       {WindowOpenDisposition::NEW_POPUP, WindowOpenDisposition::NEW_WINDOW}) {
++    for (const int opener_index : {1, 2}) {
++      SCOPED_TRACE(testing::Message()
++                   << (disposition == WindowOpenDisposition::NEW_POPUP
++                           ? "a popup"
++                           : "a new window")
++                   << " from the folder's tab " << opener_index);
++      CloseDownToOne();
++      tabs::FolderTabCollection* const folder = MakeFolder();
++      ASSERT_TRUE(folder);
++      tab_strip_model()->ActivateTabAt(opener_index);
++      content::WebContents* const opener =
++          tab_strip_model()->GetWebContentsAt(opener_index);
++
++      NavigateParams params(browser(), GURL("about:blank#signin"),
++                            ui::PAGE_TRANSITION_LINK);
++      params.disposition = disposition;
++      params.source_contents = opener;
++      params.user_gesture = true;
++      params.window_features.bounds = gfx::Rect(100, 100, 400, 500);
++      Navigate(&params);
++
++      ASSERT_TRUE(params.browser);
++      ASSERT_NE(browser(), params.browser) << "no window of its own";
++      TabStripModel* const own = params.browser->GetTabStripModel();
++      ASSERT_EQ(1, own->count()) << "the window holds no tab";
++      EXPECT_EQ(params.navigated_or_inserted_contents,
++                own->GetWebContentsAt(0));
++      EXPECT_EQ(4, tab_strip_model()->count())
++          << "the tab went into the opener's window";
++      EXPECT_EQ(2u, folder->TabCountRecursive()) << "the folder took the tab";
++      CloseBrowserSynchronously(params.browser);
++    }
++  }
++}
++
+ // Decision 6 (PLAN.md TAB-11): collapsing the folder that holds the tab on
+ // screen keeps that tab's row; a collapsed folder stays collapsed (SPC-5);
+ // its header shows the count (folders F33); Ctrl+Shift+E collapses every
+@@ -716,11 +888,12 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ACollapsedFolderKeepsItsRows) {
  
  // tabs R7, R11, pins H10 (BACKLOG S-143, PLAN.md TAB-28, TAB-40): hovering a
  // folder's rows draws nothing of the folder. The header draws its look when
@@ -7195,7 +7312,7 @@ index 291f9f1a8a074..91b6ea3ee78a5 100644
  IN_PROC_BROWSER_TEST_F(FolderTabsTest, AHoverDrawsNothingOfTheFolder) {
    CloseDownToOne();
    tabs::FolderTabCollection* const folder = MakeFolder();  // [0, F[1, 2], 3]
-@@ -762,27 +892,54 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, AHoverDrawsNothingOfTheFolder) {
+@@ -762,27 +935,54 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, AHoverDrawsNothingOfTheFolder) {
      tabs::FolderTabCollection* const nested = tab_strip_model()->AddToNewFolder(
          {tab_strip_model()->GetIndexOfTab(second)}, folder);
      ASSERT_TRUE(nested);
@@ -7262,7 +7379,7 @@ index 291f9f1a8a074..91b6ea3ee78a5 100644
    }
  
    {
-@@ -2112,4 +2269,417 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, EveryLabelInTheSidebarSuitsItsGround) {
+@@ -2112,4 +2312,417 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, EveryLabelInTheSidebarSuitsItsGround) {
    }
  }
  
@@ -9620,10 +9737,10 @@ index 5b2968364e017..136d67cff34c6 100644
 +
  }  // namespace
 diff --git a/components/tabs/impl/tab_strip_collection.cc b/components/tabs/impl/tab_strip_collection.cc
-index a60eb5d2ec55f..64ad0a2981a22 100644
+index 5553df1b1c45d..eb7315196e9b7 100644
 --- a/components/tabs/impl/tab_strip_collection.cc
 +++ b/components/tabs/impl/tab_strip_collection.cc
-@@ -396,6 +396,104 @@ void TabStripCollection::MoveTopLevelFolder(FolderTabCollection* folder,
+@@ -397,6 +397,104 @@ void TabStripCollection::MoveTopLevelFolder(FolderTabCollection* folder,
    MoveCollectionImpl(folder, position);
  }
  

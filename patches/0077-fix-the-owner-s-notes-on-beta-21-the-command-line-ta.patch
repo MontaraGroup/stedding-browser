@@ -72,7 +72,7 @@ Removable when: never as a whole; the next re-cut gives each part a patch of
 its own (patches/README.md).
 ---
  chrome/app/stedding_strings.grdp              |   11 +
- chrome/browser/app_controller_mac.mm          |   12 +
+ chrome/browser/app_controller_mac.mm          |   25 +
  .../policies/discard_eligibility_policy.cc    |   27 +-
  .../policies/termination_target_policy.cc     |   11 +-
  chrome/browser/renderer_context_menu/BUILD.gn |    1 +
@@ -171,8 +171,9 @@ its own (patches/README.md).
  .../toolbar/stedding_little_promote_button.cc |  133 ++
  .../toolbar/stedding_little_promote_button.h  |   66 +
  .../browser/ui/views/toolbar/toolbar_view.cc  |  104 +-
- chrome/test/stedding/BUILD.gn                 |   12 +
+ chrome/test/stedding/BUILD.gn                 |   13 +
  .../test/stedding/address_band_browsertest.cc |  582 ++++++-
+ .../test/stedding/dock_reopen_browsertest.mm  |  125 ++
  .../test/stedding/folder_tabs_browsertest.cc  |  183 +-
  .../hidden_row_controls_browsertest.cc        |  289 +++-
  .../stedding/horizontal_strip_browsertest.cc  |  101 ++
@@ -204,13 +205,14 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 133 files changed, 11311 insertions(+), 451 deletions(-)
+ 134 files changed, 11450 insertions(+), 451 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.h
  create mode 100644 chrome/browser/ui/views/toolbar/stedding_little_promote_button.cc
  create mode 100644 chrome/browser/ui/views/toolbar/stedding_little_promote_button.h
+ create mode 100644 chrome/test/stedding/dock_reopen_browsertest.mm
  create mode 100644 chrome/test/stedding/little_window_menu_mac_browsertest.mm
  create mode 100644 chrome/test/stedding/little_window_row_mac_browsertest.mm
  create mode 100644 chrome/test/stedding/motion_frames_browsertest.cc
@@ -243,10 +245,18 @@ index 5173ad9b56d20..07a57f4b03c35 100644
    <message name="IDS_STEDDING_DARK_PAGES_MAC" desc="In Title Case: The Mac View menu item that turns dark pages on or off for the profile: every website drawn dark by the browser. Checked while dark pages is on.">
      Dark Pages
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
-index 2c0890525caa1..6cb8004416b48 100644
+index 2c0890525caa1..7a9fe667fbb18 100644
 --- a/chrome/browser/app_controller_mac.mm
 +++ b/chrome/browser/app_controller_mac.mm
-@@ -108,6 +108,7 @@
+@@ -59,6 +59,7 @@
+ #include "chrome/browser/mac/key_window_notifier.h"
+ #include "chrome/browser/policy/chrome_browser_policy_connector.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
++#include "chrome/browser/prefs/session_startup_pref.h"
+ #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_attributes_entry.h"
+@@ -108,6 +109,7 @@
  #include "chrome/browser/ui/startup/url_util.h"
  #include "chrome/browser/ui/stedding/app_updater.h"
  #include "chrome/browser/ui/stedding/little_window.h"
@@ -254,7 +264,7 @@ index 2c0890525caa1..6cb8004416b48 100644
  #include "chrome/browser/ui/tabs/tab_enums.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
-@@ -1729,6 +1730,17 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -1729,6 +1731,17 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
        NSMenuItem* menuItem = base::apple::ObjCCast<NSMenuItem>(item);
        [menuItem setHidden:YES];
      }
@@ -272,6 +282,25 @@ index 2c0890525caa1..6cb8004416b48 100644
    } else if (action == @selector(terminate:)) {
      enable = YES;
    } else if (action == @selector(showPreferences:)) {
+@@ -1996,6 +2009,18 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+           if (!profile) {
+             return;
+           }
++          // Stedding (GitHub issue 43): a profile that continues where it
++          // left off, with no window of its own open, gets back what its
++          // last window held: the window its close button closed while the
++          // browser ran on. A window holds its Spaces' tabs and folders, and
++          // a new tab page in their place left them in Recently Closed alone.
++          if (SessionStartupPref::GetStartupPref(profile->GetPrefs())
++                  .ShouldRestoreLastSession() &&
++              !ProfileBrowserCollection::GetForProfile(profile)
++                   ->FindTabbedBrowser()) {
++            AttemptSessionRestore(profile);
++            return;
++          }
+           CreateBrowser(profile);
+         }),
+         app_controller_mac::kShowProfilePickerOnFailure);
 diff --git a/chrome/browser/performance_manager/policies/discard_eligibility_policy.cc b/chrome/browser/performance_manager/policies/discard_eligibility_policy.cc
 index 809efefcaa6a6..845558b75218c 100644
 --- a/chrome/browser/performance_manager/policies/discard_eligibility_policy.cc
@@ -633,7 +662,7 @@ index 8a4d02e0e59da..90b12b9696b8c 100644
                    .command_id(IDC_FOCUS_LOCATION)
                    .remove_if(is_pwa),
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index d08b9f63e5c52..7845ab4db67d8 100644
+index 4b86a8cf289e2..8a6f2359f04f2 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -64,6 +64,7 @@
@@ -644,7 +673,7 @@ index d08b9f63e5c52..7845ab4db67d8 100644
  #include "components/tabs/public/tab_interface.h"
  #include "content/public/browser/browser_context.h"
  #include "content/public/browser/navigation_controller.h"
-@@ -3064,6 +3065,91 @@ void SpaceModel::SetSpacePinned(tabs::TabInterface* tab, bool pinned) {
+@@ -3100,6 +3101,91 @@ void SpaceModel::SetSpacePinned(tabs::TabInterface* tab, bool pinned) {
    }
  }
  
@@ -736,7 +765,7 @@ index d08b9f63e5c52..7845ab4db67d8 100644
  void SpaceModel::MoveToSpacePinBoundary(tabs::TabInterface* tab) {
    const int index = tab_strip_model_->GetIndexOfTab(tab);
    if (index == TabStripModel::kNoTab || tab->IsPinned()) {
-@@ -3102,7 +3188,31 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
+@@ -3138,7 +3224,31 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
  
  bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
    if (!tab_strip_model_ || !tab || tab->IsPinned() || IsSpacePinned(tab) ||
@@ -3239,7 +3268,7 @@ index 3c1f78fd39952..fe868ce782e91 100644
  
  void TabMenuModel::BuildForWebApp(int index) {
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 1f2befba8ba1e..880ffbca3812d 100644
+index 4a6ee3b018970..98864f58c3265 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -5603,6 +5603,46 @@ void TabStripModel::ReorderFolder(tabs::FolderTabCollection* folder,
@@ -7320,7 +7349,7 @@ index 1dc615cf13b9a..4c6d1d5ed0a62 100644
    // Call super implementation to ensure layout manager and child layouts
    // happen.
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
-index e95a51469d691..8f833203c2eeb 100644
+index e95a51469d691..4d92c6c3bfaa5 100644
 --- a/chrome/test/stedding/BUILD.gn
 +++ b/chrome/test/stedding/BUILD.gn
 @@ -44,6 +44,7 @@ test("stedding_browser_tests") {
@@ -7355,10 +7384,11 @@ index e95a51469d691..8f833203c2eeb 100644
      "//ui/gfx/codec",
      "//ui/message_center/public/cpp",
      "//ui/shell_dialogs",
-@@ -282,10 +286,16 @@ test("stedding_browser_tests") {
+@@ -282,10 +286,17 @@ test("stedding_browser_tests") {
    if (is_mac) {
      sources += [
        "dark_pages_menu_mac_browsertest.mm",
++      "dock_reopen_browsertest.mm",
 +      "little_window_menu_mac_browsertest.mm",
 +      "little_window_row_mac_browsertest.mm",
        "make_app_mac_browsertest.mm",
@@ -7372,7 +7402,7 @@ index e95a51469d691..8f833203c2eeb 100644
      ]
      deps += [
        "//chrome/browser:app_controller_mac",
-@@ -296,6 +306,8 @@ test("stedding_browser_tests") {
+@@ -296,6 +307,8 @@ test("stedding_browser_tests") {
        "//components/remote_cocoa/app_shim",
        "//ui/base:test_support",
        "//ui/gfx:test_support",
@@ -8091,6 +8121,137 @@ index d6b80c83659c2..03d7dfd3efc02 100644
 +}
 +
  }  // namespace
+diff --git a/chrome/test/stedding/dock_reopen_browsertest.mm b/chrome/test/stedding/dock_reopen_browsertest.mm
+new file mode 100644
+index 0000000000000..ba918df351094
+--- /dev/null
++++ b/chrome/test/stedding/dock_reopen_browsertest.mm
+@@ -0,0 +1,125 @@
++// Copyright 2026 The Stedding Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// windows G9 (GitHub issue 43): with "Continue where you left off", the
++// default, the Dock's icon clicked when no window of the profile is open --
++// its last window closed with the close button while the browser ran on, as
++// the Mac's browser does -- brings that window back, its tabs and folders
++// with it. The Dock opened a new tab page, and the window was only in
++// Recently Closed. With the New Tab page at startup it still opens one.
++
++#import <Cocoa/Cocoa.h>
++
++#include <string>
++
++#include "base/test/run_until.h"
++#import "chrome/browser/app_controller_mac.h"
++#include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
++#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_restore.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/keep_alive_registry/keep_alive_types.h"
++#include "components/keep_alive_registry/scoped_keep_alive.h"
++#include "components/tabs/public/folder_tab_collection.h"
++#include "components/tabs/public/tab_collection.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/base/window_open_disposition.h"
++
++namespace {
++
++class DockReopenTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  // Clicks the Dock's icon with no window showing, and returns the window
++  // that gives once any restore is over.
++  BrowserWindowInterface* ReopenFromTheDock(Profile* profile) {
++    ui_test_utils::BrowserCreatedObserver opened;
++    [AppController.sharedController applicationShouldHandleReopen:NSApp
++                                                hasVisibleWindows:NO];
++    BrowserWindowInterface* const window = opened.Wait();
++    if (!window) {
++      return nullptr;
++    }
++    EXPECT_TRUE(base::test::RunUntil(
++        [&] { return !SessionRestore::IsRestoring(profile); }));
++    return window;
++  }
++
++  // The tab of `window` on `host`, or null.
++  static tabs::TabInterface* Find(BrowserWindowInterface* window,
++                                  const std::string& host) {
++    TabStripModel* const tabs = window->GetTabStripModel();
++    for (int i = 0; i < tabs->count(); ++i) {
++      tabs::TabInterface* const tab = tabs->GetTabAtIndex(i);
++      if (tab->GetContents()->GetVisibleURL().host() == host) {
++        return tab;
++      }
++    }
++    return nullptr;
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(DockReopenTest, TheDockBringsTheLastWindowBack) {
++  Profile* const profile = browser()->GetProfile();
++  ASSERT_TRUE(SessionStartupPref::GetStartupPref(profile->GetPrefs())
++                  .ShouldRestoreLastSession())
++      << "continuing where it left off is the default";
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("kept-a.test", "/title1.html")));
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), embedded_test_server()->GetURL("kept-b.test", "/title1.html"),
++      WindowOpenDisposition::NEW_FOREGROUND_TAB,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  ASSERT_EQ(2, browser()->tab_strip_model()->count());
++  tabs::FolderTabCollection* const folder =
++      browser()->tab_strip_model()->AddToNewFolder({0, 1});
++  ASSERT_TRUE(folder);
++  folder->SetTitle("Kept");
++
++  // The browser runs on with no window, as the Mac's does.
++  const ScopedKeepAlive keep_alive(KeepAliveOrigin::SESSION_RESTORE,
++                                   KeepAliveRestartOption::DISABLED);
++  const ScopedProfileKeepAlive profile_keep_alive(
++      profile, ProfileKeepAliveOrigin::kBrowserWindow);
++  CloseBrowserSynchronously(browser());
++
++  BrowserWindowInterface* const back = ReopenFromTheDock(profile);
++  ASSERT_TRUE(back);
++  SetBrowser(back);
++  tabs::TabInterface* const a = Find(back, "kept-a.test");
++  tabs::TabInterface* const b = Find(back, "kept-b.test");
++  ASSERT_TRUE(a) << "the Dock opened a new window, not the last one";
++  ASSERT_TRUE(b);
++  const tabs::TabCollection* const parent = a->GetParentCollection();
++  ASSERT_TRUE(parent);
++  EXPECT_EQ(tabs::TabCollection::Type::FOLDER, parent->type())
++      << "the folder did not come back";
++  EXPECT_EQ(parent, b->GetParentCollection());
++
++  // With the New Tab page at startup, the Dock opens a new window.
++  SessionStartupPref::SetStartupPref(
++      profile->GetPrefs(), SessionStartupPref(SessionStartupPref::DEFAULT));
++  CloseBrowserSynchronously(back);
++  BrowserWindowInterface* const fresh = ReopenFromTheDock(profile);
++  ASSERT_TRUE(fresh);
++  SetBrowser(fresh);
++  EXPECT_FALSE(Find(fresh, "kept-a.test"))
++      << "the Dock restored though the profile starts on the New Tab page";
++}
++
++}  // namespace
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
 index 0364372066880..ddc403ca67c1a 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
@@ -16095,10 +16256,10 @@ index 0000000000000..86eb70c397499
 +
 +}  // namespace
 diff --git a/components/tabs/impl/tab_strip_collection.cc b/components/tabs/impl/tab_strip_collection.cc
-index 057e1d0b2f867..a60eb5d2ec55f 100644
+index 982156e6939fc..5553df1b1c45d 100644
 --- a/components/tabs/impl/tab_strip_collection.cc
 +++ b/components/tabs/impl/tab_strip_collection.cc
-@@ -378,6 +378,24 @@ void TabStripCollection::MoveFolderChild(FolderTabCollection* folder,
+@@ -379,6 +379,24 @@ void TabStripCollection::MoveFolderChild(FolderTabCollection* folder,
    }
  }
  
