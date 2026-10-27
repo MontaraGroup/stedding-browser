@@ -13,7 +13,7 @@ Arc runs.
 
 You can change these keys: **Settings → Stedding → Shortcuts** has a row for every
 command, with Add to record new keys, a switch to turn a command's keys off and Reset
-to put them back (from the release that carries BACKLOG S-91; earlier builds show the list
+to put them back (from 0.3.0 beta 16, BACKLOG S-91; earlier builds show the list
 read-only). The tables below are the keys the browser ships with.
 
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
@@ -156,6 +156,4 @@ Session** row in the command bar (⇧⌘P). Off by default.
   as Ć and Ctrl+Alt+Shift+N as Ń), press the chord with Ctrl and the **left** Alt: that runs
   the command, and AltGr (the right Alt) still types the character. With a digit, the right
   Alt on such a keyboard is AltGr too, so it types; Space 1–9 are the left Alt's.
-- Remapping shortcuts yourself is not available yet; it is planned for 1.0 (`BACKLOG.md`
-  S-91).
 - Chromium's tab-group chords are removed, with the tab-group rows of the menus.

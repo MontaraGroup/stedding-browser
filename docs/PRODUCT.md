@@ -330,7 +330,7 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 - **Downloads** **[1.0]** — Chromium's downloads, with the progress ring on the sidebar's
   bottom-left button (`features/toolbar.md` T14). History and Downloads as panels in the
   sidebar's column, in the tabs' place, by ⌘Y and ⇧⌘J, the foot's History button and the
-  downloads button: **[M10]**, built 2026-10-25 (`features/sidebar-panels.md`, `S-98`).
+  downloads button: **[M10]**, released in 0.3.0 beta 16 (`features/sidebar-panels.md`, `S-98`).
 - **Library** **[1.0]** — archived tabs, captures and downloads behind the sidebar's
   bottom-left button, and easels when they return (`features/library.md`; `S-61`).
 
@@ -342,12 +342,13 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 - **Multi-window and multi-display** **[1.0]** — every window shows the same Spaces; Blank
   Windows are independent (ADR 0016; `features/windows.md`). Essentials and pins are per
   window until a pin can show as a ghost row in the other windows (windows G2).
-- **Arc Sync** **[needs decision]** — cross-device sync of Spaces, pinned tabs and order.
-  `ROADMAP.md` puts sync services out of scope and `PRIVACY.md` runs no accounts; today a
-  Space travels as a file (§1). This is the largest unmet demand in the space: the
+- **Arc Sync** **[1.0, as sync through a folder]** — cross-device sync of Spaces, pinned tabs
+  and order. `ROADMAP.md` puts sync services out of scope and `PRIVACY.md` runs no accounts,
+  so the answer is file-based: sync through a folder the user's own sync tool keeps (§1,
+  ADR 0029, released in 0.3.0 beta 16), and a Space still travels as a file. Open tabs,
+  history and passwords do not travel. This was the largest unmet demand in the space: the
   equivalent request on Zen's tracker had 475 upvotes after about two years open
-  (`AGENT-LOOP.md`, "Evidence"). End-to-end encrypted, self-hostable or file-based
-  answers are possible without becoming a service company; none is decided.
+  (`AGENT-LOOP.md`, "Evidence").
 - **Recovery Card** **[not applicable]** — recovery for an Arc account we do not have.
 - **Arc account / sign-in** **[not applicable]** — Stedding ships no account. A deliberate
   divergence, not a gap.
@@ -385,11 +386,12 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
   (`AGENTS.md`). `⌘E` (Ctrl+Alt+E) runs one, as in Arc: hold to choose, let go to run; the
   command bar's actions mode lists each extension, so they stay reachable with the address
   row hidden (`features/toolbar.md` T13, T39, T40; `S-104`).
-- **Import from another browser** **[1.0]** — Arc in one click on the Mac
-  (`features/import.md`; Windows is `S-81`); Chromium's own importer for Safari and
-  Firefox on macOS and for Firefox, Internet Explorer and the old Edge on Windows
-  (`features/welcome.md` W3). Chrome, Brave and the new Edge come with Phase 2's importer
-  (`PLAN.md` decision 8), and Dia and Safari's export file with it (**[M10]**, `S-101`).
+- **Import from another browser** **[1.0]** — Arc in one click, on the Mac and, since 0.3.0
+  beta 13, on Windows (`features/import.md`, `S-81`); Dia and Safari's export file, with
+  bookmarks, history and passwords (**[M10]**, `S-101`, released in 0.3.0 beta 16);
+  Chromium's own importer for Safari and Firefox on macOS and for Firefox, Internet Explorer
+  and the old Edge on Windows (`features/welcome.md` W3). Chrome, Brave and the new Edge come
+  with Phase 2's importer (`PLAN.md` decision 8).
 - **Progressive Web Apps** — Arc does not install them and points users to Favorites.
   Supporting them anyway is this document's position, since parity is the floor; no tier
   is decided. Any page can become an app of its own, on Chromium's web apps: "Add to
@@ -408,10 +410,11 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 What Arc never had, rebuilt from written descriptions of Nook and Aura and never copied
 (ADR 0021; `ROADMAP.md` M10). Besides the **[M10]** items above:
 
-- **Ad and tracker blocking built in**, with a switch per site; its own ADR first: the
-  engine, and filter lists fetched at run time, never built in (`S-88`).
+- **Ad and tracker blocking built in**, with a switch per site, on Chromium's subresource
+  filter and lists fetched at run time, never built in (`S-88`, ADR 0030,
+  `features/blocker.md`): its first phase released in 0.3.0 beta 16, off by default.
 - **Clean links on every page opened**, not only on a copied link (`S-89`;
-  `features/clean-links.md`): a page you open loses the tracking parameters a copy loses,
+  `features/clean-links.md`, released in 0.3.0 beta 16): a page you open loses the tracking parameters a copy loses,
   and a known redirect page that carries its target is skipped; Settings → Stedding →
   Privacy turns it off and keeps a site's parameters.
 - **Web apps keep their own keys**: the first press goes to the page, a second to
@@ -439,7 +442,9 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
 Three areas collide with a documented out-of-scope item:
 
 1. **AI (§8)** — closed by ADR 0020: no bundled model, no Space intern.
-2. **Sync (§10)** — no Stedding account; a Space travels as a file.
+2. **Sync (§10)** — no Stedding account or server; the sidebar travels through a folder the
+   user's own sync tool keeps (ADR 0029), or as a file, and open tabs, history and passwords
+   stay on each computer.
 3. **Hosted sharing (§2, §6)** — Share Space, Share Quote, the Boost gallery.
 
 So "full parity" means *parity with the local, offline capabilities of Arc*, the large

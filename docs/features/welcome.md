@@ -1,6 +1,6 @@
 # Feature: Welcome flow
 
-Status: **W1, W2, W4–W18 built** (W16, W17 written 2026-10-25, the owner's notes, their tests passing on the Mac on 2026-10-26, W16's change in patch 0106 not yet released; W18 2026-10-25, released in 0.3.0 beta 17; W5's large ask, W13, W14, W15 and W4's drawings since 2026-10-24) (W12 and W2's engine marks since beta 14, W9's test since 2026-10-18); **W3 partial** (the Chromium-family importer is withdrawn, `docs/history/plan-2026-09-26.md` WEB-15).
+Status: **W1, W2, W4–W18 built** (W16, W17 written 2026-10-25, the owner's notes, their tests passing on the Mac on 2026-10-26, W16's change in patch 0106 released in 0.3.0 beta 18; W18 2026-10-25, released in 0.3.0 beta 17; W5's large ask, W13, W14, W15 and W4's drawings since 2026-10-24) (W12 and W2's engine marks since beta 14, W9's test since 2026-10-18); **W3 partial** (the Chromium-family importer is withdrawn, `docs/history/plan-2026-09-26.md` WEB-15).
 Owner docs: `docs/PRODUCT.md` (first run, import), `docs/PRIVACY.md` (the chooser).
 Patch: `0015`; W12 and W2's engine marks: `0060`; W2's recorded choice and W6's split key: the defect round of 2026-10-18.
 

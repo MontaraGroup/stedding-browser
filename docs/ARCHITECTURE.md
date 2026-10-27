@@ -637,7 +637,7 @@ of an update check: if the site is down, updates still work.
 
 - **Policy: follow Chromium stable.** Every upstream stable release, including
   security point releases, gets evaluated the day it ships.
-- **Security bumps are rebased, rebuilt, and shipped within days**, not weeks. This is
+- **Security bumps are meant to be rebased, rebuilt, and shipped within days**, not weeks. This is
   the strongest argument for the minimal-patch-series design: a browser that lags
   upstream security fixes is worse than no browser.
 - **A minor rebase must usually be zero-touch.** The pin moves, `apply-patches` runs

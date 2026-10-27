@@ -19,6 +19,12 @@ account, no telemetry, BSD-3-Clause.
 
 <img src="docs/images/readme/demo.gif" alt="Stedding in use: choosing tabs in the sidebar turns the address row green, then blue, with each page; the command bar jumps to a map open in another Space; the Spaces switch, each in its own colour; a tab dragged onto the page lights half of it and makes a split view, the address row dark over one page and white over the other; both pages turn dark at once and back">
 
+**[Download for macOS](https://github.com/ysalitrynskyi/stedding-browser/releases/latest)** ·
+Apple silicon, macOS 13 or later, signed and notarized by Apple<br>
+**[Download for Windows](https://github.com/ysalitrynskyi/stedding-browser/releases/latest)** ·
+Windows 10 and 11, x64, installs for you alone<br>
+Homebrew: `brew install --cask ysalitrynskyi/stedding/stedding` · [Install guide](docs/INSTALL.md)
+
 ## New in 0.3
 
 <table>
@@ -107,7 +113,9 @@ Each feature has a specification naming the test behind every behaviour:
 - **Boosts and Easels**: deferred ([ADR 0012](docs/decisions/0012-defer-boosts-and-easels.md)).
 - **The mini player** in the sidebar: planned; picture in picture by key until then (`S-95`).
 - **The Library panel and Live Folders**: later (`S-61`).
-- **Sync and sharing**: there is no account, by design. A Space moves between machines as a file.
+- **Shared Spaces and share links**: there is no account or server, by design. Your own computers
+  keep the sidebar in step through a folder you choose; to give a Space to someone, send it as a
+  file.
 - **AI (Arc Max)**: never, by choice ([ADR 0020](docs/decisions/0020-no-bundled-model.md)).
 - **Phones** (Arc Search): not planned.
 
@@ -172,22 +180,43 @@ in 0.3.0 beta 13.
 - **Protective defaults**: third-party cookies blocked, HTTPS-First, Global Privacy Control,
   quiet permission prompts, search suggestions off, DuckDuckGo until you choose an engine.
 - **No Google surfaces**: no sign-in and no AI sections in Settings.
-- **Safe Browsing does not protect you** in these builds: its lists need a Google API key the
-  builds do not carry (`S-75`).
+- **Safe Browsing is not active yet**: its lists need a Google API key the builds do not
+  carry (`S-75`). The warnings for dangerous downloads work as in Chromium.
 
 The connections the browser makes are listed in [docs/PRIVACY.md](docs/PRIVACY.md); anything
 else is a bug.
 
+## It is Chromium
+
+Not WebKit, not Electron: Chromium stable with a documented series of patches, so sites,
+extensions and DevTools behave as they do in Chrome.
+
+| Part | In Stedding | |
+|---|---|---|
+| Engine | Chromium 156, stable channel | ✓ |
+| Chrome extensions | From the Chrome Web Store, as in Chrome | ✓ |
+| H.264 and AAC | The video and audio codecs plain Chromium leaves out | ✓ |
+| DevTools | Chromium's own | ✓ |
+| Google services | No sign-in, sync, telemetry or experiments; Chromium's component updates and network time stay ([PRIVACY.md](docs/PRIVACY.md)) | ✓ |
+| Ad and tracker blocking | Built in, from EasyList and EasyPrivacy; off until you turn it on | ✓ |
+| Sync | Your sidebar, through a folder your own sync app keeps; no account | Sidebar |
+| Import | Arc (Mac and Windows), Dia, Safari's export file, Firefox; Chrome and Brave later | Most |
+| Updates | Signed, in the background, with a switch to turn them off | ✓ |
+| Safe Browsing | Waits on a Google API key (`S-75`) | Not yet |
+| Netflix, Disney+, Spotify | Need Widevine, which needs a licence from Google first (`S-270`) | Not yet |
+| Windows code signing | SmartScreen asks once (`S-56`) | Not yet |
+| Intel Macs, Linux | Linux comes after Windows ([ROADMAP](docs/ROADMAP.md), M9) | Not yet |
+
+On Linux, or waiting for something above? **Watch → Custom → Releases** at the top of this
+page, and GitHub tells you when a release is out.
+
 ## Status
 
-An early **beta**, fixed release by release, and provided as is ([below](#license)). Known
-limits: the Windows installer is unsigned
-(`S-56`); Safe Browsing is off (above); on a Mac with a second desktop, Mission Control takes
-⌃1–⌃9 (the Spaces menu keeps them); while Arc runs it takes ⌥⌘N from every app (`S-79`;
-[the FAQ](docs/FAQ.md) has the way round); Netflix, Disney+ and Spotify's web player do not
-play, since Widevine is not built yet (`S-270`). Open work is in [BACKLOG.md](BACKLOG.md), the
-milestones in [docs/ROADMAP.md](docs/ROADMAP.md), and every release's changes in
-[docs/release-notes/](docs/release-notes/).
+An early **beta**, improved release by release from what people report. On a Mac with a second
+desktop, Mission Control takes ⌃1–⌃9 (the Spaces menu keeps them), and while Arc runs it takes
+⌥⌘N from every app (`S-79`; [the FAQ](docs/FAQ.md) has the way round). Open work is in
+[BACKLOG.md](BACKLOG.md), the milestones in [docs/ROADMAP.md](docs/ROADMAP.md), and every
+release's changes in [docs/release-notes/](docs/release-notes/).
 
 ## Building from source
 
@@ -220,7 +249,7 @@ New contributors and agents start at [AGENTS.md](AGENTS.md); the index of every 
 
 [BSD-3-Clause](LICENSE). Chromium is © The Chromium Authors, BSD-3-Clause.
 
-Stedding is free, open-source software, provided as is, without warranty of any kind. You use
-it at your own risk: its authors and contributors are not liable for any damage, data loss,
-security problem or other harm that comes from using it, however it came about. The
-[licence](LICENSE) has the full terms.
+Stedding is made with care and tested in daily use, with help from everyone who reports what
+they find. Like other open-source software under this licence, it is offered as is, without
+warranty, and its authors and contributors are not liable for what comes of using it; the
+[licence](LICENSE) has the exact words.

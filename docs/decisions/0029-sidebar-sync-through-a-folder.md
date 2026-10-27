@@ -1,6 +1,6 @@
 # 0029 — The sidebar syncs through a folder the user picks
 
-Status: Proposed (awaiting the owner); built 2026-10-25 on each open question's recommended answer, not yet released (`docs/features/sidebar-file.md` Sf7–Sf41)
+Status: Proposed (awaiting the owner); built 2026-10-25 on each open question's recommended answer, released in 0.3.0 beta 16 (`docs/features/sidebar-file.md` Sf7–Sf41)
 Date: 2026-10-25
 
 ## Context

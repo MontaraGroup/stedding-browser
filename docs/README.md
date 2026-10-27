@@ -43,5 +43,5 @@ Everything under `docs/`, grouped by who it is for.
 
 `images/` holds the captures the docs show, each from the build it was taken on: the
 `ui-*.png` measurements are beta 7's, the Windows captures beta 5's, and the README's
-`readme/` captures 2026-10-19's, from a build after beta 17. `tooling/check-geometry` re-measures the ones the
+`readme/` captures from 2026-10-21 to 2026-10-26, from 0.3.0 betas. `tooling/check-geometry` re-measures the ones the
 interface spec depends on.

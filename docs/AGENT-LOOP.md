@@ -334,8 +334,8 @@ But **475** upvotes on a request nobody has closed in two years is the strongest
 in this research, and it deserves a real answer rather than silence: end-to-end
 encrypted, self-hostable, or file-based export/import are all positions we could take
 without running an account system. Flagged in `PRODUCT.md` as needing a decision.
-*Since:* a Space exports to a file and imports on another machine; sync itself is still
-undecided.
+*Since:* a Space exports to a file and imports on another machine, and the sidebar syncs
+through a folder the user's own sync tool keeps (ADR 0029, released in 0.3.0 beta 16).
 
 ### What this confirms we were right to cut
 

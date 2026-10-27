@@ -9,9 +9,9 @@ services in the Chromium base are removed or replaced is in ARCHITECTURE.md
 Anything the shipping browser does on the network that is not listed here is a
 bug. Report it through SECURITY.md.
 
-What follows describes how the browser is built to behave and what the project intends. It
-is not a contract or a guarantee: a defect of any kind can make a build behave otherwise, and
-Stedding is provided as is, without warranty, under its BSD-3-Clause licence (`LICENSE`).
+What follows describes how the browser is built to behave and what the project intends, as a
+best effort rather than a contract: like any software, a build can have bugs, and Stedding
+comes as is, without warranty, under its BSD-3-Clause licence (`LICENSE`).
 The sites you visit, the extensions you install, the search engine you pick, and services
 such as GitHub, Google's update servers or the sync tool you choose are run by others, under
 their own terms and privacy policies; using them is your choice.
@@ -168,8 +168,8 @@ Google API key, and Chromium's list updates need one. Confirmed on a running bui
 after start, went to `safebrowsing.googleapis.com` with no key and Google answered
 HTTP 400. So the local lists stay empty and no listed site gets a warning page --
 while the requests themselves still reach Google, with your IP address. Only the
-local warnings for dangerous file types remain. Do not count on Safe Browsing to
-protect you in Stedding. Settings → Privacy and security → Security says so too, above
+local warnings for dangerous file types remain, so Safe Browsing's protection is not active in
+Stedding yet. Settings → Privacy and security → Security says so too, above
 the modes it offers (since 2026-10-12; `docs/features/privacy.md` Q13). The route the owner chose (2026-10-01, `BACKLOG.md` S-75) is
 the lists through stedding.dev, with the key on the server and no Google API in the
 browser; it is set aside for now, on the owner's word.
@@ -278,8 +278,8 @@ otherwise. Signing into Google *websites* works normally — this only concerns
 browser-level account integration, which the de-Googling work removes
 (ARCHITECTURE.md). Stedding never offers to sign the browser in to Google, also on a
 computer with Google's OAuth environment variables set (`features/privacy.md` Q16). Sync
-services are out of scope on the way to 1.0 (ROADMAP.md).
-Today the sidebar travels between machines as a file: **Export Space…** writes one Space and
+services are out of scope on the way to 1.0 (ROADMAP.md): there is no Stedding account or
+server. The sidebar travels between machines as a file, or through a folder (below): **Export Space…** writes one Space and
 **Export all Spaces…** every Space, to Downloads, and **Import sidebar…** reads either on the
 other machine; profile import covers the rest. The file holds each Space's name, icon,
 colours and whether it has its own session, and the addresses and titles of its pins,
@@ -368,7 +368,7 @@ consequences we will not hide:
 | HTTPS-First | On | Turn off |
 | Quiet permission prompts | On | Turn off |
 | Topics, Protected Audience, Attribution Reporting | Off | — |
-| Safe Browsing | The setting is on (hash-prefix only), but it does not protect in these builds: the list updates are refused without an API key (see above) | Turn off |
+| Safe Browsing | The setting is on (hash-prefix only), but not active yet in these builds: the list updates are refused without an API key (see above) | Turn off |
 | Google sync | Not available | — |
 | Sidebar sync through a folder | Off. Once a folder is chosen, this computer's file there holds its Spaces (name, icon, colours, order, whether it has its own session), pins (home address and the user's own name), pinned folders, essentials, a random install id and the computer's name ("Mac" or "Windows PC" and four characters, or what the user typed). Never open tabs, history, cookies, passwords, jars or the host name. Stedding makes no network request for it: the user's own sync tool or shared drive moves the file (`features/sidebar-file.md` Sf7–Sf41) | Settings → Stedding → Sync and import → Sync through a folder; Stop syncing, with or without removing this computer's file |
 | WebRTC local IPs | Hidden (mDNS) | Stricter policies through an extension; no setting |

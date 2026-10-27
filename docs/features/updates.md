@@ -13,7 +13,7 @@ Owner docs: `docs/decisions/0022-sparkle-updates-the-mac.md`, `docs/decisions/00
 Patches: `0068`, and `0073` for Windows.
 The schedule changed on 2026-10-21 (the owner's decision): a check at launch when the last one
 is more than an hour old, and every six hours while the browser runs, where it was once a day
-(Up1, Up14; in `0068` and `0073`, not yet released).
+(Up1, Up14; in `0068` and `0073`, released in 0.3.0 beta 2).
 
 Stedding updates itself on the Mac the way Arc does: it checks at launch when the last check
 is more than an hour old and every six hours while it runs, downloads a new

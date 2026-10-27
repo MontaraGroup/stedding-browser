@@ -234,8 +234,8 @@ Acceptance criteria:
 ## M6 — Settings, import, polish (public beta)
 
 > **Done but for two things:** importing from Chrome, Brave and the new Edge (`PLAN.md`
-> decision 8, `S-101`; Arc, Safari and Firefox import today on the Mac, and Arc is the Mac's
-> alone, `S-81`) and the VoiceOver pass (`docs/history/plan-2026-09-26.md` WIN-3). Two planned rows of the Arc import
+> decision 8, `S-101`; Arc imports on the Mac and, since 0.3.0 beta 13, on Windows, `S-81`,
+> and Dia, Safari's export file, Safari and Firefox import today) and the VoiceOver pass (`docs/history/plan-2026-09-26.md` WIN-3). Two planned rows of the Arc import
 > are open too: Arc's splits and archived items, and a 400-tab import inside the budgets
 > (`S-103`). Settings → Stedding reads in sections since beta 13 (settings T13).
 
@@ -312,7 +312,7 @@ Acceptance criteria:
 
 **Goal:** feature parity on Windows x64 with a native-quality installer and updates.
 
-**Where this stands (2026-10-21):** an unsigned preview ships with each beta, and from 0.2.0
+**Where this stands (2026-10-27):** an unsigned preview ships with each beta, and from 0.2.0
 beta 19 it updates itself (`S-215`); betas 18 and 19 of 0.2.0 were Windows only, and from
 beta 20 each release carries both platforms. Both suites passed with DCHECKs and the
 dangling-pointer detector on and under AddressSanitizer on 2026-09-30; with DCHECKs and the
@@ -326,9 +326,9 @@ far: the series and the Stedding window on Windows (round 8, patch 0039); brandi
 name, the icon, `%LOCALAPPDATA%\Stedding`, Stedding's own registry keys, COM classes and
 sandbox prefix (N3–N4) -- and Chromium's `mini_installer` from the `win-release`
 configuration (ADR 0018), a preview since beta 5 (N6); Arc's keyboard for Windows (N7,
-patch 0043). Not done: little windows and links from other applications, signing and
-SmartScreen, CI, Windows performance budgets, importing from Arc for Windows
-(`BACKLOG.md` S-81), and a two-finger Space swipe that follows the fingers: a touchpad's
+patch 0043); little windows for links from other applications, since 0.3.0 beta 7
+(`docs/features/little.md` E10); importing from Arc, since 0.3.0 beta 13 (`S-81`). Not done:
+signing and SmartScreen, CI, Windows performance budgets, and a two-finger Space swipe that follows the fingers: a touchpad's
 sideways scroll steps one Space instead (`docs/features/spaces.md` B39;
 `docs/history/plan-2026-09-26.md` TAB-31). `BACKLOG.md` S-56.
 

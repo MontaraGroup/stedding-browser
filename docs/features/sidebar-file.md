@@ -3,7 +3,7 @@
 Status: **Sf2 and Sf6 built** (2026-10-25, BACKLOG S-282 step 1, S-61); **sync through a
 folder, Sf7–Sf41, built in its first form** (2026-10-25, BACKLOG S-282, ADR 0029), each row's
 state below; both released in 0.3.0 beta 16, and every test they cite passes on the Mac
-(2026-10-26). **Sf42 built** 2026-10-26, not yet released. **Sf1, Sf3–Sf5 withdrawn** in patch
+(2026-10-26). **Sf42 built** 2026-10-26, released in 0.3.0 beta 18. **Sf1, Sf3–Sf5 withdrawn** in patch
 0055 (owner decision, 2026-09-26). Owner: import I18–I20.
 
 The sidebar travels as a file, or, with sync through a folder on, as a file each computer

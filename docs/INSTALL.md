@@ -13,9 +13,8 @@ yet**, which means one SmartScreen prompt (`S-56` in [BACKLOG.md](../BACKLOG.md)
 version updates itself from beta 16 on, the first release built with its updater, and the
 Windows version from beta 19 on.
 
-Stedding is beta software, provided as is, without warranty, under its
-[BSD-3-Clause licence](../LICENSE); installing and using it is at your own risk. Before it
-holds your everyday browsing, keep a copy of anything you cannot afford to lose.
+Stedding is a beta, offered as is under its [BSD-3-Clause licence](../LICENSE). As with any
+new browser, keep a copy of anything important before it becomes your everyday one.
 
 ## macOS (Apple silicon)
 

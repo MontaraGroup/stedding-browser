@@ -12,7 +12,7 @@ It is open source and needs no account. A Space can keep its own sign-ins inside
 so one site can be signed in as work in one Space and as you in another. One switch turns
 every website dark, any page can become an app with a window of its own, and one step signs
 you out of the site in front of you and nothing else. Arc still has Boosts, Easels, the
-sidebar's mini player, the Library panel and Live Folders, sync and AI. The README has both
+sidebar's mini player, the Library panel and Live Folders, hosted sharing and AI. The README has both
 lists: [What Arc never had](../README.md#what-arc-never-had) and
 [what Arc has that Stedding does not, yet](../README.md#what-arc-has-that-stedding-does-not-yet).
 
@@ -37,22 +37,23 @@ A haven. It is shaped on "steading", a farmstead, from "stead", an old word for 
 One maintainer, in the open. Open work is in [BACKLOG.md](../BACKLOG.md); what each round built
 is in [PROJECT-LOG.md](PROJECT-LOG.md).
 
-**Who is responsible if something goes wrong?**
-Stedding is free, open-source software under the [BSD-3-Clause licence](../LICENSE), provided
-as is and without warranty, so it is used at your own risk: its authors and contributors are
-not liable for any damage, data loss, security problem or other harm from using it, whatever
-the cause. Bug reports are welcome and bugs are fixed when they can be, but there is no promise
-of a fix, a date or support. It is a beta: keep your own copy of anything you cannot afford to
-lose.
+**Is there a warranty?**
+No. Like most open-source software, Stedding comes as is under its
+[BSD-3-Clause licence](../LICENSE), which also says that its authors and contributors are not
+liable for what comes of using it. Bug reports are welcome on GitHub and are fixed as time
+allows, as a best effort rather than a promise. As with any beta, keep a copy of anything
+important.
 
 ## Installing and updating
 
 **Is the build signed, and is it safe?**
-The macOS image is signed with the project's Developer ID and notarized by Apple (from beta 10).
-The Windows installer is not signed yet, so SmartScreen asks once ([INSTALL.md](INSTALL.md)).
-Every release is built from this repository's patch series, with its SHA-256 checksum published
-beside the file. A signature and a checksum show where a file came from, not that it is free of
-defects: Stedding is beta software, provided as is (see the question above).
+Keeping it safe comes first. Stedding is built in the open on Chromium stable, follows its
+security releases, and is tested in daily use with help from everyone who reports a problem on
+GitHub. The macOS image is signed with the project's Developer ID and notarized by Apple (from
+beta 10). The Windows installer is not signed yet, so SmartScreen asks once
+([INSTALL.md](INSTALL.md)). Every release is built from this repository's patch series, with its
+SHA-256 checksum published beside the file. Like any open-source software, it comes without a
+guarantee (the question above).
 
 **Will it update itself?**
 Yes, on the Mac from 0.2.0 beta 16 and on Windows from 0.2.0 beta 19. It looks for a new version
@@ -209,7 +210,7 @@ tilting wheel, or Shift with the wheel. On Windows, Ctrl with the wheel over the
 too. Scrolling up and down still scrolls your tabs ([SHORTCUTS.md](SHORTCUTS.md)).
 
 **Can I change a keyboard shortcut?**
-Yes, from the release that carries it (BACKLOG S-91): Settings → Stedding → Shortcuts. Press
+Yes, from 0.3.0 beta 16 (BACKLOG S-91): Settings → Stedding → Shortcuts. Press
 Add on a command's row and press the keys; if another command has them, the row says which,
 and Replace moves them. A switch turns a command's keys off, and Reset puts its own keys back.
 Your shortcuts apply to every profile and window on the computer.
@@ -243,8 +244,8 @@ Settings → Stedding → Pages and menus → turn off **Short context menus**.
 **Does it send anything to Google, or to you?**
 No telemetry, crash reports, experiments or identifiers, and no Google sign-in. Chromium itself
 still contacts Google for component updates, Safe Browsing lists and network time. The Safe
-Browsing requests carry no API key and are refused, so Safe Browsing does not protect you in
-these builds (`S-75`). The Web Store is contacted only when you install or update an extension.
+Browsing requests carry no API key and are refused, so Safe Browsing's warning pages are not
+active yet (`S-75`). The Web Store is contacted only when you install or update an extension.
 Every connection is listed in [PRIVACY.md](PRIVACY.md); anything else is a bug.
 
 **What is on by default?**
@@ -270,8 +271,8 @@ Use a beta for a day and open an issue for each thing that is worse than what yo
 
 **I found a security problem.**
 Use private vulnerability reporting on the repository's Security tab
-([SECURITY.md](../SECURITY.md)), not a public issue. Reports are welcome; there is no promised
-response time, fix or support.
+([SECURITY.md](../SECURITY.md)), not a public issue. They are handled as a best
+effort.
 
 **Where does a new contributor start?**
 [AGENTS.md](../AGENTS.md), then [HANDOFF.md](HANDOFF.md).

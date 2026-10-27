@@ -1,7 +1,7 @@
 # Feature: Peek
 
 Status: **P1–P18 built**, released in 0.3.0 beta 16 (and private V6); **P19 built** 2026-10-26
-(patch 0106), not yet released; **on by default** (the owner, 2026-10-25, `PLAN.md` decision 2).
+(patch 0106), released in 0.3.0 beta 18; **on by default** (the owner, 2026-10-25, `PLAN.md` decision 2).
 Settings › Stedding › "Open links from pinned tabs in a peek" turns it off.
 
 A link from a pinned tab that would leave the pinned site opens in a peek: a little window

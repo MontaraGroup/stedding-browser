@@ -21,16 +21,15 @@ A good report includes:
 ## Response expectations
 
 This is a small open-source project with one maintainer and no security team. Reports are
-welcome and read, but nothing here is a promise:
+welcome and read, and handled as a best effort, without a set response time:
 
-- We try to acknowledge a report soon; there is no promised response time.
-- Whether and when a fix follows depends on severity and on the maintainer's time; there is
-  no promised fix, timeline or support.
+- We try to acknowledge a report soon.
+- Whether and when a fix follows depends on its severity and on the maintainer's time.
 - We try to keep you informed inside the private advisory, and credit you when a fix ships
   (unless you prefer otherwise).
 
-Stedding is provided as is, without warranty, under the [BSD-3-Clause licence](LICENSE): a
-security problem, reported or not, is covered by the same terms as any other defect.
+As the [BSD-3-Clause licence](LICENSE) says, Stedding comes as is, without warranty, and that
+covers security problems as it covers any other defect.
 
 ## Scope
 
@@ -54,7 +53,7 @@ documented properties of a beta:
 - **The Windows installer is not code-signed** (`BACKLOG.md` S-56). SmartScreen asks
   once, and the release notes give the step: **More info → Run anyway**. The macOS
   image is signed with the project's Developer ID and notarized from 0.2.0 beta 10 on.
-- **Safe Browsing does not protect.** The builds carry no Google API key, so the list
+- **Safe Browsing is not active yet.** The builds carry no Google API key, so the list
   updates are refused and no site gets a warning page (`docs/PRIVACY.md`, `BACKLOG.md`
   S-75).
 

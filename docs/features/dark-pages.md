@@ -82,7 +82,7 @@ is `docs/features/windows.md` N7.
   file; the mode and the two lists as the content setting's default and entries in the same file
   (`profile.default_content_setting_values.auto_dark_web_content`,
   `profile.content_settings.exceptions.auto_dark_web_content`). The content setting is marked
-  unsyncable, and Stedding has no sync. The lists name sites the user chose, so they are as
+  unsyncable, and Stedding's sync through a folder carries only the sidebar. The lists name sites the user chose, so they are as
   private as bookmarks: they stay on the machine. Registered on desktop, the setting is one of
   those Delete browsing data clears with "Site settings" ticked, and Settings > Reset settings
   clears both lists and returns the mode to "all sites" (read in `browsing_data_helper.cc`

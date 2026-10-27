@@ -1,6 +1,6 @@
 # Feature: Private windows wear a different coat
 
-Status: **V1–V3, V6–V9 built** (V6 with Peek's rebuild, 2026-10-25, not yet released); **V4, V5 withdrawn**.
+Status: **V1–V3, V6–V9 built** (V6 with Peek's rebuild, 2026-10-25, released in 0.3.0 beta 16); **V4, V5 withdrawn**.
 Owner docs: `docs/PRIVACY.md`, `docs/PRODUCT.md` §5. Patch: 0034.
 
 A private window (⇧⌘N) must be told apart at a glance and must leave nothing in the
