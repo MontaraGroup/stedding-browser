@@ -10,6 +10,26 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-27 -- GitHub issues 48 and 13, not released
+
+The owner asked for both to be built next (BACKLOG S-325, S-321); built and checked on the
+Mac, not on Windows yet, and in no release.
+
+- Issue 48: the little window has the Copy Link button, and the toast that confirms it, which
+  Chromium gives to normal and app windows alone (copy-link L7, L5;
+  `CopyLinkTest.ALittleWindowHasTheButtonAPopupNone`). Seen on a release build with the real
+  pointer: a link handed over with `open -a` opened a little window with the button, a click put
+  the clean link on the system clipboard and the toast showed.
+- Issue 13: a menu under the Space row of Settings › Shortcuts lets the Spaces and the rows
+  trade ⌘1–⌘9 and ⌃1–⌃9, or moves either set to ⌃⌘ (Alt+Shift on Windows) (shortcuts Z23;
+  `ShortcutOverridesTest.TheNumberKeysMoveBothSets`, `ShortcutRebindTest.TheNumberKeysMoveBothSets`,
+  `ShortcutSettingsTest.TheMenuMovesTheNumberKeys`). Seen on a release build with real keys:
+  with the Spaces on ⌘, ⌃1 and ⌃2 chose the rows, holding ⌘ numbered no row, and the Space chip
+  read ⌘1, where the first build had kept ⌃1 (fixed in the same patch).
+- The hand checks found two older defects, logged as `S-326` (a little window comes back at the
+  next launch as a plain popup) and `S-327` (Copy Link's check mark shows for about a tenth of a
+  second, not 1.5).
+
 ## 2026-10-27 -- 0.3.0 beta 21: GitHub issues 42 to 46
 
 The owner asked for the open issues' bugs fixed, and for Settings to say that blocking covers

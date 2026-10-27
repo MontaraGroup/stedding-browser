@@ -10,7 +10,8 @@ The owner's requests of 2026-10-22, after 0.3.0 beta 4:
   toolbar T46; GitHub issue 11): Chromium's Copy Link action shown as a
   page action before the star. A click copies the clean link, as Cmd-Shift-C
   does; an Option-click (Alt-click) the Markdown link. A preference, on by
-  default, hides it.
+  default, hides it. A little window has it too, with the toast that
+  confirms it (GitHub issue 48).
 - Essentials of a Space's own (ADR 0028; spaces B6, sessions S8; GitHub
   issue 8): a tab pinned in a Space with an Independent session is that
   Space's essential, in its jar and shown in it alone, which shows no
@@ -83,6 +84,7 @@ the hover card).
  .../api/settings_private/prefs_util.cc        |   6 +-
  .../stedding_page/stedding_page.html.ts       |  14 +-
  chrome/browser/ui/browser_actions.cc          |  30 +-
+ .../internal/browser_window_features.cc       |   6 +-
  chrome/browser/ui/page_action/action_ids.h    |   7 +
  .../ui/page_action/page_action_icon_type.h    |   5 +-
  .../page_action_properties_provider.cc        |  11 +
@@ -102,7 +104,7 @@ the hover card).
  chrome/browser/ui/stedding/stedding_prefs.h   |  14 +-
  .../ui/stedding/stedding_prefs_unittest.cc    |  15 +-
  chrome/browser/ui/tabs/public/tab_features.h  |   8 +
- chrome/browser/ui/tabs/tab_features.cc        |  14 +
+ chrome/browser/ui/tabs/tab_features.cc        |  18 +
  chrome/browser/ui/tabs/tab_strip_model.cc     |  79 +++
  chrome/browser/ui/tabs/tab_strip_model.h      |  18 +
  .../ui/tabs/tab_strip_model_unittest.cc       | 223 ++++++
@@ -154,7 +156,7 @@ the hover card).
  .../browser/ui/webui/settings/settings_ui.cc  |  17 +-
  chrome/test/stedding/BUILD.gn                 |   5 +
  .../test/stedding/child_tabs_browsertest.cc   |   4 +
- chrome/test/stedding/copy_link_browsertest.cc | 350 +++++++++-
+ chrome/test/stedding/copy_link_browsertest.cc | 384 +++++++++-
  .../test/stedding/folder_tabs_browsertest.cc  | 655 +++++++++++++++++-
  .../hover_card_picture_browsertest.cc         | 255 ++++++-
  .../stedding/isolation_mark_browsertest.cc    | 161 ++---
@@ -168,7 +170,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6256 insertions(+), 750 deletions(-)
+ 90 files changed, 6299 insertions(+), 751 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -307,6 +309,24 @@ index 008f2a49ed4c7..4705a3d2dea13 100644
                },
                bwi, tab_strip_model),
            kActionCopyUrl, IDS_APP_MENU_COPY_LINK, IDS_APP_MENU_COPY_LINK,
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+index 4456312cac106..b80cc10b8ffd3 100644
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -972,8 +972,12 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+           *browser, browser, browser->GetTabStripModel(),
+           browser->GetSessionID(), browser->GetType());
+ 
++  // Stedding copy-link L5, L7 (GitHub issue 48): a little window has the
++  // Copy Link button, and shows the toast that confirms it, as a normal
++  // window does. It is marked little in Init, before this.
+   if (browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL ||
+-      browser->GetType() == BrowserWindowInterface::Type::TYPE_APP) {
++      browser->GetType() == BrowserWindowInterface::Type::TYPE_APP ||
++      little_window_) {
+     toast_service_ =
+         GetUserDataFactory().CreateInstance<ToastService>(*browser, browser);
+   }
 diff --git a/chrome/browser/ui/page_action/action_ids.h b/chrome/browser/ui/page_action/action_ids.h
 index 54418596f3ab1..1b47f19a00afb 100644
 --- a/chrome/browser/ui/page_action/action_ids.h
@@ -2001,10 +2021,18 @@ index 16d0fa2acbba9..f8fa6f84cbb58 100644
    std::unique_ptr<glic::GlicTabIndicatorHelper> glic_tab_indicator_helper_;
    std::unique_ptr<glic::GlicSidePanelCoordinator> glic_side_panel_coordinator_;
 diff --git a/chrome/browser/ui/tabs/tab_features.cc b/chrome/browser/ui/tabs/tab_features.cc
-index cdd4c62080fb1..a29d75981140b 100644
+index cdd4c62080fb1..b6e5f7dd9fb0f 100644
 --- a/chrome/browser/ui/tabs/tab_features.cc
 +++ b/chrome/browser/ui/tabs/tab_features.cc
-@@ -132,6 +132,7 @@
+@@ -82,6 +82,7 @@
+ #include "chrome/browser/ui/autofill/payments/wallet_reminder_notice_page_action_controller.h"
+ #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
+ #include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/commerce/commerce_ui_tab_helper.h"
+ #include "chrome/browser/ui/context_highlight/context_highlight_tab_feature.h"
+@@ -132,6 +133,7 @@
  #include "chrome/browser/ui/views/js_optimization/js_optimizations_page_action_controller.h"
  #include "chrome/browser/ui/views/location_bar/cookie_controls/cookie_controls_page_action_controller.h"
  #include "chrome/browser/ui/views/location_bar/lens_overlay_homework_page_action_controller.h"
@@ -2012,16 +2040,19 @@ index cdd4c62080fb1..a29d75981140b 100644
  #include "chrome/browser/ui/views/passwords/manage_passwords_page_action_controller.h"
  #include "chrome/browser/ui/views/side_panel/customize_chrome/side_panel_controller_views.h"
  #include "chrome/browser/ui/views/tab_sharing/tab_capture_contents_border_helper.h"
-@@ -380,6 +381,19 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
+@@ -380,6 +382,22 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
              tab, tab, profile->GetPrefs(), *page_action_controller_);
    }
  
-+  // Stedding copy-link L7 (GitHub issue 11): the address field's Copy Link
-+  // button, in every normal and private window, as the star; popups, app
-+  // windows and little windows (popups too) have none. One per tab: the
++  // Stedding copy-link L7 (GitHub issues 11, 48): the address field's Copy
++  // Link button, in every normal and private window, as the star, and in a
++  // little window, whose row is the main window's (little E8): a link opened
++  // small is often one to pass on. Other popups and app windows have none.
++  // The window is marked little before its first tab. One per tab: the
 +  // page action's state is the tab's.
-+  if (tab.GetBrowserWindowInterface()->GetType() ==
-+          BrowserWindowInterface::TYPE_NORMAL &&
++  BrowserWindowInterface* const window = tab.GetBrowserWindowInterface();
++  if ((window->GetType() == BrowserWindowInterface::TYPE_NORMAL ||
++       window->GetFeatures().little_window()) &&
 +      page_action_controller_->ActionExists(kActionCopyUrl)) {
 +    copy_link_page_action_controller_ =
 +        GetUserDataFactory()
@@ -6611,17 +6642,17 @@ index b73ee0bbc7ac4..dc13c5fbd7f26 100644
  
    TabStripModel* tabs() { return browser()->tab_strip_model(); }
 diff --git a/chrome/test/stedding/copy_link_browsertest.cc b/chrome/test/stedding/copy_link_browsertest.cc
-index 81eddea0a4a79..038dee03a5a29 100644
+index 81eddea0a4a79..e4a43f041aa50 100644
 --- a/chrome/test/stedding/copy_link_browsertest.cc
 +++ b/chrome/test/stedding/copy_link_browsertest.cc
-@@ -5,54 +5,129 @@
+@@ -5,54 +5,131 @@
  // Copy a Markdown link (⌥⇧⌘C; docs/features/copy-link.md, PLAN.md WIN-5): on
  // a page with no title, at an address carrying tracking parameters, the
  // link copied names the host and keeps the address without the trackers.
 +// The Copy Link button at the address field's right end (copy-link L7): a
 +// click copies what ⇧⌘C copies, an Option-click what ⌥⇧⌘C copies, the toast
 +// and a check mark confirm it, and it shows only on web pages, in normal and
-+// private windows, while its setting is on.
++// private windows and little windows, while its setting is on.
  // The copy goes to a test clipboard, never the machine's own -- except in
  // the Windows fixture at the end, which is about what reaches the machine's
  // own clipboard: a copy or a screenshot from a private window must stay out
@@ -6647,6 +6678,7 @@ index 81eddea0a4a79..038dee03a5a29 100644
 +#include "chrome/browser/ui/actions/chrome_action_id.h"
  #include "chrome/browser/ui/browser_commands.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stedding/little_window.h"
 +#include "chrome/browser/ui/stedding/stedding_prefs.h"
 +#include "chrome/browser/ui/toasts/api/toast_id.h"
 +#include "chrome/browser/ui/toasts/toast_controller.h"
@@ -6659,6 +6691,7 @@ index 81eddea0a4a79..038dee03a5a29 100644
  #include "chrome/test/base/ui_test_utils.h"
 +#include "components/prefs/pref_service.h"
  #include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
  #include "net/dns/mock_host_resolver.h"
  #include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "ui/base/accelerators/accelerator.h"
@@ -6748,7 +6781,7 @@ index 81eddea0a4a79..038dee03a5a29 100644
      ui::Clipboard::DestroyClipboardForCurrentThread();
      InProcessBrowserTest::TearDownOnMainThread();
    }
-@@ -64,6 +139,76 @@ class CopyLinkTest : public InProcessBrowserTest {
+@@ -64,6 +141,76 @@ class CopyLinkTest : public InProcessBrowserTest {
          text.GetCallback());
      return text.Get();
    }
@@ -6825,7 +6858,7 @@ index 81eddea0a4a79..038dee03a5a29 100644
  };
  
  IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
-@@ -79,6 +224,203 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
+@@ -79,6 +226,235 @@ IN_PROC_BROWSER_TEST_F(CopyLinkTest, AMarkdownLinkDropsTheTrackers) {
    EXPECT_EQ(std::u16string::npos, copied.find(u"fbclid"));
  }
  
@@ -7015,15 +7048,47 @@ index 81eddea0a4a79..038dee03a5a29 100644
 +  EXPECT_FALSE(clipboard()->last_write_off_the_record());
 +}
 +
-+// copy-link L7: a popup, as a little window is, has no button; ⇧⌘C is its
-+// way to copy.
-+IN_PROC_BROWSER_TEST_F(CopyLinkTest, PopupsHaveNoButton) {
++// copy-link L7 (GitHub issue 48): a little window, whose row is the main
++// window's (little E8), has the button, and it copies as a normal window's
++// does: a click the link without its trackers, with the check mark and the
++// toast (L5), an Option-click the Markdown link. Another popup has none;
++// ⇧⌘C is its way to copy.
++IN_PROC_BROWSER_TEST_F(CopyLinkTest, ALittleWindowHasTheButtonAPopupNone) {
++  BrowserWindowInterface* const little = stedding::OpenLittleWindow(
++      browser()->GetProfile(),
++      embedded_test_server()->GetURL(
++          "shop.test", "/empty.html?utm_source=mail&fbclid=abc&item=7"),
++      /*anchor=*/nullptr, /*untrusted_launch=*/false);
++  ASSERT_TRUE(little);
++  ASSERT_TRUE(stedding::IsLittleWindow(little));
++  ASSERT_TRUE(content::WaitForLoadStop(
++      little->GetTabStripModel()->GetActiveWebContents()));
++  ASSERT_TRUE(WaitForButton(little, true))
++      << "no Copy Link button in a little window";
++  page_actions::PageActionView* const button = ButtonOf(little);
++  EXPECT_EQ(u"Copy Link", button->GetViewAccessibility().GetCachedName());
++  const std::u16string clean = base::UTF8ToUTF16(
++      embedded_test_server()->GetURL("shop.test", "/empty.html?item=7").spec());
++  Click(button, ui::EF_NONE);
++  EXPECT_TRUE(ShowsTheCheckMark(button)) << "no check mark after the click";
++  EXPECT_EQ(clean, ClipboardText());
++  EXPECT_FALSE(clipboard()->last_write_off_the_record());
++  // L5: the toast confirms it, as in a normal window.
++  ToastController* const toasts = ToastController::From(little);
++  ASSERT_TRUE(toasts) << "a little window shows no toasts";
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return toasts->IsShowingToast() &&
++           toasts->GetCurrentToastId() == ToastId::kSteddingLinkCopiedClean;
++  })) << "no \"Link copied, tracking removed\" toast";
++  Click(button, ui::EF_ALT_DOWN);
++  EXPECT_EQ(u"[shop.test](" + clean + u")", ClipboardText());
++
 +  BrowserWindowInterface* const popup =
 +      CreateBrowserForPopup(browser()->GetProfile());
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(
 +      popup, embedded_test_server()->GetURL("a.test", "/title1.html")));
-+  page_actions::PageActionView* const button = ButtonOf(popup);
-+  EXPECT_FALSE(button && button->GetVisible());
++  page_actions::PageActionView* const popup_button = ButtonOf(popup);
++  EXPECT_FALSE(popup_button && popup_button->GetVisible());
 +}
 +
  #if BUILDFLAG(IS_WIN)
