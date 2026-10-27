@@ -93,7 +93,7 @@ the hover card).
  .../spaces/space_jar_navigation_throttle.cc   |  10 +-
  chrome/browser/ui/spaces/space_model.cc       | 369 ++++++----
  chrome/browser/ui/spaces/space_model.h        |  70 +-
- .../ui/spaces/space_model_window_unittest.cc  | 394 ++++++++---
+ .../ui/spaces/space_model_window_unittest.cc  | 393 ++++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
  .../ui/spaces/tab_space_restore_data.h        |  16 +-
@@ -168,7 +168,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 89 files changed, 6257 insertions(+), 750 deletions(-)
+ 89 files changed, 6256 insertions(+), 750 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -487,7 +487,7 @@ index 9cb917131b6fe..dfcf9a3178c2b 100644
      return PROCEED;
    }
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index 3f7881b4ddf32..f65e286c9c573 100644
+index 7add16d23cf34..91c581a4ccb46 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -638,6 +638,11 @@ void SpaceModel::SyncWithRegistry(bool seed) {
@@ -1225,7 +1225,7 @@ index 6b4b84fc63b70..42eab14610eae 100644
    base::WeakPtrFactory<SpaceModel> weak_factory_{this};
  };
 diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
-index 474cd0b8598ca..2f6dd38a3506f 100644
+index 474cd0b8598ca..450ea685f0a9a 100644
 --- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
 +++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
 @@ -16,6 +16,7 @@
@@ -1236,7 +1236,7 @@ index 474cd0b8598ca..2f6dd38a3506f 100644
  #include "base/json/json_writer.h"
  #include "base/run_loop.h"
  #include "base/test/bind.h"
-@@ -312,6 +313,66 @@ TEST_F(SpaceWindowTest, ComingBackLandsOnATabThatArrivedActive) {
+@@ -312,6 +313,65 @@ TEST_F(SpaceWindowTest, ComingBackLandsOnATabThatArrivedActive) {
    EXPECT_EQ(arrived, tabs().GetActiveTab());
  }
  
@@ -1296,14 +1296,13 @@ index 474cd0b8598ca..2f6dd38a3506f 100644
 +  tabs().CloseWebContentsAt(tabs().GetIndexOfTab(used),
 +                            TabCloseTypes::CLOSE_USER_GESTURE);
 +  model().SetActiveSpace(work->id());
-+  EXPECT_EQ(newer, tabs().GetActiveTab())
-+      << "not the tab last on screen";
++  EXPECT_EQ(newer, tabs().GetActiveTab()) << "not the tab last on screen";
 +}
 +
  // B3
  TEST_F(SpaceWindowTest, SwitchingToAnEmptySpaceOpensANewTabThere) {
    tabs::TabInterface* const a = OpenTab();
-@@ -483,6 +544,49 @@ TEST_F(SpaceWindowTest, ClosingTheTabOnScreenShowsTheSpacesMostRecentRow) {
+@@ -483,6 +543,49 @@ TEST_F(SpaceWindowTest, ClosingTheTabOnScreenShowsTheSpacesMostRecentRow) {
    }
  }
  
@@ -1353,7 +1352,7 @@ index 474cd0b8598ca..2f6dd38a3506f 100644
  // tabs R34: with no row of the Space used since the launch left -- rows
  // opened in the background count only once selected -- a close shows the
  // next row below, else the nearest one above; not the tab that opened the
-@@ -1018,6 +1122,33 @@ TEST_F(SpaceWindowTest, RecentTabsCountASplitOnce) {
+@@ -1018,6 +1121,33 @@ TEST_F(SpaceWindowTest, RecentTabsCountASplitOnce) {
    EXPECT_EQ(a, recent[1]);
  }
  
@@ -1387,7 +1386,7 @@ index 474cd0b8598ca..2f6dd38a3506f 100644
  // splits J4: a split's panes take a Space, a pin and a sleep together.
  TEST_F(SpaceWindowTest, SplitPanesTakeVerbsTogether) {
    const SpaceId home = model().active_id();
-@@ -1499,6 +1630,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
+@@ -1499,6 +1629,32 @@ TEST_F(SpaceWindowTest, PinRecordsHomeUrl) {
              stedding::PinnedSiteFor(browser(), essential));
  }
  
@@ -1420,7 +1419,7 @@ index 474cd0b8598ca..2f6dd38a3506f 100644
  // pins H3, H9: Cmd-W on pins sleeps rather than closes, unless the setting
  // is off; a mixed selection closes.
  TEST_F(SpaceWindowTest, CloseOnPinnedTabSleepsIt) {
-@@ -1939,121 +2096,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
+@@ -1939,121 +2095,164 @@ TEST_F(SpaceWindowTest, TurningIsolationOffUsesTheDefaultPartition) {
  }
  
  // sessions S8

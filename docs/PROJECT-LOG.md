@@ -30,9 +30,13 @@ requests only. Each fix has a test that failed on the build without it.
   asleep. It takes the tab used most recently now (spaces B3, two `SpaceWindowTest` cases).
 - Issue 46: the blocker's switch says that ads a site serves itself, such as promoted posts,
   still show until element hiding is built (blocker Bk9, Bk21).
-- A crash after ⌘Y and ⌘S, reported in a comment on issue 44, did not happen in a new browser
-  test nor by hand on the Mac's release build in any sidebar state (BACKLOG S-322); the test
-  stays as a guard.
+- A crash after ⌘Y and ⌘S, reported in a comment on issue 44, did not happen on the Mac by
+  hand nor in a new browser test, but the same test crashed on the Windows test machine, whose
+  animations are off: with the animations off a collapse ends inside its own start, and the
+  slide-out the open panel held began a second motion inside it. ⌘S now waits for the panel to
+  go, the strip's slide-out reaction runs a turn later, and a motion with no animator cancels
+  cleanly; the test runs with the animations on and off, and with another lock holding the
+  strip out (sidebar panels Pn4, BACKLOG S-322 closed).
 - The archive test that cleared a loose tab opened it from the tab on screen; with the new
   switch rule that is the folder's tab used last, so the new tab joined the folder (F25). The
   test now adds its loose tab first. It showed that ⌘T on a folder's last tab, the window's

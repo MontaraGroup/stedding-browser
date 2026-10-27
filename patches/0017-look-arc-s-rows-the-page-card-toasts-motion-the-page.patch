@@ -24,7 +24,7 @@ Removable when: Chromium's vertical tabs, status bubble, find bar and toasts
 take these shapes upstream.
 ---
  .../resources/stedding_welcome/app.css        | 33 +++++++
- .../animation/browser_animation_controller.cc | 11 ++-
+ .../animation/browser_animation_controller.cc | 21 ++++-
  .../animation/browser_animation_controller.h  |  6 ++
  .../browser/ui/color/stedding_color_mixer.cc  | 36 ++++++++
  chrome/browser/ui/stedding/motion.cc          | 24 +++++
@@ -63,7 +63,7 @@ take these shapes upstream.
  .../tabs/common/tab_view_vertical_layout.cc   | 65 ++++++++++++++
  .../tabs/common/tab_view_vertical_layout.h    |  4 +
  .../hovercard/tab_hover_card_controller.cc    |  8 +-
- 40 files changed, 838 insertions(+), 96 deletions(-)
+ 40 files changed, 846 insertions(+), 98 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/motion.cc
  create mode 100644 chrome/browser/ui/stedding/motion.h
  create mode 100644 chrome/browser/ui/stedding/motion_unittest.cc
@@ -115,7 +115,7 @@ index 0ac2838559f43..fedb18c1f562a 100644
 +  }
 +}
 diff --git a/chrome/browser/ui/animation/browser_animation_controller.cc b/chrome/browser/ui/animation/browser_animation_controller.cc
-index e8b59e5765b3f..75d2619a87469 100644
+index e8b59e5765b3f..161552153a307 100644
 --- a/chrome/browser/ui/animation/browser_animation_controller.cc
 +++ b/chrome/browser/ui/animation/browser_animation_controller.cc
 @@ -4,6 +4,9 @@
@@ -140,7 +140,31 @@ index e8b59e5765b3f..75d2619a87469 100644
        MaybeCreateAnimator();
        MaybeStartLogger();
        animator_->Start(current_motion_info_.duration);
-@@ -722,7 +728,8 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+@@ -631,7 +637,11 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+     }
+     PersistCurrentValues(params);
+     logger_.reset();
+-    animator_->Stop();
++    // Stedding: with the animations off a motion runs to its end without an
++    // animator ever made (motion O2).
++    if (animator_) {
++      animator_->Stop();
++    }
+     Notify(BrowserAnimationUpdate::kCanceled);
+     current_motion_ = BrowserAnimationMotion();
+     return true;
+@@ -645,7 +655,9 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+       return false;
+     }
+     logger_.reset();
+-    animator_->Stop();
++    if (animator_) {
++      animator_->Stop();
++    }
+     Notify(BrowserAnimationUpdate::kCanceled);
+     current_motion_ = BrowserAnimationMotion();
+     return true;
+@@ -722,7 +734,8 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
  
  BrowserAnimationController::BrowserAnimationController(
      BrowserWindowInterface& browser)

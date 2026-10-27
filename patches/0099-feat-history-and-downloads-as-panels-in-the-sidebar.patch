@@ -61,7 +61,7 @@ sidebar's column.
  chrome/browser/ui/views/download/BUILD.gn     |   2 +
  .../bubble/download_toolbar_ui_controller.cc  |   9 +
  .../views/frame/browser_native_widget_mac.mm  |   5 +-
- .../frame/vertical_tab_strip_region_view.cc   | 298 +++++-
+ .../frame/vertical_tab_strip_region_view.cc   | 317 +++++-
  .../frame/vertical_tab_strip_region_view.h    |  53 +-
  .../vertical_tab_strip_bottom_container.cc    |  60 ++
  .../vertical_tab_strip_bottom_container.h     |  15 +
@@ -83,7 +83,7 @@ sidebar's column.
  .../stedding/sidebar_panels_browsertest.cc    | 956 ++++++++++++++++++
  .../test/stedding/sidebar_rail_browsertest.cc |   3 +
  tools/gritsettings/resource_ids.spec          |   5 +
- 58 files changed, 5311 insertions(+), 21 deletions(-)
+ 58 files changed, 5329 insertions(+), 22 deletions(-)
  create mode 100644 chrome/app/vector_icons/stedding_archive_box.icon
  create mode 100644 chrome/browser/resources/stedding_library/BUILD.gn
  create mode 100644 chrome/browser/resources/stedding_library/app.css
@@ -3150,7 +3150,7 @@ index ac5ff28c54683..a2c89197c9f88 100644
    return std::min(width, max_width);
  }
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 827ca9366c55f..e6253103e7150 100644
+index 827ca9366c55f..e4348534c4ecc 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -50,7 +50,10 @@
@@ -3358,19 +3358,28 @@ index 827ca9366c55f..e6253103e7150 100644
    tab_strip_view()->SetIsAnimatingSize(!done_resizing);
    if (!starting_width_on_resize_.has_value()) {
      starting_width_on_resize_ = width();
-@@ -1906,6 +1995,11 @@ bool VerticalTabStripRegionView::IsCollapsing() {
+@@ -1906,6 +1995,20 @@ bool VerticalTabStripRegionView::IsCollapsing() {
  }
  
  void VerticalTabStripRegionView::RequestCollapse(bool collapse) {
 +  // sidebar panels Pn4: ⌘S (Ctrl+S) closes an open panel, then closes or
-+  // opens the sidebar as always.
-+  if (sidebar_panels_) {
++  // opens the sidebar as always, once the panel has gone: ApplySidebarPanel,
++  // posted as the panel closes, gives back the focus and the slide-out the
++  // panel held. Under them, the strip slid out again at once, and with the
++  // animations off that slide-out began inside the collapse, which stopped
++  // the browser (GitHub issue 44, a comment).
++  if (sidebar_panels_ &&
++      sidebar_panels_->open() != stedding::SidebarPanel::kNone) {
 +    sidebar_panels_->Close();
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&VerticalTabStripRegionView::RequestCollapse,
++                                  weak_factory_.GetWeakPtr(), collapse));
++    return;
 +  }
    target_collapse_state_.collapsed = collapse;
    if (collapse) {
      suppress_expand_on_hover_ = IsCollapseButtonHovered();
-@@ -2196,6 +2290,11 @@ void VerticalTabStripRegionView::AddTabStripView(
+@@ -2196,6 +2299,11 @@ void VerticalTabStripRegionView::AddTabStripView(
    folder_drag_target_ = std::make_unique<FolderDragTarget>(
        *browser_view()->browser()->tab_strip_model(), tab_strip_view());
  
@@ -3382,7 +3391,7 @@ index 827ca9366c55f..e6253103e7150 100644
    OnCollapseStateChanged(state_controller_->GetCollapseState());
  }
  
-@@ -2471,6 +2570,10 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTarget(
+@@ -2471,6 +2579,10 @@ TabDragTarget* VerticalTabStripRegionView::GetTabDragTarget(
  
  std::unique_ptr<views::View> VerticalTabStripRegionView::RemoveTabStripView(
      views::View* view) {
@@ -3393,7 +3402,24 @@ index 827ca9366c55f..e6253103e7150 100644
    // The strip view is about to be freed (switching to horizontal tabs, or
    // the region rebuilding it). These two still point at it; the next tab
    // insert or Space switch would use the freed view. AddTabStripView
-@@ -3355,7 +3458,7 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+@@ -2551,7 +2663,15 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
+ 
+   if (state == tabs::VerticalTabStripCollapseState::kExpanded ||
+       state == tabs::VerticalTabStripCollapseState::kCollapsed) {
+-    UpdateExpandOnHoverState();
++    // Stedding: a turn later, never inside the motion that changed the state.
++    // With the animations off (motion O2) a collapse ends inside its own
++    // start, and a slide-out a lock asked for here began a second motion of
++    // the strip inside the first, which stopped the browser (GitHub issue 44,
++    // a comment).
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&VerticalTabStripRegionView::UpdateExpandOnHoverState,
++                       weak_factory_.GetWeakPtr(), std::optional<bool>()));
+   }
+ }
+ 
+@@ -3355,7 +3475,7 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
      row->SetTooltipText(kArchivedRowName);
      row->SetBorder(views::CreateEmptyBorder(
          gfx::Insets::VH(0, rail ? 0 : open_column_inset)));
@@ -3402,7 +3428,7 @@ index 827ca9366c55f..e6253103e7150 100644
                    stedding::SidebarFaviconSize() + (rail ? 4 : 0));
    }
    // The update pill sits on the rows' column too, a little apart from the
-@@ -3395,6 +3498,13 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+@@ -3395,6 +3515,13 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
          views::kMarginsKey, rail ? gfx::Insets::TLBR(0, 0, 8, 0)
                                   : gfx::Insets::TLBR(0, open_left, 0, 0));
    }
@@ -3416,7 +3442,7 @@ index 827ca9366c55f..e6253103e7150 100644
    // The row's height follows its children (sidebar Y13); the orientation
    // and the margins above changed what they add up to.
    if (bottom_row_) {
-@@ -3619,5 +3729,183 @@ void VerticalTabStripRegionView::ClearCurrentSpaceTabs() {
+@@ -3619,5 +3746,183 @@ void VerticalTabStripRegionView::ClearCurrentSpaceTabs() {
    spaces::ClearActiveSpace(browser_view()->browser());
  }
  

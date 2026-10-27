@@ -72,7 +72,7 @@ Removable when: never as a whole; the next re-cut gives each part a patch of
 its own (patches/README.md).
 ---
  chrome/app/stedding_strings.grdp              |   11 +
- chrome/browser/app_controller_mac.mm          |   25 +
+ chrome/browser/app_controller_mac.mm          |   27 +-
  .../policies/discard_eligibility_policy.cc    |   27 +-
  .../policies/termination_target_policy.cc     |   11 +-
  chrome/browser/renderer_context_menu/BUILD.gn |    1 +
@@ -173,7 +173,7 @@ its own (patches/README.md).
  .../browser/ui/views/toolbar/toolbar_view.cc  |  104 +-
  chrome/test/stedding/BUILD.gn                 |   13 +
  .../test/stedding/address_band_browsertest.cc |  582 ++++++-
- .../test/stedding/dock_reopen_browsertest.mm  |  125 ++
+ .../test/stedding/dock_reopen_browsertest.mm  |  126 ++
  .../test/stedding/folder_tabs_browsertest.cc  |  183 +-
  .../hidden_row_controls_browsertest.cc        |  289 +++-
  .../stedding/horizontal_strip_browsertest.cc  |  101 ++
@@ -205,7 +205,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 134 files changed, 11450 insertions(+), 451 deletions(-)
+ 134 files changed, 11452 insertions(+), 452 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -245,7 +245,7 @@ index 5173ad9b56d20..07a57f4b03c35 100644
    <message name="IDS_STEDDING_DARK_PAGES_MAC" desc="In Title Case: The Mac View menu item that turns dark pages on or off for the profile: every website drawn dark by the browser. Checked while dark pages is on.">
      Dark Pages
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
-index 2c0890525caa1..7a9fe667fbb18 100644
+index 2c0890525caa1..143e73543cfc7 100644
 --- a/chrome/browser/app_controller_mac.mm
 +++ b/chrome/browser/app_controller_mac.mm
 @@ -59,6 +59,7 @@
@@ -256,6 +256,18 @@ index 2c0890525caa1..7a9fe667fbb18 100644
  #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/profiles/profile_attributes_entry.h"
+@@ -71,10 +72,10 @@
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
+-#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/shortcuts/chrome_webloc_file.h"
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+ #include "chrome/browser/task_manager/task_manager_metrics_recorder.h"
++#include "chrome/browser/ui/archive/closed_folder.h"
+ #include "chrome/browser/ui/browser_command_controller.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_live_tab_context.h"
 @@ -108,6 +109,7 @@
  #include "chrome/browser/ui/startup/url_util.h"
  #include "chrome/browser/ui/stedding/app_updater.h"
@@ -662,7 +674,7 @@ index 8a4d02e0e59da..90b12b9696b8c 100644
                    .command_id(IDC_FOCUS_LOCATION)
                    .remove_if(is_pwa),
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index 4b86a8cf289e2..8a6f2359f04f2 100644
+index 38645872f007d..7c06d7bddca13 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -64,6 +64,7 @@
@@ -8123,10 +8135,10 @@ index d6b80c83659c2..03d7dfd3efc02 100644
  }  // namespace
 diff --git a/chrome/test/stedding/dock_reopen_browsertest.mm b/chrome/test/stedding/dock_reopen_browsertest.mm
 new file mode 100644
-index 0000000000000..ba918df351094
+index 0000000000000..e4ddf28bf8b87
 --- /dev/null
 +++ b/chrome/test/stedding/dock_reopen_browsertest.mm
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,126 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -8209,7 +8221,8 @@ index 0000000000000..ba918df351094
 +                  .ShouldRestoreLastSession())
 +      << "continuing where it left off is the default";
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-+      browser(), embedded_test_server()->GetURL("kept-a.test", "/title1.html")));
++      browser(),
++      embedded_test_server()->GetURL("kept-a.test", "/title1.html")));
 +  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
 +      browser(), embedded_test_server()->GetURL("kept-b.test", "/title1.html"),
 +      WindowOpenDisposition::NEW_FOREGROUND_TAB,
