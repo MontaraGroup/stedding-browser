@@ -10,7 +10,7 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
-## 2026-10-27 -- GitHub issues 42 to 46
+## 2026-10-27 -- 0.3.0 beta 21: GitHub issues 42 to 46
 
 The owner asked for the open issues' bugs fixed, and for Settings to say that blocking covers
 requests only. Each fix has a test that failed on the build without it.
@@ -41,9 +41,10 @@ requests only. Each fix has a test that failed on the build without it.
   switch rule that is the folder's tab used last, so the new tab joined the folder (F25). The
   test now adds its loose tab first. It showed that ⌘T on a folder's last tab, the window's
   last, opens inside the folder (BACKLOG S-324).
-- Mac, release build: 1250 unit tests pass; of 758 browser tests one failed, the archive test
-  above, which passes with the Space switch tests since its fix. Nothing ran on Windows this
-  round.
+- Released as 0.3.0 beta 21. Mac, release build: 1250 unit, 56 component and 608 browser tests
+  pass (a restore-bar test failed once, then passed three times alone and in a second full
+  run). Windows, release and DCHECK builds: 1245 unit and 567 browser tests each; the installer
+  went over beta 20 and kept the profile.
 
 ## 2026-10-26, late night -- 0.3.0 beta 20
 
