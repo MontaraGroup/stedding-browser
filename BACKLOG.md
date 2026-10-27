@@ -51,7 +51,7 @@ refer to `docs/features/<feature>.md`.
    with the choices (click, hold, off). The first peek a profile opens shows a one-time note in
    the peek itself: what it is, ⌘O to keep it as a tab, and a link to the setting; it never
    shows again once dismissed or acted on. Arc's Shift-click peek from any tab waits for the
-   owner.
+   owner. **Released in 0.3.0 beta 18.**
 4. `S-310` **No amber anywhere; a neutral, designed palette** (the owner, 2026-10-26). The
    active Space's colour reaches the window as Chromium's user colour marked as an accent, so
    Chromium's whole Material palette -- Settings, toggles, menus, the command bar's chip -- was
@@ -59,18 +59,21 @@ refer to `docs/features/<feature>.md`.
    tinting the sidebar's ground and nothing else; the rest of the UI takes a neutral palette.
    The light look's sand ground (#C8B377) and the welcome page's amber go, for colours from
    the same designer palettes the Space colours use (Radix, Tailwind). The amber dot in the
-   logo is brand artwork and stays unless the owner says otherwise.
+   logo is brand artwork and stays unless the owner says otherwise. **Released in 0.3.0 beta
+   18.**
 5. `S-311` **The command bar's rows show the pointer** (the owner): today a row lights only when
    the arrow keys choose it; under the pointer it gives no sign, though a click works.
+   **Released in 0.3.0 beta 18.**
 6. `S-286` **Separators in the sidebar** (GitHub issue 19, the owner: build it now), added from
-   the right-click menu only, so they stay out of the way.
+   the right-click menu only, so they stay out of the way. **Released in 0.3.0 beta 18.**
 7. `S-312` **Sync through a folder says what to pick** (GitHub issue 38's follow-up): there is
    no provider to choose; the folder must be one a sync app keeps (iCloud Drive, OneDrive,
    Dropbox, Google Drive). Name that in the row, and say so when the chosen folder is under
-   none of them.
+   none of them. **Released in 0.3.0 beta 18**, and in beta 20 any shared folder works.
 8. `S-309` **Docs brought up to date and trimmed**: every page true to the code after the
    above, repeated or stale passages removed, history kept in `docs/PROJECT-LOG.md` and the
-   archives.
+   archives. **Started 2026-10-27:** the liability wording, released work no longer called
+   unreleased, the roadmap cut to what is ahead, old competitor notes dropped.
 9. `S-313` **Settings › Stedding reorganised** (optional, if not too hard): today one long
    list; grouped and laid out more like the setup screen. **Done 2026-10-26:** a card per
    group, Peek and the little windows in a card of their own and Spaces after Tabs, the
