@@ -11,6 +11,7 @@ Everything under `docs/`, grouped by who it is for.
 | [FAQ.md](FAQ.md) | Questions and answers: what Stedding has that Arc did not and the reverse, updates, pinned tabs and essentials, Independent session |
 | [PRIVACY.md](PRIVACY.md) | The privacy principles and every network connection the browser makes |
 | [release-notes/](release-notes/) | What the current release changed, with checksums; [archive.md](release-notes/archive.md) has every earlier release's |
+| [../LICENSE](../LICENSE) | The BSD-3-Clause licence: Stedding is provided as is, without warranty, and its authors are not liable for what comes of using it |
 
 ## About the project
 

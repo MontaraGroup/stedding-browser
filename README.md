@@ -104,7 +104,6 @@ Each feature has a specification naming the test behind every behaviour:
 
 ## What Arc has that Stedding does not, yet
 
-- **Peek**, a link from a pinned tab over the window: off until it is rebuilt (`S-93`).
 - **Boosts and Easels**: deferred ([ADR 0012](docs/decisions/0012-defer-boosts-and-easels.md)).
 - **The mini player** in the sidebar: planned; picture in picture by key until then (`S-95`).
 - **The Library panel and Live Folders**: later (`S-61`).
@@ -161,9 +160,10 @@ Settings → Stedding → Shortcuts in the browser.
 With Arc installed, the first start offers **Move everything from Arc**: Spaces with
 their colours and icons, essentials, pinned tabs, nested folders, open tabs, history and
 passwords. It reads Arc's files on your disk and sends nothing anywhere; on a Mac the passwords
-need one keychain prompt, on Windows none, and running it again never duplicates anything. From
-Safari or Firefox, Chromium's own importer runs in the same step. On Windows it is new in 0.3.0
-beta 13.
+need one keychain prompt, on Windows none, and running it again does not duplicate anything.
+The same step brings bookmarks, history and passwords from Dia, or from the file Safari
+exports; from Safari or Firefox, Chromium's own importer runs there too. On Windows it is new
+in 0.3.0 beta 13.
 
 ## Privacy
 
@@ -175,11 +175,13 @@ beta 13.
 - **Safe Browsing does not protect you** in these builds: its lists need a Google API key the
   builds do not carry (`S-75`).
 
-Every connection the browser makes is listed in [docs/PRIVACY.md](docs/PRIVACY.md).
+The connections the browser makes are listed in [docs/PRIVACY.md](docs/PRIVACY.md); anything
+else is a bug.
 
 ## Status
 
-An early **beta**, fixed release by release. Known limits: the Windows installer is unsigned
+An early **beta**, fixed release by release, and provided as is ([below](#license)). Known
+limits: the Windows installer is unsigned
 (`S-56`); Safe Browsing is off (above); on a Mac with a second desktop, Mission Control takes
 ⌃1–⌃9 (the Spaces menu keeps them); while Arc runs it takes ⌥⌘N from every app (`S-79`;
 [the FAQ](docs/FAQ.md) has the way round); Netflix, Disney+ and Spotify's web player do not
@@ -217,3 +219,8 @@ New contributors and agents start at [AGENTS.md](AGENTS.md); the index of every 
 ## License
 
 [BSD-3-Clause](LICENSE). Chromium is © The Chromium Authors, BSD-3-Clause.
+
+Stedding is free, open-source software, provided as is, without warranty of any kind. You use
+it at your own risk: its authors and contributors are not liable for any damage, data loss,
+security problem or other harm that comes from using it, however it came about. The
+[licence](LICENSE) has the full terms.

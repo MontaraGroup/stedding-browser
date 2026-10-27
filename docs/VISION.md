@@ -67,7 +67,7 @@ for permission. Your profile, your data, your machine.
 
 **Privacy by default.** No telemetry by default, and none in the builds to turn on. Privacy protections
 are product features with the same quality bar as everything else, not
-checkbox settings buried three menus deep. Concrete commitments are in
+checkbox settings buried three menus deep. The concrete defaults are in
 `docs/PRIVACY.md`.
 
 **Openness.** The entire browser is developed in public under BSD-3-Clause.
@@ -369,9 +369,9 @@ make impossible: our core is BSD-licensed and forkable, so no acquisition or piv
 can take the product away.
 
 On 2026-10-22 The Browser Company told Arc users that Arc will be sunset on December 22,
-2026: Arc keeps basic updates until then, Arc accounts close that day, and personal data
-tied to an account is deleted within 30 days (its notice to users; stedding.dev/arc/ is the
-page for people moving).
+2026: Arc keeps basic updates until then; that day the app stops working on the Mac and on
+Windows, accounts close, and personal data tied to an account is deleted within 30 days (its
+notice to users, read again on 2026-10-23; stedding.dev/arc/ is the page for people moving).
 
 ### The Arc-style field after the sunset notice (2026-10-22)
 
@@ -386,14 +386,18 @@ Checked on GitHub and the projects' own sites on 2026-10-22; star counts move da
 | Crest | WebKit and a second engine (Swift) | Mac, iPhone, iPad | MPL-2.0 | about 500 | mobile apps, App Store, Peek | Mac and iOS only |
 | Refrax | WebKit (Swift) | Mac | GPL-3.0 | about 50 | — | one person's maximalist browser |
 | Nez | Chromium | Windows | no source found | — | Arc import on Windows, uBlock Origin built in, Glance, a mini window for links from other apps, split view of up to four | Windows only, closed |
-| Stedding | Chromium | Mac, Windows | BSD-3-Clause | 21 | full Chrome extensions, the most complete Arc import (Mac), Arc's model closest | reach; no Peek, no ad blocker, Arc import Mac-only, no Linux |
+| Stedding | Chromium | Mac, Windows | BSD-3-Clause | 21 | full Chrome extensions, the most complete Arc import, Peek, ad blocking built in (off by default), Arc's model closest | reach; no Linux |
+
+Stedding's own row was brought up to date on 2026-10-27: Arc import came to Windows in 0.3.0
+beta 13, and Peek and ad and tracker blocking in 0.3.0 beta 16, so the "Ahead of Stedding"
+column above is as it was judged on 2026-10-22.
 
 ### Direct and adjacent competitors
 
 #### Dia (The Browser Company / Atlassian)
 
-AI-centric browser and the successor product to Arc. Closed source; as of this
-writing available only on macOS 14+ with Apple Silicon. Dia's core interaction is
+AI-centric browser and the successor product to Arc. Closed source; on macOS, and on
+Windows since its 1.0 there (its changelog, October 2026, read on 2026-10-23). Dia's core interaction is
 chatting with an AI about your tabs, not Arc's workflow model, though it does ship
 tab groups, profiles and end-to-end encrypted sync. Under Atlassian, its roadmap points at
 work/enterprise use. Different lane: Dia bets on AI as the interface; we bet on the
@@ -573,7 +577,7 @@ copyleft conditions). No other project on this list offers all three.
 
 ### Why users would not pick us today
 
-Honesty section. As of 2026-10-19:
+Honesty section. As of 2026-10-27:
 
 - **A beta.** The macOS image (Apple silicon only) is signed and notarized and updates
   itself from beta 16 on; the Windows x64 preview updates itself from beta 19 on but is not
@@ -582,14 +586,15 @@ Honesty section. As of 2026-10-19:
 - **No track record.** Keeping a Chromium fork current with security updates is a
   treadmill that has broken larger teams. Until we demonstrate months of on-time
   stable rebases, trusting us with your daily browsing is a leap.
-- **No sync.** Google Sync is unavailable to Chromium forks (see PRIVACY.md), and
-  Stedding runs no sync service: a Space moves between machines as a file.
+- **No sync service.** Google Sync is unavailable to Chromium forks (see PRIVACY.md), and
+  Stedding runs no sync service: the sidebar travels through a folder the user's own sync
+  tool keeps, or as a file, while open tabs, history and passwords stay on each machine.
   Multi-device users lose real functionality.
 - **Small team, bus factor.** Brave has a company behind it; Zen has a large
   community. We have neither yet. The BSD license is the mitigation — anyone can
   pick up the work — but a license is not a maintainer.
-- **No Linux and no Intel Mac yet.** Windows is a preview: no signing, and links from
-  other applications open as tabs (`BACKLOG.md` S-56).
+- **No Linux and no Intel Mac yet.** Windows is a preview: its installer is not signed
+  (`BACKLOG.md` S-56).
 
 The bet is that the empty cell above is worth occupying anyway, and that shipping
 complete, polished milestones (see "The quality bar" in `ROADMAP.md`) closes the trust

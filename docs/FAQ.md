@@ -11,7 +11,7 @@ patches. See the [README](../README.md).
 It is open source and needs no account. A Space can keep its own sign-ins inside one profile,
 so one site can be signed in as work in one Space and as you in another. One switch turns
 every website dark, any page can become an app with a window of its own, and one step signs
-you out of the site in front of you and nothing else. Arc still has Peek, Boosts, Easels, the
+you out of the site in front of you and nothing else. Arc still has Boosts, Easels, the
 sidebar's mini player, the Library panel and Live Folders, sync and AI. The README has both
 lists: [What Arc never had](../README.md#what-arc-never-had) and
 [what Arc has that Stedding does not, yet](../README.md#what-arc-has-that-stedding-does-not-yet).
@@ -37,13 +37,22 @@ A haven. It is shaped on "steading", a farmstead, from "stead", an old word for 
 One maintainer, in the open. Open work is in [BACKLOG.md](../BACKLOG.md); what each round built
 is in [PROJECT-LOG.md](PROJECT-LOG.md).
 
+**Who is responsible if something goes wrong?**
+Stedding is free, open-source software under the [BSD-3-Clause licence](../LICENSE), provided
+as is and without warranty, so it is used at your own risk: its authors and contributors are
+not liable for any damage, data loss, security problem or other harm from using it, whatever
+the cause. Bug reports are welcome and bugs are fixed when they can be, but there is no promise
+of a fix, a date or support. It is a beta: keep your own copy of anything you cannot afford to
+lose.
+
 ## Installing and updating
 
 **Is the build signed, and is it safe?**
 The macOS image is signed with the project's Developer ID and notarized by Apple (from beta 10).
 The Windows installer is not signed yet, so SmartScreen asks once ([INSTALL.md](INSTALL.md)).
 Every release is built from this repository's patch series, with its SHA-256 checksum published
-beside the file.
+beside the file. A signature and a checksum show where a file came from, not that it is free of
+defects: Stedding is beta software, provided as is (see the question above).
 
 **Will it update itself?**
 Yes, on the Mac from 0.2.0 beta 16 and on Windows from 0.2.0 beta 19. It looks for a new version
@@ -180,7 +189,7 @@ folder keeps your Spaces, pins, pinned folders and essentials the same on your c
 through a folder you choose: one your own sync app keeps (iCloud Drive, OneDrive, Dropbox,
 Google Drive, Syncthing) or a shared drive. A folder nothing syncs keeps the file on this
 computer only, and Settings says so. Stedding has no server and sends nothing; your tool moves the files. Open
-tabs, history, passwords and sign-ins never travel. Or export a Space as a file (Export
+tabs, history, passwords and sign-ins are not part of the file. Or export a Space as a file (Export
 Space…) and import it on the other machine.
 
 **Do my extensions work?**
@@ -244,12 +253,13 @@ Chromium's ad-measurement APIs off, search suggestions off, and DuckDuckGo until
 engine. Most are switches in Settings → Stedding → Privacy.
 
 **Where is my data?**
-On your machine only: `~/Library/Application Support/Stedding` on macOS,
-`%LOCALAPPDATA%\Stedding` on Windows.
+In your profile on your own computer: `~/Library/Application Support/Stedding` on macOS,
+`%LOCALAPPDATA%\Stedding` on Windows. The project runs no server that keeps a copy, so back it
+up as you would any other files.
 
 **Does the hover card keep pictures of my tabs?**
 Only in memory. Hovering a tab that is not on screen shows a picture of its page as you last
-saw it; the picture is never written to disk or sent, and it goes when the tab closes or the
+saw it; the picture is not written to disk or sent, and it goes when the tab closes or the
 browser quits. Settings → Appearance → **Show tab preview images** turns the pictures off.
 
 ## Contributing
@@ -260,7 +270,8 @@ Use a beta for a day and open an issue for each thing that is worse than what yo
 
 **I found a security problem.**
 Use private vulnerability reporting on the repository's Security tab
-([SECURITY.md](../SECURITY.md)), not a public issue.
+([SECURITY.md](../SECURITY.md)), not a public issue. Reports are welcome; there is no promised
+response time, fix or support.
 
 **Where does a new contributor start?**
 [AGENTS.md](../AGENTS.md), then [HANDOFF.md](HANDOFF.md).

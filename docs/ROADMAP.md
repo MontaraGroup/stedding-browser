@@ -369,6 +369,14 @@ Acceptance criteria:
 
 ## M10 — Beyond parity
 
+> **Partly released.** 0.3.0 beta 16 brought ad and tracker blocking's first phase (`S-88`,
+> off by default), clean links (`S-89`), shortcuts the user can change (`S-91`), the rebuilt
+> Peek (`S-93`), the sidebar on the right (`S-96`), History and Downloads in the sidebar
+> (`S-98`), import from Dia and Safari's export file (`S-101`) and the site controls panel in
+> part (`S-118`). Left: a web app's chords (`S-90`), Back returning to a child tab's opener
+> (`S-92`), "Show here / Go to window" (`S-94`), the mini player (`S-95`), the Chrome-family
+> importer, and the later slices of blocking; `BACKLOG.md` has each one's state.
+
 **Goal:** what Arc never had, and what two newer Arc-style browsers showed people want:
 Nook and Aura, read on 2026-10-11 (`docs/VISION.md`, "Competitors"). Their code is not used -- Swift
 on WebKit, under GPL-3.0 and MPL-2.0 -- and their behaviours are rebuilt from written

@@ -13,6 +13,10 @@ yet**, which means one SmartScreen prompt (`S-56` in [BACKLOG.md](../BACKLOG.md)
 version updates itself from beta 16 on, the first release built with its updater, and the
 Windows version from beta 19 on.
 
+Stedding is beta software, provided as is, without warranty, under its
+[BSD-3-Clause licence](../LICENSE); installing and using it is at your own risk. Before it
+holds your everyday browsing, keep a copy of anything you cannot afford to lose.
+
 ## macOS (Apple silicon)
 
 Requirements: a Mac with an M-series chip (M1 or later) and macOS 13 or later. Intel
@@ -135,9 +139,10 @@ setup**, then six steps, each one skippable (five before beta 14, which added st
 named along the top so you can see what is left:
 
 1. Choose a search engine.
-2. Import from Arc, or through Chromium's importer from Safari (bookmarks) or
-   Firefox (bookmarks and history) on macOS, and from Firefox, Internet Explorer or the old
-   Edge on Windows. Chrome, Brave and the new Edge cannot be imported yet.
+2. Import from Arc; from Dia, or the file Safari exports (bookmarks, history and
+   passwords); or through Chromium's importer from Safari (bookmarks) or Firefox (bookmarks
+   and history) on macOS, and from Firefox, Internet Explorer or the old Edge on Windows.
+   Chrome, Brave and the new Edge cannot be imported yet.
 3. Pick the colour scheme (system, light or dark) and a Space colour.
 4. Choose how Stedding behaves: whether idle tabs are archived (Never until you choose),
    whether the closed sidebar shrinks to icons or hides, and whether a Space sleeps after

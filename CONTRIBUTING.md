@@ -14,8 +14,8 @@ what kinds of contributions are useful right now.
   for each thing that is worse. Most of the work so far has followed exactly this kind
   of feedback; what is open from it is in `BACKLOG.md`.
 - **Ideas.** An issue that asks for a feature is read as a suggestion: the owner decides
-  what is built, and an idea that is turned down is recorded in `BACKLOG.md` with the reason
-  (`S-254`, essentials per Space, is one). An issue that reports a bug is fixed.
+  what is built, and an idea that is turned down is recorded in `BACKLOG.md` with the reason.
+  An issue that reports a bug is welcome, and is fixed when it can be.
 - **Discussions and issues.** Questions, critiques of the plan, prior art we missed,
   Chromium fork experience, packaging and signing knowledge — open a GitHub issue or
   discussion. Disagreement with a documented decision is welcome; argue against the
@@ -121,4 +121,6 @@ and Ghostty.
 
 There is **no CLA**. By contributing you agree that your contributions are licensed
 under the project's [BSD-3-Clause license](LICENSE), the same terms as the rest of
-the repository.
+the repository: offered as is, without warranty, by you as by everyone else. The project
+may accept, change or remove any contribution, and takes on no duty to maintain or support
+it.

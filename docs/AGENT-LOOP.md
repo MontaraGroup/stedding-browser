@@ -324,8 +324,8 @@ optional.
 different workflows" (**87** and **74** upvotes on the related requests). Peek is the
 in-window overlay; Little Arc is an independent OS window with a global hotkey for links
 from other applications. Building one does not satisfy the other. `PRODUCT.md` specifies
-both, which the evidence supports. *Since:* both were built; Peek is switched off until it
-is rebuilt (`BACKLOG.md` S-93), and the little window runs on the Mac only.
+both, which the evidence supports. *Since:* both were built, and Peek was rebuilt on the
+little window (`BACKLOG.md` S-93, released in 0.3.0 beta 16); both run on the Mac and Windows.
 
 **Sync is the largest unmet demand in this space — and we have it out of scope.**
 `ROADMAP.md` excludes sync services and `PRIVACY.md` commits to running no accounts.

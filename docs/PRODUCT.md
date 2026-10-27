@@ -121,7 +121,7 @@ yet, `docs/features/library.md`) and a `+`.
   merged by ids that survive a restart (`features/import.md` I18, I20;
   `features/sidebar-file.md` Sf2, Sf6). Scheduled backups and the version-2 catalog are
   **[cut]**; sync through a folder is below.
-- **Sync through a folder** **[1.0, built, not released]** — off by default; each computer
+- **Sync through a folder** **[1.0, released in 0.3.0 beta 16]** — off by default; each computer
   writes its sidebar to its own file in a folder the user picks and merges the others',
   field by field, with removals only from the user's own action, large batches and Space
   deletions held for a yes, Undo and backups. Not a sync service: no account, no server, no
@@ -142,7 +142,7 @@ yet, `docs/features/library.md`) and a `+`.
   sidebar's own menu, the Mac's View menu and the command bar puts the sidebar at the
   window's right in every window at once; its edge, rail, handle and reveal edge mirror, and
   the Mac's traffic lights stay left over the address row (`features/sidebar.md` Y34–Y43,
-  `S-96`). Written, not yet built.
+  `S-96`). Released in 0.3.0 beta 16.
 
 ## 2. Spaces
 
@@ -259,7 +259,8 @@ yet, `docs/features/library.md`) and a `+`.
   main window (`features/little.md` E8, E9); `⌘O` or the row's "Open in Stedding" button
   moves the page into the main window (a new one when none is open) and `⇧⌘O` into a
   split, as the page's menu and the File menu also offer (E7). It has no Space commands
-  (`PLAN.md` decision 9). The Mac only: on Windows such links open as tabs (`S-56`).
+  (`PLAN.md` decision 9). On Windows since 0.3.0 beta 7, with Windows' own title bar
+  (`features/little.md` E10).
   Diverging from Arc: no global `⌥⌘N` to open one (`⌥⌘N` splits, as `⌃⌘N` does,
   little E5), and a little window is never closed for being idle, where Arc archives it
   after 6 hours (the idle close is **[cut]**; little E3).
@@ -369,11 +370,10 @@ may ship later as an optional local heuristic (ADR 0020; no spec row yet).
 - **Keyboard shortcut customisation** **[1.0]** — the Shortcuts block in Settings is
   editable (`S-91`, `features/shortcuts.md` Z5, Z10–Z22): record a chord, a conflict named
   before it is taken, a switch per command, Reset per row and for all, search and a group
-  filter. The chords are the computer's, kept in Local State. Written 2026-10-25, not yet
-  built.
+  filter. The chords are the computer's, kept in Local State. Released in 0.3.0 beta 16.
 - **Site Control Center** **[1.0]** — per-site permissions and controls from the address
   area: Chromium's page info with Stedding's controls in it, from the site chip and the
-  command bar (`features/site-controls.md`, `S-118`; written, not yet built). The
+  command bar (`features/site-controls.md`, `S-118`; released in part in 0.3.0 beta 16). The
   blocker's switch joins it with `S-88`. Its entry to Boosts waits on Boosts.
 - **Developer Mode** **[1.0]** — a localhost page always shows the address row
   (`features/toolbar.md` T11), and its tab is marked in the sidebar as Arc marks it:

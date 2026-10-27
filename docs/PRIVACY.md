@@ -9,6 +9,13 @@ services in the Chromium base are removed or replaced is in ARCHITECTURE.md
 Anything the shipping browser does on the network that is not listed here is a
 bug. Report it through SECURITY.md.
 
+What follows describes how the browser is built to behave and what the project intends. It
+is not a contract or a guarantee: a defect of any kind can make a build behave otherwise, and
+Stedding is provided as is, without warranty, under its BSD-3-Clause licence (`LICENSE`).
+The sites you visit, the extensions you install, the search engine you pick, and services
+such as GitHub, Google's update servers or the sync tool you choose are run by others, under
+their own terms and privacy policies; using them is your choice.
+
 A beta named here by its number alone is one of the 0.2.0 betas; 0.3.0 beta 1 follows
 0.2.0 beta 21.
 
@@ -213,8 +220,8 @@ automatic darkening is on; it cannot read the lists.
 
 ### History and Downloads in the sidebar — nothing fetched
 
-The sidebar's History and Downloads panels (`features/sidebar-panels.md`, written
-2026-10-25, not yet built) make no network request. Their page is built into the browser;
+The sidebar's History and Downloads panels (`features/sidebar-panels.md`, released in
+0.3.0 beta 16) make no network request. Their page is built into the browser;
 site icons come from the profile's own favicon cache, never from a favicon server, and a site
 with no icon there shows the default globe; file icons come from the system. The History panel
 reads the local history through Chromium's own handler, which could read Google's web history

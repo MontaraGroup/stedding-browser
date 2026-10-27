@@ -37,8 +37,9 @@ its items still open on 2026-10-14 are BACKLOG rows that name their ids.
 12. A top-level folder can join a Space's pinned run, and its tabs are then pins
     (2026-10-20; `docs/features/folders.md` F38). Essentials take no folder.
 13. On Windows the extension chord is Ctrl+Alt+E (2026-10-20; `docs/features/toolbar.md` T39).
-14. Essentials stay shared by every Space, as in Arc (2026-10-21): no essentials of one Space,
-    and no setting for them (`S-254`, GitHub issue 8).
+14. Essentials stay shared by every Space, as in Arc (2026-10-21), except in a Space with an
+    Independent session, which has essentials of its own and shows only those (2026-10-22,
+    ADR 0028; `S-254`, GitHub issue 8). There is no setting for them.
 15. Spaces switch with a sideways scroll over the sidebar, as in Arc (2026-10-21, GitHub
     issue 10): a tilt wheel and Shift with the wheel, on Windows also a touchpad's sideways
     scroll and Ctrl with the wheel; no Control with the wheel on the Mac, and a vertical

@@ -20,13 +20,17 @@ A good report includes:
 
 ## Response expectations
 
-This is a small project without a dedicated security team. Honestly stated:
+This is a small open-source project with one maintainer and no security team. Reports are
+welcome and read, but nothing here is a promise:
 
-- We aim to acknowledge reports within **7 days**.
-- Triage and a fix timeline depend on severity and maintainer availability; there is
-  no guaranteed SLA.
-- We will keep you informed inside the private advisory and credit you in the fix
+- We try to acknowledge a report soon; there is no promised response time.
+- Whether and when a fix follows depends on severity and on the maintainer's time; there is
+  no promised fix, timeline or support.
+- We try to keep you informed inside the private advisory, and credit you when a fix ships
   (unless you prefer otherwise).
+
+Stedding is provided as is, without warranty, under the [BSD-3-Clause licence](LICENSE): a
+security problem, reported or not, is covered by the same terms as any other defect.
 
 ## Scope
 
@@ -66,8 +70,9 @@ ours.
 
 ## Supported versions
 
-Only the newest pre-release for each platform is supported: some releases carry one
-platform's image only, so the newest macOS image and the newest Windows installer can
+Only the newest pre-release for each platform is supported, which here means only that a
+fix, when there is one, goes into a newer release, not that any help or fix is promised.
+Some releases carry one platform's image only, so the newest macOS image and the newest Windows installer can
 come from different betas. Older betas are superseded on the day a newer one for their
 platform is published and receive no fixes; there is no long-term support line, and
 there will not be one before 1.0.
