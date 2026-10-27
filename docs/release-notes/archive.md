@@ -2,6 +2,59 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 20
+
+Settings that breathe. On Chromium 156.0.8078.48.
+
+### Changed
+
+- **Settings › Stedding, tidied.** Every row has room around it and says what it does in one
+  short line. Export, sync and the Arc import have a card of their own, **Sync and import**,
+  and each Space names its **Independent session** switch.
+- **Sync through a folder works with any folder** your computers share: iCloud, Dropbox,
+  Syncthing, Nextcloud, a network share. The note that a folder seems unsynced no longer
+  shows for Syncthing, Nextcloud, ownCloud, MEGA, Seafile, Synology Drive, Proton Drive,
+  Tresorit, pCloud or Resilio folders.
+
+### Fixed
+
+- The Shortcuts list showed a grey disc beside every key instead of its remove button.
+
+### Install
+
+- **macOS** (Apple silicon, macOS 13 or later): `Stedding-0.3.0-beta.20-arm64.dmg`, signed and
+  notarized. Open it and drag Stedding to Applications.
+- **Windows** (10 and 11, x64): `Stedding-0.3.0-beta.20-win-x64.exe`, installs for you alone.
+  It is not signed yet: in SmartScreen click **More info**, then **Run anyway**, once.
+
+Installed copies update themselves (Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19).
+
+### Checksums (SHA-256)
+
+```
+30c48338ac0a78d88a603ec0c8e563cb4a1bc880f038ca5df0b626267612bb6d  Stedding-0.3.0-beta.20-arm64.dmg
+78a183c4064a38cb3bf2ef80235563e90815e548aaf9a54cfe6e34cde19574ab  Stedding-0.3.0-beta.20-win-x64.exe
+```
+
+### Known limits
+
+- The Windows installer is unsigned (`S-56`).
+- Netflix, Disney+ and Spotify's web player do not play yet (`S-270`).
+- Chromium 156's built-in list of sites that must load over HTTPS lapses on 13 December 2026;
+  a release on a newer base comes before then.
+
+### How it was checked
+
+Every unit and browser test on the Mac (1248 unit and 56 component tests; 605 browser tests,
+and 150 one at a time) and on Windows, in the release build and the build with DCHECKs (each
+1243 unit tests; 565 browser tests, and 156 one at a time): all passed. The AddressSanitizer
+build was not run this round. The new Settings page was looked over in the built app, every
+card and every line. Apple's distribution check passed the signed app, and Gatekeeper accepted
+it from the downloaded image. On Windows the installer went over an installed beta 19, after an
+uninstall that kept the profile, and the installed program is the one the tests ran. From the
+published feeds, a copy of beta 19 on the Mac offered this version 48 seconds after launch, and
+an installed beta 19 on Windows had it 20 seconds after launch and was on it after a restart.
+
 ## Stedding 0.3.0 beta 19
 
 Settings in cards, a quieter essential, and pinned tabs that drag where you expect. On
