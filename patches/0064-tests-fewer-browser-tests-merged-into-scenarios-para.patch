@@ -5393,7 +5393,7 @@ index a75b863dffbfb..35445c5c20130 100644
        EXPECT_LT(tabs_listed.find(u"a.test"), tabs_listed.find(u"b.test"))
            << "the folder's tabs are listed in its order: " << tabs_listed;
        EXPECT_LT(tabs_listed.find(u"b.test"), tabs_listed.find(u"c.test"))
-@@ -459,536 +260,808 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
+@@ -459,536 +260,829 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
      ASSERT_EQ(1, folder_items) << "Recently Closed has no item for the folder";
      menu.ExecuteCommand(restore_folder, 0);
    }
@@ -5556,6 +5556,27 @@ index a75b863dffbfb..35445c5c20130 100644
 +        [&]() { return tab_strip_model()->count() == 5; }));
 +    EXPECT_EQ(folder, ParentOf(2)) << "right after its opener, in the folder";
 +    EXPECT_NE(folder, ParentOf(4));
++  }
++
++  {
++    // folders F25, BACKLOG S-324: a typed new tab on a folder's last tab,
++    // when it is also the window's last tab, opens as a loose tab outside
++    // the folder rather than joining it.
++    SCOPED_TRACE("new tab from the last tab opens outside the folder");
++    CloseDownToOne();
++    tabs::FolderTabCollection* const folder = MakeFolder();
++    ASSERT_TRUE(folder);
++    tab_strip_model()->CloseWebContentsAt(
++        3, TabCloseTypes::CLOSE_USER_GESTURE);
++    ASSERT_EQ(3, tab_strip_model()->count());
++    tab_strip_model()->ActivateTabAt(2);
++
++    chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
++
++    ASSERT_EQ(4, tab_strip_model()->count());
++    const int new_tab_index = tab_strip_model()->active_index();
++    EXPECT_EQ(3, new_tab_index) << "at the end of the window";
++    EXPECT_NE(folder, ParentOf(new_tab_index)) << "outside the folder";
 +  }
  
 -// TAB-6: Move Tabs Out of Folder on a nested folder that has a later sibling

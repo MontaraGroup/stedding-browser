@@ -12161,7 +12161,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  }
  
  bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
-@@ -5195,8 +5338,24 @@ void TabStripModel::InsertTabAtIndexImpl(
+@@ -5195,8 +5338,37 @@ void TabStripModel::InsertTabAtIndexImpl(
    }
  
    tabs::TabInterface* old_active_tab = GetActiveTab();
@@ -12178,9 +12178,22 @@ index 8422cb4717630..559b82bcdd8ba 100644
 +  // kNoTab, one before the first slot, and its folder is that window's
 +  // (GitHub issue 44).
 +  const int opener_index = GetIndexOfTab(opener);
++  content::WebContents* const contents =
++      tab_ptr ? tab_ptr->GetContents() : nullptr;
++  const content::NavigationEntry* const pending =
++      contents ? contents->GetController().GetPendingEntry() : nullptr;
++  // A tab opened from a page (a link with an opener, a duplicate, a popup or
++  // target=_blank) joins the folder; a typed address, a search or a new tab
++  // does not (folders F25, BACKLOG S-324).
++  const bool link_or_duplicate =
++      (contents && contents->GetOpener()) ||
++      ((add_types & TabStripModel::ADD_INHERIT_OPENER) != 0) ||
++      (pending && ui::PageTransitionCoreTypeIs(pending->GetTransitionType(),
++                                              ui::PAGE_TRANSITION_LINK));
 +  const bool joined_folder =
 +      !pin && !group.has_value() && opener && !opener->IsSplit() &&
 +      opener_index != kNoTab && index == opener_index + 1 &&
++      link_or_duplicate &&
 +      contents_data_->AddTabAfterInFolder(scoped_tab, opener);
 +  if (!joined_folder) {
 +    contents_data_->AddTabRecursive(std::move(scoped_tab), index, group, pin);
