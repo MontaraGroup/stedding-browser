@@ -27,6 +27,21 @@ the overhead budgets; the live list (`--sites live`, `tooling/measure/sites.txt`
 only the absolute budgets. Each new file names the build, the configuration and the pin
 it measured.
 
+What it measures, before quoting anything it prints:
+
+- **Startup** is launch to the first painted frame of a trivial local page, the working
+  reading of "first accepted input". One warm-up launch is discarded: a binary's first run
+  also pays to fault it into the page cache, once per machine, not once per start.
+- **Memory** is physical footprint (what Activity Monitor shows, read with
+  `proc_pid_rusage`), summed over the launched process and its descendants. Summed RSS
+  counts every shared page once per process: it read 9599 MB for a session that cost
+  3104 MB.
+- **Processes** run to three figures with site isolation. The harness prints the count,
+  since a count that moves between two builds is itself a finding.
+- Measure `official`, not `release`, which skips PGO and LTO. A `--sites live` run takes
+  tens of minutes and needs the network; without it the memory and warm legs fail and the
+  harness says so. `--sites local` runs offline.
+
 ## The record of 2026-09-02
 
 Apple M1 Max, 64 GB; both apps built in `official` at 153.0.8010.12, Stedding with the

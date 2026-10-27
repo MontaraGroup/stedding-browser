@@ -392,96 +392,11 @@ Stedding's own row was brought up to date on 2026-10-27: Arc import came to Wind
 beta 13, and Peek and ad and tracker blocking in 0.3.0 beta 16, so the "Ahead of Stedding"
 column above is as it was judged on 2026-10-22.
 
-### Direct and adjacent competitors
+### Two open-source Arc-style browsers read closely
 
-#### Dia (The Browser Company / Atlassian)
-
-AI-centric browser and the successor product to Arc. Closed source; on macOS, and on
-Windows since its 1.0 there (its changelog, October 2026, read on 2026-10-23). Dia's core interaction is
-chatting with an AI about your tabs, not Arc's workflow model, though it does ship
-tab groups, profiles and end-to-end encrypted sync. Under Atlassian, its roadmap points at
-work/enterprise use. Different lane: Dia bets on AI as the interface; we bet on the
-workflow UI Arc abandoned.
-
-#### Zen Browser
-
-Open-source (MPL-2.0), Firefox/Gecko-based browser with an Arc-like UI: vertical
-sidebar, workspaces, compact mode, split view, "Glance" previews, community mods.
-Actively developed with a large community (tens of thousands of GitHub stars) and
-regular releases tracking Firefox. Zen is our closest spiritual peer — same thesis
-(the Arc model deserves to live, in the open), different engine lane. The decisive
-difference: Zen inherits Firefox's extension ecosystem and web compatibility
-profile. Users who need Chrome extensions or Chromium-only site behavior cannot
-switch to Zen. That is the lane we occupy, and why we did not simply join Zen
-(see AGENTS.md: Firefox base considered and rejected).
-
-#### Helium
-
-Open-source (GPL-3.0) Chromium-based browser by imput, with Google service
-dependencies removed, built-in ad/tracker blocking, and a deliberately minimal
-interface. In beta on macOS, Windows, and Linux; no native sync. Helium validates
-our technical approach — a small, maintained patch set on Chromium with the Google
-services stripped — and we study it for that reason. Helium's product thesis is
-minimalism, but the gap is narrower than it was: it now ships vertical tabs, split
-view and tab groups. What it does not ship is the layer above those — workspaces and
-a command bar — which is where Stedding's differentiation actually sits. Also copyleft
-(GPL) where we are permissive (BSD).
-
-#### Thorium
-
-Chromium fork by a solo developer (Alex313031) focused on compiler-level
-performance optimizations (AVX2/SSE4 builds and similar), with Chrome-like
-features restored. Open source, BSD-3-Clause, active releases across platforms.
-Thorium competes on raw speed claims, not workflow or privacy defaults, and ships
-a stock Chrome-style UI. No overlap with our product surface; some overlap in
-audience (users willing to run a niche Chromium fork).
-
-#### Brave
-
-The most prominent privacy-positioned Chromium browser. Open source (MPL-2.0), full
-Chrome extension support, ad/tracker blocking on by default, solid engineering,
-long track record of tracking Chromium stable. Brave's business model is the
-friction point for our audience: opt-in Brave Rewards paying users in BAT
-cryptocurrency, sponsored new-tab background images shown by default, crypto
-wallet and widgets built in, and a history of trust incidents (notably the 2020
-affiliate-link autocomplete episode). Ships a conventional horizontal-tab UI
-(vertical tabs exist as an option, not as the organizing model). Users who want
-Brave's privacy without the crypto/ads surface area are a core Stedding audience.
-
-#### Vivaldi
-
-Power-user Chromium browser: tab stacks, tiling/split view, workspaces, notes,
-built-in mail and calendar, deep customization. Full extension support; revenue
-comes from search deals and partner placements rather than from an ad product of its
-own. The blocker for us and our users: Vivaldi's UI layer is proprietary
-and closed source (Vivaldi has publicly explained why it won't open it), and the
-browser sends a documented user-counting ping with an installation identifier. A
-feature-rich browser you cannot audit or fork is not in our lane.
-
-#### Floorp
-
-Open-source (MPL-2.0) Firefox-based browser from the Japanese Ablaze community:
-vertical tabs, workspaces, web panels, heavy customization. Same engine-lane
-limitation as Zen (Firefox extensions only), with a smaller community and a less
-Arc-shaped design. Adjacent, not competing.
-
-#### SigmaOS
-
-Closed-source, Mac-only, WebKit-based browser aimed at task-based work browsing
-(pages as todo items, spaces, AI features), on a freemium model. macOS-only by
-design. Notably it does support Chromium extensions despite the engine — the vendor
-calls it "the first Webkit browser to support Chrome extensions" — so the engine
-choice does not cost users their extensions the way it normally would. Interesting
-interaction ideas; different engine, different openness, different audience breadth.
-
-#### Horse Browser
-
-Closed-source, paid (subscription) browser by a solo developer. Replaces tabs
-entirely with "Trails" — a persistent tree of pages that preserves how you got
-somewhere — and markets to users with ADHD. Chromium-based; added extension support
-in August 2026. A genuinely novel navigation model, but a niche, closed, paid
-product. Evidence that small teams can ship real browser UX innovation — and of how
-much distribution a solo closed product can't get.
+The browsers in the tables are compared there; longer notes on each, as read on
+2026-08-30, are in this file's git history. Nook and Aura were read in more detail,
+because ideas from them are rebuilt here from these descriptions (ADR 0021).
 
 #### Nook
 
