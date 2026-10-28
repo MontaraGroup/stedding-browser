@@ -10,6 +10,30 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-28 -- Chromium 157 prepared, not released
+
+The owner asked for the move to Chromium 157 to be prepared and not released. Google's
+schedule puts M157 on the stable channel on 2026-11-03; the series sits on 157.0.8103.31, the
+stable cut, on the local branch `m157` (`tooling/chromium-version` and `patches/`, not pushed).
+The rebase changed 69 of the 110 patches and added 0111; what M157 changed under them is
+`docs/HANDOFF.md` trap 134. Reviews of the whole range-diff in four parts, each by two other
+reviewers, found lost braces, colliding toast ids, a dropped default and a Windows-only link
+gap before the compiler did.
+
+- Two M157 defaults are off again in patch 0074: `kUseActionsForBrowserCommands`, under which
+  no Stedding command was enabled (the keyboard, the menus and the command bar did nothing),
+  and `kWebAppInstallDialog`, whose new dialog Add to Dock and Install page as app are not
+  built on.
+- Mac: 1287 unit, 56 component, 610 browser and 116 of Chromium's tab tests (the rebase ring)
+  pass. Windows: 1283 unit and 727 browser tests pass. The full runs found the two flags above
+  and four tests whose assumptions M157 changed: it pins an extension when it is installed (the
+  hidden-row tests now unpin what they load; whether Stedding should pin is `S-241`'s open
+  decision), and it makes the omnibox popup's window at its first show (the motion test skips
+  with that reason until it shows one first, `S-278`). The suites those fixes touch were run
+  again on both machines; both checkouts hold the same series, tree for tree.
+- Nine upstream tests of Chromium's own sidebar header and group focus mode, which Stedding's
+  window hides, are disabled with the reason; `gn check` is `S-335`.
+
 ## 2026-10-27 -- 0.3.0 beta 22: GitHub issues 50, 48 and 13, pull request 49
 
 The owner asked for issue 50 with a confirmation, issue 48, and a release. Issue 50 is patch

@@ -1743,6 +1743,58 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     layout change: when the essentials went to one row (0.3.0 beta 7) every row moved up 54
     points and the split scene's drag caught the row on screen, which makes no split (J13).
 
+134. **M157 split Chromium's `ui` target; a rebase that merges cleanly can still drop a fork's
+    dependency, brace or number.** The move from 156.0.8078.48 to 157.0.8103.31 (2026-10-27)
+    changed 69 of the 110 patches (`git range-diff`) and added one (0111). What changed under
+    the series:
+    - `//chrome/browser/ui:ui` is gone. Its dependencies moved to `//chrome/browser`'s
+      `browser` target, and many of its sources to small source sets of their own (the region
+      view and the browser view in `chrome/browser/ui/views/frame/BUILD.gn`, the command
+      controller, tab restore, the tab strip). A dependency the series had put on `ui` now sits
+      on `//chrome/browser`, which links it but does not let the small set include it:
+      `gn check` lists every such include. A dependency that had sat in a platform block of
+      `ui` must land where every platform links it: the update pill and the thank-you pages
+      landed in the Mac block, and Windows would not have linked.
+    - Per-tab helpers are attached in `TabFeatures` (`chrome/browser/ui/tabs/tab_features.cc`,
+      at the tab's start and when its contents are replaced), not in `tab_helpers.cc`. The
+      dark-pages helper and Peek's press went there.
+    - Upstream took toast ids 61 and 62: Stedding's are 63 to 71, 68 retired. Two patches
+      that merged without a conflict still carried their 156 numbers, and two enumerators
+      shared a value.
+    - A test that merged as "both sides" next to an upstream test added at the same place
+      lost the closing brace between them (two files). Read the end of every such merge.
+    - Upstream launched three of the defaults patch 0074 turned on (CJK word boundaries in
+      tab search, the Aperitif helpers, HTTPS-First balanced mode); the payment request's
+      small-window rule it did not, and patch 0074 keeps that one.
+    - `TabStripModel::GetIndicesClosedByCommand` became `HasIndicesClosedByCommand` and
+      `GetTabsClosedByCommand`; the download button is an interface (`DownloadButton`) whose
+      views implementation draws the ring and the badge, so the sidebar's button has one of
+      its own (`SteddingDownloadButtonViews`).
+    - The expand-on-hover click delay and its handler left upstream; the region view keeps
+      Stedding's own. `TabGroupHeaderView` has `GetHeaderInsets()` and `GetCornerRadii()`; the
+      contents' lower corner is set in `DoPostLayoutVisualAdjustments`; page info takes a
+      `Surface`; the GCM client's version is read in `components/fcm/engine`.
+    - `kUseActionsForBrowserCommands` is on in M157: the command controller then keeps its
+      state in actions and knows only the commands mapped to one, so every Stedding command
+      (55100 to 55199) read as disabled and none ran, from the keyboard, the menus or the
+      command bar. Patch 0074 turns it off, which is M156's updater; the unit tests caught it
+      (`SpaceCommandTest`, `CommandBarViewTest`); the build had not.
+    - `BrowserWithTestWindowTest` lost its browser, its window and `AddTab()`; patch 0111 puts
+      them back for Stedding's unit tests. Upstream's new tests of Chromium's own sidebar
+      header (the combo button, the segmented control) and of the group focus mode, which
+      Stedding's window hides and its tab menu does not offer, are disabled with the reason.
+    - M157 pins an extension to the toolbar when it is installed (Stedding follows it until
+      the owner decides `S-241`), and makes the omnibox popup's window at its first show, not
+      with the window.
+    - `gn check` reports some 380 includes a split target reaches only through
+      `//chrome/browser`; they build and link (BACKLOG `S-335`). `gn check --fix` adds
+      dependencies that make cycles: fix them by hand, target by target.
+
+    What worked: the rebase in a sparse worktree (`git worktree add --no-checkout`, then
+    `sparse-checkout`), so the main checkout kept building; `zdiff3`; independent reviews of
+    the whole `git range-diff` in four parts, which found the lost braces, the colliding toast
+    ids, the dropped payment default and the Windows-only link gap before the compiler did.
+
 ## The Windows build
 
 Git for Windows for the bash tooling, PowerShell for the rest, Visual Studio's own
