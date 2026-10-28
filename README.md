@@ -12,7 +12,7 @@ account, no telemetry, BSD-3-Clause.
 [![Latest release](https://img.shields.io/github/v/release/ysalitrynskyi/stedding-browser?include_prereleases&label=download&color=2F4858)](https://github.com/ysalitrynskyi/stedding-browser/releases)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-E8B04B)](LICENSE)
 ![Platforms: macOS and Windows](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-1C2B33)
-![Chromium 156](https://img.shields.io/badge/Chromium-156%20stable-2F4858)
+![Chromium 157](https://img.shields.io/badge/Chromium-157%20stable-2F4858)
 
 [stedding.dev](https://stedding.dev) · [Download](#download) · [Shortcuts](docs/SHORTCUTS.md) ·
 [FAQ](docs/FAQ.md) · [Privacy](docs/PRIVACY.md) · [Build](#building-from-source)
@@ -121,7 +121,7 @@ Each feature has a specification naming the test behind every behaviour:
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.3.0 beta 22**, for macOS and Windows, on Chromium 156.0.8078.48.
+is **0.4.0 beta 1**, for macOS and Windows, on Chromium 157.0.8103.31.
 
 | Platform | File | |
 |---|---|---|
@@ -197,7 +197,7 @@ behave as they do in Chrome.
 
 | Part | In Stedding | |
 |---|---|---|
-| Engine | Chromium 156, stable channel | ✓ |
+| Engine | Chromium 157, stable channel | ✓ |
 | Chrome extensions | From the Chrome Web Store, as in Chrome | ✓ |
 | H.264 and AAC | The video and audio codecs plain Chromium leaves out | ✓ |
 | DevTools | Chromium's own | ✓ |
