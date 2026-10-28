@@ -4,33 +4,37 @@ Date: Tue, 27 Oct 2026 20:55:19 -0400
 Subject: feat: a pinned tab's x asks before removing it
 
 GitHub issue 50 (pins H29; BACKLOG S-332): the close button on a Space pin
-that is not on screen had put it to sleep, like the one on screen, and
-removing a pin took the tab menu's Unpin and then a close. Now the pin on
-screen shows a minus, which puts it to sleep at its home and keeps it (H3),
-and any other Space pin an x that asks first: a bubble at the button,
-"Remove this pinned tab?" with Remove and Cancel, Cancel the default, so
-Return alone removes nothing. Remove closes the row, both panes of a split,
-as a row's close button closes a tab, so the pin goes with it and Reopen
-Closed Tab can bring it back. Cmd-W, a middle click and the tab menu keep
-H3's rule, and with Cmd-W's setting off the button closes as before.
+that was not on screen had put it to sleep, like the one on screen, and
+removing a pin took the tab menu's Unpin and then a close. Now a Space pin
+that is awake, on screen or not, shows a minus, which puts it to sleep at
+its home and keeps it (H3); once it is asleep at its home it shows an x
+that asks first: a bubble at the button, "Remove this pinned tab?" with
+Remove and Cancel, Cancel the default, so Return alone removes nothing. The
+button turns from one to the other as the pin sleeps or wakes, under the
+pointer too. Remove closes the row, both panes of a split, as a row's close
+button closes a tab, so the pin goes with it and Reopen Closed Tab can bring
+it back. Cmd-W, a middle click and the tab menu keep H3's rule, and with
+Cmd-W's setting off the button closes as before.
 
 Why: the owner asked for it, with a confirmation so the user really
-confirms a removal.
+confirms a removal, and then for the minus first on every pin that is
+awake, so a press only puts a pin to sleep and removing one takes a second
+press and a confirmation.
 Removable when: never as a feature; the tab_view.cc and tab_close_button
 hunks go if Chromium's vertical tab strip grows its own pinned-tab close
 rule.
 ---
- chrome/browser/ui/stedding/pin_lifecycle.cc   | 47 ++++++++++
- chrome/browser/ui/stedding/pin_lifecycle.h    | 16 ++++
- .../browser/ui/views/tabs/common/tab_view.cc  | 87 +++++++++++++++++--
- .../browser/ui/views/tabs/common/tab_view.h   | 11 +++
- .../ui/views/tabs/tab/tab_close_button.cc     | 14 ++-
- .../ui/views/tabs/tab/tab_close_button.h      |  8 ++
- .../stedding/sidebar_click_browsertest.cc     | 87 +++++++++++++++++--
- 7 files changed, 253 insertions(+), 17 deletions(-)
+ chrome/browser/ui/stedding/pin_lifecycle.cc   |  53 ++++++++
+ chrome/browser/ui/stedding/pin_lifecycle.h    |  16 +++
+ .../browser/ui/views/tabs/common/tab_view.cc  | 108 ++++++++++++++--
+ .../browser/ui/views/tabs/common/tab_view.h   |  11 ++
+ .../ui/views/tabs/tab/tab_close_button.cc     |  14 ++-
+ .../ui/views/tabs/tab/tab_close_button.h      |   8 ++
+ .../stedding/sidebar_click_browsertest.cc     | 115 ++++++++++++++++--
+ 7 files changed, 308 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding/pin_lifecycle.cc b/chrome/browser/ui/stedding/pin_lifecycle.cc
-index 82fa940de9b92..a3998cfc5f928 100644
+index 82fa940de9b92..564f7899d292c 100644
 --- a/chrome/browser/ui/stedding/pin_lifecycle.cc
 +++ b/chrome/browser/ui/stedding/pin_lifecycle.cc
 @@ -5,6 +5,7 @@
@@ -41,7 +45,7 @@ index 82fa940de9b92..a3998cfc5f928 100644
  #include <memory>
  #include <optional>
  #include <string>
-@@ -378,6 +379,52 @@ CloseAction CloseActionForRow(BrowserWindowInterface* browser,
+@@ -378,6 +379,58 @@ CloseAction CloseActionForRow(BrowserWindowInterface* browser,
    return CloseActionForTabs(browser, prefs, model->SplitPeers(tab));
  }
  
@@ -57,14 +61,20 @@ index 82fa940de9b92..a3998cfc5f928 100644
 +  spaces::SpaceModel* const model = spaces::SpaceModel::From(browser);
 +  const tabs::TabInterface* const active =
 +      browser->GetTabStripModel()->GetActiveTab();
-+  bool on_screen = false;
++  bool awake = false;
 +  bool space_pinned = false;
 +  for (tabs::TabInterface* peer : model->SplitPeers(tab)) {
-+    on_screen = on_screen || peer == active;
++    // Awake: something is left for the minus to do, as UnloadAtHome decides
++    // it. The pin on screen is always so. Only the x had been shown on a
++    // pin that was not on screen, awake or not (the owner, 2026-10-28).
++    const std::optional<GURL> home = model->HomeUrl(peer);
++    const bool asleep_at_home = home && IsAllowedPinHome(*home)
++                                    ? IsAsleepAt(peer, *home)
++                                    : IsAsleep(peer);
++    awake = awake || peer == active || !asleep_at_home;
 +    space_pinned = space_pinned || model->IsSpacePinned(peer);
 +  }
-+  return on_screen || !space_pinned ? RowClose::kSleep
-+                                    : RowClose::kAskToRemove;
++  return awake || !space_pinned ? RowClose::kSleep : RowClose::kAskToRemove;
 +}
 +
 +void RemovePinnedRow(BrowserWindowInterface* browser,
@@ -95,7 +105,7 @@ index 82fa940de9b92..a3998cfc5f928 100644
    TabStripModel* const tabs = browser ? browser->GetTabStripModel() : nullptr;
    return tabs && SleepOrLeaveToClose(browser, Selection(tabs));
 diff --git a/chrome/browser/ui/stedding/pin_lifecycle.h b/chrome/browser/ui/stedding/pin_lifecycle.h
-index 8a46207879611..a132f3599a10c 100644
+index 8a46207879611..4ac6898c8dc58 100644
 --- a/chrome/browser/ui/stedding/pin_lifecycle.h
 +++ b/chrome/browser/ui/stedding/pin_lifecycle.h
 @@ -65,6 +65,22 @@ bool SleepInsteadOfClose(BrowserWindowInterface* browser);
@@ -103,9 +113,9 @@ index 8a46207879611..a132f3599a10c 100644
                                tabs::TabInterface* tab);
  
 +// H29 (GitHub issue 50): what the close button on `tab`'s row does. A Space
-+// pin on screen shows a minus and goes to sleep by H3's rule; any other Space
-+// pin shows an x that asks first, and then removes it: unpinned and closed.
-+// Everything else is CloseActionForRow's.
++// pin that is awake, on screen or not, shows a minus and goes to sleep by H3's
++// rule; one asleep at its home shows an x that asks first, and then removes
++// it: unpinned and closed. Everything else is CloseActionForRow's.
 +enum class RowClose {
 +  kClose,
 +  kSleep,
@@ -122,7 +132,7 @@ index 8a46207879611..a132f3599a10c 100644
  // the menu was opened on, or the selection that holds it): its row shows
  // Cmd-W's shortcut, and does what Cmd-W does (the owner, 2026-10-20). It
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index d9d40dc9c5659..d1a35d7fc187e 100644
+index d9d40dc9c5659..b99d9dd3da121 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -100,6 +100,7 @@
@@ -178,7 +188,35 @@ index d9d40dc9c5659..d1a35d7fc187e 100644
  
    UpdateFocusFreezing();
  
-@@ -1913,15 +1924,24 @@ void TabView::UpdateContrastRatioValues() {
+@@ -1629,6 +1640,27 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+   if (old_data.is_tab_discarded != tab_data_.is_tab_discarded) {
+     UpdateColors();
+   }
++  // Stedding pins H29: a pin that falls asleep at its home, or wakes, swaps
++  // its minus and its x, under the pointer too.
++  if (old_data.is_tab_discarded != tab_data_.is_tab_discarded ||
++      old_data.last_committed_url != tab_data_.last_committed_url) {
++    UpdatePinCloseButton();
++  }
++  // A discard is told before the tab holds its new contents
++  // (TabDataObserver::OnTabDiscarded), when the old ones still read as awake,
++  // so the button is decided again once the tab holds them. It stayed a minus
++  // on a pin asleep at its home.
++  if (old_data.is_tab_discarded != tab_data_.is_tab_discarded) {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(
++                       [](base::WeakPtr<TabView> row, tabs::TabHandle handle) {
++                         if (row && handle.Get() &&
++                             handle.Get() == row->GetTabInterface()) {
++                           row->UpdatePinCloseButton();
++                         }
++                       },
++                       weak_ptr_factory_.GetWeakPtr(), tab->GetHandle()));
++  }
+ 
+   icon_->SetData(tab_data_);
+   icon_->SetActiveState(tab->IsActivated());
+@@ -1913,15 +1945,24 @@ void TabView::UpdateContrastRatioValues() {
  void TabView::CloseButtonPressed(const ui::Event& event) {
    CHECK(collection_node_);
  
@@ -187,12 +225,12 @@ index d9d40dc9c5659..d1a35d7fc187e 100644
 -  // to sleep while Cmd-W's setting is on, and stays a pin. It closed the pin
 -  // for good. Any other row closes, below.
 +  // Stedding (pins H3, H29, PLAN.md TAB-25; GitHub issue 50): the close
-+  // button on the Space pin on screen does what Cmd-W does with it, by the
-+  // one rule: it goes to sleep while Cmd-W's setting is on and stays a pin,
-+  // and the button is a minus. On any other Space pin it is an x that asks
-+  // first and then removes the pin: it had put that pin to sleep too, and
-+  // removing one took the tab menu's Unpin and then a close. Any other row
-+  // closes, below.
++  // button on a Space pin that is awake, on screen or not, does what Cmd-W
++  // does with it, by the one rule: it goes to sleep while Cmd-W's setting is
++  // on and stays a pin, and the button is a minus. On a Space pin asleep at
++  // its home it is an x that asks first and then removes the pin: it had put
++  // that pin to sleep again, and removing one took the tab menu's Unpin and
++  // then a close. Any other row closes, below.
    if (tabs::TabInterface* const tab =
 -          const_cast<tabs::TabInterface*>(GetTabInterface());
 -      tab && stedding::SleepInsteadOfClosingRow(
@@ -211,7 +249,7 @@ index d9d40dc9c5659..d1a35d7fc187e 100644
    }
  
    if (active_) {
-@@ -1957,6 +1977,57 @@ void TabView::CloseButtonPressed(const ui::Event& event) {
+@@ -1957,6 +1998,57 @@ void TabView::CloseButtonPressed(const ui::Event& event) {
        from_mouse ? CloseTabSource::kFromMouse : CloseTabSource::kFromTouch);
  }
  
@@ -270,7 +308,7 @@ index d9d40dc9c5659..d1a35d7fc187e 100644
    auto* tab_strip_view = GetTabStripView(this);
    CHECK(tab_strip_view);
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.h b/chrome/browser/ui/views/tabs/common/tab_view.h
-index f2c092b344247..4f7b178efc333 100644
+index f2c092b344247..6ba2a48573104 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.h
 @@ -136,6 +136,11 @@ class TabView : public views::View,
@@ -289,8 +327,8 @@ index f2c092b344247..4f7b178efc333 100644
    void UpdateContrastRatioValues();
  
    void CloseButtonPressed(const ui::Event& event);
-+  // Stedding pins H29 (GitHub issue 50): the close button's minus on the
-+  // Space pin on screen, and the question before any other is removed.
++  // Stedding pins H29 (GitHub issue 50): the close button's minus on a Space
++  // pin that is awake, and the question before one asleep is removed.
 +  void UpdatePinCloseButton();
 +  void AskToRemovePin(tabs::TabInterface* tab);
    void RecordMousePressedInTab();
@@ -332,16 +370,16 @@ index 775a64fad9668..082e5fdd04a4f 100644
                           : kCloseTabChromeRefreshOldIcon;
  
 diff --git a/chrome/browser/ui/views/tabs/tab/tab_close_button.h b/chrome/browser/ui/views/tabs/tab/tab_close_button.h
-index 957cc621a610b..e6a8cead218b8 100644
+index 957cc621a610b..745b8da43d1cb 100644
 --- a/chrome/browser/ui/views/tabs/tab/tab_close_button.h
 +++ b/chrome/browser/ui/views/tabs/tab/tab_close_button.h
 @@ -40,6 +40,12 @@ class TabCloseButton : public views::LabelButton,
    // theme changes.
    void SetColors(TabStyle::TabColors colors);
  
-+  // Stedding pins H29 (GitHub issue 50): the close button on the Space pin on
-+  // screen is a minus, since it puts the pin to sleep and keeps it (H3); the
-+  // x on any other Space pin asks before removing it.
++  // Stedding pins H29 (GitHub issue 50): the close button on a Space pin that
++  // is awake is a minus, since it puts the pin to sleep and keeps it (H3); the
++  // x on one asleep at its home asks before removing it.
 +  void SetKeepsPin(bool keeps_pin);
 +  bool keeps_pin() const { return keeps_pin_; }
 +
@@ -358,7 +396,7 @@ index 957cc621a610b..e6a8cead218b8 100644
  
  #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_TAB_CLOSE_BUTTON_H_
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index fb9d9aef66584..c602003353d4f 100644
+index fb9d9aef66584..5ab20768306f4 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
 @@ -2230,10 +2230,21 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
@@ -366,17 +404,17 @@ index fb9d9aef66584..c602003353d4f 100644
  
      {
 -      SCOPED_TRACE("the close button on a pin asleep at home");
-+      // pins H29 (GitHub issue 50): asleep, the pin is not on screen, so its
-+      // close button is an x that asks before removing it. Cancel keeps it,
-+      // asleep at home. The button had put it to sleep again.
-+      SCOPED_TRACE("the close button on a pin not on screen asks first");
++      // pins H29 (GitHub issue 50): asleep at its home, the pin's close
++      // button is an x that asks before removing it. Cancel keeps it, asleep
++      // at home. The button had put it to sleep again.
++      SCOPED_TRACE("the close button on a pin asleep at home asks first");
        ASSERT_NO_FATAL_FAILURE(press_close_button(pin));
 -      base::RunLoop().RunUntilIdle();
 -      EXPECT_EQ(count, tabs->count()) << "the close button closed the pin";
 +      TabView* const row = RowFor(tabs->GetIndexOfTab(pin));
 +      ASSERT_TRUE(row);
 +      EXPECT_FALSE(row->close_button_for_testing()->keeps_pin())
-+          << "a minus on a pin that is not on screen";
++          << "a minus on a pin asleep at home";
 +      views::Widget* const bubble = row->pin_remove_bubble_for_testing();
 +      ASSERT_TRUE(bubble) << "no question before removing a pin";
 +      bubble->widget_delegate()->AsDialogDelegate()->CancelDialog();
@@ -386,16 +424,18 @@ index fb9d9aef66584..c602003353d4f 100644
        EXPECT_TRUE(model->IsSpacePinned(pin));
        EXPECT_TRUE(pin->GetContents()->WasDiscarded());
        EXPECT_EQ(home, pin->GetContents()->GetLastCommittedURL());
-@@ -2303,6 +2314,41 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
+@@ -2303,6 +2314,58 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
        dialog->view()->AcceptAppModalDialog();  // Leave.
        ASSERT_NO_FATAL_FAILURE(expect_closed_by_the_rule(pin));
      }
 +
 +    {
-+      // pins H29 (GitHub issue 50): on screen, the pin's close button is a
-+      // minus that keeps it; on another Space pin the x asks, and Remove
-+      // unpins and closes it, in one step: it had taken Unpin and a close.
-+      SCOPED_TRACE("Remove takes a pin that is not on screen");
++      // pins H29 (GitHub issue 50): awake, on screen or not, the pin's close
++      // button is a minus that sleeps it and keeps it; asleep at its home it
++      // is an x that asks, and Remove unpins and closes it, in one step: it
++      // had taken Unpin and a close. A pin awake but not on screen had shown
++      // the x at once (the owner, 2026-10-28).
++      SCOPED_TRACE("first the minus, then Remove takes the pin");
 +      // A Space pin of its own: the steps below still play with `pin`.
 +      ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
 +          browser(), home, WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -411,7 +451,22 @@ index fb9d9aef66584..c602003353d4f 100644
 +          << "no minus on the pin on screen";
 +      on_screen->UpdateHovered(false);
 +      tabs->ActivateTabAt(tabs->GetIndexOfTab(before));
++      ASSERT_NO_FATAL_FAILURE(WaitForRowsToSettle());
++      TabView* const awake = RowFor(tabs->GetIndexOfTab(second));
++      ASSERT_TRUE(awake);
++      awake->UpdateHovered(true);
++      EXPECT_TRUE(awake->close_button_for_testing()->keeps_pin())
++          << "an x on an awake pin that is not on screen";
 +      const tabs::TabHandle handle = second->GetHandle();
++      ASSERT_NO_FATAL_FAILURE(press_close_button(second));
++      ASSERT_TRUE(base::test::RunUntil([&]() {
++        return !handle.Get() || handle.Get()->GetContents()->WasDiscarded();
++      })) << "the minus did not sleep the pin";
++      ASSERT_TRUE(handle.Get()) << "the minus closed the pin";
++      EXPECT_EQ(with_second, tabs->count());
++      TabView* const slept = RowFor(tabs->GetIndexOfTab(second));
++      ASSERT_TRUE(slept);
++      EXPECT_FALSE(slept->pin_remove_bubble_for_testing()) << "the minus asked";
 +      ASSERT_NO_FATAL_FAILURE(press_close_button(second));
 +      TabView* const row = RowFor(tabs->GetIndexOfTab(second));
 +      ASSERT_TRUE(row);
@@ -428,11 +483,11 @@ index fb9d9aef66584..c602003353d4f 100644
    }();
  
    // pins H3, tabs R4 (the owner, 2026-10-21): a pin closed while it plays
-@@ -2445,8 +2491,32 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
+@@ -2445,24 +2508,60 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
      tabs::TabInterface* const plain = tab_strip_model()->GetActiveTab();
      const int count = tab_strip_model()->count();
  
-+    // pins H29 (GitHub issue 50): the x on a Space pin that is not on screen
++    // pins H29 (GitHub issue 50): the x on a Space pin asleep at its home
 +    // asks before removing it; Cancel leaves it as it was.
 +    const auto cancel_the_question = [&](tabs::TabInterface* tab) {
 +      TabView* const row = RowFor(tabs->GetIndexOfTab(tab));
@@ -446,37 +501,49 @@ index fb9d9aef66584..c602003353d4f 100644
 +
      {
 -      SCOPED_TRACE("the close button on an awake Space pin sleeps it");
-+      SCOPED_TRACE("the x on an awake Space pin not on screen asks first");
-+      ASSERT_NO_FATAL_FAILURE(press_close_button(pin));
-+      ASSERT_NO_FATAL_FAILURE(cancel_the_question(pin));
-+      ASSERT_TRUE(pin_handle.Get()) << "Cancel closed the pin";
-+      EXPECT_FALSE(pin->GetContents()->WasDiscarded()) << "Cancel slept it";
-+      EXPECT_EQ(count, tab_strip_model()->count());
-+      EXPECT_TRUE(model->IsSpacePinned(pin));
-+      EXPECT_EQ(plain, tab_strip_model()->GetActiveTab());
-+    }
-+
-+    {
-+      SCOPED_TRACE("the minus on the Space pin on screen sleeps it");
-+      tabs->ActivateTabAt(tabs->GetIndexOfTab(pin));
++      // A pin awake but not on screen had shown the x, which asked to remove
++      // it (the owner, 2026-10-28: first the minus, then the x).
++      SCOPED_TRACE("the minus on an awake Space pin not on screen sleeps it");
        ASSERT_NO_FATAL_FAILURE(press_close_button(pin));
        ASSERT_TRUE(base::test::RunUntil([&]() {
          return !pin_handle.Get() ||
-@@ -2455,14 +2525,15 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
+                pin_handle.Get()->GetContents()->WasDiscarded();
+-      }));
++      })) << "the minus did not sleep the pin";
        ASSERT_TRUE(pin_handle.Get()) << "the close button closed the pin";
++      TabView* const row = RowFor(tabs->GetIndexOfTab(pin));
++      ASSERT_TRUE(row);
++      EXPECT_FALSE(row->pin_remove_bubble_for_testing()) << "the minus asked";
        EXPECT_EQ(count, tab_strip_model()->count());
        EXPECT_TRUE(model->IsSpacePinned(pin));
--      EXPECT_EQ(plain, tab_strip_model()->GetActiveTab());
-+      EXPECT_EQ(plain, tab_strip_model()->GetActiveTab())
-+          << "not the row used before the pin";
+       EXPECT_EQ(plain, tab_strip_model()->GetActiveTab());
++      // Still under the pointer, the button is now the x.
++      ASSERT_TRUE(base::test::RunUntil(
++          [&]() { return !row->close_button_for_testing()->keeps_pin(); }))
++          << "the minus stayed on a pin asleep at home";
      }
  
      {
 -      SCOPED_TRACE("the close button on a sleeping Space pin leaves it a pin");
-+      SCOPED_TRACE("the x on a sleeping Space pin asks too");
++      SCOPED_TRACE("the minus on the Space pin on screen sleeps it");
++      tabs->ActivateTabAt(tabs->GetIndexOfTab(pin));
        ASSERT_NO_FATAL_FAILURE(press_close_button(pin));
 -      base::RunLoop().RunUntilIdle();
 -      ASSERT_TRUE(pin_handle.Get()) << "the close button closed a sleeping pin";
++      ASSERT_TRUE(base::test::RunUntil([&]() {
++        return !pin_handle.Get() ||
++               pin_handle.Get()->GetContents()->WasDiscarded();
++      }));
++      ASSERT_TRUE(pin_handle.Get()) << "the close button closed the pin";
++      EXPECT_EQ(count, tab_strip_model()->count());
++      EXPECT_TRUE(model->IsSpacePinned(pin));
++      EXPECT_EQ(plain, tab_strip_model()->GetActiveTab())
++          << "not the row used before the pin";
++    }
++
++    {
++      SCOPED_TRACE("the x on a sleeping Space pin asks too");
++      ASSERT_NO_FATAL_FAILURE(press_close_button(pin));
 +      ASSERT_NO_FATAL_FAILURE(cancel_the_question(pin));
 +      ASSERT_TRUE(pin_handle.Get()) << "Cancel closed a sleeping pin";
        EXPECT_EQ(count, tab_strip_model()->count());

@@ -85,11 +85,13 @@ Yes. Settings → Stedding → Sidebar → **When the sidebar closes: Hide it co
 back. The same section sets row height, text size, width, and **Page flush against the window**.
 
 **What does closing a pinned tab do?**
-The same as in Arc: ⌘W (Ctrl+W), the tab's ✕, a middle click or **Close** on its menu unloads
-it and puts it back to the page you pinned, in its place, so it costs nothing until you open it
-again. A page that asks "Leave site?" asks first. To remove a pinned tab, choose **Unpin from
-This Space** or **Remove from Essentials** on its menu; or turn the rule off in Settings →
-Stedding → Tabs, and ⌘W, the ✕ and a middle click then close a pinned tab.
+⌘W (Ctrl+W), the − on its row, a middle click or **Close** on its menu unloads it and puts it
+back to the page you pinned, in its place, so it costs nothing until you open it again. A page
+that asks "Leave site?" asks first. Once the tab is asleep, its row shows an ✕ instead: click it
+and Stedding asks *Remove this pinned tab?*, and **Remove** unpins and closes it (⇧⌘T,
+Ctrl+Shift+T, brings it back). **Unpin from This Space** or **Remove from Essentials** on its
+menu remove one too. Turn the rule off in Settings → Stedding → Tabs, and ⌘W, the ✕ and a
+middle click then close a pinned tab.
 
 **Can I pin a tab by dragging it?**
 Yes, as in Arc. Drag a tab up over the line among the pinned tabs and it is pinned where you drop

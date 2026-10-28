@@ -10,6 +10,24 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-28 -- GitHub issue 50: the minus first
+
+The owner: a pinned tab that was awake but not on screen showed the x, which asked to remove
+it, where it should show the minus first; the x only once the tab is asleep. Patch 0110 (pins
+H29) now shows the minus on every Space pin that is awake, on screen or not, so the first press
+only puts it to sleep at its home; once it is asleep there the button is the x that asks
+*Remove this pinned tab?*. The new test step found the button still a minus on a pin just put to
+sleep: a discard tells the row before the tab holds its new contents (`docs/HANDOFF.md`, trap
+135), so the row now decides again once it does. The pin close test passes on both machines
+(three runs on Windows), and so do the pins unit tests and the whole Stedding browser suite but
+for five timeouts in other features' tests under the full run's load (the restore bar on the
+Mac; the address band, the site controls' jar and two panel tests on Windows), each of which
+passed three runs alone.
+On the Mac's release build, with the real pointer: the minus on the pin on screen and on the same
+pin awake behind another row, no question; asleep, the x under the pointer at once; the
+question, Escape keeping the pin, Remove taking it, and ⇧⌘T bringing it back pinned. Not tried
+with the real pointer on Windows.
+
 ## 2026-10-28 -- Chromium 157 prepared, not released
 
 The owner asked for the move to Chromium 157 to be prepared and not released. Google's

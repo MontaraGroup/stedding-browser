@@ -75,7 +75,7 @@ a moment before the next.
 | Split with the page on screen: drag a tab onto the page's left or right half, and let go when it lights | drag | drag |
 | Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
 | Reopen closed tabs, one at a time, each in its Space and folder (with Settings › Stedding › Tabs › Offer Undo after closing tabs on, the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
-| Close a pinned tab: it unloads and goes back to its pinned page, keeping its place (its ✕, a middle click and its menu's Close do the same) | ⌘W | Ctrl+W |
+| Close a pinned tab: it unloads and goes back to its pinned page, keeping its place (the − on its row, a middle click and its menu's Close do the same; once it is asleep, its ✕ asks to remove it) | ⌘W | Ctrl+W |
 
 ## Page
 

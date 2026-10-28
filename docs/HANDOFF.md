@@ -50,7 +50,7 @@ you, not the list.
 | What a test can and cannot prove | 2, 4, 31, 46, 48, 51, 52, 55, 56, 58, 59, 60, 66, 68, 69, 72, 75, 77, 78, 79, 80, 81, 84, 86, 87, 88, 91, 98, 99, 101, 102, 104, 106, 107, 110, 111, 112, 113, 114, 115, 119, 120, 126, 127 |
 | Windows | 32, 34, 36, 38, 40, 42, 53, 54, 55, 56, 57, 59, 62, 67, 68, 69, 70, 71, 74, 91, 93, 98, 99, 100, 101, 103, 106, 111, 113, 114, 115, 116, 118, 121, 122, 125, 128 |
 | Release and signing | 44, 47, 49, 62, 85, 117, 118, 124, 129, 131 |
-| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113, 122 |
+| Chromium's and the platforms' own behaviour to know | 6, 8, 20, 21, 25, 26, 33, 35, 39, 41, 43, 60, 72, 73, 92, 95, 97, 98, 104, 105, 107, 108, 109, 110, 111, 113, 122, 135 |
 
 ## Where things live
 
@@ -1794,6 +1794,15 @@ ApiTabsSplitView` (`chrome.tabs.createSplit`, `chrome.tabs.group`).
     `sparse-checkout`), so the main checkout kept building; `zdiff3`; independent reviews of
     the whole `git range-diff` in four parts, which found the lost braces, the colliding toast
     ids, the dropped payment default and the Windows-only link gap before the compiler did.
+
+135. **A row hears of a discard before its tab holds the discarded contents.** Chromium's discard
+    swaps the tab's contents; `TabDataObserver::OnTabDiscarded` runs from the tab's
+    will-discard callback, while the tab still holds the old, awake contents, and tells the row
+    the new state then. Anything the row decides from the tab itself there (`GetContents()`,
+    `WasDiscarded()`) reads the old page: pins H29's button stayed a minus on a pin just put to
+    sleep. Decide again once the swap is done (`TabView::UpdateTabData` posts a task), or read
+    the row's own `tab_data_`. Stedding's own sleep at home (`ReplaceWithHomeAsleep`) notifies
+    after its swap and does not have this.
 
 ## The Windows build
 
