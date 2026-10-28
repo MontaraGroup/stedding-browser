@@ -65,8 +65,8 @@ of its own (patches/README.md).
  .../ui/cocoa/main_menu_builder_unittest.mm    |  33 +
  .../ui/page_action/page_action_controller.cc  |  12 +
  .../ui/page_action/page_action_controller.h   |  10 +
- chrome/browser/ui/spaces/space_model.cc       | 199 ++++-
- chrome/browser/ui/spaces/space_model.h        |  28 +
+ chrome/browser/ui/spaces/space_model.cc       | 226 +++++-
+ chrome/browser/ui/spaces/space_model.h        |  35 +-
  .../ui/spaces/space_model_window_unittest.cc  | 420 ++++++++++
  chrome/browser/ui/stedding/BUILD.gn           |  21 +
  chrome/browser/ui/stedding/pin_lifecycle.cc   |  42 +-
@@ -130,7 +130,7 @@ of its own (patches/README.md).
  .../test/stedding/space_switch_browsertest.cc |  25 +
  .../test/stedding/startup_load_browsertest.cc | 549 ++++++++++++++
  chrome/test/stedding/tab_drop_browsertest.cc  | 322 +++++++-
- 90 files changed, 6835 insertions(+), 106 deletions(-)
+ 90 files changed, 6858 insertions(+), 117 deletions(-)
  create mode 100644 chrome/browser/performance_manager/policies/stedding_discard_veto.h
  create mode 100644 chrome/browser/ui/stedding/startup_load.cc
  create mode 100644 chrome/browser/ui/stedding/startup_load.h
@@ -1205,7 +1205,7 @@ index 4cd73ec060d4d..d4172619ea788 100644
    base::OnceCallbackList<void(PageActionController&)>
        on_will_destroy_callback_list_;
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index b37f2da5ac8d6..38645872f007d 100644
+index b37f2da5ac8d6..d86074423bdb5 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -28,6 +28,7 @@
@@ -1246,61 +1246,103 @@ index b37f2da5ac8d6..38645872f007d 100644
  
    // Membership is decided on insertion (B1). The window's features are built
    // before its first tab, so this normally observes an empty strip; any tab
-@@ -1020,8 +1037,17 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+@@ -993,9 +1010,11 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+     return;
+   }
+   // An essential is in every Space, so it is visible whichever Space is
+-  // active. After a close it stays on screen; after a switch it gives way to
+-  // the Space's own tab below, as any other tab does. It kept the screen, so
+-  // Ctrl-2 from the Gmail essential stayed on Gmail (PLAN.md SPC-16).
++  // active. After a close it stays on screen; after a switch it gives way
++  // unless it is the row this Space used last. A shared essential used in
++  // another Space is not that row: the uses are kept per Space. It kept the
++  // screen, so Ctrl-2 from the Gmail essential stayed on Gmail (PLAN.md
++  // SPC-16).
+   const tabs::TabInterface* const active = tab_strip_model_->GetActiveTab();
+   const bool on_an_essential = active && active->IsPinned();
+   if (active && IsTabInActiveSpace(active) &&
+@@ -1003,9 +1022,32 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+     return;
    }
  
-   // A tab that belongs to the Space beats an essentials tab, which is visible
+-  // Where the user left this Space, if that tab is still here and still in it.
+-  // A collapsed folder does not hide it: active again, it shows under the
+-  // header, as when the user left (folders F3). A collapsed group does.
++  // This run's uses of the Space, most recent first. An essential the Space
++  // shows counts: RecordActivation filed it under the Space that was active
++  // when it was used. last_active_ never holds one, and reading it first came
++  // back to the pin selected on the way in -- the Space's first pin -- even
++  // when an essential was the row used last (GitHub issue 42). A collapsed
++  // folder does not hide a row: active again, it shows under the header, as
++  // when the user left (folders F3). A collapsed group does.
++  if (const auto history = history_.find(active_id_);
++      history != history_.end()) {
++    for (const tabs::TabHandle& handle : history->second) {
++      tabs::TabInterface* const used = handle.Get();
++      const int index = used ? tab_strip_model_->GetIndexOfTab(used)
++                             : TabStripModel::kNoTab;
++      if (index == TabStripModel::kNoTab || !IsTabInActiveSpace(used) ||
++          tab_strip_model_->IsTabCollapsed(index)) {
++        continue;
++      }
++      tab_strip_model_->ActivateTabAt(
++          index, TabStripUserGestureDetails(
++                     TabStripUserGestureDetails::GestureType::kOther));
++      return;
++    }
++  }
++
++  // No use recorded this run (a restore): the tab of the Space's own the
++  // user left on screen, if it is still here and still in it.
+   if (const auto it = last_active_.find(active_id_); it != last_active_.end()) {
+     if (tabs::TabInterface* const remembered = it->second.Get()) {
+       const int index = tab_strip_model_->GetIndexOfTab(remembered);
+@@ -1019,9 +1061,18 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+     }
+   }
+ 
+-  // A tab that belongs to the Space beats an essentials tab, which is visible
 -  // everywhere and so tells the user nothing about where they are.
-+  // everywhere and so tells the user nothing about where they are. Of the
-+  // Space's own tabs, the one used most recently: this run's uses first,
-+  // then the time each was last on screen, which a session restore brings
-+  // back, and the first in the list only when nothing tells them apart. The
-+  // first in the list had been the rule, after a launch or once the tab used
-+  // last had closed: often a pinned tab asleep since the launch before
-+  // (GitHub issue 42).
++  // Nothing used this run and no tab of the Space's own left on screen: the
++  // time each tab was last on screen, which a session restore brings back,
++  // and the Space's first tab only when nothing tells them apart. The first
++  // in the list had been the rule, after a launch or once the tab used last
++  // had closed: often a pinned tab asleep since the launch before (GitHub
++  // issue 42). A shared essential takes no part: its time is the last time it
++  // was on screen in any Space, so it would open in every Space (ADR 0028). A
++  // Space's own essential does: only that Space shows it.
    int essentials = TabStripModel::kNoTab;
 +  int first_own = TabStripModel::kNoTab;
-+  int latest_own = TabStripModel::kNoTab;
++  int latest = TabStripModel::kNoTab;
 +  base::Time latest_shown;
    for (int i = 0; i < tab_strip_model_->count(); ++i) {
      tabs::TabInterface* const tab = tab_strip_model_->GetTabAtIndex(i);
      if (!IsTabInActiveSpace(tab) || tab_strip_model_->IsTabHidden(i)) {
-@@ -1033,18 +1059,48 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+@@ -1031,20 +1082,36 @@ void SpaceModel::EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way) {
+       if (essentials == TabStripModel::kNoTab) {
+         essentials = i;
        }
-       continue;
-     }
-+    if (first_own == TabStripModel::kNoTab) {
+-      continue;
++      if (!IsOwnEssential(tab)) {
++        continue;
++      }
++    } else if (first_own == TabStripModel::kNoTab) {
 +      first_own = i;
 +    }
 +    const base::Time shown = tab->GetContents()->GetLastActiveTime();
 +    if (!shown.is_null() &&
-+        (latest_own == TabStripModel::kNoTab || shown > latest_shown)) {
-+      latest_own = i;
++        (latest == TabStripModel::kNoTab || shown > latest_shown)) {
++      latest = i;
 +      latest_shown = shown;
-+    }
+     }
 +  }
-+  if (first_own != TabStripModel::kNoTab) {
-+    int own = TabStripModel::kNoTab;
-+    if (const auto it = history_.find(active_id_); it != history_.end()) {
-+      for (const tabs::TabHandle& handle : it->second) {
-+        tabs::TabInterface* const used = handle.Get();
-+        const int index = used ? tab_strip_model_->GetIndexOfTab(used)
-+                               : TabStripModel::kNoTab;
-+        if (index != TabStripModel::kNoTab && !used->IsPinned() &&
-+            IsTabInActiveSpace(used) && !tab_strip_model_->IsTabHidden(index)) {
-+          own = index;
-+          break;
-+        }
-+      }
-+    }
-+    if (own == TabStripModel::kNoTab) {
-+      own = latest_own != TabStripModel::kNoTab ? latest_own : first_own;
-+    }
++  if (latest != TabStripModel::kNoTab || first_own != TabStripModel::kNoTab) {
      tab_strip_model_->ActivateTabAt(
 -        i, TabStripUserGestureDetails(
 -               TabStripUserGestureDetails::GestureType::kOther));
-+        own, TabStripUserGestureDetails(
-+                 TabStripUserGestureDetails::GestureType::kOther));
++        latest != TabStripModel::kNoTab ? latest : first_own,
++        TabStripUserGestureDetails(
++            TabStripUserGestureDetails::GestureType::kOther));
      return;
    }
    if (essentials != TabStripModel::kNoTab) {
@@ -1319,7 +1361,7 @@ index b37f2da5ac8d6..38645872f007d 100644
      }
      return;
    }
-@@ -1356,6 +1412,36 @@ void SpaceModel::RecordActivation(tabs::TabInterface* tab) {
+@@ -1356,6 +1423,36 @@ void SpaceModel::RecordActivation(tabs::TabInterface* tab) {
    if (!tab || cycle_ || !IsTabInActiveSpace(tab)) {
      return;
    }
@@ -1356,7 +1398,7 @@ index b37f2da5ac8d6..38645872f007d 100644
    std::vector<tabs::TabHandle>& history = history_[active_id_];
    std::erase(history, tab->GetHandle());
    history.insert(history.begin(), tab->GetHandle());
-@@ -1415,6 +1501,107 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
+@@ -1415,6 +1512,107 @@ std::vector<tabs::TabInterface*> SpaceModel::RecentTabs(const SpaceId& id,
    return out;
  }
  
@@ -1465,7 +1507,7 @@ index b37f2da5ac8d6..38645872f007d 100644
    if (!tab_strip_model_ || delta == 0) {
      return false;
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index 51abf9a01ac7a..7b122d45f2ed1 100644
+index 51abf9a01ac7a..76837d8818fc0 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
 @@ -14,6 +14,7 @@
@@ -1499,7 +1541,21 @@ index 51abf9a01ac7a..7b122d45f2ed1 100644
    // switcher X1, X2: Ctrl-Tab. The first call of a run starts it: the recent
    // list of the active Space freezes so a held Ctrl walks it -- one step is
    // the previous tab, the next the one before that, wrapping -- and `delta`
-@@ -659,8 +676,19 @@ class SpaceModel : public TabStripModelObserver,
+@@ -608,9 +625,10 @@ class SpaceModel : public TabStripModelObserver,
+   // is, opening a new tab when the Space has none (B3, B4). With
+   // `essential_gives_way`, as after a switch, an essential on screen counts
+   // as not visible too: it is in every Space and says nothing of where the
+-  // user is, so the Space's own tab wins, and the essential stays only while
+-  // the Space has no tab of its own (PLAN.md SPC-16). No-op without a tab
+-  // strip, while the window is closing, or when the strip is empty.
++  // user is, so the row this Space used last wins -- an essential only when
++  // it is that row (GitHub issue 42) -- and the essential stays while the
++  // Space has no tab of its own (PLAN.md SPC-16). No-op without a tab strip,
++  // while the window is closing, or when the strip is empty.
+   void EnsureActiveSpaceHasAVisibleTab(bool essential_gives_way);
+ 
+   // B4, before `leaving` close (`closing`) or leave for another window's
+@@ -659,8 +677,19 @@ class SpaceModel : public TabStripModelObserver,
    std::map<SpaceId, tabs::TabHandle> last_active_;
    // switcher X1: per Space, the tabs in most-recently-active order. `tab`
    // was just activated in the active Space; a run in progress freezes it.

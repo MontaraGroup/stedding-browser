@@ -2,6 +2,28 @@
 
 What was built, newest first. Nothing here is needed to do a task: `AGENTS.md` carries what is true now, `BACKLOG.md` the order of work, `PLAN.md` the owner's decisions. This file was the "State of the project" section of `AGENTS.md` until 2026-09-30. This log starts at 2026-10-15. Closed work from before that is the table in [docs/history/archive.md](history/archive.md).
 
+## 2026-10-28 -- GitHub issues 14, 35 and 42
+
+On main, and not in a release; the owner asked for all three.
+
+- Issue 42: coming back to a Space lands on the essential used there last, ahead of the pin
+  the Space was entered on (spaces B3, folded into patches 0075 and 0083).
+- Issue 35: a collapsed folder keeps listing a pin that is awake; asleep, it folds away
+  (folders F3, patch 0112).
+- Issue 14: Settings › Stedding › Address field, full width or a field centred on the page at
+  800, 640 or 480 DIP, the row beside it moving the window (toolbar T48); and no "Ask Google
+  about this page" in the focused field (privacy Q17). Both in patch 0113.
+- Issue 43 needs no code: a ⌘Q is restored when On startup is Continue where you left off; the
+  report fits the New Tab page setting (BACKLOG S-323).
+
+## 2026-10-28 -- Every document reviewed
+
+Every document was checked line by line against the patches, the tooling and the releases,
+rewritten where it was false, stale or long, and checked again for errors. The records were
+cut to what is cited: the release-notes archive is gone (GitHub keeps every release's notes),
+the history archive is the table of closed items, the 2026-09-26 audit is an index of its ids,
+and each trap is its lesson.
+
 ## 2026-10-28 -- GitHub issue 50: the minus first
 
 On main, and not in a release. Patch 0110 (pins H29) shows a minus on every Space pin that is awake, on screen or not, so the first press only puts it to sleep at its home. Once it is asleep there, the button is the x that asks *Remove this pinned tab?*, with Cancel the default. Remove unpins and closes it, and Reopen Closed Tab brings it back. 0.3.0 beta 22 still asks on an awake pin that is not on screen. A discard tells the row before the tab holds its new contents, so the row decides again once it does (`docs/HANDOFF.md`, trap 135).

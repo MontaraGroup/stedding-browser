@@ -1,0 +1,528 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 28 Oct 2026 12:51:47 -0400
+Subject: feat: the address field's width as a setting, and no Ask Google line
+
+GitHub issue 14 (toolbar T48, privacy Q17). Settings > Stedding > Address
+field offers Full width, the default (T29), or a field centred on the page
+at 800, 640 or 480 DIP. A centred field keeps its width and place in every
+state, the suggestions open under it at its width, and the empty row either
+side of it moves the window: the two spacers are views of their own class
+that the caption hit test passes through. The spacers now always exist and
+are shown with a centred width; a change applies at once. A positive
+`location_bar_width` still overrides the setting.
+
+The focused field no longer offers "Ask Google about this page" with
+Google as the engine: Chromium's OmniboxContextualSearchOnFocusSuggestions
+is off, as the rest of that family already was.
+
+Why: the owner asked for both on 2026-10-28.
+Removable when: never as a feature; the toolbar hunks go if Chromium's
+toolbar grows its own width setting.
+---
+ .../api/settings_private/prefs_util.cc        |   2 +
+ .../stedding_page/stedding_page.html.ts       |  16 +++
+ .../ui/stedding/address_row_unittest.cc       |  15 +++
+ .../ui/stedding/privacy_defaults_unittest.cc  |  11 ++
+ chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
+ chrome/browser/ui/stedding/stedding_prefs.h   |   4 +
+ chrome/browser/ui/stedding_ui_metrics.cc      |  16 ++-
+ chrome/browser/ui/stedding_ui_metrics.h       |  11 ++
+ .../views/location_bar/location_bar_view.cc   |   8 ++
+ .../ui/views/location_bar/location_bar_view.h |   3 +
+ .../browser/ui/views/toolbar/toolbar_view.cc  | 121 ++++++++++++------
+ .../browser/ui/views/toolbar/toolbar_view.h   |   6 +
+ .../browser/ui/webui/settings/settings_ui.cc  |   9 ++
+ .../test/stedding/address_band_browsertest.cc |  34 +++++
+ .../omnibox/common/omnibox_feature_configs.cc |   6 +-
+ 15 files changed, 224 insertions(+), 39 deletions(-)
+
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 743958674f75c..700e2635439c4 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -319,6 +319,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kNumber;
+   (*s_allowlist)[stedding::prefs::kToolbarHideWithSidebar] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stedding::prefs::kToolbarFieldWidth] =
++      settings_api::PrefType::kNumber;
+   (*s_allowlist)[stedding::prefs::kLittleEnabled] =
+       settings_api::PrefType::kBoolean;
+   // privacy Q4, Q5: the rows Chromium's own pages do not carry.
+diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+index 198ae9cbb6cdd..f6f0fd9020e3b 100644
+--- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
++++ b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
+@@ -130,6 +130,22 @@ export function getHtml(this: SettingsSteddingPageElement) {
+       label="$i18n{steddingHideAddressRowLabel}"
+       sub-label="$i18n{steddingHideAddressRowSubLabel}">
+   </settings-toggle-button>
++  <div class="hr settings-box">
++    <div class="start" id="fieldWidthLabel">
++      <div class="label">$i18n{steddingFieldWidthLabel}</div>
++      <div class="secondary">$i18n{steddingFieldWidthSubLabel}</div>
++    </div>
++    <settings-dropdown-menu id="fieldWidth"
++        pref-key="stedding.toolbar.field_width"
++        label="$i18n{steddingFieldWidthLabel}"
++        .menuOptions="${[
++          {value: 0, name: '$i18n{steddingFieldWidthFull}'},
++          {value: 800, name: '$i18n{steddingFieldWidthWide}'},
++          {value: 640, name: '$i18n{steddingFieldWidthMedium}'},
++          {value: 480, name: '$i18n{steddingFieldWidthCompact}'},
++        ]}">
++    </settings-dropdown-menu>
++  </div>
+   <settings-toggle-button
+       id="holdCmdNumbers"
+       class="hr"
+diff --git a/chrome/browser/ui/stedding/address_row_unittest.cc b/chrome/browser/ui/stedding/address_row_unittest.cc
+index 62006850fe7a4..7b3744ab6ad23 100644
+--- a/chrome/browser/ui/stedding/address_row_unittest.cc
++++ b/chrome/browser/ui/stedding/address_row_unittest.cc
+@@ -162,6 +162,21 @@ TEST_F(AddressRowTest, TheWholeAddressIsShownByDefault) {
+ // the row it is offered. With a width asked for (`location_bar_width`) it
+ // holds that width where the row has the room and gives it back when the row
+ // is tight, and it never goes under its own minimum (operator, 2026-09-05).
++// toolbar T48 (GitHub issue 14): the widths the setting offers, and the
++// whole row for any other value.
++TEST(AddressRowWidthTest, TheSettingsWidths) {
++  base::test::ScopedFeatureList features(stedding::kArcStyleWindow);
++  ASSERT_EQ(0, stedding::kLocationBarWidth.Get());
++  EXPECT_EQ(0, LocationBarCap(0));
++  EXPECT_EQ(800, LocationBarCap(800));
++  EXPECT_EQ(640, LocationBarCap(640));
++  EXPECT_EQ(480, LocationBarCap(480));
++  EXPECT_EQ(0, LocationBarCap(500)) << "a width the setting does not offer";
++  EXPECT_EQ(480, LocationBarWidthForCap(1000, 120, 1300, 480));
++  EXPECT_EQ(300, LocationBarWidthForCap(1000, 120, 300, 480))
++      << "a tight row gives the centred field back its room";
++}
++
+ TEST(AddressRowWidthTest, Width) {
+   constexpr int kMinimum = 120;
+   constexpr int kAsks = 220;
+diff --git a/chrome/browser/ui/stedding/privacy_defaults_unittest.cc b/chrome/browser/ui/stedding/privacy_defaults_unittest.cc
+index 7c2a7a4071567..ee4a9846395b4 100644
+--- a/chrome/browser/ui/stedding/privacy_defaults_unittest.cc
++++ b/chrome/browser/ui/stedding/privacy_defaults_unittest.cc
+@@ -17,6 +17,7 @@
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/content_settings/core/common/pref_names.h"
+ #include "components/embedder_support/pref_names.h"
++#include "components/omnibox/common/omnibox_feature_configs.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/prefs/testing_pref_service.h"
+ #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
+@@ -79,6 +80,16 @@ TEST(PrivacyDefaultsTest, AutofillAsksNoServer) {
+       autofill::features::debug::kAutofillServerCommunication));
+ }
+ 
++// privacy Q17 (GitHub issue 14): a focused address field offers no "Ask
++// Google about this page" line and asks for no suggestions about the page.
++TEST(PrivacyDefaultsTest, TheFocusedFieldAsksGoogleNothingAboutThePage) {
++  EXPECT_FALSE(base::FeatureList::IsEnabled(
++      omnibox_feature_configs::ContextualSearch::
++          kOmniboxContextualSearchOnFocusSuggestions));
++  EXPECT_FALSE(omnibox_feature_configs::ContextualSearch::Get()
++                   .show_open_lens_action);
++}
++
+ TEST(PrivacyDefaultsTest, GpcSwitchFollowsTheLocalState) {
+   EXPECT_EQ("GlobalPrivacyControlForce",
+             EnableFeaturesWithGlobalPrivacyControl("", true));
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.cc b/chrome/browser/ui/stedding/stedding_prefs.cc
+index 9dda84f84d758..97b9138f56977 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.cc
++++ b/chrome/browser/ui/stedding/stedding_prefs.cc
+@@ -35,6 +35,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // collapsed window had no address bar, and the owner read that as the row
+   // disappearing (toolbar T8, T12; 2026-10-01). The setting still hides it.
+   registry->RegisterBooleanPref(kToolbarHideWithSidebar, false);
++  registry->RegisterIntegerPref(kToolbarFieldWidth, 0);
+   registry->RegisterBooleanPref(kBookmarksConverted, false);
+   registry->RegisterListPref(kSpaceRegistry);
+   registry->RegisterBooleanPref(kLittleEnabled, true);
+diff --git a/chrome/browser/ui/stedding/stedding_prefs.h b/chrome/browser/ui/stedding/stedding_prefs.h
+index 04493368237e4..593817b398ac9 100644
+--- a/chrome/browser/ui/stedding/stedding_prefs.h
++++ b/chrome/browser/ui/stedding/stedding_prefs.h
+@@ -52,6 +52,10 @@ inline constexpr char kArchiveKeepDays[] = "stedding.archive.keep_days";
+ // default since 2026-10-01.
+ inline constexpr char kToolbarHideWithSidebar[] =
+     "stedding.toolbar.hide_with_sidebar";
++// toolbar T48 (GitHub issue 14): the address field's width. 0 is the whole
++// row between the button clusters (T29); a positive value is a field of that
++// many DIP, centred on the page, with the row beside it dragging the window.
++inline constexpr char kToolbarFieldWidth[] = "stedding.toolbar.field_width";
+ // little E4: links from other apps open in a small window.
+ inline constexpr char kLittleEnabled[] = "stedding.little.enabled";
+ // windows G3: the profile's Space list (ADR 0016).
+diff --git a/chrome/browser/ui/stedding_ui_metrics.cc b/chrome/browser/ui/stedding_ui_metrics.cc
+index a3780d9ef1bef..8efee8d373119 100644
+--- a/chrome/browser/ui/stedding_ui_metrics.cc
++++ b/chrome/browser/ui/stedding_ui_metrics.cc
+@@ -229,7 +229,21 @@ int SidebarCornerRadius() {
+ int LocationBarWidthFor(int preferred,
+                         int minimum,
+                         std::optional<int> available) {
+-  const int cap = kLocationBarWidth.Get();
++  return LocationBarWidthForCap(preferred, minimum, available,
++                                kLocationBarWidth.Get());
++}
++
++int LocationBarCap(int setting) {
++  if (const int param = kLocationBarWidth.Get(); param > 0) {
++    return param;
++  }
++  return setting == 800 || setting == 640 || setting == 480 ? setting : 0;
++}
++
++int LocationBarWidthForCap(int preferred,
++                           int minimum,
++                           std::optional<int> available,
++                           int cap) {
+   // What the field asks for: the cap where there is one, the row it is offered
+   // where there is not. Its own preferred width, which is what Chromium's
+   // location bar reports and is a fraction of a wide row, is only the answer
+diff --git a/chrome/browser/ui/stedding_ui_metrics.h b/chrome/browser/ui/stedding_ui_metrics.h
+index 683b4f9fbf99d..5b02de2c7d2fc 100644
+--- a/chrome/browser/ui/stedding_ui_metrics.h
++++ b/chrome/browser/ui/stedding_ui_metrics.h
+@@ -139,6 +139,17 @@ BASE_DECLARE_FEATURE_PARAM(int, kLocationBarWidth);
+ int LocationBarWidthFor(int preferred,
+                         int minimum,
+                         std::optional<int> available);
++// The same for a given `cap` (0: no cap).
++int LocationBarWidthForCap(int preferred,
++                           int minimum,
++                           std::optional<int> available,
++                           int cap);
++
++// toolbar T48 (GitHub issue 14): the cap the address field takes, in DIP, for
++// `setting` (the value of stedding.toolbar.field_width): a positive
++// `location_bar_width` parameter first, then a centred width the setting
++// offers (800, 640 or 480), else 0, the whole row.
++int LocationBarCap(int setting);
+ 
+ // Open the command bar as soon as a window opens. Zero in normal use; this
+ // exists so the overlay can be screenshotted, since it is otherwise only
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 2dd2aed380652..ebc2519826777 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -777,6 +777,14 @@ gfx::Size LocationBarView::GetMinimumSize() const {
+   return gfx::Size(width, height);
+ }
+ 
++void LocationBarView::ClearSteddingCentre() {
++  if (!stedding_centre_x_) {
++    return;
++  }
++  stedding_centre_x_.reset();
++  InvalidateLayout();
++}
++
+ void LocationBarView::SetSteddingCentre(int centre_x) {
+   if (stedding_centre_x_ == centre_x) {
+     return;
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
+index 5009de91ff646..ceec8b4aba4c4 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -138,6 +138,9 @@ class LocationBarView
+   // middle is not the page's, so the chip and the address gather on this
+   // instead of on the field's own centre (within the field's limits).
+   void SetSteddingCentre(int centre_x);
++  // Stedding (toolbar T48): forgets that middle, for a bar centred at a width
++  // of its own, which gathers its contents on its own middle.
++  void ClearSteddingCentre();
+ 
+   // Returns the location bar border radius in DIPs.
+   int GetBorderRadius() const;
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 3b7b46fed2568..ddabef1373e83 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -62,6 +62,7 @@
+ #include "chrome/browser/ui/page_action/page_action_properties_provider.h"
+ #include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
+ #include "chrome/browser/ui/stedding/little_window.h"
++#include "chrome/browser/ui/stedding/stedding_prefs.h"
+ #include "chrome/browser/ui/stedding_ui_metrics.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+@@ -225,6 +226,16 @@ constexpr int kLargeSpaceBetweenButtons = 6;
+ constexpr int kInsideBorderAroundGlicButtons = 2;
+ constexpr int kGlicButtonMargin = 5;
+ 
++// Stedding (toolbar T48, sidebar Y29): the empty row either side of a centred
++// address field. It holds nothing, so a press there moves the window, as on
++// any other empty part of the row.
++class SteddingRowSpacer : public views::View {
++  METADATA_HEADER(SteddingRowSpacer, views::View)
++};
++
++BEGIN_METADATA(SteddingRowSpacer)
++END_METADATA
++
+ // Returns whether `point` should be treated as part of the caption area in
+ // `view`. Recursively traverses into icon containers to correctly handle
+ // padding between buttons.
+@@ -244,7 +255,8 @@ bool IsPositionInWindowCaptionForView(const views::View* view,
+     // Separators and dividers are non-interactive and should be treated
+     // as caption area.
+     if (views::IsViewClass<views::Separator>(child) ||
+-        views::IsViewClass<ToolbarDivider>(child)) {
++        views::IsViewClass<ToolbarDivider>(child) ||
++        views::IsViewClass<SteddingRowSpacer>(child)) {
+       return true;
+     }
+     // The point hit an interactive control (button, location bar, etc.).
+@@ -1636,7 +1648,7 @@ void ToolbarView::Layout(PassKey) {
+   // coordinates, before it lays out. A capped bar is centred below instead,
+   // after its layout, and gathers its contents on its own middle.
+   if (display_mode_ == DisplayMode::kNormal && location_bar_view_ &&
+-      !stedding_left_spacer_ &&
++      !stedding_field_centred_ &&
+       base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
+     location_bar_view_->SetSteddingCentre(
+         (width() + stedding_trailing_reserve_) / 2);
+@@ -1666,8 +1678,8 @@ void ToolbarView::Layout(PassKey) {
+   // over the back, forward and reload buttons, in a window under about
+   // 1000 DIP with the sidebar open (2026-09-08).
+   if (display_mode_ == DisplayMode::kNormal && location_bar_view_ &&
+-      stedding_left_spacer_ && stedding_right_spacer_ &&
+-      stedding_left_spacer_->GetVisible() &&
++      stedding_field_centred_ && stedding_left_spacer_ &&
++      stedding_right_spacer_ && stedding_left_spacer_->GetVisible() &&
+       stedding_right_spacer_->GetVisible()) {
+     const gfx::Rect bar = location_bar_view_->bounds();
+     const int left_limit = stedding_left_spacer_->x();
+@@ -1683,6 +1695,60 @@ void ToolbarView::Layout(PassKey) {
+   }
+ }
+ 
++void ToolbarView::ApplySteddingFieldWidth() {
++  if (!location_bar_view_ || !stedding_left_spacer_ ||
++      !stedding_right_spacer_) {
++    return;
++  }
++  const int cap = stedding::LocationBarCap(stedding_field_width_.GetValue());
++  stedding_field_centred_ = cap > 0;
++  // The same order InitLayout gives the bar: it shrinks to its soft minimum
++  // first, and the spacers with it.
++  const int order =
++      base::FeatureList::IsEnabled(features::kOmniboxResizingPrioritization)
++          ? 1
++          : 1000 + 1;
++  if (stedding_field_centred_) {
++    // Cap the bar's width with a flex rule of its own. Left to itself it
++    // prefers the whole toolbar, so there is no leftover for the spacers to
++    // take and nothing to centre it in. Below the cap the rule defers to what
++    // the bar asks for, so a narrow window still shrinks it, never below its
++    // own minimum (toolbar T5, T18; the operator, 2026-09-05).
++    location_bar_view_->SetProperty(
++        views::kFlexBehaviorKey,
++        views::FlexSpecification(
++            base::BindRepeating(
++                [](int cap, const views::View* view,
++                   const views::SizeBounds& bounds) {
++                  gfx::Size size = view->GetPreferredSize(bounds);
++                  size.set_width(stedding::LocationBarWidthForCap(
++                      size.width(), view->GetMinimumSize().width(),
++                      bounds.width().is_bounded()
++                          ? std::optional<int>(bounds.width().value())
++                          : std::nullopt,
++                      cap));
++                  return size;
++                },
++                cap))
++            .WithOrder(order));
++  } else {
++    // The whole row between the button clusters (toolbar T29); the address
++    // reads as centred on the page all the same (T18).
++    location_bar_view_->SetProperty(
++        views::kFlexBehaviorKey,
++        views::FlexSpecification(views::LayoutOrientation::kHorizontal,
++                                 views::MinimumFlexSizeRule::kScaleToMinimum,
++                                 views::MaximumFlexSizeRule::kUnbounded)
++            .WithOrder(order));
++  }
++  stedding_left_spacer_->SetVisible(stedding_field_centred_);
++  stedding_right_spacer_->SetVisible(stedding_field_centred_);
++  // A centred bar gathers its contents on its own middle, which is the
++  // page's once Layout has placed it there.
++  location_bar_view_->ClearSteddingCentre();
++  InvalidateLayout();
++}
++
+ void ToolbarView::SetSteddingTrailingReserve(int reserve) {
+   if (stedding_trailing_reserve_ == reserve) {
+     return;
+@@ -1790,49 +1856,30 @@ void ToolbarView::InitLayout() {
+     // being pushed against the leading one. They flex at the same order as the
+     // location bar, so all three grow together and the bar keeps a third of
+     // whatever space is going rather than being pinned to its minimum.
++    // A centred width (toolbar T48: the setting, or a positive
++    // `location_bar_width` for capture work) caps the bar and shows the views
++    // below, which take the leftover width either side of it.
+     if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
+-        stedding::kLocationBarWidth.Get() > 0) {
+-      // Cap the bar's width with a flex rule of its own. Left to itself it
+-      // prefers the whole toolbar, so there is no leftover for the spacers to
+-      // take and nothing to centre it in. SetPreferredSize() does not do this:
+-      // FlexLayout asks for the preferred size that fits given bounds, which
+-      // goes to LocationBarView's own calculation and ignores a stored value.
+-      // Below the cap the rule defers to what the bar asks for, so a narrow
+-      // window still shrinks it.
+-      location_bar_view_->SetProperty(
+-          views::kFlexBehaviorKey,
+-          views::FlexSpecification(
+-              base::BindRepeating(
+-                  [](const views::View* view, const views::SizeBounds& bounds) {
+-                    gfx::Size size = view->GetPreferredSize(bounds);
+-                    // The cap is what the field takes when there is room; the
+-                    // bar centres on the row (toolbar T5, T18). Where the
+-                    // toolbar is tight -- a narrow window, a row of extension
+-                    // actions -- the field gives way and shrinks with the
+-                    // space it is offered, never below its own minimum
+-                    // (operator, 2026-09-05).
+-                    size.set_width(stedding::LocationBarWidthFor(
+-                        size.width(), view->GetMinimumSize().width(),
+-                        bounds.width().is_bounded()
+-                            ? std::optional<int>(bounds.width().value())
+-                            : std::nullopt));
+-                    return size;
+-                  }))
+-              .WithOrder(location_bar_flex_order));
+-
++        display_mode_ == DisplayMode::kNormal) {
+       const views::FlexSpecification spacer_rule =
+           views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                                    views::MaximumFlexSizeRule::kUnbounded)
+               .WithOrder(location_bar_flex_order);
+       const size_t location_bar_index =
+           GetIndexOf(location_bar_view_.get()).value();
+-      stedding_left_spacer_ =
+-          AddChildViewAt(std::make_unique<views::View>(), location_bar_index);
++      stedding_left_spacer_ = AddChildViewAt(
++          std::make_unique<SteddingRowSpacer>(), location_bar_index);
+       stedding_left_spacer_->SetProperty(views::kFlexBehaviorKey, spacer_rule);
+       // The location bar has shifted along by one.
+-      stedding_right_spacer_ = AddChildViewAt(std::make_unique<views::View>(),
+-                                              location_bar_index + 2);
++      stedding_right_spacer_ = AddChildViewAt(
++          std::make_unique<SteddingRowSpacer>(), location_bar_index + 2);
+       stedding_right_spacer_->SetProperty(views::kFlexBehaviorKey, spacer_rule);
++      stedding_field_width_.Init(
++          stedding::prefs::kToolbarFieldWidth,
++          browser_->GetProfile()->GetPrefs(),
++          base::BindRepeating(&ToolbarView::ApplySteddingFieldWidth,
++                              base::Unretained(this)));
++      ApplySteddingFieldWidth();
+     }
+   }
+ 
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
+index dc2fbc4aebe9b..9d9a4efb7d8a7 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -425,6 +425,12 @@ class ToolbarView : public views::AccessiblePaneView,
+   raw_ptr<views::View> stedding_left_spacer_ = nullptr;
+   raw_ptr<views::View> stedding_right_spacer_ = nullptr;
+   int stedding_trailing_reserve_ = 0;
++  // Stedding (toolbar T48, GitHub issue 14): the address field's width
++  // setting, and whether the field is centred at a width of its own (the
++  // spacers shown) rather than taking the whole row.
++  IntegerPrefMember stedding_field_width_;
++  bool stedding_field_centred_ = false;
++  void ApplySteddingFieldWidth();
+ 
+   // An alias for `location_bar_view_` or `toolbar_webview_->GetLocationBar()`.
+   raw_ptr<LocationBar> location_bar_ = nullptr;
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 7bbdd154fbc84..04cb6470af32c 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -1101,6 +1101,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+       base::StrCat({key("\u2318S", "Ctrl+S"), " hides both; ",
+                     key("\u21E7\u2318D", "Ctrl+Shift+D"),
+                     " hides the row alone."}));
++  html_source->AddString("steddingFieldWidthLabel", "Address field");
++  html_source->AddString(
++      "steddingFieldWidthSubLabel",
++      "Across the whole row, or a narrower field centred on the page. The "
++      "space beside a narrower field moves the window.");
++  html_source->AddString("steddingFieldWidthFull", "Full width");
++  html_source->AddString("steddingFieldWidthWide", "Wide, centred");
++  html_source->AddString("steddingFieldWidthMedium", "Medium, centred");
++  html_source->AddString("steddingFieldWidthCompact", "Compact, centred");
+   html_source->AddString("steddingArchiveKeepLabel", "Keep archived tabs for");
+   html_source->AddString(
+       "steddingArchiveKeepSubLabel",
+diff --git a/chrome/test/stedding/address_band_browsertest.cc b/chrome/test/stedding/address_band_browsertest.cc
+index edd40873f21e4..eb6bb078a4a0f 100644
+--- a/chrome/test/stedding/address_band_browsertest.cc
++++ b/chrome/test/stedding/address_band_browsertest.cc
+@@ -286,6 +286,40 @@ IN_PROC_BROWSER_TEST_F(AddressBandTest, TheFieldIsWholeInEveryState) {
+       << "a click on the field's empty start did not focus the address";
+ }
+ 
++// toolbar T48 (GitHub issue 14): Settings > Stedding > Address field. A
++// centred width holds the field at that width on the page's middle, in every
++// state, with the row either side of it the window's to drag; full width
++// gives the field the row again. Each takes effect at once.
++IN_PROC_BROWSER_TEST_F(AddressBandTest, TheFieldsWidthIsASetting) {
++  PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++  ASSERT_EQ(0, prefs->GetInteger(stedding::prefs::kToolbarFieldWidth))
++      << "the field is not full width by default";
++  views::test::RunScheduledLayout(view());
++  const int full = bar()->width();
++
++  prefs->SetInteger(stedding::prefs::kToolbarFieldWidth, 480);
++  views::test::RunScheduledLayout(view());
++  EXPECT_EQ(480, bar()->width()) << "the compact field is not 480 DIP";
++  ASSERT_LT(bar()->width(), full);
++  const gfx::Rect field = bar()->GetBoundsInScreen();
++  const gfx::Rect page = view()->contents_container()->GetBoundsInScreen();
++  EXPECT_NEAR(page.CenterPoint().x(), field.CenterPoint().x(), 2)
++      << "the field is not on the page's middle";
++  // The row just before the field holds nothing, and moves the window.
++  gfx::Point beside(bar()->x() - 6, bar()->y() + bar()->height() / 2);
++  EXPECT_TRUE(view()->toolbar()->IsPositionInWindowCaption(beside))
++      << "the empty row beside a centred field is not the window's to drag";
++
++  bar()->omnibox_view()->RequestFocus();
++  views::test::RunScheduledLayout(view());
++  EXPECT_EQ(field, bar()->GetBoundsInScreen())
++      << "the field moved or grew when it took focus";
++
++  prefs->SetInteger(stedding::prefs::kToolbarFieldWidth, 0);
++  views::test::RunScheduledLayout(view());
++  EXPECT_EQ(full, bar()->width()) << "full width did not give the row back";
++}
++
+ // The field while it is edited or hovered, and a toast, all leave the
+ // address readable (toolbar T34, T35).
+ IN_PROC_BROWSER_TEST_F(AddressBandTest,
+diff --git a/components/omnibox/common/omnibox_feature_configs.cc b/components/omnibox/common/omnibox_feature_configs.cc
+index 8da6848bea9c2..2e0c78ee4257d 100644
+--- a/components/omnibox/common/omnibox_feature_configs.cc
++++ b/components/omnibox/common/omnibox_feature_configs.cc
+@@ -112,9 +112,13 @@ BASE_FEATURE(ContextualSearch::kSendContextualUrlSuggestParam,
+              "SendContextualUrlSuggestParam",
+              base::FEATURE_ENABLED_BY_DEFAULT);
+ 
++// Stedding (privacy Q17, GitHub issue 14): off. On, a focused address field
++// in a profile whose engine is Google offered "Ask Google about this page"
++// and asked Google for suggestions about the page; the rest of that family
++// (the chip, the toolbelt, contextual tasks) was off already.
+ BASE_FEATURE(ContextualSearch::kOmniboxContextualSearchOnFocusSuggestions,
+              "OmniboxContextualSearchOnFocusSuggestions",
+-             base::FEATURE_ENABLED_BY_DEFAULT);
++             base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(ContextualSearch::kContextualSearchBoxUsesContextualSearchProvider,
+              "ContextualSearchBoxUsesContextualSearchProvider",

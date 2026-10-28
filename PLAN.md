@@ -62,7 +62,8 @@ still open is a BACKLOG row that names its id.
     (`status: needs decision`, `status: planned`, `done`).
 17. The address does not jump when the field takes focus (2026-10-23, GitHub issue 14;
     `S-275`; `docs/features/toolbar.md` T18). The field is the whole row in every state
-    (the owner, 2026-10-24; toolbar T34).
+    (the owner, 2026-10-24; toolbar T34). Its width is a setting: full width, or a field
+    centred on the page at 800, 640 or 480 DIP (the owner, 2026-10-28; toolbar T48).
 18. Sync has no account and no Stedding server. It goes through a folder the user picks,
     and it is off by default (2026-10-23, GitHub issue 20; `S-282`; ADR 0029;
     `docs/features/sidebar-file.md` Sf7–Sf41).

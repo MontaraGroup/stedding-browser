@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 28 Oct 2026 12:51:34 -0400
+Subject: feat: a collapsed folder keeps a pin that is awake listed
+
+GitHub issue 35 (folders F3; BACKLOG S-304): a collapsed folder showed
+only the tab on screen, so leaving a pinned tab in it hid that tab, and
+going back to it took opening the folder. Now a collapsed folder keeps
+listing a Space pin that is awake under its header; asleep, the pin folds
+away with the rest, and a tab that is not a pin does too. TabStripModel
+takes a second embedder predicate, the tabs kept under a collapsed folder,
+which SpaceModel answers for its awake pins.
+
+Why: the owner asked for it on 2026-10-28.
+Removable when: Chromium's folders grow their own rule for what a
+collapsed folder keeps listed.
+---
+ chrome/browser/ui/spaces/space_model.cc       | 13 ++++++++
+ .../ui/spaces/space_model_window_unittest.cc  | 32 +++++++++++++++++++
+ chrome/browser/ui/tabs/tab_strip_model.cc     | 13 ++++++--
+ chrome/browser/ui/tabs/tab_strip_model.h      |  6 ++++
+ .../test/stedding/pinned_run_browsertest.cc   |  7 ++++
+ 5 files changed, 69 insertions(+), 2 deletions(-)
+
+diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
+index 9dd014a344af6..a94714c4fa6ed 100644
+--- a/chrome/browser/ui/spaces/space_model.cc
++++ b/chrome/browser/ui/spaces/space_model.cc
+@@ -348,6 +348,17 @@ SpaceModel::SpaceModel(BrowserWindowInterface& browser) : SpaceModel() {
+         return model->HidesTab(tab);
+       },
+       base::Unretained(this)));
++  // folders F3 (GitHub issue 35): a collapsed folder keeps listing a pin of
++  // its Space that is awake, so switching away from it and back does not take
++  // opening the folder. Asleep, it folds away with the rest. Unretained for
++  // the same reason as the predicate above.
++  tab_strip_model_->SetKeptUnderCollapsedFolderPredicate(base::BindRepeating(
++      [](SpaceModel* model, const tabs::TabInterface* tab) {
++        content::WebContents* const contents = tab->GetContents();
++        return model->IsSpacePinned(tab) && contents &&
++               !contents->WasDiscarded();
++      },
++      base::Unretained(this)));
+   // B4: a close never leaves another Space's tab on screen. Unretained for
+   // the same reason as the predicate.
+   tab_strip_model_->SetBeforeCloseTabsCallback(
+@@ -419,6 +430,8 @@ SpaceModel::~SpaceModel() {
+   if (tab_strip_model_) {
+     tab_strip_model_->SetHiddenTabPredicate(
+         TabStripModel::HiddenTabPredicate());
++    tab_strip_model_->SetKeptUnderCollapsedFolderPredicate(
++        TabStripModel::HiddenTabPredicate());
+     tab_strip_model_->SetBeforeCloseTabsCallback(
+         TabStripModel::BeforeCloseTabsCallback());
+     // The detach callback holds this model unretained too: a tab leaving the
+diff --git a/chrome/browser/ui/spaces/space_model_window_unittest.cc b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+index c6756adf89585..ab2b049aa7764 100644
+--- a/chrome/browser/ui/spaces/space_model_window_unittest.cc
++++ b/chrome/browser/ui/spaces/space_model_window_unittest.cc
+@@ -2576,6 +2576,38 @@ TEST_F(SpaceWindowTest, HorizontalStripKeepsSpacePinAndFolder) {
+   EXPECT_EQ(folder->id(), parent->id());
+ }
+ 
++// folders F3 (GitHub issue 35): a collapsed folder keeps listing a pin of its
++// Space that is awake after another tab is on screen, so going back to it
++// does not take opening the folder; asleep, the pin folds away with the
++// rest, and a tab that is not a pin does too.
++TEST_F(SpaceWindowTest, ACollapsedFolderKeepsAnAwakePinListed) {
++  Space* const work = model().AddSpace("Work", kBlue);
++  model().SetActiveSpace(work->id());
++  tabs::TabInterface* const pinned = OpenTab();
++  model().SetSpacePinned(pinned, true);
++  tabs::TabInterface* const other = OpenTab();
++  model().SetSpaceForTab(other, work->id());
++  std::vector<int> indices = {tabs().GetIndexOfTab(pinned),
++                              tabs().GetIndexOfTab(other)};
++  std::ranges::sort(indices);
++  tabs::FolderTabCollection* const folder = tabs().AddToNewFolder(indices);
++  ASSERT_NE(nullptr, folder);
++  folder->SetCollapsed(true);
++  tabs::TabInterface* const elsewhere = OpenTab();
++  tabs().ActivateTabAt(tabs().GetIndexOfTab(elsewhere));
++  ASSERT_NE(pinned, tabs().GetActiveTab());
++  ASSERT_FALSE(pinned->GetContents()->WasDiscarded());
++
++  EXPECT_FALSE(tabs().IsTabHidden(tabs().GetIndexOfTab(pinned)))
++      << "the collapsed folder hid a pin that is awake";
++  EXPECT_TRUE(tabs().IsTabHidden(tabs().GetIndexOfTab(other)))
++      << "the collapsed folder listed a tab that is not a pin";
++
++  pinned->GetContents()->SetWasDiscarded(true);
++  EXPECT_TRUE(tabs().IsTabHidden(tabs().GetIndexOfTab(pinned)))
++      << "the collapsed folder listed a pin that is asleep";
++}
++
+ // folders F19: Close Folder's Tabs closes the folder's tabs in this Space,
+ // collapsed ones included, and leaves a tab moved to another Space open.
+ TEST_F(SpaceWindowTest, CloseFolderTabsLeavesAnotherSpacesTabOpen) {
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index 593e95a98b2ca..97d1003082e8d 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -1483,7 +1483,10 @@ bool TabStripModel::IsTabHidden(int index) const {
+   // A collapsed folder hides everything inside it, nested folders included,
+   // except what is on screen: the active tab and, in a split, the pane beside
+   // it. Collapsing the folder that holds the page the user is looking at keeps
+-  // those rows under the header and does not switch tabs (folders F3).
++  // those rows under the header and does not switch tabs (folders F3). The
++  // embedder may keep more listed: Stedding keeps a pinned tab that is awake,
++  // so switching away and back does not take opening the folder (GitHub
++  // issue 35).
+   tabs::TabInterface* const tab = GetTabAtIndex(index);
+   bool collapsed_folder = false;
+   for (const tabs::TabCollection* collection = tab->GetParentCollection();
+@@ -1500,7 +1503,8 @@ bool TabStripModel::IsTabHidden(int index) const {
+     const bool on_screen =
+         tab == active ||
+         (active && tab->IsSplit() && tab->GetSplit() == active->GetSplit());
+-    if (!on_screen) {
++    if (!on_screen && !(kept_under_collapsed_folder_predicate_ &&
++                        kept_under_collapsed_folder_predicate_.Run(tab))) {
+       return true;
+     }
+   }
+@@ -1511,6 +1515,11 @@ void TabStripModel::SetHiddenTabPredicate(HiddenTabPredicate predicate) {
+   hidden_tab_predicate_ = std::move(predicate);
+ }
+ 
++void TabStripModel::SetKeptUnderCollapsedFolderPredicate(
++    HiddenTabPredicate predicate) {
++  kept_under_collapsed_folder_predicate_ = std::move(predicate);
++}
++
+ void TabStripModel::SetNewTabIndexCallback(NewTabIndexCallback callback) {
+   new_tab_index_callback_ = std::move(callback);
+ }
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
+index 92d97a40408a3..593abee7c0a33 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.h
++++ b/chrome/browser/ui/tabs/tab_strip_model.h
+@@ -536,6 +536,10 @@ class TabStripModel {
+   using HiddenTabPredicate =
+       base::RepeatingCallback<bool(const tabs::TabInterface*)>;
+   void SetHiddenTabPredicate(HiddenTabPredicate predicate);
++  // Stedding (folders F3, GitHub issue 35): lets the embedder keep a tab
++  // listed under a collapsed folder although it is not on screen -- a pinned
++  // tab that is awake. Cheap, as the predicate above.
++  void SetKeptUnderCollapsedFolderPredicate(HiddenTabPredicate predicate);
+ 
+   // Stedding (spaces B4): asked before tabs close, with the tabs about to
+   // close -- never when every tab closes -- so the embedder can add the tab
+@@ -1630,6 +1634,8 @@ class TabStripModel {
+ 
+   // Set by the embedder; see SetHiddenTabPredicate().
+   HiddenTabPredicate hidden_tab_predicate_;
++  // Set by the embedder; see SetKeptUnderCollapsedFolderPredicate().
++  HiddenTabPredicate kept_under_collapsed_folder_predicate_;
+   // Set by the embedder; see SetBeforeCloseTabsCallback().
+   BeforeCloseTabsCallback before_close_tabs_callback_;
+   // Set by the embedder; see SetNewTabIndexCallback().
+diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
+index ac7f228ac3541..e2ad518dd512c 100644
+--- a/chrome/test/stedding/pinned_run_browsertest.cc
++++ b/chrome/test/stedding/pinned_run_browsertest.cc
+@@ -1369,6 +1369,13 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest,
+   g->SetTitle("Later");
+   ASSERT_TRUE(model().CanPinFolder(g));
+   model().SetFolderSpacePinned(g, true);
++  // The folders' pins asleep, as after a launch, so the collapsed folders
++  // list none of them: a pin that is awake stays listed (folders F3, GitHub
++  // issue 35). The row on screen is a loose one.
++  tabs().ActivateTabAt(Index(l4));
++  for (tabs::TabInterface* const pin : {f1, f2, g1}) {
++    pin->GetContents()->SetWasDiscarded(true);
++  }
+   f->SetCollapsed(true);
+   g->SetCollapsed(true);
+ 
