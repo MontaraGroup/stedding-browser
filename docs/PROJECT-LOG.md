@@ -10,6 +10,16 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
+## 2026-10-27 -- Pull request 49: ⌘T on a folder's last tab (S-324), not released
+
+An outside contributor's fix for `S-324`, checked for anything hidden or malicious first (none:
+its four files are docs and two patch files, no workflow, script or binary). As sent it did not
+compile (`add_types` is not in `InsertTabAtIndexImpl`) and would not have fixed the bug, since
+⌘T carries `ADD_INHERIT_OPENER` too; two other models' reviews, read only, found the same. The
+branch now marks Chromium's typed-at-end case where `AddWebContents` makes it, and the insert
+keeps that tab out of the opener's folder (folders F25). Its test step fails without the fix;
+the Mac's full unit and browser runs pass.
+
 ## 2026-10-27 -- GitHub issues 48 and 13, not released
 
 The owner asked for both to be built next (BACKLOG S-325, S-321); built and checked on the

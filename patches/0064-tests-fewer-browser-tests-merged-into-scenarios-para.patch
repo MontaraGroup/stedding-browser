@@ -68,7 +68,7 @@ Removable when: never; these are Stedding's own tests.
  chrome/test/stedding/copy_link_browsertest.cc |   90 +-
  chrome/test/stedding/defaults_browsertest.cc  |  290 +--
  .../external_extensions_browsertest.cc        |    2 -
- .../test/stedding/folder_tabs_browsertest.cc  | 2014 ++++++++++-------
+ .../test/stedding/folder_tabs_browsertest.cc  | 2038 +++++++++++------
  .../test/stedding/https_first_browsertest.cc  |   66 +-
  chrome/test/stedding/import_browsertest.cc    |  122 +-
  chrome/test/stedding/link_drop_browsertest.cc |  359 +--
@@ -91,8 +91,8 @@ Removable when: never; these are Stedding's own tests.
  chrome/test/stedding/space_jar_browsertest.cc | 1182 +++++-----
  .../test/stedding/space_switch_browsertest.cc |  605 +++--
  chrome/test/stedding/tab_drop_browsertest.cc  |  616 ++---
- chrome/test/stedding/welcome_browsertest.cc   |  258 +--
- 58 files changed, 7436 insertions(+), 5852 deletions(-)
+ chrome/test/stedding/welcome_browsertest.cc   |  258 ++-
+ 58 files changed, 7460 insertions(+), 5852 deletions(-)
 
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc b/chrome/browser/renderer_context_menu/render_view_context_menu_unittest.cc
 index 1e2ad017c8007..bb27ea5a5b363 100644
@@ -4990,7 +4990,7 @@ index 32492985e51eb..7b2843f2a2bbd 100644
      provider->ServiceShutdown();
    }
 diff --git a/chrome/test/stedding/folder_tabs_browsertest.cc b/chrome/test/stedding/folder_tabs_browsertest.cc
-index a75b863dffbfb..35445c5c20130 100644
+index a75b863dffbfb..a8d4e2a63f22c 100644
 --- a/chrome/test/stedding/folder_tabs_browsertest.cc
 +++ b/chrome/test/stedding/folder_tabs_browsertest.cc
 @@ -14,7 +14,9 @@
@@ -5027,7 +5027,7 @@ index a75b863dffbfb..35445c5c20130 100644
 -  ASSERT_TRUE(folder);
 -  tab_strip_model()->ActivateTabAt(1);
 -  content::WebContents* const opener = tab_strip_model()->GetWebContentsAt(1);
- 
+-
 -  NavigateParams params(browser(), GURL("about:blank#child"),
 -                        ui::PAGE_TRANSITION_LINK);
 -  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
@@ -5138,7 +5138,7 @@ index a75b863dffbfb..35445c5c20130 100644
 -  ASSERT_TRUE(model->SetActiveSpace(other));
 -  ASSERT_TRUE(model->SetActiveSpace(home));
 -  expect_collapsed("a Space switch and back");
--
+ 
 -  tab_strip_model()->MoveWebContentsAt(0, tab_strip_model()->count() - 1,
 -                                       /*select_after_move=*/false);
 -  expect_collapsed("a moved tab");
@@ -5393,7 +5393,7 @@ index a75b863dffbfb..35445c5c20130 100644
        EXPECT_LT(tabs_listed.find(u"a.test"), tabs_listed.find(u"b.test"))
            << "the folder's tabs are listed in its order: " << tabs_listed;
        EXPECT_LT(tabs_listed.find(u"b.test"), tabs_listed.find(u"c.test"))
-@@ -459,536 +260,808 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
+@@ -459,536 +260,832 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest,
      ASSERT_EQ(1, folder_items) << "Recently Closed has no item for the folder";
      menu.ExecuteCommand(restore_folder, 0);
    }
@@ -5563,14 +5563,38 @@ index a75b863dffbfb..35445c5c20130 100644
 -IN_PROC_BROWSER_TEST_F(FolderTabsTest, MovingTabsOutOfANestedFolderKeepsThem) {
 -  for (int i = 0; i < 3; ++i) {
 +  {
++    // BACKLOG S-324: Cmd-T on a folder's last tab, when it is also the
++    // window's last tab, opens a loose tab at the window's end. Chromium
++    // still makes the active tab its opener, so closing it goes back there.
++    SCOPED_TRACE("Cmd-T on the folder's last tab opens a loose tab");
++    CloseDownToOne();
++    tabs::FolderTabCollection* const folder = MakeFolder();
++    ASSERT_TRUE(folder);
++    tab_strip_model()->CloseWebContentsAt(3, TabCloseTypes::CLOSE_USER_GESTURE);
++    ASSERT_EQ(3, tab_strip_model()->count());
++    ASSERT_EQ(folder, ParentOf(2)) << "the folder's last tab is the window's";
++    tab_strip_model()->ActivateTabAt(2);
++
++    chrome::NewTab(browser(), NewTabTypes::kNewTabCommand);
++
++    ASSERT_EQ(4, tab_strip_model()->count());
++    EXPECT_EQ(3, tab_strip_model()->active_index()) << "at the window's end";
++    EXPECT_NE(folder, ParentOf(3)) << "outside the folder";
++    EXPECT_EQ(folder, ParentOf(2)) << "the folder keeps its tabs";
++    tab_strip_model()->CloseWebContentsAt(3, TabCloseTypes::CLOSE_USER_GESTURE);
++    EXPECT_EQ(2, tab_strip_model()->active_index())
++        << "closing it goes back to the tab it came from";
++  }
++
++  {
 +    // TAB-6: a folder of three tabs; its middle one closed and brought back
 +    // with ⇧⌘T returns to its place in the folder. The same RestoreTab into
 +    // a live folder used to CHECK on the interior index.
 +    SCOPED_TRACE("restore the middle tab");
 +    CloseDownToOne();
 +    ClearClosedTabs();
-+    AppendTab();
      AppendTab();
++    AppendTab();
 +    AppendTab();
 +    AppendTab();
 +    tabs::FolderTabCollection* const folder =
@@ -6679,7 +6703,7 @@ index a75b863dffbfb..35445c5c20130 100644
  }
  
  // folders, BACKLOG S-136: a split made of a folder's tabs stays in the
-@@ -1027,4 +1100,431 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitOfAFoldersTabsStaysInIt) {
+@@ -1027,4 +1124,431 @@ IN_PROC_BROWSER_TEST_F(FolderTabsTest, ASplitOfAFoldersTabsStaysInIt) {
    EXPECT_NE(folder, ParentOf(4)) << "the tab after the folder stays out";
  }
  

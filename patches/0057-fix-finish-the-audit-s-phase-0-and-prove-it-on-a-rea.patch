@@ -12,7 +12,8 @@ folder, Space) on a click elsewhere or a blur, keeps it across a window
 deactivation, and trims or drops an unchanged name (TAB-1, TAB-4,
 SPC-29). A link dropped over a folder opens where the indicator shows,
 at any depth, and chrome://tab-strip-internals shows folders (TAB-5).
-Folder interiors are addressable: a link from a folder tab joins it, a
+Folder interiors are addressable: a link from a folder tab joins it
+(a typed new tab, Cmd-T's, does not: S-324), a
 split nests whole and in place, Move Tabs Out keeps nested rows in the
 parent, an emptied chain leaves the tree (TAB-6). Folder drops and chip
 drops move tabs without detaching them, and a chip refuses a tab
@@ -199,7 +200,7 @@ into the feature patches they belong to.
  .../browser/ui/tabs/stedding_folder_session.h |  72 +-
  .../tabs/stedding_folder_session_unittest.cc  | 260 ++++-
  chrome/browser/ui/tabs/tab_menu_model.cc      |  12 +-
- chrome/browser/ui/tabs/tab_strip_model.cc     | 237 ++++-
+ chrome/browser/ui/tabs/tab_strip_model.cc     | 266 +++++-
  chrome/browser/ui/tabs/tab_strip_model.h      |  32 +-
  .../ui/tabs/tab_strip_model_unittest.cc       | 271 ++++++
  ...ertical_tab_strip_state_controller_impl.cc |   7 +
@@ -337,7 +338,7 @@ into the feature patches they belong to.
  .../user_data_importer/common/importer_type.h |   3 -
  crypto/apple/fake_keychain_v2.h               |  11 -
  crypto/apple/fake_keychain_v2.mm              |   2 -
- 241 files changed, 19934 insertions(+), 3604 deletions(-)
+ 241 files changed, 19961 insertions(+), 3606 deletions(-)
  delete mode 100644 chrome/browser/ui/spaces/chromium_profile_import.cc
  delete mode 100644 chrome/browser/ui/spaces/chromium_profile_import.h
  delete mode 100644 chrome/browser/ui/spaces/chromium_profile_import_unittest.cc
@@ -11781,10 +11782,18 @@ index d4bdc885073fb..7994a0e8fa70a 100644
      const int switch_to_horizontal_id =
  #if BUILDFLAG(IS_MAC)
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 8422cb4717630..559b82bcdd8ba 100644
+index 8422cb4717630..dac395a982115 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -56,6 +56,7 @@
+@@ -17,6 +17,7 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/auto_reset.h"
+ #include "base/check.h"
+ #include "base/check_op.h"
+ #include "base/containers/flat_map.h"
+@@ -56,6 +57,7 @@
  #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
  #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
  #include "chrome/browser/ui/spaces/space_model.h"
@@ -11792,7 +11801,22 @@ index 8422cb4717630..559b82bcdd8ba 100644
  #include "chrome/browser/ui/tab_ui_helper.h"
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
-@@ -1333,6 +1334,8 @@ void TabStripModel::CloseWebContents(content::WebContents* contents,
+@@ -148,6 +150,14 @@ class ReentrancyCheck {
+   const raw_ptr<bool> guard_flag_;
+ };
+ 
++// Stedding folders F25 (BACKLOG S-324): the tab AddWebContents is inserting
++// as a typed tab at the end of the strip, which inherits the active tab as
++// its opener only so that closing it goes back (the "quick look-up" case).
++// It names the tab, and is set and restored around the insert, so a tab an
++// observer inserts meanwhile, in this strip or another, is never taken for
++// it. Only compared, never followed. Every TabStripModel is on the UI thread.
++const tabs::TabModel* g_quick_lookup_tab = nullptr;
++
+ // Returns true if the specified transition is one of the types that cause the
+ // opener relationships for the tab in which the transition occurred to be
+ // forgotten. This is generally any navigation that isn't a link click (i.e.
+@@ -1333,6 +1343,8 @@ void TabStripModel::CloseWebContents(content::WebContents* contents,
  
    CHECK(contents);
    CHECK_NE(GetIndexOfWebContents(contents), kNoTab);
@@ -11801,7 +11825,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
    CloseTabs({contents}, close_types);
  }
  
-@@ -1445,9 +1448,9 @@ bool TabStripModel::IsTabHidden(int index) const {
+@@ -1445,9 +1457,9 @@ bool TabStripModel::IsTabHidden(int index) const {
      return true;
    }
    // A collapsed folder hides everything inside it, nested folders included,
@@ -11814,7 +11838,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
    tabs::TabInterface* const tab = GetTabAtIndex(index);
    bool collapsed_folder = false;
    for (const tabs::TabCollection* collection = tab->GetParentCollection();
-@@ -1459,17 +1462,37 @@ bool TabStripModel::IsTabHidden(int index) const {
+@@ -1459,17 +1471,37 @@ bool TabStripModel::IsTabHidden(int index) const {
        break;
      }
    }
@@ -11856,7 +11880,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  bool TabStripModel::IsGroupCollapsed(
      const tab_groups::TabGroupId& group) const {
    DCHECK(group_model_);
-@@ -1557,6 +1580,14 @@ void TabStripModel::ExtendSelectionTo(int index) {
+@@ -1557,6 +1589,14 @@ void TabStripModel::ExtendSelectionTo(int index) {
  
      tabs_to_select = anchor_index < index ? GetTabRange(anchor, tab)
                                            : GetTabRange(tab, anchor);
@@ -11871,7 +11895,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  
      new_model.SetSelectedTabs({tabs_to_select.begin(), tabs_to_select.end()},
                                tab, anchor);
-@@ -1564,6 +1595,7 @@ void TabStripModel::ExtendSelectionTo(int index) {
+@@ -1564,6 +1604,7 @@ void TabStripModel::ExtendSelectionTo(int index) {
      // anchor or index.
      std::vector<tabs::TabInterface*> tabs_to_append =
          GetSelectionRangeFromAnchorToIndex(index);
@@ -11879,7 +11903,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  
      new_model.AppendTabsToSelection(
          {tabs_to_append.begin(), tabs_to_append.end()});
-@@ -1660,12 +1692,19 @@ void TabStripModel::AddSelectionFromAnchorTo(int index) {
+@@ -1660,12 +1701,19 @@ void TabStripModel::AddSelectionFromAnchorTo(int index) {
      std::vector<tabs::TabInterface*> tabs_to_select =
          anchor_index < index ? GetTabRange(anchor, tab)
                               : GetTabRange(tab, anchor);
@@ -11899,7 +11923,37 @@ index 8422cb4717630..559b82bcdd8ba 100644
      new_model.AppendTabsToSelection(
          {tabs_to_append.begin(), tabs_to_append.end()});
      new_model.SetActiveTab(tab);
-@@ -2697,23 +2736,28 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -1815,6 +1863,9 @@ void TabStripModel::AddTab(std::unique_ptr<tabs::TabModel> tab,
+     index = GetIndexRangeOfSplit(split_id.value()).GetMax();
+   }
+ 
++  // Stedding folders F25 (BACKLOG S-324): the typed tab below inherits its
++  // opener only for going back on close; it joins no folder of the opener's.
++  bool quick_lookup = false;
+   if (ui::PageTransitionTypeIncludingQualifiersIs(transition,
+                                                   ui::PAGE_TRANSITION_TYPED) &&
+       index == count()) {
+@@ -1825,11 +1876,17 @@ void TabStripModel::AddTab(std::unique_ptr<tabs::TabModel> tab,
+     // Tab to quickly look up something. When this Tab is closed, the old one
+     // is re-activated, not the next-adjacent.
+     inherit_opener = true;
++    quick_lookup = true;
+   }
+   tabs::TabModel* tab_ptr = tab.get();
+   tab->OnAddedToModel(this);
+-  InsertTabAtImpl(index, std::move(tab),
+-                  add_types | (inherit_opener ? ADD_INHERIT_OPENER : 0), group);
++  {
++    const base::AutoReset<const tabs::TabModel*> quick_lookup_tab(
++        &g_quick_lookup_tab, quick_lookup ? tab_ptr : nullptr);
++    InsertTabAtImpl(index, std::move(tab),
++                    add_types | (inherit_opener ? ADD_INHERIT_OPENER : 0),
++                    group);
++  }
+   // Reset the index, just in case insert ended up moving it on us.
+   index = GetIndexOfTab(tab_ptr);
+ 
+@@ -2697,23 +2754,28 @@ bool TabStripModel::IsContextMenuCommandEnabled(
      return false;
    }
  
@@ -11938,7 +11992,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
      case CommandNewTabToRight:
      case CommandCloseTab:
        return true;
-@@ -2815,11 +2859,12 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -2815,11 +2877,12 @@ bool TabStripModel::IsContextMenuCommandEnabled(
        return true;
  
      case CommandCopyURL:
@@ -11953,7 +12007,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
      case CommandSteddingCopyMarkdownLink:
      case CommandSteddingSleepTab:
      case CommandSteddingSleepOthersInSpace:
-@@ -2857,15 +2902,15 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -2857,15 +2920,15 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
    if (!ContainsIndex(context_index)) {
      return;
    }
@@ -11975,7 +12029,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
      case CommandSpacePin:
      case CommandSpaceUnpin:
        break;
-@@ -3227,6 +3272,8 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -3227,6 +3290,8 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
      }
  
      case CommandCopyURL: {
@@ -11984,7 +12038,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
        base::UmaHistogramCounts1000("Tab.ContextMenu.CopyURL.SelectedTabsCount",
                                     selection_model_.size());
        base::RecordAction(UserMetricsAction("TabContextMenu_CopyURL"));
-@@ -3234,7 +3281,7 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -3234,7 +3299,7 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
        break;
      }
  
@@ -11993,7 +12047,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
      case CommandSteddingCopyMarkdownLink:
      case CommandSteddingSleepTab:
      case CommandSteddingSleepOthersInSpace:
-@@ -3503,6 +3550,16 @@ void TabStripModel::ExecuteCloseTabs(
+@@ -3503,6 +3568,16 @@ void TabStripModel::ExecuteCloseTabs(
      base::RepeatingCallback<std::vector<tabs::TabInterface*>()>
          get_tabs_to_close,
      uint32_t close_types) {
@@ -12010,7 +12064,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
    ReentrancyCheck reentrancy_check(&reentrancy_guard_);
    const std::vector<tabs::TabInterface*> tabs_to_close =
        std::move(get_tabs_to_close).Run();
-@@ -3842,7 +3899,12 @@ std::vector<int> TabStripModel::GetIndicesForCommand(int index) const {
+@@ -3842,7 +3917,12 @@ std::vector<int> TabStripModel::GetIndicesForCommand(int index) const {
    }
    const ui::ListSelectionModel::SelectedIndices sel =
        selection_model_.GetListSelectionModel().selected_indices();
@@ -12024,7 +12078,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  }
  
  std::vector<tabs::TabInterface*> TabStripModel::GetTabsForCommand(
-@@ -3860,9 +3922,14 @@ std::vector<tabs::TabInterface*> TabStripModel::GetTabsForCommand(
+@@ -3860,9 +3940,14 @@ std::vector<tabs::TabInterface*> TabStripModel::GetTabsForCommand(
      return {tab};
    }
  
@@ -12040,7 +12094,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  }
  
  std::vector<int> TabStripModel::GetIndicesClosedByCommand(
-@@ -4999,15 +5066,41 @@ tabs::FolderTabCollection* TabStripModel::AddToNewFolder(
+@@ -4999,15 +5084,41 @@ tabs::FolderTabCollection* TabStripModel::AddToNewFolder(
      std::vector<int> indices,
      tabs::FolderTabCollection* parent_folder,
      std::optional<tabs::FolderId> id) {
@@ -12087,7 +12141,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
  
    // Same destination rule as grouping: the first spot at or after the first
    // tab that is not pinned and not inside someone else's group.
-@@ -5042,9 +5135,14 @@ tabs::FolderTabCollection* TabStripModel::AddToNewFolder(
+@@ -5042,9 +5153,14 @@ tabs::FolderTabCollection* TabStripModel::AddToNewFolder(
  
    // A folder made from a tab that already lives in a folder nests inside it,
    // which is how nesting happens without a drag: use the command again inside.
@@ -12103,7 +12157,7 @@ index 8422cb4717630..559b82bcdd8ba 100644
      if (current_parent &&
          current_parent->type() == tabs::TabCollection::Type::FOLDER) {
        parent_folder = const_cast<tabs::FolderTabCollection*>(
-@@ -5086,9 +5184,54 @@ void TabStripModel::MoveTabsOutOfFolder(tabs::FolderTabCollection* folder) {
+@@ -5086,9 +5202,54 @@ void TabStripModel::MoveTabsOutOfFolder(tabs::FolderTabCollection* folder) {
      }
    }
    std::ranges::sort(indices);
@@ -12161,7 +12215,16 @@ index 8422cb4717630..559b82bcdd8ba 100644
  }
  
  bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
-@@ -5195,8 +5338,24 @@ void TabStripModel::InsertTabAtIndexImpl(
+@@ -5178,6 +5339,8 @@ void TabStripModel::InsertTabAtIndexImpl(
+     bool pin,
+     bool active) {
+   tabs::TabModel* const tab_ptr = tab_model.get();
++  // Stedding folders F25: the tab AddWebContents names as a quick look-up.
++  const bool quick_lookup = tab_ptr == g_quick_lookup_tab;
+ 
+   if (std::optional<split_tabs::SplitTabId> split_id =
+           InsertionBreaksSplitContiguity(index);
+@@ -5195,8 +5358,29 @@ void TabStripModel::InsertTabAtIndexImpl(
    }
  
    tabs::TabInterface* old_active_tab = GetActiveTab();
@@ -12178,9 +12241,14 @@ index 8422cb4717630..559b82bcdd8ba 100644
 +  // kNoTab, one before the first slot, and its folder is that window's
 +  // (GitHub issue 44).
 +  const int opener_index = GetIndexOfTab(opener);
++  // A tab the user asked for -- Cmd-T, an address typed into a new tab -- is
++  // no page's own: Chromium makes one added at the end the active tab's child
++  // only so that closing it goes back (AddWebContents, the "quick look-up"
++  // case), and with the active tab a folder's last and the window's last it
++  // landed right after that opener and joined the folder (BACKLOG S-324).
 +  const bool joined_folder =
 +      !pin && !group.has_value() && opener && !opener->IsSplit() &&
-+      opener_index != kNoTab && index == opener_index + 1 &&
++      opener_index != kNoTab && index == opener_index + 1 && !quick_lookup &&
 +      contents_data_->AddTabAfterInFolder(scoped_tab, opener);
 +  if (!joined_folder) {
 +    contents_data_->AddTabRecursive(std::move(scoped_tab), index, group, pin);
