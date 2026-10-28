@@ -17,14 +17,14 @@ Removable when: Chromium's tab strip hosts a Space switcher and a downloads
 button of its own.
 ---
  .../browser/ui/spaces/space_model_unittest.cc | 79 ++++++++++++++++
- .../bubble/download_toolbar_ui_controller.cc  | 65 ++++++++-----
+ .../bubble/download_toolbar_ui_controller.cc  | 14 ++-
  chrome/browser/ui/views/spaces/BUILD.gn       |  7 +-
  .../ui/views/spaces/space_switcher_rules.cc   | 21 +++++
  .../ui/views/spaces/space_switcher_rules.h    | 31 ++++++
  .../spaces/space_switcher_rules_unittest.cc   | 28 ++++++
  .../ui/views/spaces/space_switcher_view.cc    | 94 +++++++++++++++++++
  .../ui/views/spaces/space_switcher_view.h     | 22 ++++-
- 8 files changed, 318 insertions(+), 29 deletions(-)
+ 8 files changed, 288 insertions(+), 8 deletions(-)
  create mode 100644 chrome/browser/ui/views/spaces/space_switcher_rules.cc
  create mode 100644 chrome/browser/ui/views/spaces/space_switcher_rules.h
  create mode 100644 chrome/browser/ui/views/spaces/space_switcher_rules_unittest.cc
@@ -127,86 +127,10 @@ index 0969184453000..c74016b163fa6 100644
   public:
    void OnSpaceAdded(const SpaceId& id) override { ++added; }
 diff --git a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
-index b9994e07451cd..f863d8401ec79 100644
+index f7d9aee57377c..fae91696894ca 100644
 --- a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
 +++ b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
-@@ -116,7 +116,7 @@ class DownloadProgressRing : public views::View, gfx::AnimationDelegate {
- 
-   // Create a DownloadProgressRing and adds it to |parent|. The
-   // returned progress ring is owned by the |parent|.
--  static DownloadProgressRing* Install(ToolbarButton* parent) {
-+  static DownloadProgressRing* Install(views::View* parent) {
-     auto progress_ring =
-         base::WrapUnique<DownloadProgressRing>(new DownloadProgressRing());
-     auto* ring = parent->AddChildView(std::move(progress_ring));
-@@ -124,7 +124,7 @@ class DownloadProgressRing : public views::View, gfx::AnimationDelegate {
-   }
- 
-   // Returns the progress ring if it is a direct child of the `parent`.
--  static DownloadProgressRing* GetProgressRing(ToolbarButton* parent) {
-+  static DownloadProgressRing* GetProgressRing(views::View* parent) {
-     for (auto& child : parent->children()) {
-       if (views::IsViewClass<DownloadProgressRing>(child)) {
-         return views::AsViewClass<DownloadProgressRing>(child);
-@@ -242,14 +242,16 @@ class DownloadProgressRing : public views::View, gfx::AnimationDelegate {
- BEGIN_METADATA(DownloadProgressRing)
- END_METADATA
- 
--DownloadProgressRing* GetProgressRing(BrowserView* browser_view) {
--  auto* button = GetDownloadsButton(browser_view);
--  if (!button) {
-+// Stedding (toolbar, S-41): the ring and the badge live on whichever view
-+// hosts the downloads icon -- the sidebar's button when the window has one,
-+// else the toolbar's.
-+DownloadProgressRing* GetProgressRing(views::View* host) {
-+  if (!host) {
-     return nullptr;
-   }
--  auto* progress_ring = DownloadProgressRing::GetProgressRing(button);
-+  auto* progress_ring = DownloadProgressRing::GetProgressRing(host);
-   if (!progress_ring) {
--    progress_ring = DownloadProgressRing::Install(button);
-+    progress_ring = DownloadProgressRing::Install(host);
-   }
-   return progress_ring;
- }
-@@ -310,14 +312,14 @@ class DownloadsImageBadge : public views::ImageView {
- 
-   // Create a DownloadsImageBadge and adds it to |parent|. The
-   // returned badge is owned by the |parent|.
--  static DownloadsImageBadge* Install(ToolbarButton* parent) {
-+  static DownloadsImageBadge* Install(views::View* parent) {
-     auto badge =
-         base::WrapUnique<DownloadsImageBadge>(new DownloadsImageBadge());
-     return parent->AddChildView(std::move(badge));
-   }
- 
-   // Returns the image badge if it is a direct child of the `parent`.
--  static DownloadsImageBadge* GetImageBadge(ToolbarButton* parent) {
-+  static DownloadsImageBadge* GetImageBadge(views::View* parent) {
-     for (auto& child : parent->children()) {
-       if (views::IsViewClass<DownloadsImageBadge>(child)) {
-         return views::AsViewClass<DownloadsImageBadge>(child);
-@@ -419,14 +421,13 @@ class DownloadsImageBadge : public views::ImageView {
- BEGIN_METADATA(DownloadsImageBadge)
- END_METADATA
- 
--DownloadsImageBadge* GetImageBadge(BrowserView* browser_view) {
--  auto* button = GetDownloadsButton(browser_view);
--  if (!button) {
-+DownloadsImageBadge* GetImageBadge(views::View* host) {
-+  if (!host) {
-     return nullptr;
-   }
--  auto* badge = DownloadsImageBadge::GetImageBadge(button);
-+  auto* badge = DownloadsImageBadge::GetImageBadge(host);
-   if (!badge) {
--    badge = DownloadsImageBadge::Install(button);
-+    badge = DownloadsImageBadge::Install(host);
-   }
-   return badge;
- }
-@@ -477,6 +478,11 @@ void DownloadToolbarUIController::TearDownPreBrowserWindowDestruction() {
+@@ -145,6 +145,11 @@ void DownloadToolbarUIController::TearDownPreBrowserWindowDestruction() {
  }
  
  void DownloadToolbarUIController::Show() {
@@ -218,7 +142,7 @@ index b9994e07451cd..f863d8401ec79 100644
    auto* container = GetPinnedToolbarActions(browser_view_);
    if (!container) {
      return;
-@@ -656,8 +662,13 @@ void DownloadToolbarUIController::OnOfflineItemsInitialized() {
+@@ -324,8 +329,13 @@ void DownloadToolbarUIController::OnOfflineItemsInitialized() {
  }
  
  void DownloadToolbarUIController::UpdateIcon() {
@@ -234,57 +158,6 @@ index b9994e07451cd..f863d8401ec79 100644
      return;
    }
  
-@@ -730,11 +741,10 @@ void DownloadToolbarUIController::UpdateIcon() {
- 
-   redraw_progress_soon_ = false;
- 
--  DownloadProgressRing* progress_ring = GetProgressRing(browser_view_);
-+  DownloadProgressRing* progress_ring = GetProgressRing(button);
- 
--  GetImageBadge(browser_view_)
--      ->UpdateImage(is_active, progress_download_count, progress_color,
--                    badge_background_color);
-+  GetImageBadge(button)->UpdateImage(is_active, progress_download_count,
-+                                     progress_color, badge_background_color);
- 
-   // Do not show the progress ring when there is no in progress download.
-   if (state_ == IconState::kComplete || progress_info_.download_count == 0) {
-@@ -872,7 +882,10 @@ void DownloadToolbarUIController::ShowPendingDownloadStartedAnimation() {
- }
- 
- bool DownloadToolbarUIController::IsProgressRingInDownloadingStateForTesting() {
--  if (auto* progress_ring = GetProgressRing(browser_view_)) {
-+  if (auto* progress_ring = GetProgressRing(
-+          SteddingAnchorView() && SteddingAnchorView()->GetWidget()
-+              ? SteddingAnchorView()
-+              : static_cast<views::View*>(GetDownloadsButton(browser_view_)))) {
-     return progress_ring->GetStatus() ==
-            DownloadProgressRing::DownloadStatus::kDownloading;
-   }
-@@ -880,7 +893,10 @@ bool DownloadToolbarUIController::IsProgressRingInDownloadingStateForTesting() {
- }
- 
- bool DownloadToolbarUIController::IsProgressRingInDormantStateForTesting() {
--  if (auto* progress_ring = GetProgressRing(browser_view_)) {
-+  if (auto* progress_ring = GetProgressRing(
-+          SteddingAnchorView() && SteddingAnchorView()->GetWidget()
-+              ? SteddingAnchorView()
-+              : static_cast<views::View*>(GetDownloadsButton(browser_view_)))) {
-     return progress_ring->GetStatus() ==
-            DownloadProgressRing::DownloadStatus::kDormant;
-   }
-@@ -888,7 +904,10 @@ bool DownloadToolbarUIController::IsProgressRingInDormantStateForTesting() {
- }
- 
- views::ImageView* DownloadToolbarUIController::GetImageBadgeForTesting() {
--  return GetImageBadge(browser_view_);
-+  return GetImageBadge(
-+      SteddingAnchorView() && SteddingAnchorView()->GetWidget()
-+          ? SteddingAnchorView()
-+          : static_cast<views::View*>(GetDownloadsButton(browser_view_)));
- }
- 
- DownloadToolbarUIController::BubbleCloser::BubbleCloser(
 diff --git a/chrome/browser/ui/views/spaces/BUILD.gn b/chrome/browser/ui/views/spaces/BUILD.gn
 index 3db16302be365..6a105da40d554 100644
 --- a/chrome/browser/ui/views/spaces/BUILD.gn

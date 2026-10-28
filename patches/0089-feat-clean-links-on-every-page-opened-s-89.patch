@@ -67,23 +67,23 @@ Chromium ships its own top-level parameter filter that does the same.
  create mode 100644 chrome/test/stedding/clean_links_browsertest.cc
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index b1b4f4086fbd6..6b20c3435b4a6 100644
+index 29b2af3367ee7..b4585289b9962 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1306,6 +1306,8 @@ source_set("core") {
-       "//chrome/browser/ui:stedding_ui_metrics",
+@@ -1479,6 +1479,8 @@ source_set("core") {
        "//chrome/browser/ui:uma_browsing_activity_observer",
        "//chrome/browser/ui/lens",
+       "//chrome/browser/ui/read_anything",
 +      # clean links Cl1: the throttle CreateURLLoaderThrottles makes.
 +      "//chrome/browser/ui/stedding:clean_links",
        "//chrome/browser/ui/stedding:dark_pages",
+       "//chrome/browser/ui/stedding:make_app",
        "//chrome/browser/ui/tabs/tab_drag_api/desktop_tab_drag_impl",
-       "//chrome/browser/ui/views/frame:glass_frame_service",
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 3f321dad984b7..751576c1d991c 100644
+index 98c0f3a23a3fa..327ac4ce62405 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -590,6 +590,7 @@
+@@ -597,6 +597,7 @@
  #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
  #include "chrome/browser/ui/chrome_pages.h"
  #include "chrome/browser/ui/dialogs/browser_dialogs.h"
@@ -91,7 +91,7 @@ index 3f321dad984b7..751576c1d991c 100644
  #include "chrome/browser/ui/stedding/dark_pages.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/waap/waap_utils.h"
-@@ -6158,6 +6159,25 @@ ChromeContentBrowserClient::CreateURLLoaderThrottles(
+@@ -6227,6 +6228,25 @@ ChromeContentBrowserClient::CreateURLLoaderThrottles(
    Profile* profile = Profile::FromBrowserContext(browser_context);
    DCHECK(profile);
  
@@ -118,10 +118,10 @@ index 3f321dad984b7..751576c1d991c 100644
        static_cast<ChromeNavigationUIData*>(navigation_ui_data);
  
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 5c842c1336c14..4a999043e123a 100644
+index 0a4138c4920e8..96f3012086deb 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -346,6 +346,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -349,6 +349,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kString;
    (*s_allowlist)[stedding::prefs::kCopyStripTracking] =
        settings_api::PrefType::kBoolean;
@@ -132,10 +132,10 @@ index 5c842c1336c14..4a999043e123a 100644
    (*s_allowlist)[stedding::prefs::kCopyLinkButton] =
        settings_api::PrefType::kBoolean;
 diff --git a/chrome/browser/history/BUILD.gn b/chrome/browser/history/BUILD.gn
-index a2d825a7ee9a5..eb1d2d3b74ccc 100644
+index 1ea3164fe5b24..dff5ee16efee5 100644
 --- a/chrome/browser/history/BUILD.gn
 +++ b/chrome/browser/history/BUILD.gn
-@@ -59,6 +59,9 @@ source_set("impl") {
+@@ -56,6 +56,9 @@ source_set("impl") {
      "//chrome/browser/sync:factories",
      "//chrome/browser/translate",
      "//chrome/browser/ui/profiles",
@@ -146,7 +146,7 @@ index a2d825a7ee9a5..eb1d2d3b74ccc 100644
      "//chrome/common:constants",
      "//components/bookmarks/browser",
 diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
-index cff7c3955c8a1..090a05d51c2a2 100644
+index 41e33ac73f3cd..b4528447bb7f6 100644
 --- a/chrome/browser/history/history_tab_helper.cc
 +++ b/chrome/browser/history/history_tab_helper.cc
 @@ -17,6 +17,7 @@
@@ -157,7 +157,7 @@ index cff7c3955c8a1..090a05d51c2a2 100644
  #include "components/actor/core/task_id.h"
  #include "components/history/content/browser/history_context_helper.h"
  #include "components/history/core/browser/history_constants.h"
-@@ -438,14 +439,26 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
+@@ -439,14 +440,26 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
        http_response_code == 404 ? history::VisitResponseCodeCategory::k404
                                  : history::VisitResponseCodeCategory::kNot404;
  
@@ -187,10 +187,10 @@ index cff7c3955c8a1..090a05d51c2a2 100644
        response_code_category, navigation_handle->DidReplaceEntry(),
        should_consider_for_ntp_most_visited, visit_context_ephemerality, title,
 diff --git a/chrome/browser/history/history_tab_helper_unittest.cc b/chrome/browser/history/history_tab_helper_unittest.cc
-index daa7fb3171862..baa6659f8f20d 100644
+index 28db030877d66..294a62bb14007 100644
 --- a/chrome/browser/history/history_tab_helper_unittest.cc
 +++ b/chrome/browser/history/history_tab_helper_unittest.cc
-@@ -326,6 +326,30 @@ TEST_F(HistoryTabHelperTest, CreateAddPageArgsReferringURLMainFrameNoReferrer) {
+@@ -327,6 +327,30 @@ TEST_F(HistoryTabHelperTest, CreateAddPageArgsReferringURLMainFrameNoReferrer) {
    EXPECT_TRUE(args.referrer.is_empty());
  }
  
@@ -1591,19 +1591,19 @@ index 9e5435da4660e..17ad7f9d61513 100644
  #if BUILDFLAG(IS_MAC)
             u"\u2318W on a pinned tab puts it to sleep"},
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index c93e81f15da79..c2b88e5759bc0 100644
+index 054c840ed640b..b5346e785e326 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -145,6 +145,8 @@ source_set("impl") {
-     "captions_handler.cc",
+@@ -150,6 +150,8 @@ source_set("impl") {
      "custom_home_pages_table_model.cc",
+     "device_tab_visibility_handler.cc",
      "dictation_handler.cc",
 +    "stedding_clean_links_handler.cc",
 +    "stedding_clean_links_handler.h",
      "stedding_dark_pages_handler.cc",
      "stedding_dark_pages_handler.h",
      "stedding_shortcuts_handler.cc",
-@@ -192,6 +194,9 @@ source_set("impl") {
+@@ -198,6 +200,9 @@ source_set("impl") {
      "//chrome/app:command_ids",
      "//chrome/app:generated_resources",
      "//chrome/browser/ui/stedding:app_updater",
@@ -1612,20 +1612,20 @@ index c93e81f15da79..c2b88e5759bc0 100644
 +    "//chrome/browser/ui/stedding:prefs",
      "//chrome/browser/ui/stedding:dark_pages",
      "//chrome/app/vector_icons",
-     "//chrome/browser:browser_process",
+     "//chrome/browser:browser_features",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 10e04d13cf720..c86406a1aefb6 100644
+index e7c42fb7e613d..f831bd0495cd4 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -64,6 +64,7 @@
- #include "chrome/browser/ui/webui/settings/appearance_handler.h"
+@@ -67,6 +67,7 @@
  #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
+ #include "chrome/browser/ui/webui/settings/device_tab_visibility_handler.h"
  #include "chrome/browser/ui/webui/settings/dictation_handler.h"
 +#include "chrome/browser/ui/webui/settings/stedding_clean_links_handler.h"
  #include "chrome/browser/ui/webui/settings/stedding_dark_pages_handler.h"
  #include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
  #include "chrome/browser/ui/webui/settings/stedding_spaces_handler.h"
-@@ -250,6 +251,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -257,6 +258,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    // Stedding dark pages (docs/features/dark-pages.md Dk20): the mode and the
    // lists, a content setting the page's preference bindings cannot reach.
    AddSettingsPageUIHandler(std::make_unique<SteddingDarkPagesHandler>(profile));
@@ -1636,7 +1636,7 @@ index 10e04d13cf720..c86406a1aefb6 100644
  
  #if BUILDFLAG(IS_CHROMEOS)
    AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
-@@ -841,6 +846,26 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -862,6 +867,26 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "steddingGpcSubLabel",
        "Sec-GPC: 1 on every request, and navigator.globalPrivacyControl for "
        "pages. Takes effect after a restart.");

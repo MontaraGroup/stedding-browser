@@ -96,7 +96,7 @@ stays while Stedding ships more than one release on a Chromium build.
  .../stedding/chromium_version_browsertest.cc  |  94 +++
  .../component_updater/configurator_impl.cc    |   3 +-
  .../embedder_support/user_agent_utils.cc      |  22 +-
- components/gcm_driver/gcm_desktop_utils.cc    |   4 +-
+ components/fcm/engine/chrome_build_info.cc    |   4 +-
  .../core/browser/db/sb_protocol_config.cc     |   8 +-
  components/sync/base/sync_util.cc             |   4 +-
  .../update_client/update_query_params.cc      |   3 +-
@@ -197,10 +197,10 @@ index e7a14529a99e9..3a80d30c8a862 100644
  #define LAST_CHANGE "@LASTCHANGE@"
  #define IS_OFFICIAL_BUILD @OFFICIAL_BUILD@
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 68ee6fd9c0df7..b1b4f4086fbd6 100644
+index c507c27b0a519..059f15ff10dfa 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1452,6 +1452,7 @@ source_set("core") {
+@@ -1630,6 +1630,7 @@ source_set("core") {
      ]
  
      deps += [
@@ -209,10 +209,10 @@ index 68ee6fd9c0df7..b1b4f4086fbd6 100644
        ":fullscreen",
        "//chrome/app:chrome_exe_main_exports",
 diff --git a/chrome/browser/chrome_browser_main_win.cc b/chrome/browser/chrome_browser_main_win.cc
-index 691b61da00a6f..6dfd469fa5352 100644
+index e1f879d33383e..693025d3da37f 100644
 --- a/chrome/browser/chrome_browser_main_win.cc
 +++ b/chrome/browser/chrome_browser_main_win.cc
-@@ -59,6 +59,7 @@
+@@ -61,6 +61,7 @@
  #include "chrome/browser/first_run/first_run.h"
  #include "chrome/browser/first_run/upgrade_util.h"
  #include "chrome/browser/first_run/upgrade_util_win.h"
@@ -220,7 +220,7 @@ index 691b61da00a6f..6dfd469fa5352 100644
  #include "chrome/browser/performance_manager/public/dll_pre_read_policy_win.h"
  #include "chrome/browser/platform_experience/features.h"
  #include "chrome/browser/platform_experience/prefs.h"
-@@ -67,6 +68,7 @@
+@@ -69,6 +70,7 @@
  #include "chrome/browser/shell_integration_win.h"
  #include "chrome/browser/ui/accessibility_util.h"
  #include "chrome/browser/ui/simple_message_box.h"
@@ -228,7 +228,7 @@ index 691b61da00a6f..6dfd469fa5352 100644
  #include "chrome/browser/ui/uninstall_browser_prompt.h"
  #include "chrome/browser/web_applications/chrome_pwa_launcher/last_browser_file_util.h"
  #include "chrome/browser/web_applications/chrome_pwa_launcher/launcher_update.h"
-@@ -121,6 +123,7 @@
+@@ -123,6 +125,7 @@
  #include "sandbox/win/src/sandbox_factory.h"
  #include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
  #include "services/device/public/cpp/geolocation/system_geolocation_source_win.h"
@@ -236,7 +236,7 @@ index 691b61da00a6f..6dfd469fa5352 100644
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/l10n/l10n_util_win.h"
  #include "ui/base/ui_base_switches.h"
-@@ -693,6 +696,12 @@ void ChromeBrowserMainPartsWin::PostProfileInit(Profile* profile,
+@@ -769,6 +772,12 @@ void ChromeBrowserMainPartsWin::PostProfileInit(Profile* profile,
    if (!is_initial_profile)
      return;
  
@@ -250,7 +250,7 @@ index 691b61da00a6f..6dfd469fa5352 100644
    // updated, update all launchers for this profile.
    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kAppId) &&
 diff --git a/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc b/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc
-index 358acdc3073e3..0d539e1269557 100644
+index 80434eba0af81..aa0c515d00e3e 100644
 --- a/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc
 +++ b/chrome/browser/extensions/api/identity/identity_get_auth_token_function.cc
 @@ -86,7 +86,9 @@ bool IsBrowserSigninAllowed(Profile* profile) {
@@ -265,10 +265,10 @@ index 358acdc3073e3..0d539e1269557 100644
  
  std::string_view GetOAuth2MintTokenFlowChannel() {
 diff --git a/chrome/browser/extensions/chrome_extensions_browser_client.cc b/chrome/browser/extensions/chrome_extensions_browser_client.cc
-index 982247172ea41..a67257e41cd3b 100644
+index 92742e80ff781..9f98946c17c95 100644
 --- a/chrome/browser/extensions/chrome_extensions_browser_client.cc
 +++ b/chrome/browser/extensions/chrome_extensions_browser_client.cc
-@@ -614,7 +614,8 @@ bool ChromeExtensionsBrowserClient::IsBackgroundUpdateAllowed() {
+@@ -621,7 +621,8 @@ bool ChromeExtensionsBrowserClient::IsBackgroundUpdateAllowed() {
  
  bool ChromeExtensionsBrowserClient::IsMinBrowserVersionSupported(
      const std::string& min_version) {
@@ -279,7 +279,7 @@ index 982247172ea41..a67257e41cd3b 100644
    return !browser_version.IsValid() || !browser_min_version.IsValid() ||
           browser_min_version.CompareTo(browser_version) <= 0;
 diff --git a/chrome/browser/media/router/discovery/dial/dial_service_impl.cc b/chrome/browser/media/router/discovery/dial/dial_service_impl.cc
-index 6e6ceee70a73a..0c6e8578f8c54 100644
+index 595dbfba1cda7..8575248f7061e 100644
 --- a/chrome/browser/media/router/discovery/dial/dial_service_impl.cc
 +++ b/chrome/browser/media/router/discovery/dial/dial_service_impl.cc
 @@ -122,7 +122,8 @@ std::string BuildRequest() {
@@ -291,7 +291,7 @@ index 6e6ceee70a73a..0c6e8578f8c54 100644
 +      version_info::GetChromiumVersionNumber().data(),
        version_info::GetOSType().data()));
    // 1500 is a good MTU value for most Ethernet LANs.
-   DCHECK_LE(request.size(), 1500U);
+   CHECK_LE(request.size(), 1500U, base::NotFatalUntil::M161);
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
 index ce3dabfbc6fbd..f6813d178c4b8 100644
 --- a/chrome/browser/resources/settings/stedding_page/stedding_page.html.ts
@@ -2317,10 +2317,10 @@ index ef98f36ba6903..42f36b01bf974 100644
      NOTREACHED();
    }
 diff --git a/chrome/installer/setup/uninstall.cc b/chrome/installer/setup/uninstall.cc
-index e1b1a9d71585f..16bc4964e5a68 100644
+index 823e20d1eb27b..90701fef750bd 100644
 --- a/chrome/installer/setup/uninstall.cc
 +++ b/chrome/installer/setup/uninstall.cc
-@@ -616,8 +616,14 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
+@@ -627,8 +627,14 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
                                      browser_entry_suffix);
    DeleteSoftwareClassesSubkey(root, chrome_prog_id);
  
@@ -2460,10 +2460,10 @@ index 0000000000000..fe7d415058b6f
 +
 +}  // namespace
 diff --git a/components/component_updater/configurator_impl.cc b/components/component_updater/configurator_impl.cc
-index 2ff9716b246fc..64d7871d3e376 100644
+index 2d595664a6c22..84e6d02f35f53 100644
 --- a/components/component_updater/configurator_impl.cc
 +++ b/components/component_updater/configurator_impl.cc
-@@ -96,7 +96,8 @@ std::vector<GURL> ConfiguratorImpl::PingUrl() const {
+@@ -97,7 +97,8 @@ std::vector<GURL> ConfiguratorImpl::PingUrl() const {
  
  const base::Version& ConfiguratorImpl::GetBrowserVersion() const {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -2474,10 +2474,10 @@ index 2ff9716b246fc..64d7871d3e376 100644
  
  std::string ConfiguratorImpl::GetOSLongName() const {
 diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
-index e699a6a394fd7..e8a598a1fdb84 100644
+index bf4a8960a0d6c..3a16a00fb3f74 100644
 --- a/components/embedder_support/user_agent_utils.cc
 +++ b/components/embedder_support/user_agent_utils.cc
-@@ -183,10 +183,11 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+@@ -179,10 +179,11 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
  // GetVersionNumber()
  const blink::UserAgentBrandList GetUserAgentBrandMajorVersionListInternal(
      std::optional<blink::UserAgentBrandVersion> additional_brand_version) {
@@ -2493,7 +2493,7 @@ index e699a6a394fd7..e8a598a1fdb84 100644
  }
  
  // For desktop and android:
-@@ -205,10 +206,11 @@ bool ShouldSendUserAgentUnifiedPlatform() {
+@@ -201,10 +202,11 @@ bool ShouldSendUserAgentUnifiedPlatform() {
  // GetVersionNumber()
  const blink::UserAgentBrandList GetUserAgentBrandFullVersionListInternal(
      std::optional<blink::UserAgentBrandVersion> additional_brand_version) {
@@ -2508,8 +2508,8 @@ index e699a6a394fd7..e8a598a1fdb84 100644
 +      blink::UserAgentBrandVersionType::kFullVersion, additional_brand_version);
  }
  
- // Internal function to handle return the full or "reduced" user agent string,
-@@ -689,7 +691,9 @@ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
+ // Generate random order list based on the input size and seed.
+@@ -661,7 +663,9 @@ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
    // High entropy client hints.
    metadata.brand_full_version_list =
        GetUserAgentBrandFullVersionListInternal(std::nullopt);
@@ -2520,11 +2520,11 @@ index e699a6a394fd7..e8a598a1fdb84 100644
    metadata.architecture = GetCpuArchitecture();
    metadata.model = BuildModelInfo();
    metadata.form_factors = GetFormFactorsClientHint(metadata, metadata.mobile);
-diff --git a/components/gcm_driver/gcm_desktop_utils.cc b/components/gcm_driver/gcm_desktop_utils.cc
-index 4052fd500040a..08b0257bbb453 100644
---- a/components/gcm_driver/gcm_desktop_utils.cc
-+++ b/components/gcm_driver/gcm_desktop_utils.cc
-@@ -57,7 +57,9 @@ GCMClient::ChromeChannel GetChannel(version_info::Channel channel) {
+diff --git a/components/fcm/engine/chrome_build_info.cc b/components/fcm/engine/chrome_build_info.cc
+index 4fe82050c778d..f21a773e03d7e 100644
+--- a/components/fcm/engine/chrome_build_info.cc
++++ b/components/fcm/engine/chrome_build_info.cc
+@@ -52,7 +52,9 @@ ChromeChannel GetChannel(version_info::Channel channel) {
  }
  
  std::string GetVersion() {
@@ -2534,7 +2534,7 @@ index 4052fd500040a..08b0257bbb453 100644
 +  return std::string(version_info::GetChromiumVersionNumber());
  }
  
- GCMClient::ChromeBuildInfo GetChromeBuildInfo(
+ }  // namespace
 diff --git a/components/safe_browsing/core/browser/db/sb_protocol_config.cc b/components/safe_browsing/core/browser/db/sb_protocol_config.cc
 index 441203549c2bb..dbd94b3830250 100644
 --- a/components/safe_browsing/core/browser/db/sb_protocol_config.cc
@@ -2614,10 +2614,10 @@ index ad5ac45ba49b5..ca96b6cae8f1b 100644
    info.version_number = std::string(version);
    return RespondNow(ArgumentList(GetFullChromeVersion::Results::Create(info)));
 diff --git a/net/cert/cert_verify_proc_builtin.cc b/net/cert/cert_verify_proc_builtin.cc
-index 284bab5a0349f..798bb7c44a6f9 100644
+index 094f8a18d3715..0142498c51a0e 100644
 --- a/net/cert/cert_verify_proc_builtin.cc
 +++ b/net/cert/cert_verify_proc_builtin.cc
-@@ -893,13 +893,15 @@ class PathBuilderDelegateImpl : public bssl::SimplePathBuilderDelegate {
+@@ -892,13 +892,15 @@ class PathBuilderDelegateImpl : public bssl::SimplePathBuilderDelegate {
        }
      }
  

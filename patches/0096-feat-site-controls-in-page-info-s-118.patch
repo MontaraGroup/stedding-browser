@@ -41,7 +41,7 @@ Chromium's page info gains the same controls.
  chrome/browser/ui/stedding/site_cookies.h     |  30 +
  .../ui/stedding/site_cookies_unittest.cc      |  65 ++
  chrome/browser/ui/toasts/api/toast_id.cc      |   4 +
- chrome/browser/ui/toasts/api/toast_id.h       |   5 +
+ chrome/browser/ui/toasts/api/toast_id.h       |   7 +-
  chrome/browser/ui/toasts/toast_service.cc     |  20 +
  .../views/commandbar/address_row_controls.cc  |  23 +
  .../views/commandbar/address_row_controls.h   |   9 +
@@ -49,8 +49,8 @@ Chromium's page info gains the same controls.
  .../views/location_bar/location_bar_view.cc   |   3 +
  chrome/browser/ui/views/page_info/BUILD.gn    |  44 +
  .../page_info_bubble_specification.cc         |  14 +
- .../page_info_bubble_specification.h          |   8 +
- .../views/page_info/page_info_bubble_view.cc  |  52 +-
+ .../page_info_bubble_specification.h          |   7 +
+ .../views/page_info/page_info_bubble_view.cc  |  42 +-
  .../views/page_info/page_info_bubble_view.h   |   3 +-
  .../ui/views/page_info/page_info_main_view.cc |  29 +-
  .../ui/views/page_info/page_info_main_view.h  |   3 +-
@@ -66,7 +66,7 @@ Chromium's page info gains the same controls.
  chrome/test/stedding/space_jar_browsertest.cc | 211 +++++
  components/page_info/page_info.cc             |  11 +
  components/page_info/page_info_delegate.h     |   6 +
- 39 files changed, 3428 insertions(+), 34 deletions(-)
+ 39 files changed, 3423 insertions(+), 30 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/site_controls.cc
  create mode 100644 chrome/browser/ui/stedding/site_controls.h
  create mode 100644 chrome/browser/ui/stedding/site_controls_unittest.cc
@@ -1081,10 +1081,10 @@ index 19ad5ea88ca12..a26839b86710b 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/toasts/api/toast_id.cc b/chrome/browser/ui/toasts/api/toast_id.cc
-index 94d97d237fc3b..e6b4adb6ef06c 100644
+index e26eb17c71c73..6e4126abd7539 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.cc
 +++ b/chrome/browser/ui/toasts/api/toast_id.cc
-@@ -137,6 +137,10 @@ std::string_view GetToastName(ToastId toast_id) {
+@@ -141,6 +141,10 @@ std::string_view GetToastName(ToastId toast_id) {
        return "SteddingSiteCookiesCleared";
      case ToastId::kSteddingTabsClosed:
        return "SteddingTabsClosed";
@@ -1096,26 +1096,30 @@ index 94d97d237fc3b..e6b4adb6ef06c 100644
        return "SteddingCaptureFailed";
    }
 diff --git a/chrome/browser/ui/toasts/api/toast_id.h b/chrome/browser/ui/toasts/api/toast_id.h
-index 8b10f22529f6c..c7db9fbec5a9c 100644
+index 03dd31d14195e..5e3a1f7c321ff 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.h
 +++ b/chrome/browser/ui/toasts/api/toast_id.h
-@@ -98,6 +98,11 @@ enum class ToastId {
-   // 66 was kSteddingPinLeftSession (docs/features/sessions.md S33, withdrawn
+@@ -100,9 +100,14 @@ enum class ToastId {
+   // 68 was kSteddingPinLeftSession (docs/features/sessions.md S33, withdrawn
    // 2026-10-22: an essential pinned in a Space with its own session stays in
    // it, ADR 0028).
 +  // Site controls (docs/features/site-controls.md): the site's data cleared
 +  // from the page's jar and the page reloaded (Si8); the page's title copied
 +  // (Si3).
-+  kSteddingSiteDataCleared = 67,
-+  kSteddingTitleCopied = 68,
++  kSteddingSiteDataCleared = 69,
++  kSteddingTitleCopied = 70,
    // A screenshot that was not taken, or taken and not saved
    // (docs/features/screenshot.md C10).
-   kSteddingCaptureFailed = 69,
+-  kSteddingCaptureFailed = 69,
++  kSteddingCaptureFailed = 71,
+   kMaxValue = kSteddingCaptureFailed,
+ };
+ // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
 diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
-index 97a7153cfc915..e12a87333e18f 100644
+index 658b3cfc0ce85..869ce28eb5e4e 100644
 --- a/chrome/browser/ui/toasts/toast_service.cc
 +++ b/chrome/browser/ui/toasts/toast_service.cc
-@@ -469,6 +469,26 @@ void ToastService::RegisterToasts(
+@@ -456,6 +456,26 @@ void ToastService::RegisterToasts() {
            .SetPersistOnNavigation()
            .Build());
  
@@ -1235,10 +1239,10 @@ index a36455069d310..aa376b9c2a27c 100644
    extensions_menu_widget_ = menu->GetWeakPtr();
    extension_menu_observation_.Observe(menu);
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-index 08255fa850608..5a538083182f1 100644
+index 957ada4bc7364..2dd2aed380652 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-@@ -2426,6 +2426,9 @@ bool LocationBarView::ShowPageInfoDialog() {
+@@ -2536,6 +2536,9 @@ bool LocationBarView::ShowPageInfoDialog() {
            .AddPageInfoClosingCallback(
                base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
                               weak_factory_.GetWeakPtr()))
@@ -1249,7 +1253,7 @@ index 08255fa850608..5a538083182f1 100644
    views::BubbleDialogDelegateView* const bubble =
        PageInfoBubbleView::CreatePageInfoBubble(std::move(specification));
 diff --git a/chrome/browser/ui/views/page_info/BUILD.gn b/chrome/browser/ui/views/page_info/BUILD.gn
-index 1f9bd481a371a..3faa59e7bb122 100644
+index d6e74b52c8f5b..a949f93096432 100644
 --- a/chrome/browser/ui/views/page_info/BUILD.gn
 +++ b/chrome/browser/ui/views/page_info/BUILD.gn
 @@ -28,6 +28,10 @@ source_set("page_info") {
@@ -1312,9 +1316,9 @@ index 1f9bd481a371a..3faa59e7bb122 100644
 +    "//components/zoom",
 +
      "//base",
-     "//chrome/browser:browser_public_dependencies",
      "//chrome/browser:primitives",
-@@ -142,9 +178,17 @@ source_set("unit_tests") {
+     "//chrome/browser/file_system_access",
+@@ -141,9 +177,17 @@ source_set("unit_tests") {
      "page_info_security_content_view_unittest.cc",
      "safety_tip_page_info_bubble_view_unittest.cc",
      "star_rating_view_unittest.cc",
@@ -1333,10 +1337,10 @@ index 1f9bd481a371a..3faa59e7bb122 100644
      "//chrome/browser/bluetooth",
      "//chrome/browser/content_settings",
 diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc b/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc
-index 6007694fd1cd5..090eadf037d41 100644
+index 04dad7a7fba34..56e7a503d2dec 100644
 --- a/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc
 +++ b/chrome/browser/ui/views/page_info/page_info_bubble_specification.cc
-@@ -83,6 +83,12 @@ PageInfoBubbleSpecification::Builder::SetOnExtensionsClickedCallback(
+@@ -89,6 +89,12 @@ PageInfoBubbleSpecification::Builder::SetSurface(PageInfo::Surface surface) {
    return *this;
  }
  
@@ -1349,7 +1353,7 @@ index 6007694fd1cd5..090eadf037d41 100644
  void PageInfoBubbleSpecification::Builder::ValidateSpecification() {
    CHECK(page_info_bubble_specification_->web_contents());
  }
-@@ -142,6 +148,14 @@ void PageInfoBubbleSpecification::SetOnExtensionsClickedCallback(
+@@ -148,6 +154,14 @@ void PageInfoBubbleSpecification::SetOnExtensionsClickedCallback(
    open_extensions_menu_callback_ = std::move(callback);
  }
  
@@ -1365,47 +1369,46 @@ index 6007694fd1cd5..090eadf037d41 100644
    return !open_extensions_menu_callback_.is_null();
  }
 diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_specification.h b/chrome/browser/ui/views/page_info/page_info_bubble_specification.h
-index 3dc980bb1e985..a3bc995e1ff7b 100644
+index 70ed3cb670e95..1602fc458ede7 100644
 --- a/chrome/browser/ui/views/page_info/page_info_bubble_specification.h
 +++ b/chrome/browser/ui/views/page_info/page_info_bubble_specification.h
-@@ -66,6 +66,11 @@ class PageInfoBubbleSpecification {
-     // bubble is clicked, and enables showing the extensions menu item.
-     Builder& SetOnExtensionsClickedCallback(base::RepeatingClosure callback);
- 
+@@ -69,6 +69,10 @@ class PageInfoBubbleSpecification {
+     // Sets the surface from which the page info bubble is opened (e.g.
+     // Contextual Tasks side panel toolbar Super G button).
+     Builder& SetSurface(PageInfo::Surface surface);
 +    // Stedding (BACKLOG S-118, site-controls Si1): the bubble holds the site
 +    // controls when its page is a tab of a normal or private tabbed window.
 +    // Only the site chip and the command bar's View Site Information ask.
 +    Builder& ShowSteddingSiteControls();
-+
+ 
      std::unique_ptr<PageInfoBubbleSpecification> Build();
  
-    private:
-@@ -90,6 +95,7 @@ class PageInfoBubbleSpecification {
-   void HideExtendedSiteInfo();
+@@ -95,6 +99,7 @@ class PageInfoBubbleSpecification {
    void ShowPermissionPage(ContentSettingsType type);
    void SetOnExtensionsClickedCallback(base::RepeatingClosure callback);
+   void SetSurface(PageInfo::Surface surface);
 +  void ShowSteddingSiteControls();
  
    views::BubbleAnchor anchor();
    gfx::NativeWindow parent_window();
-@@ -103,6 +109,7 @@ class PageInfoBubbleSpecification {
-   std::optional<ContentSettingsType> permission_page_type();
+@@ -109,6 +114,7 @@ class PageInfoBubbleSpecification {
    bool should_show_extensions_menu() const;
    const base::RepeatingClosure& get_open_extensions_menu_callback() const;
+   PageInfo::Surface surface() const;
 +  bool show_stedding_site_controls() const;
  
   private:
    views::BubbleAnchor anchor_;
-@@ -117,6 +124,7 @@ class PageInfoBubbleSpecification {
-   bool show_extended_site_info_ = true;
+@@ -124,6 +130,7 @@ class PageInfoBubbleSpecification {
    std::optional<ContentSettingsType> permission_page_type_;
    base::RepeatingClosure open_extensions_menu_callback_;
+   PageInfo::Surface surface_ = PageInfo::Surface::kDefault;
 +  bool show_stedding_site_controls_ = false;
  };
  
  #endif  // CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_BUBBLE_SPECIFICATION_H_
 diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
-index 3f36fc7c6838d..02e50f946cee0 100644
+index 72e4e2e06d895..f514c5d742f38 100644
 --- a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
 +++ b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
 @@ -10,9 +10,11 @@
@@ -1428,24 +1431,24 @@ index 3f36fc7c6838d..02e50f946cee0 100644
  #include "components/dom_distiller/core/url_constants.h"
  #include "components/dom_distiller/core/url_utils.h"
  #include "components/page_info/core/features.h"
-@@ -187,7 +190,8 @@ PageInfoBubbleView::PageInfoBubbleView(
-     PageInfoClosingCallback closing_callback,
+@@ -188,7 +191,8 @@ PageInfoBubbleView::PageInfoBubbleView(
      bool allow_extended_site_info,
      ChromePageInfoDelegate::GetBrowserCallback get_browser_callback,
--    base::RepeatingClosure open_extensions_menu_callback)
-+    base::RepeatingClosure open_extensions_menu_callback,
+     base::RepeatingClosure open_extensions_menu_callback,
+-    PageInfo::Surface surface)
++    PageInfo::Surface surface,
 +    bool stedding_site_controls)
      : PageInfoBubbleViewBase(anchor,
                               anchor_rect,
                               parent_window,
-@@ -205,13 +209,20 @@ PageInfoBubbleView::PageInfoBubbleView(
+@@ -206,13 +210,20 @@ PageInfoBubbleView::PageInfoBubbleView(
    set_margins(gfx::Insets().set_top(top_margin));
    ui_delegate_ =
        std::make_unique<ChromePageInfoUiDelegate>(web_contents(), url);
 -  presenter_ = std::make_unique<PageInfo>(
 -      std::make_unique<ChromePageInfoDelegate>(web_contents(),
 -                                               std::move(get_browser_callback)),
--      web_contents(), url);
+-      web_contents(), url, surface);
 +  auto page_info_delegate = std::make_unique<ChromePageInfoDelegate>(
 +      web_contents(), std::move(get_browser_callback));
 +  if (stedding_site_controls) {
@@ -1455,7 +1458,7 @@ index 3f36fc7c6838d..02e50f946cee0 100644
 +        stedding::AlwaysListedPermissions(url));
 +  }
 +  presenter_ = std::make_unique<PageInfo>(std::move(page_info_delegate),
-+                                          web_contents(), url);
++                                          web_contents(), url, surface);
    view_factory_ = std::make_unique<PageInfoViewFactory>(
        presenter_.get(), ui_delegate_.get(), this, allow_extended_site_info,
        std::move(open_extensions_menu_callback));
@@ -1463,17 +1466,10 @@ index 3f36fc7c6838d..02e50f946cee0 100644
  
    SetShowTitle(false);
    SetShowCloseButton(false);
-@@ -256,13 +267,25 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
+@@ -257,14 +268,26 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
                                            web_contents, url);
    }
  
--  PageInfoBubbleView* const bubble = new PageInfoBubbleView(
--      anchor, anchor_rect, parent_view, web_contents, url,
--      specification->initialized_callback(),
--      specification->page_info_closing_callback(),
--      specification->show_extended_site_info(),
--      specification->get_browser_callback(),
--      specification->get_open_extensions_menu_callback());
 +  // Stedding (BACKLOG S-118, site-controls Si1, Si10): the site chip's and
 +  // the command bar's page info of a tab holds the site controls, and its
 +  // Extensions row opens the window's extensions menu.
@@ -1486,17 +1482,20 @@ index 3f36fc7c6838d..02e50f946cee0 100644
 +    open_extensions_menu =
 +        stedding::SiteControlsExtensionsCallback(web_contents);
 +  }
-+  PageInfoBubbleView* const bubble =
-+      new PageInfoBubbleView(anchor, anchor_rect, parent_view, web_contents,
-+                             url, specification->initialized_callback(),
-+                             specification->page_info_closing_callback(),
-+                             specification->show_extended_site_info(),
-+                             specification->get_browser_callback(),
-+                             std::move(open_extensions_menu), site_controls);
+   PageInfoBubbleView* const bubble =
+       new PageInfoBubbleView(anchor, anchor_rect, parent_view, web_contents,
+                              url, specification->initialized_callback(),
+                              specification->page_info_closing_callback(),
+                              specification->show_extended_site_info(),
+                              specification->get_browser_callback(),
+-                             specification->get_open_extensions_menu_callback(),
+-                             specification->surface());
++                             std::move(open_extensions_menu),
++                             specification->surface(), site_controls);
    if (specification->permission_page_type().has_value()) {
      bubble->OpenPermissionPage(specification->permission_page_type().value());
    }
-@@ -413,6 +436,11 @@ void ShowPageInfoDialogImpl(BrowserWindowInterface* browser,
+@@ -417,6 +440,11 @@ void ShowPageInfoDialogImpl(BrowserWindowInterface* browser,
        .AddPageInfoClosingCallback(std::move(closing_callback));
    if (type.has_value()) {
      page_info_bubble_builder.ShowPermissionPage(type.value());
@@ -1509,21 +1508,21 @@ index 3f36fc7c6838d..02e50f946cee0 100644
  
    views::BubbleDialogDelegateView* const bubble =
 diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view.h b/chrome/browser/ui/views/page_info/page_info_bubble_view.h
-index 6881e79d73675..7969ece89e13f 100644
+index fb8378179dd20..4d373dfae5c59 100644
 --- a/chrome/browser/ui/views/page_info/page_info_bubble_view.h
 +++ b/chrome/browser/ui/views/page_info/page_info_bubble_view.h
-@@ -65,7 +65,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
-       bool allow_extended_site_info,
+@@ -66,7 +66,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
        ChromePageInfoDelegate::GetBrowserCallback get_browser_callback,
        base::RepeatingClosure open_extensions_menu_callback =
--          base::RepeatingClosure());
-+          base::RepeatingClosure(),
+           base::RepeatingClosure(),
+-      PageInfo::Surface surface = PageInfo::Surface::kDefault);
++      PageInfo::Surface surface = PageInfo::Surface::kDefault,
 +      bool stedding_site_controls = false);
  
    // PageInfoBubbleViewBase:
    gfx::Size CalculatePreferredSize(
 diff --git a/chrome/browser/ui/views/page_info/page_info_main_view.cc b/chrome/browser/ui/views/page_info/page_info_main_view.cc
-index 2c44be691f580..d8073aab72ac3 100644
+index 877b22f596031..c58b557559ae2 100644
 --- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
 +++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
 @@ -28,6 +28,7 @@
@@ -1545,8 +1544,8 @@ index 2c44be691f580..d8073aab72ac3 100644
        ui_delegate_(ui_delegate),
        navigation_handler_(navigation_handler),
 @@ -166,6 +168,20 @@ PageInfoMainView::PageInfoMainView(
-       ->SetProperty(views::kMarginsKey,
-                     gfx::Insets::TLBR(0, 0, hover_list_spacing, 0));
+   header_view_->SetProperty(views::kMarginsKey,
+                             gfx::Insets::TLBR(0, 0, hover_list_spacing, 0));
  
 +  // Stedding (BACKLOG S-118, toolbar T47, site-controls Si2-Si5): the strip
 +  // under the header -- copy link, copy title, mute, picture in picture, zoom
@@ -1584,7 +1583,7 @@ index 2c44be691f580..d8073aab72ac3 100644
    int tooltip_text_id = 0;
    if (ui_delegate_->ShouldShowSiteSettings(&link_text_id, &tooltip_text_id)) {
 diff --git a/chrome/browser/ui/views/page_info/page_info_main_view.h b/chrome/browser/ui/views/page_info/page_info_main_view.h
-index d39123af62467..262695b868539 100644
+index 4d92ff537cd8d..5531b55c671b4 100644
 --- a/chrome/browser/ui/views/page_info/page_info_main_view.h
 +++ b/chrome/browser/ui/views/page_info/page_info_main_view.h
 @@ -71,7 +71,8 @@ class PageInfoMainView : public views::View,
@@ -1598,10 +1597,10 @@ index d39123af62467..262695b868539 100644
  
    // PageInfoUI implementations.
 diff --git a/chrome/browser/ui/views/page_info/page_info_view_factory.cc b/chrome/browser/ui/views/page_info/page_info_view_factory.cc
-index 7f22647e5e881..7f9f8450ab289 100644
+index d5a310459999e..dd4fb73fa718a 100644
 --- a/chrome/browser/ui/views/page_info/page_info_view_factory.cc
 +++ b/chrome/browser/ui/views/page_info/page_info_view_factory.cc
-@@ -144,7 +144,7 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateMainPageView(
+@@ -149,7 +149,7 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateMainPageView(
    return std::make_unique<PageInfoMainView>(
        presenter_, ui_delegate_, navigation_handler_,
        std::move(initialized_callback), allow_extended_site_info_,
@@ -4240,10 +4239,10 @@ index 326c29e639aa7..e466aa666f33f 100644
  // moves Work's tabs in both, and clearing the session signs both out. The
  // toggle reloads. It does not delete the partition's cookies.
 diff --git a/components/page_info/page_info.cc b/components/page_info/page_info.cc
-index 81954bda08be0..1e60fe9d2e0d1 100644
+index e56071dd2f9f0..6d373bd461012 100644
 --- a/components/page_info/page_info.cc
 +++ b/components/page_info/page_info.cc
-@@ -964,6 +964,10 @@ void PageInfo::OnSuspiciousSiteBackToSafety() {
+@@ -1003,6 +1003,10 @@ void PageInfo::OnSuspiciousSiteBackToSafety() {
    delegate_->OnSuspiciousSiteBackToSafety();
  }
  
@@ -4254,7 +4253,7 @@ index 81954bda08be0..1e60fe9d2e0d1 100644
  void PageInfo::OnSuspiciousSiteMarkAsSafe() {
    delegate_->OnSuspiciousSiteMarkAsSafe();
  }
-@@ -1505,6 +1509,13 @@ bool PageInfo::ShouldShowPermission(
+@@ -1544,6 +1548,13 @@ bool PageInfo::ShouldShowPermission(
    // TODO(crbug.com/40064079): Filter out FPS related STORAGE_ACCESS
    // permissions.
  

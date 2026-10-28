@@ -16,8 +16,8 @@ that do it want the pages they see.
 Removable when: never; this is product behaviour.
 ---
  chrome/app/chrome_command_ids.h               |   5 +
+ chrome/browser/BUILD.gn                       |   1 +
  .../browser/global_keyboard_shortcuts_mac.mm  |   8 +
- chrome/browser/ui/BUILD.gn                    |   1 +
  .../browser/ui/browser_command_controller.cc  |  14 +
  .../browser/ui/stedding/screenshot/BUILD.gn   |  28 ++
  .../stedding/screenshot/screenshot_capture.cc | 296 ++++++++++++++++++
@@ -28,10 +28,10 @@ Removable when: never; this is product behaviour.
  create mode 100644 chrome/browser/ui/stedding/screenshot/screenshot_capture.h
 
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index a9f146ad74755..dfaac83cb4556 100644
+index e7b9327ce3fd4..054eb2a8d553f 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
-@@ -576,6 +576,11 @@
+@@ -580,6 +580,11 @@
  // otherwise it'll conflict. Unbounded menus must also avoid conflicting with
  // each other, by only using every Nth id (where N is the number of unbounded
  // menus).
@@ -43,6 +43,18 @@ index a9f146ad74755..dfaac83cb4556 100644
  #define IDC_FIRST_UNBOUNDED_MENU COMMAND_ID_FIRST_UNBOUNDED
  // LINT.ThenChange(//chrome/browser/ui/actions/chrome_action_id.h)
  
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index af4460d6b55db..da998c9f7d973 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3859,6 +3859,7 @@ source_set("browser") {
+     public_deps += [
+       "//chrome/browser/ui/stedding:prefs",
+       "//chrome/browser/ui/views/peek",
++      "//chrome/browser/ui/stedding/screenshot",
+       "//chrome/browser/ui/stedding/theme",
+     ]
+     deps += [
 diff --git a/chrome/browser/global_keyboard_shortcuts_mac.mm b/chrome/browser/global_keyboard_shortcuts_mac.mm
 index 1bbe4c5fab656..54b8bff8196db 100644
 --- a/chrome/browser/global_keyboard_shortcuts_mac.mm
@@ -62,20 +74,8 @@ index 1bbe4c5fab656..54b8bff8196db 100644
        {true,  true,  false, false, kVK_ANSI_RightBracket, IDC_SELECT_NEXT_TAB},
        {true,  true,  false, false, kVK_ANSI_LeftBracket,  IDC_SELECT_PREVIOUS_TAB},
        {false, false, true,  false, kVK_PageDown,          IDC_SELECT_NEXT_TAB},
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index daddd96861721..b0857681c98f3 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2346,6 +2346,7 @@ static_library("ui") {
-       "//chrome/browser/ui/views/spaces",
-       "//chrome/browser/ui/views/commandbar",
-       "//chrome/browser/ui/views/peek",
-+      "//chrome/browser/ui/stedding/screenshot",
-       "//chrome/browser/ui/stedding/theme",
-       ":tab_ui_helper",
-       ":uma_browsing_activity_observer",
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index a78b28bce213b..391880b596fd9 100644
+index 79cb06521af34..15ed826cebdb4 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
 @@ -4,6 +4,8 @@
@@ -87,7 +87,7 @@ index a78b28bce213b..391880b596fd9 100644
  #include <stddef.h>
  
  #include <algorithm>
-@@ -894,6 +896,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -906,6 +908,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
        PromptToNameWindow(browser_);
        break;
  
@@ -103,7 +103,7 @@ index a78b28bce213b..391880b596fd9 100644
  #if BUILDFLAG(IS_CHROMEOS)
      case IDC_TAKE_SCREENSHOT:
        TakeScreenshot();
-@@ -1962,6 +1973,9 @@ void BrowserCommandController::InitCommandState() {
+@@ -2020,6 +2031,9 @@ void BrowserCommandController::InitCommandState() {
          (!guest_session && !profile()->IsSystemProfile()));
    }
  

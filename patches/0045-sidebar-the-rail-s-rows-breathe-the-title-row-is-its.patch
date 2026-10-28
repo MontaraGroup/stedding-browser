@@ -46,10 +46,10 @@ sidebar's views in a narrower form.
  10 files changed, 168 insertions(+), 43 deletions(-)
 
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index fcecb5a11e059..b1633a762f55d 100644
+index 4479e6a522665..a4b427f22e3c9 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -305,8 +305,10 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -323,8 +323,10 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
          bottom_row->AddChildView(std::make_unique<spaces::SpaceSwitcherView>(
              *space_model, *browser_view->browser()));
      row_layout->SetFlexForView(space_switcher_, 1);
@@ -62,7 +62,7 @@ index fcecb5a11e059..b1633a762f55d 100644
      bottom_row->SetProperty(
          views::kFlexBehaviorKey,
          views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
-@@ -1660,6 +1662,7 @@ base::TimeDelta VerticalTabStripRegionView::SteddingHoverDelay() const {
+@@ -1669,6 +1671,7 @@ base::TimeDelta VerticalTabStripRegionView::SteddingHoverDelay() const {
  void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
    const bool arc_style =
        base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
@@ -70,7 +70,7 @@ index fcecb5a11e059..b1633a762f55d 100644
    // The button containers sit on the rows' column: the rail's padding
    // from the strip's edges in the rail, the open sidebar's 12 DIP
    // otherwise, past the gutter's worth of interior margin the collapsed
-@@ -1709,18 +1712,24 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+@@ -1718,18 +1721,24 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
      bottom_row_layout_->SetOrientation(
          rail ? views::BoxLayout::Orientation::kVertical
               : views::BoxLayout::Orientation::kHorizontal);
@@ -101,7 +101,7 @@ index fcecb5a11e059..b1633a762f55d 100644
    }
  }
  
-@@ -1841,14 +1850,16 @@ void VerticalTabStripRegionView::UpdateSpaceTitle() {
+@@ -1850,14 +1859,16 @@ void VerticalTabStripRegionView::UpdateSpaceTitle() {
        browser_view()->browser()->GetProfile()->IsOffTheRecord()) {
      strip->SetSpaceTitleIcon(ui::ImageModel::FromVectorIcon(
          kIncognitoIcon, kColorTabForegroundInactiveFrameActive, 16));
@@ -120,7 +120,7 @@ index fcecb5a11e059..b1633a762f55d 100644
    // One unnamed Space is an ordinary window; the title appears with two.
    if (active && model->size() > 1) {
      size_t index = 0;
-@@ -1858,11 +1869,11 @@ void VerticalTabStripRegionView::UpdateSpaceTitle() {
+@@ -1867,11 +1878,11 @@ void VerticalTabStripRegionView::UpdateSpaceTitle() {
        }
        ++index;
      }
@@ -135,7 +135,7 @@ index fcecb5a11e059..b1633a762f55d 100644
        base::BindRepeating(
            [](VerticalTabStripRegionView* self, const ui::Event& event) {
              spaces::SpaceModel* const model =
-@@ -1889,7 +1900,10 @@ void VerticalTabStripRegionView::OnSpaceChipHovered(
+@@ -1898,7 +1909,10 @@ void VerticalTabStripRegionView::OnSpaceChipHovered(
    if (!space_hover_pill_) {
      return;
    }
@@ -148,10 +148,10 @@ index fcecb5a11e059..b1633a762f55d 100644
      return;
    }
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 41825236f9319..bde38f566a055 100644
+index 3c9c52e478742..c80acc206d941 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -305,6 +305,9 @@ class VerticalTabStripRegionView final
+@@ -289,6 +289,9 @@ class VerticalTabStripRegionView final
    // The gutter's worth of interior margin the collapsed strip carries
    // (sidebar Y6), for the button containers' margins in ApplyRailForm.
    int rail_left_ = 0;
@@ -316,10 +316,10 @@ index 1251f20f7dabd..4da40a9856489 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-index fbe4c84aa441a..523e720ea550c 100644
+index 93f6105630f70..25a26ed2bd700 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-@@ -28,6 +28,8 @@
+@@ -29,6 +29,8 @@
  
  namespace {
  constexpr int kTabVerticalPadding = 2;
@@ -328,7 +328,7 @@ index fbe4c84aa441a..523e720ea550c 100644
  constexpr int kGroupLineWidth = 2;
  constexpr int kGroupLineCollapsedLeadingPadding = 6;
  constexpr int kGroupHeaderHeight = 26;
-@@ -88,6 +90,8 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -90,6 +92,8 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
        rail ? stedding::kRailRowPadding
             : GetLayoutConstant(
                   LayoutConstant::kVerticalTabStripHorizontalPadding);
@@ -337,7 +337,7 @@ index fbe4c84aa441a..523e720ea550c 100644
    if (tab_strip_collapse_state !=
        tabs::VerticalTabStripCollapseState::kExpanded) {
      group_line_bounds.set_x(rail ? 0 : kGroupLineCollapsedLeadingPadding);
-@@ -108,7 +112,7 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -130,7 +134,7 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
        tab_group_view->group_header_->GetVisible(), header_bounds);
  
    height +=
@@ -346,7 +346,7 @@ index fbe4c84aa441a..523e720ea550c 100644
    width = std::max(width, header_bounds.width());
  
    // If the tab strip is not collapsed then the group line is below and left
-@@ -152,11 +156,11 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -174,11 +178,11 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
        bounds.set_width(size_bounds.width().value() - bounds.x());
      }
      layouts.child_layouts.emplace_back(child, child->GetVisible(), bounds);
@@ -360,7 +360,7 @@ index fbe4c84aa441a..523e720ea550c 100644
  
    if (!children.empty()) {
      group_line_bounds.set_height(height - group_line_bounds.y());
-@@ -171,7 +175,7 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -193,7 +197,7 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
    // Add extra padding below the group if not collapsed.
    const bool is_group_collapsed = tab_group_view->IsCollapsed();
    if (!is_group_collapsed) {
@@ -370,7 +370,7 @@ index fbe4c84aa441a..523e720ea550c 100644
  
    // If the group is focused and we are handling a drag, we need to account for
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index 1b05b49491d1f..bc3884cbe60fd 100644
+index 14936524ccfd9..77093007b4179 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 @@ -11,6 +11,7 @@
@@ -381,7 +381,7 @@ index 1b05b49491d1f..bc3884cbe60fd 100644
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/browser_element_identifiers.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-@@ -336,14 +337,41 @@ void TabStripView::SetUpSpaceBoundary(
+@@ -334,14 +335,41 @@ void TabStripView::SetUpSpaceBoundary(
                                                    std::move(is_space_pinned));
  }
  
@@ -426,7 +426,7 @@ index 1b05b49491d1f..bc3884cbe60fd 100644
    InvalidateLayout();
  }
  
-@@ -600,8 +628,12 @@ void TabStripView::SetCollapsedState(bool is_collapsed) {
+@@ -590,8 +618,12 @@ void TabStripView::SetCollapsedState(bool is_collapsed) {
  }
  
  void TabStripView::SetRailForm(bool rail) {
@@ -441,7 +441,7 @@ index 1b05b49491d1f..bc3884cbe60fd 100644
      return;
    }
    // The "+ New Tab" row is its plus alone in the rail, centred in the row
-@@ -943,9 +975,8 @@ void TabStripView::OnThemeChanged() {
+@@ -933,9 +965,8 @@ void TabStripView::OnThemeChanged() {
    // size and the preset's row height (both rows are SidebarRowButtons, which
    // let their label be reached). A density change arrives as a theme change.
    if (space_title_row_) {
@@ -454,10 +454,10 @@ index 1b05b49491d1f..bc3884cbe60fd 100644
          0, std::min(kSpaceTitleRowHeight,
                      GetLayoutConstant(LayoutConstant::kVerticalTabHeight))));
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.h b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-index 3cfd1370e59bb..52636899d9045 100644
+index 4aecbc2c15407..522b4f8464724 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-@@ -63,9 +63,11 @@ class TabStripView final : public views::View, public views::WidgetObserver {
+@@ -64,9 +64,11 @@ class TabStripView final : public views::View, public views::WidgetObserver {
    void SetUpSpaceBoundary(
        base::RepeatingCallback<bool(const views::View*)> is_space_pinned);
  
@@ -472,7 +472,7 @@ index 3cfd1370e59bb..52636899d9045 100644
                       views::Button::PressedCallback pressed);
    // private V2: an icon before the title (the incognito glyph).
    void SetSpaceTitleIcon(const ui::ImageModel& icon);
-@@ -178,6 +180,11 @@ class TabStripView final : public views::View, public views::WidgetObserver {
+@@ -181,6 +183,11 @@ class TabStripView final : public views::View, public views::WidgetObserver {
    raw_ptr<ClearTabsSeparator> clear_line_ = nullptr;
    raw_ptr<views::LabelButton> new_tab_row_ = nullptr;
    raw_ptr<views::LabelButton> space_title_row_ = nullptr;

@@ -122,20 +122,20 @@ embedder hook for page activation; the feature itself stays.
  create mode 100644 chrome/test/stedding/blocker_browsertest.cc
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 6b20c3435b4a6..f3f4afd89156c 100644
+index b4585289b9962..24c856ad5a6e6 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1309,6 +1309,8 @@ source_set("core") {
-       # clean links Cl1: the throttle CreateURLLoaderThrottles makes.
+@@ -1483,6 +1483,8 @@ source_set("core") {
        "//chrome/browser/ui/stedding:clean_links",
        "//chrome/browser/ui/stedding:dark_pages",
+       "//chrome/browser/ui/stedding:make_app",
 +      # blocker Bk1, Bk11: started with the browser.
 +      "//chrome/browser/ui/stedding/blocker",
        "//chrome/browser/ui/tabs/tab_drag_api/desktop_tab_drag_impl",
        "//chrome/browser/ui/views/frame:glass_frame_service",
        "//chrome/browser/ui/views/tabs/organizer",
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index b2619baa8f61d..68b275965c571 100644
+index 1651c5defa7c0..d3a9c566433dc 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -35,6 +35,9 @@
@@ -181,10 +181,10 @@ index 9cf5a226c7f74..8ddd4e1da91e5 100644
        cus, g_browser_process->GetApplicationLocale());
    RegisterOptimizationHintsComponent(cus);
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 6835c472f0e02..165eca9fb89e1 100644
+index de7cf7fb8982f..67ae2db4dcd1e 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -362,6 +362,16 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -365,6 +365,16 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
    // switch is Chromium's own web preference, bound in Stedding's section.
    (*s_allowlist)[::prefs::kWebKitForceDarkModeEnabled] =
        settings_api::PrefType::kBoolean;
@@ -2999,7 +2999,7 @@ index e89cf642389ab..b2dbb22ecbdd0 100644
    EXPECT_TRUE(local_state.GetBoolean(kThanksAfterUpdate));
    EXPECT_EQ("", local_state.GetString(kLastRunVersion));
 diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
-index 0fb86ffcbbe5b..8577118600834 100644
+index 55f5890b26871..2710b01d600a0 100644
 --- a/chrome/browser/ui/views/commandbar/BUILD.gn
 +++ b/chrome/browser/ui/views/commandbar/BUILD.gn
 @@ -25,6 +25,7 @@ source_set("commandbar") {
@@ -3062,10 +3062,10 @@ index ab4d283da4a40..63c807cd154ab 100644
    // opens nowhere else (K15).
    if (tabbed) {
 diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
-index 66a17190941f0..cd4c0309b29a2 100644
+index ae44bea58c9a0..a5ce5897ba1f9 100644
 --- a/chrome/browser/ui/views/toolbar/BUILD.gn
 +++ b/chrome/browser/ui/views/toolbar/BUILD.gn
-@@ -185,6 +185,8 @@ source_set("impl") {
+@@ -188,6 +188,8 @@ source_set("impl") {
      "pinned_toolbar_button_status_indicator.cc",
      "reload_button.cc",
      "split_tabs_button.cc",
@@ -3074,7 +3074,7 @@ index 66a17190941f0..cd4c0309b29a2 100644
      "stedding_dark_pages_button.cc",
      "stedding_dark_pages_button.h",
      "stedding_little_promote_button.cc",
-@@ -332,6 +334,7 @@ source_set("impl") {
+@@ -343,6 +345,7 @@ source_set("impl") {
      "//chrome/browser/upgrade_detector",
      "//chrome/browser/user_education",
      "//chrome/browser/ui/stedding:address_row",
@@ -3385,7 +3385,7 @@ index 0000000000000..f5df6a176591b
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_STEDDING_BLOCKER_BUTTON_H_
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-index fff41a52e6e8e..e6067635e0e24 100644
+index c0533e1fa099d..3b7b46fed2568 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
 @@ -111,6 +111,7 @@
@@ -3396,7 +3396,7 @@ index fff41a52e6e8e..e6067635e0e24 100644
  #include "chrome/browser/ui/views/toolbar/stedding_dark_pages_button.h"
  #include "chrome/browser/ui/views/toolbar/stedding_little_promote_button.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
-@@ -633,6 +634,10 @@ void ToolbarView::Init() {
+@@ -623,6 +624,10 @@ void ToolbarView::Init() {
    // still reach the switch there. The button keeps itself in step with the
    // switch and its setting, so the toolbar holds no pointer to it.
    if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
@@ -3408,19 +3408,19 @@ index fff41a52e6e8e..e6067635e0e24 100644
    }
  
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index c2b88e5759bc0..c068f19780735 100644
+index b5346e785e326..bf2e1d358fd34 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -145,6 +145,8 @@ source_set("impl") {
-     "captions_handler.cc",
+@@ -150,6 +150,8 @@ source_set("impl") {
      "custom_home_pages_table_model.cc",
+     "device_tab_visibility_handler.cc",
      "dictation_handler.cc",
 +    "stedding_blocker_handler.cc",
 +    "stedding_blocker_handler.h",
      "stedding_clean_links_handler.cc",
      "stedding_clean_links_handler.h",
      "stedding_dark_pages_handler.cc",
-@@ -198,6 +200,9 @@ source_set("impl") {
+@@ -204,6 +206,9 @@ source_set("impl") {
      "//chrome/browser/ui/stedding:clean_links",
      "//chrome/browser/ui/stedding:prefs",
      "//chrome/browser/ui/stedding:dark_pages",
@@ -3428,21 +3428,21 @@ index c2b88e5759bc0..c068f19780735 100644
 +    "//base:i18n",
 +    "//chrome/browser/ui/stedding/blocker",
      "//chrome/app/vector_icons",
+     "//chrome/browser:browser_features",
      "//chrome/browser:browser_process",
-     "//chrome/browser:browser_process_platform_part",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index b50272422289f..912455957bc72 100644
+index 899b217339561..dcf079cd8f04c 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -64,6 +64,7 @@
- #include "chrome/browser/ui/webui/settings/appearance_handler.h"
+@@ -67,6 +67,7 @@
  #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
+ #include "chrome/browser/ui/webui/settings/device_tab_visibility_handler.h"
  #include "chrome/browser/ui/webui/settings/dictation_handler.h"
 +#include "chrome/browser/ui/webui/settings/stedding_blocker_handler.h"
  #include "chrome/browser/ui/webui/settings/stedding_clean_links_handler.h"
  #include "chrome/browser/ui/webui/settings/stedding_dark_pages_handler.h"
  #include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
-@@ -255,6 +256,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -262,6 +263,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    // cut to a host by the rule the throttle matches.
    AddSettingsPageUIHandler(
        std::make_unique<SteddingCleanLinksHandler>(profile));
@@ -3452,7 +3452,7 @@ index b50272422289f..912455957bc72 100644
  
  #if BUILDFLAG(IS_CHROMEOS)
    AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
-@@ -877,6 +881,46 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -898,6 +902,46 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    // Cl9: a remove button's name to a screen reader is the action and the
    // site, not the site alone.
    html_source->AddString("steddingCleanLinksRemoveSite", "Remove $1");
@@ -3738,10 +3738,10 @@ index 0000000000000..e4b0bb804821a
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_STEDDING_BLOCKER_HANDLER_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 699496ec0e07c..d296f4ec14825 100644
+index b91db0296337f..8ea7582162f9a 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -5138,6 +5138,7 @@ test("unit_tests") {
+@@ -2908,6 +2908,7 @@ test("unit_tests") {
      "//chrome/browser/ui/views/commandbar:unit_tests",
      "//chrome/browser/ui/views/switcher:unit_tests",
      "//chrome/browser/ui/stedding:unit_tests",
@@ -4515,7 +4515,7 @@ index 0000000000000..b8f595887b641
 +      [&] { return ListRequests().size() >= before + 2; }));
 +}
 diff --git a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc
-index e440b4d7a8342..8cd6234fdf5f6 100644
+index 839575284340d..1a71ea15c864c 100644
 --- a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc
 +++ b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.cc
 @@ -11,6 +11,7 @@
@@ -4558,7 +4558,7 @@ index e440b4d7a8342..8cd6234fdf5f6 100644
  // static
  void ContentSubresourceFilterThrottleManager::BindReceiver(
      mojo::PendingAssociatedReceiver<mojom::SubresourceFilterHost>
-@@ -490,7 +516,9 @@ void ContentSubresourceFilterThrottleManager::DidBecomePrimaryPage() {
+@@ -501,7 +527,9 @@ void ContentSubresourceFilterThrottleManager::DidBecomePrimaryPage() {
    // If we tried to notify while non-primary, we didn't show UI so do that now
    // that the page became primary. This also leads to reattempting notification
    // if a page transitioned from primary to non-primary and back (BFCache).
@@ -4569,7 +4569,7 @@ index e440b4d7a8342..8cd6234fdf5f6 100644
      profile_interaction_manager_->MaybeShowNotification();
    }
  }
-@@ -572,7 +600,13 @@ void ContentSubresourceFilterThrottleManager::
+@@ -582,7 +610,13 @@ void ContentSubresourceFilterThrottleManager::
    CHECK(!navigation_handle.IsSameDocument());
    CHECK(!ShouldInheritActivation(navigation_handle.GetURL()));
  
@@ -4584,7 +4584,7 @@ index e440b4d7a8342..8cd6234fdf5f6 100644
      registry.AddThrottle(std::make_unique<SafeBrowsingPageActivationThrottle>(
          registry, profile_interaction_manager_.get(), database_manager_));
    }
-@@ -625,6 +659,11 @@ void ContentSubresourceFilterThrottleManager::OnReloadRequested() {
+@@ -636,6 +670,11 @@ void ContentSubresourceFilterThrottleManager::OnReloadRequested() {
  void ContentSubresourceFilterThrottleManager::OnAdsViolationTriggered(
      content::RenderFrameHost* rfh,
      mojom::AdsViolation triggered_violation) {
@@ -4596,7 +4596,7 @@ index e440b4d7a8342..8cd6234fdf5f6 100644
    profile_interaction_manager_->OnAdsViolationTriggered(rfh,
                                                          triggered_violation);
  }
-@@ -738,7 +777,8 @@ void ContentSubresourceFilterThrottleManager::MaybeShowNotification(
+@@ -749,7 +788,8 @@ void ContentSubresourceFilterThrottleManager::MaybeShowNotification(
    // Non-primary pages shouldn't affect UI. When the page becomes primary we'll
    // check |current_committed_load_has_notified_disallowed_load_| and try
    // again.
@@ -4607,18 +4607,18 @@ index e440b4d7a8342..8cd6234fdf5f6 100644
    }
  }
 diff --git a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h
-index 609be0a633ed6..22de6a7413b91 100644
+index 2852732513090..09589a9951816 100644
 --- a/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h
 +++ b/components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h
-@@ -11,6 +11,7 @@
+@@ -10,6 +10,7 @@
+ #include <optional>
  #include <vector>
  
- #include "base/containers/flat_set.h"
 +#include "base/functional/callback.h"
  #include "base/gtest_prod_util.h"
  #include "base/memory/raw_ptr.h"
  #include "base/memory/raw_ref.h"
-@@ -181,6 +182,20 @@ class ContentSubresourceFilterThrottleManager
+@@ -180,6 +181,20 @@ class ContentSubresourceFilterThrottleManager
    void MaybeCreateAndAddNavigationThrottles(
        content::NavigationThrottleRegistry& registry);
  

@@ -51,11 +51,12 @@ on upstream's vertical tabs rather than patched onto them.
  .../page_theme_color_controller_unittest.cc   |  66 ++++++
  chrome/browser/ui/stedding_ui_metrics.cc      |  29 ++-
  chrome/browser/ui/stedding_ui_metrics.h       |  27 ++-
+ chrome/browser/ui/views/frame/BUILD.gn        |   2 +
  .../layout/stedding_browser_view_layout.cc    |  47 ++++-
  .../views/frame/stedding_window_background.cc |  42 +++-
  .../views/frame/stedding_window_background.h  |   8 +
  .../stedding_window_background_unittest.cc    |  40 ++++
- .../frame/vertical_tab_strip_region_view.cc   |  50 ++++-
+ .../frame/vertical_tab_strip_region_view.cc   |  46 +++-
  .../frame/vertical_tab_strip_region_view.h    |   8 +
  .../views/location_bar/location_bar_view.cc   | 106 +++++++++-
  .../ui/views/location_bar/location_bar_view.h |  16 +-
@@ -75,13 +76,12 @@ on upstream's vertical tabs rather than patched onto them.
  .../browser/ui/views/tabs/common/tab_view.cc  |  27 ++-
  .../browser/ui/views/tabs/common/tab_view.h   |   3 +
  .../tabs/common/tab_view_vertical_layout.cc   |  11 +
- .../vertical_tab_strip_top_container.cc       |  57 ++++-
+ .../vertical_tab_strip_top_container.cc       |  50 ++++-
  .../vertical_tab_strip_top_container.h        |  12 ++
  ...rtical_tab_strip_top_container_unittest.cc |  68 +++++-
  .../browser/ui/views/toolbar/toolbar_view.cc  |  47 ++++-
  .../browser/ui/views/toolbar/toolbar_view.h   |   5 +
- chrome/test/BUILD.gn                          |   1 +
- 41 files changed, 1214 insertions(+), 98 deletions(-)
+ 41 files changed, 1211 insertions(+), 91 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/theme/page_bar_color_supplier_unittest.cc
  create mode 100644 chrome/browser/ui/stedding/theme/page_theme_color_controller_unittest.cc
  create mode 100644 chrome/browser/ui/views/frame/stedding_window_background_unittest.cc
@@ -572,6 +572,26 @@ index abce46e678541..c14b8abcaef53 100644
  // Extra Spaces to create in each new window, on top of the one every window
  // starts with. Zero in normal use. This exists so multi-Space states can be
  // screenshotted and tested without a UI gesture, the same reason the metrics
+diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
+index 985b91228e14c..5e76e79daebe8 100644
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -2272,6 +2272,7 @@ source_set("unit_tests") {
+ 
+   sources = [
+     "frame_separator_unittest.cc",
++    "stedding_window_background_unittest.cc",
+     "layout/browser_view_layout_params_unittest.cc",
+     "multi_contents_drop_target_view_unittest.cc",
+     "multi_contents_view_drop_target_controller_unittest.cc",
+@@ -2279,6 +2280,7 @@ source_set("unit_tests") {
+     "web_contents_close_handler_unittest.cc",
+   ]
+   deps = [
++    ":stedding_window_background",
+     ":browser_view_layout_params",
+     ":frame_separator",
+     ":multi_contents_drop_target_view",
 diff --git a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc b/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
 index 63c3ccafd0eda..db01f72733595 100644
 --- a/chrome/browser/ui/views/frame/layout/stedding_browser_view_layout.cc
@@ -798,7 +818,7 @@ index 0000000000000..acb3932fbdbc6
 +  EXPECT_FALSE(stedding::PageBarViewsShareWidget(root, nullptr, card));
 +}
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index f32cc5d8d5b6d..cf97dafd36afa 100644
+index 20a924ca3c5f0..3689cbb31ce18 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -9,6 +9,7 @@
@@ -809,7 +829,7 @@ index f32cc5d8d5b6d..cf97dafd36afa 100644
  #include "base/functional/bind.h"
  #include "base/i18n/number_formatting.h"
  #include "base/i18n/rtl.h"
-@@ -237,6 +238,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -255,6 +256,7 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
            GetLayoutConstant(
                LayoutConstant::kVerticalTabStripCollapsedVerticalPadding),
            region_horizontal_padding, 0, region_horizontal_padding));
@@ -817,7 +837,7 @@ index f32cc5d8d5b6d..cf97dafd36afa 100644
  
    // The Space switcher lives at the bottom of the sidebar, below the new-tab
    // row, as the reference does. Windows with no Spaces -- popups, app windows
-@@ -514,6 +516,41 @@ void VerticalTabStripRegionView::SetCaptionButtonWidthForLayout(
+@@ -532,6 +534,41 @@ void VerticalTabStripRegionView::SetCaptionButtonWidthForLayout(
    top_button_container_->SetCaptionButtonWidthForLayout(caption_button_width);
  }
  
@@ -859,7 +879,7 @@ index f32cc5d8d5b6d..cf97dafd36afa 100644
  void VerticalTabStripRegionView::SetIsExitingExpandOnHoverForLayout(
      bool is_exiting_expand_on_hover) {
    top_button_container_->SetIsExitingExpandOnHoverForLayout(
-@@ -698,14 +735,16 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
+@@ -725,15 +762,17 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
    // There's a bit of padding at the bottom of the tabstrip.
    available.Inset(gfx::Insets::TLBR(0, 0, vertical_padding, 0));
  
@@ -869,19 +889,18 @@ index f32cc5d8d5b6d..cf97dafd36afa 100644
    layout.child_layouts.push_back(
        {.child_view = top_button_container_.get(),
         .visible = true,
--       .bounds =
--           gfx::Rect(horizontal_padding, 0,
--                     std::max(0, available.width() - 2 * horizontal_padding),
--                     button_size.height())});
-+       .bounds = gfx::Rect(horizontal_padding + rail_left_inset_, 0,
-+                           std::max(0, available.width() -
-+                                           2 * horizontal_padding -
-+                                           rail_left_inset_),
-+                           button_size.height())});
+        .bounds = gfx::Rect(
+-           horizontal_padding, 0,
++           horizontal_padding + rail_left_inset_, 0,
+            blending_with_organizer_tray
+                ? button_size.width()
+-               : std::max(0, available.width() - 2 * horizontal_padding),
++               : std::max(0, available.width() - 2 * horizontal_padding -
++                                 rail_left_inset_),
+            button_size.height())});
    available.Inset(gfx::Insets::TLBR(button_size.height(), 0, 0, 0));
  
-   // Just so that there's never a zero-size tabstrip.
-@@ -1289,6 +1328,7 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
+@@ -1300,6 +1339,7 @@ void VerticalTabStripRegionView::OnCollapseStateChanged(
    // Apply padding immediately at the start of the animation by including
    // the collapsing state.
    bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
@@ -890,10 +909,10 @@ index f32cc5d8d5b6d..cf97dafd36afa 100644
    // Stedding: a width set elsewhere (the settings slider writes the
    // preference, the state controller applies it) reaches the view here. The
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 99e8740bec51e..dbae57b27c7ae 100644
+index 69bd9da9c0db7..f7f9713b42ec1 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -121,6 +121,8 @@ class VerticalTabStripRegionView final
+@@ -110,6 +110,8 @@ class VerticalTabStripRegionView final
    // aligned to the leading, top corner.
    void SetToolbarHeightForLayout(int toolbar_height);
    void SetCaptionButtonWidthForLayout(int caption_button_width);
@@ -902,7 +921,7 @@ index 99e8740bec51e..dbae57b27c7ae 100644
    void SetIsExitingExpandOnHoverForLayout(bool is_exiting_expand_on_hover);
    void SetTransitionButtonOpacity(float opacity);
    bool WillWrapDueToOverflow(int available_width) const;
-@@ -311,6 +313,12 @@ class VerticalTabStripRegionView final
+@@ -279,6 +281,12 @@ class VerticalTabStripRegionView final
    raw_ptr<views::ResizeArea> resize_area_ = nullptr;
    raw_ptr<ShadowFrameView> shadow_frame_ = nullptr;
    int resize_area_width_;
@@ -916,7 +935,7 @@ index 99e8740bec51e..dbae57b27c7ae 100644
    const raw_ptr<tabs::VerticalTabStripStateController> state_controller_;
    std::optional<base::CallbackListSubscription>
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-index bac174d0b227a..2a0261a92f771 100644
+index d07cbfe86cf9b..fe516ba12f735 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
 @@ -9,6 +9,7 @@
@@ -925,9 +944,9 @@ index bac174d0b227a..2a0261a92f771 100644
  #include <utility>
 +#include <vector>
  
+ #include "base/auto_reset.h"
  #include "base/feature_list.h"
- #include "base/functional/bind.h"
-@@ -52,6 +53,7 @@
+@@ -53,6 +54,7 @@
  #include "chrome/browser/ui/page_action/page_action_icon_type.h"
  #include "chrome/browser/ui/page_action/page_action_properties_provider.h"
  #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
@@ -935,7 +954,7 @@ index bac174d0b227a..2a0261a92f771 100644
  #include "chrome/browser/ui/tabs/public/tab_features.h"
  #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
-@@ -331,8 +333,15 @@ void LocationBarView::Init() {
+@@ -334,8 +336,15 @@ void LocationBarView::Init() {
    }
  
    const auto& typography_provider = views::TypographyProvider::Get();
@@ -953,7 +972,7 @@ index bac174d0b227a..2a0261a92f771 100644
  
    const gfx::FontList& omnibox_chip_font_list = typography_provider.GetFont(
        CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_BODY_4_EMPHASIS);
-@@ -741,6 +750,94 @@ gfx::Size LocationBarView::GetMinimumSize() const {
+@@ -756,6 +765,94 @@ gfx::Size LocationBarView::GetMinimumSize() const {
    return gfx::Size(width, height);
  }
  
@@ -1048,7 +1067,7 @@ index bac174d0b227a..2a0261a92f771 100644
  gfx::Size LocationBarView::CalculatePreferredSize(
      const views::SizeBounds& available_size) const {
    const int height = GetLayoutConstant(LayoutConstant::kLocationBarHeight);
-@@ -1031,6 +1128,7 @@ void LocationBarView::Layout(PassKey) {
+@@ -1048,6 +1145,7 @@ void LocationBarView::Layout(PassKey) {
    }
  
    LayoutSuperclass<View>(this);
@@ -1056,7 +1075,7 @@ index bac174d0b227a..2a0261a92f771 100644
  }
  
  void LocationBarView::OnThemeChanged() {
-@@ -1062,6 +1160,7 @@ bool LocationBarView::HasSecurityStateChanged() {
+@@ -1079,6 +1177,7 @@ bool LocationBarView::HasSecurityStateChanged() {
  
  void LocationBarView::Update(WebContents* contents) {
    TRACE_EVENT("omnibox", "LocationBarView::Update");
@@ -1064,7 +1083,7 @@ index bac174d0b227a..2a0261a92f771 100644
  
    RefreshContentSettingViews();
    RefreshPageActionIconViews();
-@@ -2058,6 +2157,7 @@ const LocationBarModel* LocationBarView::GetLocationBarModel() const {
+@@ -2167,6 +2266,7 @@ const LocationBarModel* LocationBarView::GetLocationBarModel() const {
  }
  
  void LocationBarView::OnOmniboxFocused() {
@@ -1072,7 +1091,7 @@ index bac174d0b227a..2a0261a92f771 100644
    if (views::FocusRing::Get(this)) {
      views::FocusRing::Get(this)->Refresh();
    }
-@@ -2081,6 +2181,7 @@ void LocationBarView::OpenOmniboxPopup(bool query_zps) {
+@@ -2191,6 +2291,7 @@ void LocationBarView::OpenOmniboxPopup(bool query_zps) {
  }
  
  void LocationBarView::OnOmniboxBlurred() {
@@ -1080,7 +1099,7 @@ index bac174d0b227a..2a0261a92f771 100644
    if (views::FocusRing::Get(this)) {
      views::FocusRing::Get(this)->Refresh();
    }
-@@ -2434,7 +2535,6 @@ void LocationBarView::OnAppShimChanged(const webapps::AppId& app_id) {
+@@ -2544,7 +2645,6 @@ void LocationBarView::OnAppShimChanged(const webapps::AppId& app_id) {
  }
  #endif
  
@@ -1089,7 +1108,7 @@ index bac174d0b227a..2a0261a92f771 100644
  ADD_READONLY_PROPERTY_METADATA(int, BorderRadius)
  ADD_READONLY_PROPERTY_METADATA(gfx::Point, OmniboxViewOrigin)
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
-index 05979cd142b6c..96fa2d7dbc148 100644
+index 317211c69c515..704555481e283 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.h
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
 @@ -8,6 +8,7 @@
@@ -1121,7 +1140,7 @@ index 05979cd142b6c..96fa2d7dbc148 100644
    PermissionChipView* chip_view() { return chip_view_; }
    PermissionDashboardView* permission_dashboard_view() {
      return permission_dashboard_view_;
-@@ -341,6 +347,13 @@ class LocationBarView
+@@ -343,6 +349,13 @@ class LocationBarView
      run_omnibox_context_menu_callback_ = std::move(callback);
    }
  
@@ -1135,7 +1154,7 @@ index 05979cd142b6c..96fa2d7dbc148 100644
    // Returns the amount of space required to the left of the omnibox text.
    int GetMinimumLeadingWidth() const;
  
-@@ -584,7 +597,6 @@ class LocationBarView
+@@ -608,7 +621,6 @@ class LocationBarView
    // Shown if the user has selected a keyword.
    raw_ptr<SelectedKeywordView> selected_keyword_view_ = nullptr;
  
@@ -1211,10 +1230,10 @@ index b04455a54d13f..cbee5b21ff847 100644
    UpdateWindowTint();
  }
 diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
-index 120ec52eccb81..c61678f6c1aff 100644
+index 42ba35b50f44f..50b14921f5525 100644
 --- a/chrome/browser/ui/views/tabs/common/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
-@@ -57,6 +57,8 @@ source_set("impl") {
+@@ -58,6 +58,8 @@ source_set("impl") {
      "root_tab_collection_node.cc",
      "folder_drag_target.cc",
      "folder_view.cc",
@@ -1223,7 +1242,7 @@ index 120ec52eccb81..c61678f6c1aff 100644
      "split_tab_view.cc",
      "tab_collection_animating_layout_manager.cc",
      "tab_collection_node.cc",
-@@ -95,6 +97,11 @@ source_set("impl") {
+@@ -97,6 +99,11 @@ source_set("impl") {
      "vertical_tab_style_views.h",
    ]
  
@@ -1235,7 +1254,7 @@ index 120ec52eccb81..c61678f6c1aff 100644
    deps = [
      "//base:i18n",
      "//cc/paint",
-@@ -241,6 +248,7 @@ source_set("unit_tests") {
+@@ -243,6 +250,7 @@ source_set("unit_tests") {
    testonly = true
    sources = [
      "folder_drag_target_unittest.cc",
@@ -1243,7 +1262,7 @@ index 120ec52eccb81..c61678f6c1aff 100644
      "stedding_tab_row_rules_unittest.cc",
      "tab_collection_animating_layout_manager_unittest.cc",
      "tab_collection_z_order_manager_unittest.cc",
-@@ -257,6 +265,7 @@ source_set("unit_tests") {
+@@ -259,6 +267,7 @@ source_set("unit_tests") {
      "//chrome/test:test_support",
      "//chrome/test:test_support_ui",
      "//components/tabs:test_support",
@@ -1924,10 +1943,10 @@ index a1b18c7efff54..e15f8af8ac8b0 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index 5fc467fc896d3..106b10737c87b 100644
+index dea172da9578f..f3ea787f99b03 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-@@ -232,7 +232,8 @@ TabStripView::TabStripView(TabCollectionNode* collection_node)
+@@ -226,7 +226,8 @@ TabStripView::TabStripView(TabCollectionNode* collection_node)
        views::Button::PressedCallback(), std::u16string());
    title_row->SetHorizontalAlignment(gfx::ALIGN_LEFT);
    title_row->SetEnabledTextColors(kColorTabForegroundInactiveFrameActive);
@@ -1937,7 +1956,7 @@ index 5fc467fc896d3..106b10737c87b 100644
    title_row->SetPreferredSize(gfx::Size(0, kSpaceTitleRowHeight));
    title_row->SetVisible(false);
    space_title_row_ = AddChildView(std::move(title_row));
-@@ -320,8 +321,11 @@ void TabStripView::SetUpSpaceBoundary(
+@@ -318,8 +319,11 @@ void TabStripView::SetUpSpaceBoundary(
        ui::ImageModel::FromVectorIcon(vector_icons::kAdd2Icon,
                                       kColorTabForegroundInactiveFrameActive,
                                       stedding::SidebarFaviconSize()));
@@ -1951,7 +1970,7 @@ index 5fc467fc896d3..106b10737c87b 100644
    new_tab_row->SetPreferredSize(
        gfx::Size(0, GetLayoutConstant(LayoutConstant::kVerticalTabHeight)));
    new_tab_row->SetTooltipText(u"New Tab (⌘T)");
-@@ -346,7 +350,7 @@ void TabStripView::SetSpaceTitle(const std::u16string& title,
+@@ -344,7 +348,7 @@ void TabStripView::SetSpaceTitle(const std::u16string& title,
  void TabStripView::SetSpaceTitleIcon(const ui::ImageModel& icon) {
    if (space_title_row_) {
      space_title_row_->SetImageModel(views::Button::STATE_NORMAL, icon);
@@ -1961,10 +1980,10 @@ index 5fc467fc896d3..106b10737c87b 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 1830106f032da..101f591036d01 100644
+index 081bb1f160616..6fc1dfa0f5342 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -406,6 +406,13 @@ TabView::TabView(TabCollectionNode* collection_node)
+@@ -409,6 +409,13 @@ TabView::TabView(TabCollectionNode* collection_node)
    reset->layer()->SetFillsBoundsOpaquely(false);
    reset_badge_ = AddChildView(std::move(reset));
  
@@ -1978,7 +1997,7 @@ index 1830106f032da..101f591036d01 100644
    title_->SetProperty(views::kElementIdentifierKey, kVerticalTabTitleElementId);
    SetProperty(views::kElementIdentifierKey, kTabElementId);
    // Layout manager must be set after child views are created because the
-@@ -1038,6 +1045,9 @@ void TabView::OnThemeChanged() {
+@@ -1061,6 +1068,9 @@ void TabView::OnThemeChanged() {
    // sidebar Y2: the title at the chosen size. A density change is sent to
    // every window as a theme change, which is how it reaches every row.
    title_->SetFontList(stedding::SidebarFont());
@@ -1988,7 +2007,7 @@ index 1830106f032da..101f591036d01 100644
    UpdateColors();
  }
  
-@@ -1283,9 +1293,18 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1311,9 +1321,18 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
                        !tab->IsActivated() && tab->IsBlocked());
    icon_->SetAttention(TabIcon::AttentionType::kTabWantsAttentionStatus,
                        tab_data_.needs_attention);
@@ -2009,7 +2028,7 @@ index 1830106f032da..101f591036d01 100644
    UpdateResetBadge();
    UpdateTitle(tab_data_.title, tab_data_.should_render_loading_title);
    alert_indicator_->TransitionToAlertState(tab_data_.alert_state);
-@@ -1409,6 +1428,10 @@ void TabView::UpdateColors() {
+@@ -1437,6 +1456,10 @@ void TabView::UpdateColors() {
    if (auto* const folder = views::AsViewClass<FolderView>(parent())) {
      folder->UpdateSleptLook();
    }
@@ -2035,10 +2054,10 @@ index b86404de16e6c..a1a2e1b300882 100644
    base::CallbackListSubscription node_destroyed_subscription_;
    base::CallbackListSubscription tab_state_changed_subscription_;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-index 006289fcf0823..353ac4d8e1784 100644
+index f7d4b501078ae..db3c3bdab6610 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-@@ -27,6 +27,8 @@ int IconDesignWidth() {
+@@ -29,6 +29,8 @@ int IconDesignWidth() {
  constexpr int kTitleMinWidth = 10;
  constexpr int kHorizontalInset = 8;
  constexpr int kDefaultPadding = 4;
@@ -2047,7 +2066,7 @@ index 006289fcf0823..353ac4d8e1784 100644
  }  // namespace
  
  TabViewVerticalLayout::TabViewVerticalLayout() = default;
-@@ -47,6 +49,9 @@ void TabViewVerticalLayout::OnInstalled(views::View* host) {
+@@ -49,6 +51,9 @@ void TabViewVerticalLayout::OnInstalled(views::View* host) {
        TabChildConfig(TabView().icon_, IconDesignWidth(), kHorizontalInset,
                       /*align_leading=*/true,
                       /*expand=*/false),
@@ -2057,7 +2076,7 @@ index 006289fcf0823..353ac4d8e1784 100644
        TabChildConfig(TabView().title_, kTitleMinWidth, kDefaultPadding,
                       /*align_leading=*/true,
                       /*expand=*/true)};
-@@ -257,5 +262,11 @@ bool TabViewVerticalLayout::IsChildVisible(const views::View* child_view,
+@@ -260,5 +265,11 @@ bool TabViewVerticalLayout::IsChildVisible(const views::View* child_view,
      return TabView().active_ || hovered_or_focused;
    }
  
@@ -2070,26 +2089,26 @@ index 006289fcf0823..353ac4d8e1784 100644
    NOTREACHED() << "Unknown tab child view";
  }
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index 5a3bb53514cbc..f96973299376a 100644
+index fa2ba8a351901..c2e16344615fc 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-@@ -8,6 +8,7 @@
- #include "chrome/browser/ui/browser_commands.h"
+@@ -10,6 +10,7 @@
  #include "chrome/browser/ui/browser_element_identifiers.h"
  #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/tabs/organizer/organizer_panel_utils.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
- #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
  #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
-@@ -15,7 +16,6 @@
+@@ -17,7 +18,6 @@
  #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
- #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_host.h"
 -#include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/views/tabs/shared/tab_strip_combo_button.h"
  #include "chrome/browser/ui/views/tabs/shared/tab_strip_flat_edge_button.h"
  #include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
-@@ -126,7 +126,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -184,7 +184,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
      // to ensure that the top container's button do not appear behind the
      // caption buttons when they are leading.
      if (caption_button_width_ > 0) {
@@ -2098,16 +2117,10 @@ index 5a3bb53514cbc..f96973299376a 100644
      }
  
      if (unfocus_button_ && unfocus_button_->GetVisible()) {
-@@ -212,20 +212,30 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
-     // caption buttons, shift them below.
-     const bool wrapped_due_to_overflow = size_bounds.width().is_bounded() &&
-                                          WillWrapDueToOverflow(available_width);
--
--    const int left_alignment =
--        (wrapped_due_to_overflow || is_exiting_expand_on_hover_)
--            ? 0
--            : caption_button_width_;
--
+@@ -275,20 +275,33 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+     // In collapsed mode with expand on hover, the vertical tab strip is
+     // positioned below the caption buttons exclusion zone, so the collapse
+     // button does not need to be shifted over.
 +    // Stedding (sidebar Y7): a button at x 0 on the caption row sits under
 +    // the traffic lights. Leaving expand-on-hover used to put it there for
 +    // the length of the animation; it drops below them instead, as the
@@ -2115,9 +2128,13 @@ index 5a3bb53514cbc..f96973299376a 100644
 +    const bool below_caption =
 +        wrapped_due_to_overflow ||
 +        (is_exiting_expand_on_hover_ && caption_button_width_ > 0);
-+    const int left_alignment = (below_caption || is_exiting_expand_on_hover_)
-+                                   ? 0
-+                                   : caption_button_width_;
+     const int left_alignment =
+-        (wrapped_due_to_overflow || is_exiting_expand_on_hover_ ||
++        (below_caption || is_exiting_expand_on_hover_ ||
+          (is_collapsed && is_expand_on_hover))
+             ? 0
+             : caption_button_width_;
+ 
      int y_baseline = host_size.height() / 2;
 +    // Stedding (sidebar Y7): sharing the row with the traffic lights, the
 +    // toggle takes their own centre rather than the container's, so the two
@@ -2137,7 +2154,7 @@ index 5a3bb53514cbc..f96973299376a 100644
                     (GetLayoutConstant(LayoutConstant::kBookmarkBarHeight) -
                      GetLayoutConstant(
                          LayoutConstant::kBookmarkBarButtonImageLabelPadding)) /
-@@ -253,6 +263,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -316,6 +329,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
                         pref_size.width(), pref_size.height());
        layout.child_layouts.emplace_back(collapse_button_.get(),
                                          collapse_button_->GetVisible(), bounds);
@@ -2146,7 +2163,7 @@ index 5a3bb53514cbc..f96973299376a 100644
        current_y =
            bounds.bottom() +
            GetLayoutConstant(
-@@ -414,6 +426,31 @@ void VerticalTabStripTopContainer::SetCaptionButtonWidthForLayout(
+@@ -504,6 +519,31 @@ void VerticalTabStripTopContainer::SetCaptionButtonWidthForLayout(
    InvalidateLayout(/*avoid_propagate_during_layout=*/true);
  }
  
@@ -2179,10 +2196,10 @@ index 5a3bb53514cbc..f96973299376a 100644
      bool is_exiting_expand_on_hover) {
    if (is_exiting_expand_on_hover_ == is_exiting_expand_on_hover) {
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
-index 27763751c72b7..1aa6e203859d6 100644
+index c03539ffa6f8c..f774a81eaf344 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
-@@ -82,6 +82,10 @@ class VerticalTabStripTopContainer : public views::View,
+@@ -87,6 +87,10 @@ class VerticalTabStripTopContainer : public views::View,
    // aligned to the leading, top corner.
    void SetToolbarHeightForLayout(int toolbar_height);
    void SetCaptionButtonWidthForLayout(int caption_button_width);
@@ -2193,7 +2210,7 @@ index 27763751c72b7..1aa6e203859d6 100644
    void SetIsExitingExpandOnHoverForLayout(bool is_exiting_expand_on_hover);
    bool WillWrapDueToOverflow(int available_width) const;
  
-@@ -96,6 +100,11 @@ class VerticalTabStripTopContainer : public views::View,
+@@ -101,6 +105,11 @@ class VerticalTabStripTopContainer : public views::View,
    // its buttons at their baseline positions.
    int GetBaselineMinHeight() const;
  
@@ -2205,7 +2222,7 @@ index 27763751c72b7..1aa6e203859d6 100644
    raw_ptr<tabs::VerticalTabStripStateController> state_controller_ = nullptr;
    raw_ptr<actions::ActionItem> root_action_item_ = nullptr;
    raw_ptr<BrowserWindowInterface> browser_ = nullptr;
-@@ -117,6 +126,9 @@ class VerticalTabStripTopContainer : public views::View,
+@@ -128,6 +137,9 @@ class VerticalTabStripTopContainer : public views::View,
    // rendered inside of it becaused that area is reserved for outside UI
    // elements.
    int caption_button_width_ = 0;
@@ -2216,19 +2233,19 @@ index 27763751c72b7..1aa6e203859d6 100644
    // the expand-on-hover animation. This is because the final state needs to be
    // within the wrapped state bounds when leading caption buttons are present.
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
-index 5824363dbc286..4c70d3936e82f 100644
+index 1cf805a14fa29..ef63efb586cde 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
-@@ -30,7 +30,6 @@
- namespace {
- constexpr int kSessionIDValue = 123;
- constexpr int kTopContainerWidth = 240;
+@@ -52,7 +52,6 @@ class TestVerticalTabStripDelegate
+  private:
+   base::RepeatingCallback<void(bool)> callback_;
+ };
 -}  // namespace
  
  class VerticalTabStripTopContainerTest : public ChromeViewsTestBase {
   public:
-@@ -91,6 +90,14 @@ class VerticalTabStripTopContainerTest : public ChromeViewsTestBase {
-     return top_container_->GetCollapseButton();
+@@ -135,6 +134,14 @@ class VerticalTabStripTopContainerTest : public ChromeViewsTestBase {
+     return profile_.GetTestingPrefService();
    }
  
 +  // Stedding: lay out at the collapsed rail's width (below the snap width
@@ -2242,7 +2259,7 @@ index 5824363dbc286..4c70d3936e82f 100644
    void LayoutView() {
      // Pass an arbitrarily large height for the available size bounds so the
      // widget can adjust as needed.
-@@ -160,6 +167,45 @@ TEST_F(VerticalTabStripTopContainerTest, LayoutWithFullWidthExclusionZone) {
+@@ -204,6 +211,45 @@ TEST_F(VerticalTabStripTopContainerTest, LayoutWithFullWidthExclusionZone) {
    EXPECT_EQ(collapse_bounds.right_center().y(), expected_y_center);
  }
  
@@ -2288,9 +2305,9 @@ index 5824363dbc286..4c70d3936e82f 100644
  TEST_F(VerticalTabStripTopContainerTest, LayoutWithPartialWidthExclusionZone) {
    top_container()->SetCaptionButtonWidthForLayout(50);
    top_container()->SetToolbarHeightForLayout(50);
-@@ -180,3 +226,23 @@ TEST_F(VerticalTabStripTopContainerTest, LayoutWithPartialWidthExclusionZone) {
-   EXPECT_LT(collapse_bounds.CenterPoint().x(), combo_bounds.CenterPoint().x());
-   EXPECT_EQ(collapse_bounds.CenterPoint().y(), combo_bounds.CenterPoint().y());
+@@ -348,3 +394,23 @@ TEST_F(VerticalTabStripTopContainerTest,
+   EXPECT_TRUE(collapse_it->visible);
+   EXPECT_EQ(collapse_it->bounds.x(), kCaptionButtonWidth);
  }
 +
 +// sidebar Y7: sharing the row with the traffic lights, the toggle takes their
@@ -2313,7 +2330,7 @@ index 5824363dbc286..4c70d3936e82f 100644
 +
 +}  // namespace
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-index c26eb80a0c15e..f6e2833c01748 100644
+index a541f2b7282e0..ef1c1245749f3 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
 @@ -58,10 +58,10 @@
@@ -2336,7 +2353,7 @@ index c26eb80a0c15e..f6e2833c01748 100644
  #include "ui/views/widget/tooltip_manager.h"
  #include "ui/views/widget/widget.h"
  
-@@ -616,8 +615,9 @@ void ToolbarView::Init() {
+@@ -606,8 +605,9 @@ void ToolbarView::Init() {
          AvatarToolbarButtonInterface::CanShowForProfile(browser_->GetProfile());
      // Stedding: the reference toolbar has no profile button; the profile menu
      // stays reachable from the app menu.
@@ -2348,7 +2365,7 @@ index c26eb80a0c15e..f6e2833c01748 100644
    }
  
    // Only manage the overflow button when there are at least some views
-@@ -1509,6 +1509,22 @@ void ToolbarView::Layout(PassKey) {
+@@ -1505,6 +1505,22 @@ void ToolbarView::Layout(PassKey) {
    // Call super implementation to ensure layout manager and child layouts
    // happen.
    LayoutSuperclass<AccessiblePaneView>(this);
@@ -2371,7 +2388,7 @@ index c26eb80a0c15e..f6e2833c01748 100644
  }
  
  void ToolbarView::OnThemeChanged() {
-@@ -1621,8 +1637,17 @@ void ToolbarView::InitLayout() {
+@@ -1617,8 +1633,17 @@ void ToolbarView::InitLayout() {
                base::BindRepeating(
                    [](const views::View* view, const views::SizeBounds& bounds) {
                      gfx::Size size = view->GetPreferredSize(bounds);
@@ -2391,7 +2408,7 @@ index c26eb80a0c15e..f6e2833c01748 100644
                      return size;
                    }))
                .WithOrder(location_bar_flex_order));
-@@ -1633,11 +1658,13 @@ void ToolbarView::InitLayout() {
+@@ -1629,11 +1654,13 @@ void ToolbarView::InitLayout() {
                .WithOrder(location_bar_flex_order);
        const size_t location_bar_index =
            GetIndexOf(location_bar_view_.get()).value();
@@ -2410,10 +2427,10 @@ index c26eb80a0c15e..f6e2833c01748 100644
    }
  
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
-index 50e546251e9f8..7530fc9fb7d69 100644
+index e10dc91a6710c..c147c4d8d0048 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.h
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
-@@ -419,6 +419,11 @@ class ToolbarView : public views::AccessiblePaneView,
+@@ -414,6 +414,11 @@ class ToolbarView : public views::AccessiblePaneView,
    raw_ptr<SplitTabsToolbarButton> split_tabs_ = nullptr;
    raw_ptr<CustomTabBarView> custom_tab_bar_ = nullptr;
    raw_ptr<LocationBarView> location_bar_view_ = nullptr;
@@ -2425,15 +2442,3 @@ index 50e546251e9f8..7530fc9fb7d69 100644
  
    // An alias for `location_bar_view_` or `toolbar_webview_->GetLocationBar()`.
    raw_ptr<LocationBar> location_bar_ = nullptr;
-diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 921cbbeca0e5a..72ffb88d18aa5 100644
---- a/chrome/test/BUILD.gn
-+++ b/chrome/test/BUILD.gn
-@@ -7485,6 +7485,7 @@ test("unit_tests") {
-       "../browser/ui/views/content_setting_site_row_view_unittest.cc",
-       "../browser/ui/views/device_chooser_content_view_unittest.cc",
-       "../browser/ui/views/download/download_in_progress_dialog_view_unittest.cc",
-+      "../browser/ui/views/frame/stedding_window_background_unittest.cc",
-       "../browser/ui/views/frame/layout/browser_view_layout_params_unittest.cc",
-       "../browser/ui/views/frame/multi_contents_drop_target_view_unittest.cc",
-       "../browser/ui/views/frame/multi_contents_view_drop_target_controller_unittest.cc",

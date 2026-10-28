@@ -39,9 +39,9 @@ Why: the owner asked for child tabs, and the import check found the folders.
 Removable when: never; the next re-cut gives child tabs a patch of its own
 and folds the import fix into the importer's patch.
 ---
+ chrome/browser/BUILD.gn                       |   1 +
  .../api/settings_private/prefs_util.cc        |   3 +
  .../stedding_page/stedding_page.html.ts       |   7 +
- chrome/browser/ui/BUILD.gn                    |   1 +
  chrome/browser/ui/browser_tabrestore.cc       |   3 +
  chrome/browser/ui/spaces/BUILD.gn             |   2 +
  .../browser/ui/spaces/arc_sidebar_importer.cc | 115 ++++--
@@ -72,11 +72,23 @@ and folds the import fix into the importer's patch.
  create mode 100644 chrome/browser/ui/stedding/tab_parents_unittest.cc
  create mode 100644 chrome/test/stedding/child_tabs_browsertest.cc
 
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 059f15ff10dfa..29b2af3367ee7 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3878,6 +3878,7 @@ source_set("browser") {
+       "//chrome/browser/ui/stedding:sleep_tabs",
+       "//chrome/browser/ui/stedding:tab_names",
+       "//chrome/browser/ui/stedding:tab_numbers",
++      "//chrome/browser/ui/stedding:tab_parents",
+       "//chrome/browser/ui/stedding:motion",
+       "//chrome/browser/ui/stedding/theme",
+       "//chrome/browser/ui/archive",
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index a89cb85d6b368..15e6294575dc1 100644
+index 29cee934f7bae..a5a24c70a861f 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -376,6 +376,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -379,6 +379,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kUndoToast] =
        settings_api::PrefType::kBoolean;
@@ -104,18 +116,6 @@ index 4bf373e24b2ad..26c26890e773f 100644
    <settings-toggle-button
        id="ctrlTabMru"
        class="hr"
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 015087aec7cc3..88bf70825680e 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2385,6 +2385,7 @@ static_library("ui") {
-       "//chrome/browser/ui/stedding:sleep_tabs",
-       "//chrome/browser/ui/stedding:tab_names",
-       "//chrome/browser/ui/stedding:tab_numbers",
-+      "//chrome/browser/ui/stedding:tab_parents",
-       "//chrome/browser/ui/stedding:motion",
-       "//chrome/browser/ui/views/commandbar",
-       "//chrome/browser/ui/views/peek",
 diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
 index 33e76b99547d5..fbc1c21a108a0 100644
 --- a/chrome/browser/ui/browser_tabrestore.cc
@@ -138,7 +138,7 @@ index 33e76b99547d5..fbc1c21a108a0 100644
    // idle time it had; one reopened from the recently-closed list is opened
    // again.
 diff --git a/chrome/browser/ui/spaces/BUILD.gn b/chrome/browser/ui/spaces/BUILD.gn
-index 6ed98a1a13783..2130030a1a19e 100644
+index 0329f4487945e..b16433edeea09 100644
 --- a/chrome/browser/ui/spaces/BUILD.gn
 +++ b/chrome/browser/ui/spaces/BUILD.gn
 @@ -107,6 +107,7 @@ source_set("spaces") {
@@ -1339,10 +1339,10 @@ index 9aead120b4f52..de44c7ecf0774 100644
    base::WeakPtrFactory<SpaceTabVisibilityController> weak_factory_{this};
  };
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index e015f20149699..ca88e9eba8c1e 100644
+index 223249d83595b..80f752a0a9424 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -2001,6 +2001,24 @@ bool TabView::IsRailRow(int width) const {
+@@ -2029,6 +2029,24 @@ bool TabView::IsRailRow(int width) const {
    return collapsed_ && !IsInExpandOnHover(width);
  }
  
@@ -1395,10 +1395,10 @@ index bbc7014b0923b..5d67ac6a1b0d8 100644
    // Stedding (tabs R4, R7): the row drawn as asleep, which the folders above
    // it were last told (UpdateColors).
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-index 64c97f5247aa6..e26596d53d841 100644
+index 117e49d35372c..88e7c4b7ba228 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-@@ -72,6 +72,9 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
+@@ -74,6 +74,9 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
  
    gfx::Rect bounds_remaining = gfx::Rect(layouts.host_size);
    bounds_remaining.Inset(TabView().tab_styling()->GetContentsInsets());
@@ -1425,10 +1425,10 @@ index dd7a0a899fae6..876ec1e7f37e3 100644
    if (flags.render_units == TabStyle::RenderUnits::kPixels) {
      bounds.Scale(scale);
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 76b73e26132a0..44712efe12d86 100644
+index 90f735192be56..bb51011ff736e 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -1102,6 +1102,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1123,6 +1123,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                      "and folder. Off, ",
                      key("\u21E7\u2318T", "Ctrl+Shift+T"),
                      " still reopens them one at a time."}));

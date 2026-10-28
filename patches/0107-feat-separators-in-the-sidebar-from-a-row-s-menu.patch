@@ -20,7 +20,7 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/browser/ui/browser_tabrestore.cc       |   3 +
  chrome/browser/ui/spaces/space_model.cc       |  12 +-
  .../ui/spaces/space_storage_partition.cc      |   3 +
- chrome/browser/ui/stedding/BUILD.gn           |  11 +-
+ chrome/browser/ui/stedding/BUILD.gn           |  13 +-
  chrome/browser/ui/stedding/menu_rules.cc      |   4 +
  chrome/browser/ui/stedding/pin_lifecycle.cc   |   2 +
  chrome/browser/ui/stedding/tab_menu_verbs.cc  |  48 ++++++-
@@ -39,7 +39,7 @@ Removable when: never; to be folded into the patches that own the code.
  .../stedding/sidebar_click_browsertest.cc     |   2 +
  chrome/test/stedding/tab_drop_browsertest.cc  |  21 +++
  .../tabs/public/tab_context_menu_command.h    |   4 +
- 23 files changed, 544 insertions(+), 5 deletions(-)
+ 23 files changed, 545 insertions(+), 6 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/tab_separators.cc
  create mode 100644 chrome/browser/ui/stedding/tab_separators.h
 
@@ -164,7 +164,7 @@ index 84ad428da9677..8fc5bd703ec5b 100644
    // The old contents showed a new-tab page at most; they go now, before the
    // address loads in their place.
 diff --git a/chrome/browser/ui/stedding/BUILD.gn b/chrome/browser/ui/stedding/BUILD.gn
-index ff0daee67c43f..31ad2c106a956 100644
+index ff0daee67c43f..cb99c92b82505 100644
 --- a/chrome/browser/ui/stedding/BUILD.gn
 +++ b/chrome/browser/ui/stedding/BUILD.gn
 @@ -330,8 +330,14 @@ source_set("bookmarks_to_pins_dialog") {
@@ -192,6 +192,15 @@ index ff0daee67c43f..31ad2c106a956 100644
      "//base",
      "//chrome/browser/profiles:profile",
      "//chrome/browser/ui/browser_window",
+@@ -982,7 +989,7 @@ source_set("unit_tests") {
+     "//chrome/app:command_ids",
+     "//chrome/common/stedding:web_apps",
+     "//chrome/browser/media/webrtc",
+-    "//chrome/browser/ui",
++    "//chrome/browser",
+     "//chrome/browser/ui:recently_audible_helper",
+     "//chrome/browser/ui/color:color_headers",
+     "//chrome/browser/ui/spaces",
 diff --git a/chrome/browser/ui/stedding/menu_rules.cc b/chrome/browser/ui/stedding/menu_rules.cc
 index 2d22f17a9f7fe..51d408ab818b8 100644
 --- a/chrome/browser/ui/stedding/menu_rules.cc
@@ -632,10 +641,10 @@ index 0000000000000..3d003a2ca0224
 +
 +#endif  // CHROME_BROWSER_UI_STEDDING_TAB_SEPARATORS_H_
 diff --git a/chrome/browser/ui/tabs/tab_menu_model.cc b/chrome/browser/ui/tabs/tab_menu_model.cc
-index fe868ce782e91..0a7b7ce187149 100644
+index e4e6e7f6ae912..c4c3316fb581c 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model.cc
 +++ b/chrome/browser/ui/tabs/tab_menu_model.cc
-@@ -268,6 +268,12 @@ void TabMenuModel::BuildStedding(int index) {
+@@ -269,6 +269,12 @@ void TabMenuModel::BuildStedding(int index) {
    AddItem(TabStripModel::CommandMoveTabToNewFolder,
            l10n_util::GetPluralStringFUTF16(
                IDS_STEDDING_TAB_CXMENU_MOVE_TO_NEW_FOLDER, num_tabs));
@@ -648,7 +657,7 @@ index fe868ce782e91..0a7b7ce187149 100644
    // A split row arranges its panes; any other row can start a split (M7,
    // splits J1).
    if (tab_strip_->GetSplitForTab(index).has_value()) {
-@@ -793,6 +799,11 @@ void TabMenuModel::Build(int index) {
+@@ -802,6 +808,11 @@ void TabMenuModel::Build(int index) {
      // Rename in place (docs/features/tabs.md R14).
      AddItemWithStringId(TabStripModel::CommandSteddingRenameTab,
                          IDS_STEDDING_RENAME_TAB);
@@ -661,10 +670,10 @@ index fe868ce782e91..0a7b7ce187149 100644
  
    if (features::IsMenuSimplificationEnabled()) {
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index cd2e02379e0fd..6f38b3dec0813 100644
+index 0d079130e4664..593e95a98b2ca 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -2938,6 +2938,8 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -2956,6 +2956,8 @@ bool TabStripModel::IsContextMenuCommandEnabled(
      case CommandSteddingSetHome:
      case CommandSteddingEditHome:
      case CommandSteddingRenameTab:
@@ -673,7 +682,7 @@ index cd2e02379e0fd..6f38b3dec0813 100644
      case CommandSteddingMoveToSpaceMenu:
      case CommandSteddingMoveToSpaceFirst:
      case CommandSteddingMoveToSpaceLast:
-@@ -3356,6 +3358,8 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -3374,6 +3376,8 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
      case CommandSteddingSetHome:
      case CommandSteddingEditHome:
      case CommandSteddingRenameTab:
@@ -683,10 +692,10 @@ index cd2e02379e0fd..6f38b3dec0813 100644
      case CommandSteddingMoveToSpaceFirst:
      case CommandSteddingMoveToSpaceLast:
 diff --git a/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc b/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc
-index fdc80d6ee02de..c842ab155dfce 100644
+index 555c0c8da40f5..85c4ee920f252 100644
 --- a/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc
 +++ b/chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc
-@@ -286,6 +286,8 @@ void RootTabCollectionNode::OnTabChangedAt(tabs::TabInterface* tab,
+@@ -276,6 +276,8 @@ void RootTabCollectionNode::OnTabChangedAt(tabs::TabInterface* tab,
    }
    if (TabView* const row = RowOf(tab)) {
      row->ReadTabDataAgain();
@@ -696,7 +705,7 @@ index fdc80d6ee02de..c842ab155dfce 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index ce03ac6580dd3..0eda395fbc814 100644
+index 482a0a0e11402..c9e53319c8a0f 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -36,6 +36,7 @@
@@ -707,7 +716,7 @@ index ce03ac6580dd3..0eda395fbc814 100644
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
  #include "chrome/browser/ui/tab_ui_helper.h"
-@@ -1490,6 +1491,21 @@ void TabView::UpdateDriftDot() {
+@@ -1518,6 +1519,21 @@ void TabView::UpdateDriftDot() {
                        stedding::ShowsDriftDot(drift_row, HasDriftedFromHome()));
  }
  
@@ -729,7 +738,7 @@ index ce03ac6580dd3..0eda395fbc814 100644
  void TabView::OnTabStateChanged() {
    CHECK(collection_node_);
  
-@@ -1586,6 +1602,7 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
+@@ -1614,6 +1630,7 @@ void TabView::UpdateTabData(const tabs::TabData& data) {
    icon_->SetAttention(TabIcon::AttentionType::kTabWantsAttentionStatus,
                        tab_data_.needs_attention);
    UpdateDriftDot();
@@ -772,7 +781,7 @@ index 484672a9accbf..c3a512abca43a 100644
    // (stedding::UntitledLocalTitle), kept with the host line.
    std::u16string untitled_title_;
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index c3b09c3b5946e..0e5b403c45e52 100644
+index 791716eb34de7..8d845e5c0879e 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 @@ -16,6 +16,7 @@
@@ -783,7 +792,7 @@ index c3b09c3b5946e..0e5b403c45e52 100644
  #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
  #include "chrome/browser/ui/views/tabs/common/folder_view.h"
  #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
-@@ -328,8 +329,41 @@ void UnpinnedTabContainerView::ViewHierarchyChanged(
+@@ -329,8 +330,41 @@ void UnpinnedTabContainerView::ViewHierarchyChanged(
    }
  }
  
@@ -826,10 +835,10 @@ index c3b09c3b5946e..0e5b403c45e52 100644
      return;
    }
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 693f2f60faec1..23bee683ade0b 100644
+index bcaeb5dcd6986..e3bbd80382213 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-@@ -164,6 +164,9 @@ class UnpinnedTabContainerView
+@@ -165,6 +165,9 @@ class UnpinnedTabContainerView
  
    // views::View:
    void PaintChildren(const views::PaintInfo& info) override;

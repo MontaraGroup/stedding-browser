@@ -33,7 +33,7 @@ Why: every item is something a switcher from Arc noticed in the first day.
 
 Removable when: never; this is product behaviour.
 ---
- chrome/browser/ui/BUILD.gn                    |   1 +
+ chrome/browser/BUILD.gn                       |   1 +
  chrome/browser/ui/cocoa/accelerators_cocoa.mm |   7 +-
  .../browser/ui/color/stedding_color_mixer.cc  |  30 ++-
  chrome/browser/ui/layout_constants.cc         |   5 +-
@@ -64,7 +64,7 @@ Removable when: never; this is product behaviour.
  .../spaces/space_tab_visibility_controller.h  |   8 +
  .../views/tabs/common/clear_tabs_separator.cc |  17 +-
  .../tabs/common/pinned_tab_container_view.cc  |  11 +-
- .../ui/views/tabs/common/tab_strip_view.cc    |  77 +++++--
+ .../ui/views/tabs/common/tab_strip_view.cc    |  80 +++++--
  .../ui/views/tabs/common/tab_strip_view.h     |  16 ++
  .../tabs/common/tab_strip_view_layout.cc      |  20 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |   6 +-
@@ -77,23 +77,23 @@ Removable when: never; this is product behaviour.
  ...rtical_tab_strip_focus_swipe_controller.cc |  19 +-
  ...ertical_tab_strip_focus_swipe_controller.h |   8 +
  .../browser/ui/webui/settings/settings_ui.cc  |   2 +-
- 44 files changed, 1249 insertions(+), 155 deletions(-)
+ 44 files changed, 1252 insertions(+), 155 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/theme/BUILD.gn
  create mode 100644 chrome/browser/ui/stedding/theme/page_theme_color_controller.cc
  create mode 100644 chrome/browser/ui/stedding/theme/page_theme_color_controller.h
 
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 0488cc7805414..daddd96861721 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2346,6 +2346,7 @@ static_library("ui") {
-       "//chrome/browser/ui/views/spaces",
-       "//chrome/browser/ui/views/commandbar",
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index dcbfe0e0918f4..af4460d6b55db 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3859,6 +3859,7 @@ source_set("browser") {
+     public_deps += [
+       "//chrome/browser/ui/stedding:prefs",
        "//chrome/browser/ui/views/peek",
 +      "//chrome/browser/ui/stedding/theme",
-       ":tab_ui_helper",
-       ":uma_browsing_activity_observer",
-       ":unload_controller",
+     ]
+     deps += [
+       ":chrome_browser_interface_binders_webui_parts",
 diff --git a/chrome/browser/ui/cocoa/accelerators_cocoa.mm b/chrome/browser/ui/cocoa/accelerators_cocoa.mm
 index 12d6be60e250e..b7911a7974b4c 100644
 --- a/chrome/browser/ui/cocoa/accelerators_cocoa.mm
@@ -172,7 +172,7 @@ index e749ec04a5145..03f147e17b45d 100644
 +      ui::SetAlpha(kColorTabForegroundActiveFrameActive, 0x20);
  }
 diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_constants.cc
-index a276d6e68f435..bd28b17535f86 100644
+index ee050d1659792..5f6d16dbe2e20 100644
 --- a/chrome/browser/ui/layout_constants.cc
 +++ b/chrome/browser/ui/layout_constants.cc
 @@ -63,7 +63,10 @@ int GetLayoutConstant(LayoutConstant constant) {
@@ -1072,18 +1072,18 @@ index 514fcde8ef769..e5e8c780a161b 100644
  }  // namespace stedding
 +
 diff --git a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
-index 68ff79372263e..b9994e07451cd 100644
+index 10b7682418b0d..f7d9aee57377c 100644
 --- a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
 +++ b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
-@@ -39,6 +39,7 @@ DEFINE_USER_DATA(DownloadToolbarUIController);
+@@ -36,6 +36,7 @@ DEFINE_USER_DATA(DownloadToolbarUIController);
  #include "chrome/browser/ui/views/download/bubble/download_bubble_contents_view.h"
  #include "chrome/browser/ui/views/download/bubble/download_bubble_started_animation_views.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
- #include "chrome/browser/ui/views/toolbar/pinned_action_toolbar_button.h"
+ #include "chrome/browser/ui/views/toolbar/download_button.h"
  #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-@@ -944,6 +945,18 @@ void DownloadToolbarUIController::BubbleCloser::OnWidgetDestroyed(
+@@ -593,6 +594,18 @@ void DownloadToolbarUIController::BubbleCloser::OnWidgetDestroyed(
    }
  }
  
@@ -1102,7 +1102,7 @@ index 68ff79372263e..b9994e07451cd 100644
  void DownloadToolbarUIController::ShowBubble(
      DownloadBubbleMode mode,
      std::optional<ContentId> content_id) {
-@@ -966,6 +979,12 @@ void DownloadToolbarUIController::ShowBubble(
+@@ -615,6 +628,12 @@ void DownloadToolbarUIController::ShowBubble(
    }
  
    pending_bubble_ = true;
@@ -1115,7 +1115,7 @@ index 68ff79372263e..b9994e07451cd 100644
    container->GetBubbleAnchorAsync(
        kActionShowDownloads,
        base::BindOnce(&DownloadToolbarUIController::OnBubbleAnchorAssembled,
-@@ -996,7 +1015,10 @@ void DownloadToolbarUIController::OnBubbleAnchorAssembled(
+@@ -645,7 +664,10 @@ void DownloadToolbarUIController::OnBubbleAnchorAssembled(
      }
    }
    auto bubble_delegate = std::make_unique<views::BubbleDialogDelegate>(
@@ -1153,10 +1153,10 @@ index 0ffc300767d53..b44a8a720b6ce 100644
    std::unique_ptr<BubbleCloser> bubble_closer_;
  
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index e7c67764a3d83..d0984aefb04b0 100644
+index 0c911d03af0c4..868ded6d4653c 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -6126,7 +6126,7 @@ void BrowserView::FrameColorsChanged() {
+@@ -6090,7 +6090,7 @@ void BrowserView::FrameColorsChanged() {
      // the flat sand colour in light. The sidebar, top container and content
      // mat paint nothing in Arc mode, so this single painter shows through them
      // all with no seams.
@@ -1487,7 +1487,7 @@ index a1c15d4aec966..df991bf6a06dd 100644
  
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 099b30db3b4bd..853c285455de8 100644
+index c82855c0a0ff4..3f7f1b972ff32 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -9,7 +9,10 @@
@@ -1527,7 +1527,7 @@ index 099b30db3b4bd..853c285455de8 100644
  constexpr int kCollapsedResizeAreaWidth = 2;
  constexpr int kKeyboardResizeWidth = 50;
  constexpr int kSnapDistance = 15;
-@@ -190,9 +197,41 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -208,9 +215,41 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
    // area's children, so the switcher is one of them.
    if (spaces::SpaceModel* const space_model =
            spaces::SpaceModel::From(browser_view->browser())) {
@@ -1572,7 +1572,7 @@ index 099b30db3b4bd..853c285455de8 100644
      space_switcher_->SetHoverCallback(
          base::BindRepeating(&VerticalTabStripRegionView::OnSpaceChipHovered,
                              base::Unretained(this)));
-@@ -203,9 +242,9 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -221,9 +260,9 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
      // is this view's child, placed in this view's coordinates, on a layer of
      // its own so that it paints above the content area's layer.
      auto name_pill = std::make_unique<views::Label>();
@@ -1585,7 +1585,7 @@ index 099b30db3b4bd..853c285455de8 100644
      name_pill->SetVisible(false);
      name_pill->SetProperty(views::kViewIgnoredByLayoutKey, true);
      name_pill->SetPaintToLayer();
-@@ -262,6 +301,17 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -280,6 +319,17 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
    if (base::FeatureList::IsEnabled(features::kTabGroupsFocusing)) {
      focus_swipe_controller_ =
          std::make_unique<VerticalTabStripFocusSwipeController>(this);
@@ -1603,7 +1603,7 @@ index 099b30db3b4bd..853c285455de8 100644
    }
  
    SetNotifyEnterExitOnChild(true);
-@@ -929,11 +979,21 @@ void VerticalTabStripRegionView::AddTabStripView(
+@@ -940,11 +990,21 @@ void VerticalTabStripRegionView::AddTabStripView(
                &VerticalTabStripRegionView::OnExpandOnHoverEnabledChanged,
                base::Unretained(this)));
  
@@ -1630,7 +1630,7 @@ index 099b30db3b4bd..853c285455de8 100644
              &VerticalTabStripRegionView::ClearCurrentSpaceTabs,
              base::Unretained(this)));
      // The New Tab row opens what Cmd+T opens, and the bottom "+" pill goes:
-@@ -950,6 +1010,14 @@ void VerticalTabStripRegionView::AddTabStripView(
+@@ -961,6 +1021,14 @@ void VerticalTabStripRegionView::AddTabStripView(
      // Space switcher at the bottom of the sidebar.
      if (bottom_button_container_) {
        bottom_button_container_->SetNewTabButtonVisible(false);
@@ -1645,7 +1645,7 @@ index 099b30db3b4bd..853c285455de8 100644
      }
      // No hairline under the traffic lights either.
      if (top_button_separator_) {
-@@ -966,6 +1034,9 @@ void VerticalTabStripRegionView::AddTabStripView(
+@@ -977,6 +1045,9 @@ void VerticalTabStripRegionView::AddTabStripView(
          std::make_unique<spaces::SpaceTabVisibilityController>(
              *space_model, *browser_view()->browser()->GetTabStripModel(),
              *tab_strip_view());
@@ -1655,7 +1655,7 @@ index 099b30db3b4bd..853c285455de8 100644
    }
  
    // Folder headers accept a dropped tab. Built here because the FolderViews
-@@ -1390,6 +1461,49 @@ void VerticalTabStripRegionView::OnActiveTabChanged(
+@@ -1364,6 +1435,49 @@ void VerticalTabStripRegionView::OnActiveTabChanged(
    }
  }
  
@@ -1705,7 +1705,7 @@ index 099b30db3b4bd..853c285455de8 100644
  void VerticalTabStripRegionView::OnSpaceChipHovered(
      const std::u16string& name,
      const gfx::Rect& chip_bounds) {
-@@ -1404,11 +1518,19 @@ void VerticalTabStripRegionView::OnSpaceChipHovered(
+@@ -1378,11 +1492,19 @@ void VerticalTabStripRegionView::OnSpaceChipHovered(
    const gfx::Size text = space_hover_pill_->GetPreferredSize();
    const int width = text.width() + 16;
    const int height = text.height() + 6;
@@ -1728,10 +1728,10 @@ index 099b30db3b4bd..853c285455de8 100644
    space_hover_pill_->SetVisible(true);
    // Above the chips in paint order.
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 05a2799a95052..3fc903f8538cc 100644
+index d01267e68e48c..87e53b8b6f9eb 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -276,6 +276,13 @@ class VerticalTabStripRegionView final
+@@ -244,6 +244,13 @@ class VerticalTabStripRegionView final
    raw_ptr<views::View> content_area_view_ = nullptr;
  
    raw_ptr<spaces::SpaceSwitcherView> space_switcher_ = nullptr;
@@ -1745,7 +1745,7 @@ index 05a2799a95052..3fc903f8538cc 100644
    raw_ptr<views::Label> space_hover_pill_ = nullptr;
    std::unique_ptr<spaces::SpaceDragTarget> space_drag_target_;
    // A tab dropped on a folder header joins the folder (folders F7).
-@@ -333,6 +340,10 @@ class VerticalTabStripRegionView final
+@@ -301,6 +308,10 @@ class VerticalTabStripRegionView final
    void ClearCurrentSpaceTabs();
  
    // Floats the name pill above a hovered Space chip; empty name hides it.
@@ -2028,10 +2028,10 @@ index 478b234d1da02..7ee578ec72c2e 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-index f3cbdd3d03048..5e06d601f61c4 100644
+index 83947b0ac126a..d0c30826102e1 100644
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-@@ -427,14 +427,15 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+@@ -422,14 +422,15 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
                                     1));
  
      // Stedding: the essentials row is a grid of cards, two to a row at the
@@ -2053,20 +2053,23 @@ index f3cbdd3d03048..5e06d601f61c4 100644
        // Allocate extra space to the tabs.
        available_width -= (children_on_row * child_width) +
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index fab6a96f81b21..93734af34c6d0 100644
+index 1ed6641edb7aa..c25d2df9e8970 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-@@ -52,6 +52,9 @@
+@@ -49,6 +49,12 @@
+ #include "ui/views/view_class_properties.h"
+ #include "ui/views/view_utils.h"
  
- namespace {
- 
++namespace {
++
 +// Stedding: the Space title row above the pinned tabs.
 +constexpr int kSpaceTitleRowHeight = 30;
 +
- bool IsVerticalOrientation(const TabCollectionNode* collection_node) {
-   return collection_node &&
-          collection_node->orientation() == TabStripOrientation::kVertical;
-@@ -195,26 +198,25 @@ TabStripView::TabStripView(TabCollectionNode* collection_node)
++}  // namespace
+ class TabStripView::TargetViewsTracker : public views::ViewObserver {
+  public:
+   explicit TargetViewsTracker(TabStripOrientation orientation)
+@@ -185,26 +191,25 @@ TabStripView::TabStripView(TabCollectionNode* collection_node)
        views::ScrollView::ScrollWithLayers::kEnabled));
    SetScrollViewProperties(pinned_tabs_scroll_view_);
  
@@ -2107,7 +2110,7 @@ index fab6a96f81b21..93734af34c6d0 100644
  
    unpinned_tabs_scroll_view_ = AddChildView(std::make_unique<views::ScrollView>(
        views::ScrollView::ScrollWithLayers::kEnabled));
-@@ -263,13 +265,54 @@ TabStripView::~TabStripView() {
+@@ -257,13 +262,54 @@ TabStripView::~TabStripView() {
  }
  
  void TabStripView::SetSeparatorClearCallback(base::RepeatingClosure callback) {
@@ -2165,7 +2168,7 @@ index fab6a96f81b21..93734af34c6d0 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.h b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-index 722f1aa8a7899..78763a8b3c6f1 100644
+index a9d61cf52f031..6828fb87dd13a 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
 @@ -5,7 +5,9 @@
@@ -2176,9 +2179,9 @@ index 722f1aa8a7899..78763a8b3c6f1 100644
  #include "base/memory/raw_ptr.h"
 +#include "ui/views/controls/button/button.h"
  #include "base/scoped_observation.h"
+ #include "chrome/browser/ui/views/tabs/shared/tab_strip_types.h"
  #include "components/prefs/pref_change_registrar.h"
- #include "components/tabs/public/tab_interface.h"
-@@ -15,6 +17,7 @@
+@@ -16,6 +18,7 @@
  
  class PrefService;
  class TabCollectionNode;
@@ -2186,7 +2189,7 @@ index 722f1aa8a7899..78763a8b3c6f1 100644
  class PinnedTabContainerView;
  class UnpinnedTabContainerView;
  class TabScrollButtonContainer;
-@@ -56,6 +59,17 @@ class TabStripView final : public views::View,
+@@ -57,6 +60,17 @@ class TabStripView final : public views::View,
    void SetNewTabCallback(base::RepeatingClosure callback);
    views::LabelButton* GetNewTabRow() const { return new_tab_row_; }
  
@@ -2204,7 +2207,7 @@ index 722f1aa8a7899..78763a8b3c6f1 100644
    PinnedTabContainerView* GetPinnedTabsContainer() const;
    UnpinnedTabContainerView* GetUnpinnedTabsContainer() const;
    TabScrollButtonContainer* GetScrollButtonContainer() const;
-@@ -155,7 +169,9 @@ class TabStripView final : public views::View,
+@@ -158,7 +172,9 @@ class TabStripView final : public views::View,
    raw_ptr<views::ScrollView> pinned_tabs_scroll_view_ = nullptr;
    raw_ptr<PinnedTabContainerView> pinned_tabs_container_view_ = nullptr;
    raw_ptr<views::Separator> tabs_separator_ = nullptr;
@@ -2215,7 +2218,7 @@ index 722f1aa8a7899..78763a8b3c6f1 100644
    raw_ptr<UnpinnedTabContainerView> unpinned_tabs_container_view_ = nullptr;
    raw_ptr<TabScrollButtonContainer> tab_scroll_button_container_ = nullptr;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
-index a3b39f5af6393..76e96f6aa17db 100644
+index d76e39db2a486..0719f959ee01a 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 @@ -4,6 +4,10 @@
@@ -2229,7 +2232,7 @@ index a3b39f5af6393..76e96f6aa17db 100644
  #include <algorithm>
  
  #include "base/logging.h"
-@@ -254,7 +258,9 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
+@@ -258,7 +262,9 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
    // Stedding: the line between pinned and unpinned tabs shows whenever both
    // exist, collapsed or not -- it carries the Clear affordance, as the
    // reference does. Upstream only showed it collapsed.
@@ -2240,7 +2243,7 @@ index a3b39f5af6393..76e96f6aa17db 100644
        pinned_preferred_height != 0 && unpinned_preferred_height != 0;
  
    // If the height is bounded, calculate the available space for laying out the
-@@ -315,11 +321,13 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
+@@ -319,11 +325,13 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
    layouts.child_layouts.emplace_back(tabs_separator, should_show_separator,
                                       separator_bounds);
  
@@ -2258,7 +2261,7 @@ index a3b39f5af6393..76e96f6aa17db 100644
        row_bounds = gfx::Rect(region_horizontal_padding, y,
                               size_bounds.width().value() -
                                   2 * region_horizontal_padding,
-@@ -327,7 +335,7 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
+@@ -331,7 +339,7 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
        y += row_height;
        remaining_height -= row_height;
      }
@@ -2268,10 +2271,10 @@ index a3b39f5af6393..76e96f6aa17db 100644
    }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 5292c13b13a55..5ac78bbb3f9ea 100644
+index 61a57c1534a1f..4da3d67e04f60 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -1001,9 +1001,9 @@ views::BubbleBorder::Arrow TabView::GetAnchorPosition() const {
+@@ -1028,9 +1028,9 @@ views::BubbleBorder::Arrow TabView::GetAnchorPosition() const {
    if (orientation_ == TabStripOrientation::kHorizontal) {
      return views::BubbleBorder::Arrow::TOP_LEFT;
    }
@@ -2285,16 +2288,17 @@ index 5292c13b13a55..5ac78bbb3f9ea 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-index 6641560e2f254..17bb6201013bb 100644
+index d2b935e0c80a1..666d76572eb50 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-@@ -12,11 +12,16 @@
+@@ -12,12 +12,17 @@
  #include "chrome/browser/ui/views/tabs/tab/alert_indicator_button.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
  #include "chrome/browser/ui/views/tabs/tab_style_views.h"
+ #include "ui/views/view_utils.h"
  
  namespace {
 -constexpr int kIconDesignWidth = 16;
@@ -2306,7 +2310,7 @@ index 6641560e2f254..17bb6201013bb 100644
  constexpr int kTitleMinWidth = 10;
  constexpr int kHorizontalInset = 8;
  constexpr int kDefaultPadding = 4;
-@@ -28,15 +33,15 @@ TabViewVerticalLayout::~TabViewVerticalLayout() = default;
+@@ -29,15 +34,15 @@ TabViewVerticalLayout::~TabViewVerticalLayout() = default;
  void TabViewVerticalLayout::OnInstalled(views::View* host) {
    TabView::LayoutManager::OnInstalled(host);
    tab_children_configs_ = {
@@ -2326,10 +2330,10 @@ index 6641560e2f254..17bb6201013bb 100644
                       /*expand=*/false),
        TabChildConfig(TabView().title_, kTitleMinWidth, kDefaultPadding,
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-index 0d3dccca25de6..cb50efe33097d 100644
+index 2b8af11ebfdcc..87ff1ed920241 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.cc
-@@ -110,6 +110,16 @@ UnpinnedTabContainerView::UnpinnedTabContainerView(
+@@ -111,6 +111,16 @@ UnpinnedTabContainerView::UnpinnedTabContainerView(
                       base::Unretained(this)));
  }
  
@@ -2347,7 +2351,7 @@ index 0d3dccca25de6..cb50efe33097d 100644
  
  
 diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
-index 962216bdc7d15..6f01d8cf0d726 100644
+index 4bd271e26e665..a9ff74fdbe980 100644
 --- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 +++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h
 @@ -6,6 +6,7 @@
@@ -2358,7 +2362,7 @@ index 962216bdc7d15..6f01d8cf0d726 100644
  #include "base/memory/raw_ptr.h"
  #include "chrome/browser/ui/views/frame/browser_root_view.h"
  #include "chrome/browser/ui/views/tabs/common/dragged_tabs_container.h"
-@@ -64,6 +65,18 @@ class UnpinnedTabContainerView
+@@ -65,6 +66,18 @@ class UnpinnedTabContainerView
    void SetAvailableSpace(views::SizeBound space) { available_space_ = space; }
    views::SizeBound available_space() const { return available_space_; }
  
@@ -2377,9 +2381,9 @@ index 962216bdc7d15..6f01d8cf0d726 100644
   private:
    // DraggedTabsContainer:
    views::ScrollView* GetScrollViewForContainer() const override;
-@@ -83,6 +96,12 @@ class UnpinnedTabContainerView
- 
-   raw_ptr<TabCollectionNode> collection_node_;
+@@ -85,6 +98,12 @@ class UnpinnedTabContainerView
+   const TabStripOrientation orientation_;
+   raw_ptr<TabCollectionNode> collection_node_ = nullptr;
  
 +  raw_ptr<views::View> boundary_clear_line_ = nullptr;
 +
@@ -2496,7 +2500,7 @@ index 366f3e39e5877..dcd4e5224c7db 100644
      height -= kTabVerticalPadding;
    }
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
-index f1432f5ed1991..4a3bf176ecfbe 100644
+index 2cc366bb021e7..d15d241c75688 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
 @@ -5,6 +5,9 @@
@@ -2509,7 +2513,7 @@ index f1432f5ed1991..4a3bf176ecfbe 100644
  #include "chrome/browser/ui/browser_element_identifiers.h"
  #include "chrome/browser/ui/layout_constants.h"
  #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
-@@ -49,6 +52,21 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+@@ -48,6 +51,21 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
            base::Unretained(this)));
  }
  
@@ -2644,10 +2648,10 @@ index 4a91fb53f8f72..1413a7e710516 100644
    GestureState gesture_state_ = GestureState::kNone;
    float cumulative_x_ = 0.0f;
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index a064335cbcf76..15f977f5e473e 100644
+index 2512fbd4c0e5e..d534ea304f069 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -711,7 +711,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -732,7 +732,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           "Expand the collapsed sidebar when the pointer rests on it");
    html_source->AddString(
        "steddingSidebarHoverSubLabel",

@@ -38,9 +38,10 @@ ships its own desktop shortcut remapping that Stedding adopts.
  .../settings/stedding_page/stedding_page.ts   |   8 +-
  .../stedding_shortcuts_editor.html.ts         | 152 ++++
  .../stedding_shortcuts_editor.ts              | 522 ++++++++++++++
- chrome/browser/ui/BUILD.gn                    |   4 +
- chrome/browser/ui/accelerator_table.cc        |  25 +-
+ chrome/browser/ui/BUILD.gn                    |   1 +
+ chrome/browser/ui/accelerator_table.cc        |  26 +-
  chrome/browser/ui/accelerator_table.h         |   5 +
+ .../browser/ui/accelerator_table_unittest.cc  |   4 +
  chrome/browser/ui/cocoa/BUILD.gn              |   2 +
  chrome/browser/ui/cocoa/accelerators_cocoa.h  |  14 +-
  chrome/browser/ui/cocoa/accelerators_cocoa.mm |  26 +
@@ -97,7 +98,7 @@ ships its own desktop shortcut remapping that Stedding adopts.
  .../stedding_shortcuts_handler_unittest.cc    | 195 ++++++
  chrome/test/stedding/BUILD.gn                 |   7 +
  .../stedding/shortcut_rebind_browsertest.cc   | 654 ++++++++++++++++++
- 68 files changed, 6240 insertions(+), 102 deletions(-)
+ 69 files changed, 6242 insertions(+), 102 deletions(-)
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts
  create mode 100644 chrome/browser/ui/stedding/shortcut_catalog.cc
@@ -125,10 +126,10 @@ ships its own desktop shortcut remapping that Stedding adopts.
  create mode 100644 chrome/test/stedding/shortcut_rebind_browsertest.cc
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index f3f4afd89156c..b60e3c034db54 100644
+index 8ecd02a6e0fe4..45f95727276b8 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -575,6 +575,7 @@ if (is_mac) {
+@@ -746,6 +746,7 @@ if (is_mac) {
  
    source_set("global_keyboard_shortcuts_mac") {
      public = [ "global_keyboard_shortcuts_mac.h" ]
@@ -136,16 +137,16 @@ index f3f4afd89156c..b60e3c034db54 100644
    }
  
    source_set("shutdown_watchdog_mac") {
-@@ -1309,6 +1310,8 @@ source_set("core") {
-       # clean links Cl1: the throttle CreateURLLoaderThrottles makes.
+@@ -1483,6 +1484,8 @@ source_set("core") {
        "//chrome/browser/ui/stedding:clean_links",
        "//chrome/browser/ui/stedding:dark_pages",
+       "//chrome/browser/ui/stedding:make_app",
 +      # shortcuts Z10: the user's chords, read before the first window.
 +      "//chrome/browser/ui/stedding:shortcuts",
        # blocker Bk1, Bk11: started with the browser.
        "//chrome/browser/ui/stedding/blocker",
        "//chrome/browser/ui/tabs/tab_drag_api/desktop_tab_drag_impl",
-@@ -1548,6 +1551,8 @@ source_set("core") {
+@@ -1728,6 +1731,8 @@ source_set("core") {
        ":fullscreen",
        ":global_keyboard_shortcuts_mac",
        ":shutdown_watchdog_mac",
@@ -155,7 +156,7 @@ index f3f4afd89156c..b60e3c034db54 100644
        "//chrome/browser/apps/app_shim",
        "//chrome/browser/enterprise/connectors/device_trust/key_management/core/mac",
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 68b275965c571..ba2d317a7d8b4 100644
+index d3a9c566433dc..e588ec9637a46 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -80,6 +80,7 @@
@@ -178,7 +179,7 @@ index 68b275965c571..ba2d317a7d8b4 100644
    // Create an instance of GpuModeManager to watch gpu mode pref change.
    g_browser_process->gpu_mode_manager();
  
-@@ -2249,6 +2255,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
+@@ -2247,6 +2253,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
    // disconnects DBus services in its PostDestroyThreads.
    UpgradeDetector::GetInstance()->Shutdown();
  
@@ -465,10 +466,10 @@ index a04f11e9ec693..8058089ddbaf7 100644
 +  return shipped != nullptr;
 +}
 diff --git a/chrome/browser/resources/settings/BUILD.gn b/chrome/browser/resources/settings/BUILD.gn
-index 859df475d7b8a..9780a805a549f 100644
+index 9815ac3bc0c6b..8b5ff83f32f78 100644
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
-@@ -279,6 +279,8 @@ build_webui("build") {
+@@ -284,6 +284,8 @@ build_webui("build") {
      "downloads_page/downloads_page.ts",
      "stedding_page/stedding_page.html.ts",
      "stedding_page/stedding_page.ts",
@@ -1215,40 +1216,30 @@ index 0000000000000..7eb3ae59a1c43
 +    SettingsSteddingShortcutsEditorElement.is,
 +    SettingsSteddingShortcutsEditorElement);
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 11b480fdb3bde..93152948ce8ee 100644
+index a97de283c08cb..3c0aaee2b0ff5 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1100,6 +1100,7 @@ if (!is_android) {
-     public = [ "accelerator_table.h" ]
-     sources = [ "accelerator_table.cc" ]
-     deps = [
-+      "//chrome/browser/ui/stedding:shortcut_overrides",
-       "//chrome/app:command_ids",
-       "//chrome/browser/ui:ui_features",
-       "//chrome/browser/ui/tabs",
-@@ -2394,6 +2395,9 @@ static_library("ui") {
-       "//chrome/browser/ui/stedding:tab_parents",
-       "//chrome/browser/ui/stedding:motion",
-       "//chrome/browser/ui/views/commandbar",
-+      # shortcuts Z11, Z17: the windows reload their accelerators; the row
-+      # numbers follow their switch.
-+      "//chrome/browser/ui/stedding:shortcuts",
-       "//chrome/browser/ui/views/peek",
-       "//chrome/browser/ui/views/switcher",
-       ":tab_ui_helper",
+@@ -1148,6 +1148,7 @@ source_set("accelerator_table") {
+     "//build:branding_buildflags",
+     "//chrome/app:command_ids",
+     "//chrome/browser/ui/actions:command_id_to_action_id",
++    "//chrome/browser/ui/stedding:shortcut_overrides",
+     "//printing/buildflags",
+     "//ui/base",
+     "//ui/base:features",
 diff --git a/chrome/browser/ui/accelerator_table.cc b/chrome/browser/ui/accelerator_table.cc
-index d671f663d08d0..53dd2a511d3c7 100644
+index 0428981164eff..cd7cd65a5074e 100644
 --- a/chrome/browser/ui/accelerator_table.cc
 +++ b/chrome/browser/ui/accelerator_table.cc
-@@ -15,6 +15,7 @@
- #include "build/branding_buildflags.h"
+@@ -16,6 +16,7 @@
  #include "build/build_config.h"
  #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/ui/actions/command_id_to_action_id.h"
 +#include "chrome/browser/ui/stedding/shortcut_overrides.h"
  #include "chrome/browser/ui/stedding/stedding_command_ids.h"
- #include "chrome/browser/ui/tabs/features.h"
- #include "chrome/browser/ui/ui_features.h"
-@@ -422,7 +423,7 @@ std::vector<AcceleratorMapping>* GetAcceleratorsPointer() {
+ #include "printing/buildflags/buildflags.h"
+ #include "ui/base/accelerators/accelerator.h"
+@@ -415,7 +416,7 @@ std::vector<AcceleratorMapping>* GetAcceleratorsPointer() {
  
  }  // namespace
  
@@ -1257,7 +1248,7 @@ index d671f663d08d0..53dd2a511d3c7 100644
    std::vector<AcceleratorMapping>* accelerators = GetAcceleratorsPointer();
  
    if (accelerators->empty()) {
-@@ -479,6 +480,28 @@ std::vector<AcceleratorMapping> GetAcceleratorList() {
+@@ -476,6 +477,29 @@ std::vector<AcceleratorMapping> GetAcceleratorList() {
    return *accelerators;
  }
  
@@ -1278,7 +1269,8 @@ index d671f663d08d0..53dd2a511d3c7 100644
 +  for (const stedding::shortcuts::Binding& binding :
 +       stedding::shortcuts::ApplyForViewsTable(defaults)) {
 +    accelerators.push_back(
-+        {binding.chord.key, binding.chord.modifiers, binding.command});
++        {binding.chord.key, binding.chord.modifiers, binding.command,
++         chrome::GetActionIdForCommandId(binding.command)});
 +  }
 +  return accelerators;
 +}
@@ -1287,10 +1279,10 @@ index d671f663d08d0..53dd2a511d3c7 100644
    std::vector<AcceleratorMapping>* accelerators = GetAcceleratorsPointer();
    accelerators->clear();
 diff --git a/chrome/browser/ui/accelerator_table.h b/chrome/browser/ui/accelerator_table.h
-index ce0b2e5d88b6d..c49931e09f998 100644
+index 171ee09c4a040..c4524ab60f50a 100644
 --- a/chrome/browser/ui/accelerator_table.h
 +++ b/chrome/browser/ui/accelerator_table.h
-@@ -36,6 +36,11 @@ struct AcceleratorMapping {
+@@ -43,6 +43,11 @@ struct AcceleratorMapping {
  // modifier key (e.g. escape).
  std::vector<AcceleratorMapping> GetAcceleratorList();
  
@@ -1302,11 +1294,26 @@ index ce0b2e5d88b6d..c49931e09f998 100644
  // This function should be used only for testing. Clears the accelerator list.
  void ClearAcceleratorListForTesting();
  
+diff --git a/chrome/browser/ui/accelerator_table_unittest.cc b/chrome/browser/ui/accelerator_table_unittest.cc
+index 98567c70038b3..b3bf65ee0c30c 100644
+--- a/chrome/browser/ui/accelerator_table_unittest.cc
++++ b/chrome/browser/ui/accelerator_table_unittest.cc
+@@ -88,6 +88,10 @@ TEST(AcceleratorTableTest, OpenFeedbackWithSearchBasedAccelerator) {
+ // resolved through the Actions framework.
+ TEST(AcceleratorTableTest, EveryAcceleratorMapsToAnAction) {
+   for (const auto& entry : GetAcceleratorList()) {
++    // Stedding's own commands (55100 to 55199) are commands, not actions.
++    if (entry.command_id >= 55100 && entry.command_id < 55200) {
++      continue;
++    }
+     EXPECT_TRUE(entry.action_id.has_value())
+         << "Accelerator command " << entry.command_id
+         << " has no associated action. Add an E(kActionFoo, IDC_FOO) entry in "
 diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
-index 879c89aa95e77..68cbe52c3cb30 100644
+index ac568016a982d..985a6b896908e 100644
 --- a/chrome/browser/ui/cocoa/BUILD.gn
 +++ b/chrome/browser/ui/cocoa/BUILD.gn
-@@ -133,6 +133,8 @@ source_set("cocoa") {
+@@ -130,6 +130,8 @@ source_set("cocoa") {
      "//chrome/browser:command_updater_impl",
      "//chrome/browser:global_keyboard_shortcuts_mac",
      "//chrome/browser:primitives",
@@ -5585,7 +5592,7 @@ index 9279e2d17a41d..c948f665e762b 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
-index 8577118600834..52f305906639c 100644
+index 2710b01d600a0..066d8eb3e76e3 100644
 --- a/chrome/browser/ui/views/commandbar/BUILD.gn
 +++ b/chrome/browser/ui/views/commandbar/BUILD.gn
 @@ -30,6 +30,9 @@ source_set("commandbar") {
@@ -5750,7 +5757,7 @@ index 63c807cd154ab..75ccb1b8ebdb2 100644
          kHeldChordCancel, ui::AcceleratorManager::kHighPriority, this);
      cancel_chord_manager_ = focus_manager;
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 5ad2674b490e1..03596abdbf2ca 100644
+index 80e06daffeeb2..3b19892e7623c 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -125,6 +125,7 @@
@@ -5761,7 +5768,7 @@ index 5ad2674b490e1..03596abdbf2ca 100644
  #include "chrome/browser/ui/stedding/thanks_pages.h"
  #include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
-@@ -5302,6 +5303,11 @@ void BrowserView::AddedToWidget() {
+@@ -5299,6 +5300,11 @@ void BrowserView::AddedToWidget() {
  #endif
  
    LoadAccelerators();
@@ -5773,7 +5780,7 @@ index 5ad2674b490e1..03596abdbf2ca 100644
  
    // ImmersiveModeController may depend on the presence of a Widget, so it
    // is initialized here.
-@@ -5888,6 +5894,16 @@ void BrowserView::RequestFullscreen(bool fullscreen, int64_t display_id) {
+@@ -5874,6 +5880,16 @@ void BrowserView::RequestFullscreen(bool fullscreen, int64_t display_id) {
  #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
  }
  
@@ -5791,10 +5798,10 @@ index 5ad2674b490e1..03596abdbf2ca 100644
    views::FocusManager* focus_manager = GetFocusManager();
    DCHECK(focus_manager);
 diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
-index fbcbee2380432..dfcacb7b3c6bb 100644
+index 80f17f46882eb..f22c7832c35cd 100644
 --- a/chrome/browser/ui/views/frame/browser_view.h
 +++ b/chrome/browser/ui/views/frame/browser_view.h
-@@ -997,6 +997,11 @@ class BrowserView : public BrowserWindow,
+@@ -992,6 +992,11 @@ class BrowserView : public BrowserWindow,
    // Copy the accelerator table from the app resources into something we can
    // use.
    void LoadAccelerators();
@@ -5806,7 +5813,7 @@ index fbcbee2380432..dfcacb7b3c6bb 100644
  
    // Retrieves the command id for the specified Windows app command.
    int GetCommandIDForAppCommandID(int app_command_id) const;
-@@ -1288,6 +1293,8 @@ class BrowserView : public BrowserWindow,
+@@ -1279,6 +1284,8 @@ class BrowserView : public BrowserWindow,
  
    // A mapping between accelerators and command IDs.
    std::map<ui::Accelerator, int> accelerator_table_;
@@ -5816,7 +5823,7 @@ index fbcbee2380432..dfcacb7b3c6bb 100644
    // True if we have already been initialized.
    bool initialized_ = false;
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index e4348534c4ecc..544b0d18e922b 100644
+index f79c8876ab532..b96d7da5e5144 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -52,6 +52,7 @@
@@ -5827,7 +5834,7 @@ index e4348534c4ecc..544b0d18e922b 100644
  #include "chrome/browser/ui/stedding/sidebar_panels.h"
  #include "chrome/browser/ui/stedding/sidebar_panels_view.h"
  #include "chrome/browser/ui/stedding/stedding_prefs.h"
-@@ -1261,12 +1262,26 @@ void VerticalTabStripRegionView::ShowNumberBadges() {
+@@ -1279,12 +1280,26 @@ void VerticalTabStripRegionView::ShowNumberBadges() {
    if (prefs && !prefs->GetBoolean(stedding::prefs::kHoldCmdNumbers)) {
      return;
    }
@@ -5856,10 +5863,10 @@ index e4348534c4ecc..544b0d18e922b 100644
          root_node() ? root_node()->GetNodeForHandle(tab->GetHandle()) : nullptr;
      if (auto* const view =
 diff --git a/chrome/browser/ui/views/page_action/BUILD.gn b/chrome/browser/ui/views/page_action/BUILD.gn
-index 3601e56694003..fe697271a169e 100644
+index d43e1a470dad7..b07683c8848d0 100644
 --- a/chrome/browser/ui/views/page_action/BUILD.gn
 +++ b/chrome/browser/ui/views/page_action/BUILD.gn
-@@ -87,6 +87,8 @@ source_set("impl") {
+@@ -84,6 +84,8 @@ source_set("impl") {
      "//chrome/browser/ui/page_action:page_action_impl",
      "//chrome/browser/ui/search",
      "//chrome/browser/ui/stedding:prefs",
@@ -6209,10 +6216,10 @@ index 7432c28410cb9..8f094c6176dc9 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
-index cd4c0309b29a2..05c18fcf29817 100644
+index a5ce5897ba1f9..3ff34df8d634c 100644
 --- a/chrome/browser/ui/views/toolbar/BUILD.gn
 +++ b/chrome/browser/ui/views/toolbar/BUILD.gn
-@@ -338,6 +338,8 @@ source_set("impl") {
+@@ -349,6 +349,8 @@ source_set("impl") {
      "//chrome/browser/ui/stedding:dark_pages",
      "//chrome/browser/ui/stedding:little_window",
      "//chrome/browser/ui/stedding:prefs",
@@ -6358,10 +6365,10 @@ index d3663e7be4266..2977988282882 100644
  
  }  // namespace stedding
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index c068f19780735..c25338211fd75 100644
+index bf2e1d358fd34..7914070f41e6f 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -198,6 +198,8 @@ source_set("impl") {
+@@ -204,6 +204,8 @@ source_set("impl") {
      "//chrome/browser/ui/stedding:app_updater",
      "//chrome/browser/ui/stedding:clean_link",
      "//chrome/browser/ui/stedding:clean_links",
@@ -6370,7 +6377,7 @@ index c068f19780735..c25338211fd75 100644
      "//chrome/browser/ui/stedding:prefs",
      "//chrome/browser/ui/stedding:dark_pages",
      # blocker Bk9: the lists' state and the sites where blocking is off.
-@@ -565,6 +567,8 @@ if (!is_android) {
+@@ -585,6 +587,8 @@ if (!is_android) {
        ":settings",
        "//base/test:test_support",
        "//chrome/browser/ui/stedding:address_row",
@@ -6380,10 +6387,10 @@ index c068f19780735..c25338211fd75 100644
        "//chrome/browser:global_features",
        "//chrome/browser/affiliations",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 9752fe1caabd4..3eb0ba2069108 100644
+index e5cf4bf6ac974..ff5dde2f9f281 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -1261,10 +1261,46 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1282,10 +1282,46 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "then. On, the bar follows Show bookmarks bar again and the star "
        "bookmarks a page.");
    html_source->AddString("steddingShortcutsTitle", "Shortcuts");

@@ -18,12 +18,13 @@ was a legal notice, not a welcome.
 
 Removable when: never; this is product behaviour.
 ---
+ chrome/browser/BUILD.gn                       |   2 +
  chrome/browser/resources/BUILD.gn             |   1 +
  .../resources/stedding_welcome/BUILD.gn       |  19 ++
  .../resources/stedding_welcome/app.css        | 263 +++++++++++++++
  .../browser/resources/stedding_welcome/app.ts | 304 ++++++++++++++++++
  .../stedding_welcome/stedding_welcome.html    |  13 +
- chrome/browser/ui/BUILD.gn                    |   7 +-
+ chrome/browser/ui/BUILD.gn                    |  22 ++
  .../search_engine_choice_tab_helper.cc        |  13 +
  chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   4 +
@@ -38,7 +39,7 @@ Removable when: never; this is product behaviour.
  .../stedding_welcome/stedding_welcome_ui.h    |  33 ++
  chrome/chrome_paks.gni                        |   1 +
  tools/gritsettings/resource_ids.spec          |   6 +
- 20 files changed, 1191 insertions(+), 2 deletions(-)
+ 21 files changed, 1210 insertions(+)
  create mode 100644 chrome/browser/resources/stedding_welcome/BUILD.gn
  create mode 100644 chrome/browser/resources/stedding_welcome/app.css
  create mode 100644 chrome/browser/resources/stedding_welcome/app.ts
@@ -51,8 +52,28 @@ Removable when: never; this is product behaviour.
  create mode 100644 chrome/browser/ui/webui/stedding_welcome/stedding_welcome_ui.cc
  create mode 100644 chrome/browser/ui/webui/stedding_welcome/stedding_welcome_ui.h
 
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index da998c9f7d973..e4a9476edf212 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3861,6 +3861,7 @@ source_set("browser") {
+       "//chrome/browser/ui/views/peek",
+       "//chrome/browser/ui/stedding/screenshot",
+       "//chrome/browser/ui/stedding/theme",
++      "//chrome/browser/ui/webui/stedding_welcome",
+     ]
+     deps += [
+       ":chrome_browser_interface_binders_webui_parts",
+@@ -3909,6 +3910,7 @@ source_set("browser") {
+       "//chrome/browser/ui:intent_picker_tab_helper",
+       "//chrome/browser/ui:layout_constants",
+       "//chrome/browser/ui:stedding_ui_metrics",
++      "//chrome/browser/ui:stedding_welcome_view",
+       "//chrome/browser/ui:tab_helpers",
+       "//chrome/browser/ui:tab_helpers_impl",
+       "//chrome/browser/ui/views/spaces",
 diff --git a/chrome/browser/resources/BUILD.gn b/chrome/browser/resources/BUILD.gn
-index 5ded1d6276081..9561f80b49769 100644
+index b0e80f7a4d8ce..e90395ad0ce28 100644
 --- a/chrome/browser/resources/BUILD.gn
 +++ b/chrome/browser/resources/BUILD.gn
 @@ -87,6 +87,7 @@ group("resources") {
@@ -687,32 +708,38 @@ index 0000000000000..97d02986790fa
 +  </body>
 +</html>
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index b0857681c98f3..c1b90ea7142bc 100644
+index 3d9f3f374ae0f..54f97fe624c63 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2302,6 +2302,8 @@ static_library("ui") {
-       "browser.h",
-       "browser_tabstrip.cc",
-       "browser_tabstrip.h",
+@@ -90,6 +90,28 @@ source_set("browser_live_tab_context") {
+ }
+ 
+ if (!is_android) {
++  # Stedding: the first-run welcome dialog, which hosts the welcome WebUI.
++  source_set("stedding_welcome_view") {
++    sources = [
 +      "views/stedding_welcome/welcome_dialog_view.cc",
 +      "views/stedding_welcome/welcome_dialog_view.h",
-     ]
- 
-     if (enable_dice_support) {
-@@ -2344,10 +2346,11 @@ static_library("ui") {
-       ":tab_helpers",
-       ":tab_helpers_impl",
-       "//chrome/browser/ui/views/spaces",
-+      "//chrome/browser/ui/stedding/theme",
++    ]
++    public_deps = [ "//chrome/browser:browser_public_dependencies" ]
++    deps = [
++      "//base",
++      "//chrome/browser/ui/browser_window",
++      "//chrome/browser/ui/stedding:prefs",
 +      "//chrome/browser/ui/webui/stedding_welcome",
-+      "//chrome/browser/ui/stedding/screenshot",
-       "//chrome/browser/ui/views/commandbar",
-       "//chrome/browser/ui/views/peek",
--      "//chrome/browser/ui/stedding/screenshot",
--      "//chrome/browser/ui/stedding/theme",
-       ":tab_ui_helper",
-       ":uma_browsing_activity_observer",
-       ":unload_controller",
++      "//chrome/common",
++      "//components/prefs",
++      "//ui/base",
++      "//ui/gfx",
++      "//ui/views",
++      "//ui/views/controls/webview",
++      "//url",
++    ]
++  }
++
+   source_set("browser_tabstrip") {
+     public = [ "browser_tabstrip.h" ]
+     public_deps = [
 diff --git a/chrome/browser/ui/search_engine_choice/search_engine_choice_tab_helper.cc b/chrome/browser/ui/search_engine_choice/search_engine_choice_tab_helper.cc
 index 3808ea381ea55..0006245c79d68 100644
 --- a/chrome/browser/ui/search_engine_choice/search_engine_choice_tab_helper.cc
@@ -771,7 +798,7 @@ index b1111d2832f7d..9147dbadbb9ca 100644
  
  }  // namespace stedding::prefs
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index d0984aefb04b0..dcfb69696b040 100644
+index 868ded6d4653c..318e00469c7eb 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -6,6 +6,7 @@
@@ -988,21 +1015,21 @@ index 0000000000000..72b2ca4bb04e6
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_STEDDING_WELCOME_WELCOME_DIALOG_VIEW_H_
 diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-index 139fecebd5645..8699e6dbdac66 100644
+index d79e9dfdb0e67..f37f7c0a70165 100644
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-@@ -116,6 +116,7 @@
+@@ -119,6 +119,7 @@
+ #include "chrome/browser/ui/webui/multistep_filter_internals/multistep_filter_internals_ui.h"
  #if BUILDFLAG(ENABLE_WEBUI_NTP)
  #include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer_ui.h"
- #include "chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.h"
 +#include "chrome/browser/ui/webui/stedding_welcome/stedding_welcome_ui.h"
  #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
  #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
  #include "chrome/browser/ui/webui/omnibox_everywhere/omnibox_everywhere_ui.h"
-@@ -385,6 +386,7 @@ void RegisterChromeWebUIConfigs() {
+@@ -394,6 +395,7 @@ void RegisterChromeWebUIConfigs() {
+           multistep_filter_internals::MultistepFilterInternalsUIConfig>());
  #if BUILDFLAG(ENABLE_WEBUI_NTP)
    map.AddWebUIConfig(std::make_unique<NewTabFooterUIConfig>());
-   map.AddWebUIConfig(std::make_unique<NewTabPageThirdPartyUIConfig>());
 +  map.AddWebUIConfig(std::make_unique<stedding::WelcomeUIConfig>());
  #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
    map.AddWebUIConfig(std::make_unique<NewTabUIConfig>());
@@ -1410,10 +1437,10 @@ index 0000000000000..02ab251090927
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_STEDDING_WELCOME_STEDDING_WELCOME_UI_H_
 diff --git a/chrome/chrome_paks.gni b/chrome/chrome_paks.gni
-index 12a5e53584f9f..8a4155ff35017 100644
+index 150c570d3ea97..80f4011724c8a 100644
 --- a/chrome/chrome_paks.gni
 +++ b/chrome/chrome_paks.gni
-@@ -241,6 +241,7 @@ template("chrome_extra_paks") {
+@@ -251,6 +251,7 @@ template("chrome_extra_paks") {
          "$root_gen_dir/chrome/password_manager_resources.pak",
          "$root_gen_dir/chrome/profile_internals_resources.pak",
          "$root_gen_dir/chrome/search_engine_choice_resources.pak",
@@ -1422,10 +1449,10 @@ index 12a5e53584f9f..8a4155ff35017 100644
          "$root_gen_dir/chrome/side_panel_bookmarks_resources.pak",
          "$root_gen_dir/chrome/side_panel_comments_resources.pak",
 diff --git a/tools/gritsettings/resource_ids.spec b/tools/gritsettings/resource_ids.spec
-index 8749c14d44f1b..438100b7726b7 100644
+index 52b97ceee9ec8..273ca2a617977 100644
 --- a/tools/gritsettings/resource_ids.spec
 +++ b/tools/gritsettings/resource_ids.spec
-@@ -1799,6 +1799,12 @@
+@@ -1791,6 +1791,12 @@
      "includes": [10140],
    },
  

@@ -46,14 +46,14 @@ layout flag and its tests stay together.
  .../layout/browser_view_tabbed_layout_impl.cc |  48 +-
  .../layout/stedding_browser_view_layout.cc    | 159 +++-
  .../layout/stedding_browser_view_layout.h     |   5 +
- .../views/frame/system_menu_model_builder.cc  |  12 +
+ .../views/frame/system_menu_model_builder.cc  |  35 +-
  .../frame/vertical_tab_strip_region_view.cc   | 193 ++++-
  .../frame/vertical_tab_strip_region_view.h    |  45 ++
  .../ui/views/frame/windows_caption_button.cc  |  14 +
  .../views/stedding/sidebar_resize_handle.cc   |  24 +-
  .../ui/views/stedding/sidebar_resize_handle.h |   5 +
  .../sidebar_resize_handle_unittest.cc         |  25 +
- .../tabs/common/tab_group_header_view.cc      |  16 +
+ .../tabs/common/tab_group_header_view.cc      |  13 +
  .../browser/ui/views/tabs/common/tab_view.cc  |  11 +
  .../vertical_tab_strip_top_container.cc       |  20 +-
  .../vertical_tab_strip_top_container.h        |   8 +
@@ -61,7 +61,7 @@ layout flag and its tests stay together.
  .../browser/ui/webui/settings/settings_ui.cc  |  11 +-
  .../stedding/sidebar_forms_browsertest.cc     | 700 +++++++++++++++++-
  .../stedding/window_buttons_browsertest.mm    | 123 +++
- 32 files changed, 1569 insertions(+), 69 deletions(-)
+ 32 files changed, 1579 insertions(+), 79 deletions(-)
 
 diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
 index bc9a21d00ed77..e4968f81b049f 100644
@@ -82,10 +82,10 @@ index bc9a21d00ed77..e4968f81b049f 100644
 +  </message>
  </grit-part>
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 4a999043e123a..6835c472f0e02 100644
+index 96f3012086deb..de7cf7fb8982f 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -336,6 +336,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -339,6 +339,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kNumber;
    (*s_allowlist)[stedding::prefs::kSidebarPageFlush] =
        settings_api::PrefType::kBoolean;
@@ -113,10 +113,10 @@ index 5023143d68005..a294d62a81a94 100644
      <div class="start" id="sidebarWidthLabel">
        <div class="label">$i18n{steddingSidebarWidthLabel}</div>
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 1157b994afac3..b491f31aae10a 100644
+index a267649aef7b2..b8df9765e9ead 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -98,6 +98,7 @@
+@@ -100,6 +100,7 @@
  #include "chrome/browser/ui/stedding/screenshot/screenshot_capture.h"
  #include "chrome/browser/ui/stedding/site_cookies.h"
  #include "chrome/browser/ui/stedding/stedding_command_ids.h"
@@ -124,7 +124,7 @@ index 1157b994afac3..b491f31aae10a 100644
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
-@@ -1076,6 +1077,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -1088,6 +1089,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_STEDDING_TOGGLE_DARK_PAGES:
        stedding::SetDarkPagesOn(profile(), !stedding::DarkPagesOn(profile()));
        break;
@@ -140,7 +140,7 @@ index 1157b994afac3..b491f31aae10a 100644
      case IDC_STEDDING_TOGGLE_DARK_PAGES_FOR_SITE:
        if (content::WebContents* const contents =
                browser_->tab_strip_model()->GetActiveWebContents();
-@@ -2218,6 +2228,11 @@ void BrowserCommandController::InitCommandState() {
+@@ -2276,6 +2286,11 @@ void BrowserCommandController::InitCommandState() {
    command_updater_->UpdateCommandEnabled(
        IDC_STEDDING_TOGGLE_DARK_PAGES,
        base::FeatureList::IsEnabled(stedding::kArcStyleWindow));
@@ -361,10 +361,10 @@ index c0e85ae431b8a..91af64ae9ce10 100644
  // from the omnibox's default match. The rest is selected with the caret
  // after what was typed, the typed row reads the site with "Open", and Enter
 diff --git a/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc
-index fd144abd62e24..971107af67b40 100644
+index e4a6ae50a9a10..024a722a95602 100644
 --- a/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/base_tab_strip_region_view.cc
-@@ -658,11 +658,15 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBounds(
+@@ -659,11 +659,15 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBounds(
          drop_bounds.Offset(0, drop_bounds.height() + height());
        }
      } else {
@@ -384,7 +384,7 @@ index fd144abd62e24..971107af67b40 100644
          *direction = DropArrow::Direction::kLeft;
          drop_bounds.Offset(GetBoundsInScreen().width() + DropArrow::kSize, 0);
        }
-@@ -678,7 +682,9 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBoundsFromPosition(
+@@ -679,7 +683,9 @@ gfx::Rect BaseTabStripRegionView::GetLinkDropBoundsFromPosition(
    if (direction == DropArrow::Direction::kRight) {
      position.Offset(-DropArrow::kSize, -DropArrow::kSize / 2);
    } else if (direction == DropArrow::Direction::kLeft) {
@@ -396,10 +396,10 @@ index fd144abd62e24..971107af67b40 100644
      position.Offset(-DropArrow::kSize / 2, -DropArrow::kSize);
    }
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index 139d5b1821819..7770911851d25 100644
+index 82ac21b3d7641..6ed7162bb49d1 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-@@ -43,6 +43,7 @@
+@@ -44,6 +44,7 @@
  #include "chrome/browser/ui/stedding/little_window.h"
  #include "chrome/browser/ui/stedding/make_app.h"
  #include "chrome/browser/ui/stedding/stedding_command_ids.h"
@@ -407,7 +407,7 @@ index 139d5b1821819..7770911851d25 100644
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
-@@ -464,6 +465,21 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
+@@ -474,6 +475,21 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
                                                 : IDS_ENTER_FULLSCREEN_MAC));
        break;
      }
@@ -430,10 +430,10 @@ index 139d5b1821819..7770911851d25 100644
      // page that is an app's already.
      case IDC_STEDDING_MAKE_APP: {
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-index 1ca1fcbba7337..66454fdd3ed9d 100644
+index 7ccd233dc33d1..69cef007d370c 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-@@ -712,6 +712,17 @@ int BrowserViewTabbedLayoutImpl::GetCollapsedVerticalTabStripRelativeTop()
+@@ -772,6 +772,17 @@ int BrowserViewTabbedLayoutImpl::GetCollapsedVerticalTabStripRelativeTop()
  
    const auto& params = layout_data_->revised_params;
  
@@ -451,7 +451,7 @@ index 1ca1fcbba7337..66454fdd3ed9d 100644
    // If there is no leading exclusion, the tabstrip goes all the way to the top.
    if (params.leading_exclusion.IsEmpty()) {
      return 0;
-@@ -879,8 +890,15 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -945,8 +956,15 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
          last_vertical_tab_strip_width_ = vertical_tab_strip_width;
        }
  
@@ -468,7 +468,7 @@ index 1ca1fcbba7337..66454fdd3ed9d 100644
                      params.visual_client_area.y() +
                          vertical_tab_strip_animation.top_offset,
                      vertical_tab_strip_width,
-@@ -904,7 +922,8 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -983,7 +1001,8 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
        const int inset_amount =
            std::max(0, horizontal_layout.vertical_tab_strip_width -
                            GetVerticalTabStripContentOverlap());
@@ -478,7 +478,7 @@ index 1ca1fcbba7337..66454fdd3ed9d 100644
  
        // Let the vertical tab strip animate out over the content.
        if (vertical_tab_strip_animation.current_motion) {
-@@ -915,12 +934,15 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -994,12 +1013,15 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
                  TabStripAnimations::kCollapse;
          // Stedding (sidebar Y19): a sidebar that closes to nothing leaves
          // the page the whole width.
@@ -499,7 +499,7 @@ index 1ca1fcbba7337..66454fdd3ed9d 100644
        }
      }
      layout.AddChild(views().vertical_tab_strip_region_view,
-@@ -1195,9 +1217,14 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1274,9 +1296,14 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
    // Update the multi-contents view about if we will be animating content
    // bounds. This is to make optimizations during animations e.g. avoid
    // repositioning status bubble.
@@ -515,7 +515,7 @@ index 1ca1fcbba7337..66454fdd3ed9d 100644
    views().multi_contents_view->SetIsAnimatingContent(
        side_panel_is_animating || vertical_tab_strip_animation.current_motion,
        is_origin_changing);
-@@ -1280,7 +1307,10 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1614,7 +1641,10 @@ void BrowserViewTabbedLayoutImpl::DoPostLayoutVisualAdjustments(
        // the same this will not produce a visual bug.
        const int radius =
            views().vertical_tab_strip_bottom_corner->GetCornerRadius();
@@ -828,7 +828,7 @@ index 0c06444b227cc..14d9fa9c3c111 100644
  
  #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_LAYOUT_STEDDING_BROWSER_VIEW_LAYOUT_H_
 diff --git a/chrome/browser/ui/views/frame/system_menu_model_builder.cc b/chrome/browser/ui/views/frame/system_menu_model_builder.cc
-index 087c126fcf4e9..98c2baf1e3d91 100644
+index eebe1fbc53607..f7360197d68d3 100644
 --- a/chrome/browser/ui/views/frame/system_menu_model_builder.cc
 +++ b/chrome/browser/ui/views/frame/system_menu_model_builder.cc
 @@ -17,6 +17,7 @@
@@ -839,10 +839,33 @@ index 087c126fcf4e9..98c2baf1e3d91 100644
  #include "chrome/browser/ui/stedding/stedding_prefs.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/features.h"
-@@ -246,6 +247,17 @@ void SystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
-       model->SetElementIdentifierAt(
+@@ -247,15 +248,31 @@ void SystemMenuModelBuilder::BuildSystemMenuForBrowserWindow(
            model->GetIndexOfCommandId(IDC_TOGGLE_VERTICAL_TABS_COLLAPSE).value(),
            kToggleVerticalTabsCollapseElementId);
+ 
+-      model->AddItemWithStringId(
+-          IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER,
+-          controller->IsExpandOnHoverEnabled()
+-              ? IDS_VERTICAL_TABS_DISABLE_EXPAND_ON_HOVER
+-              : IDS_VERTICAL_TABS_ENABLE_EXPAND_ON_HOVER);
+-      model->SetElementIdentifierAt(
+-          model->GetIndexOfCommandId(IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER)
+-              .value(),
+-          kToggleVerticalTabsExpandOnHoverElementId);
++      // Stedding (menus M13): the auto-expanding toggle goes with the short
++      // menus.
++      if (!short_menus) {
++        model->AddItemWithStringId(
++            IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER,
++            controller->IsExpandOnHoverEnabled()
++                ? IDS_VERTICAL_TABS_DISABLE_EXPAND_ON_HOVER
++                : IDS_VERTICAL_TABS_ENABLE_EXPAND_ON_HOVER);
++        model->SetElementIdentifierAt(
++            model
++                ->GetIndexOfCommandId(IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER)
++                .value(),
++            kToggleVerticalTabsExpandOnHoverElementId);
++      }
 +      // Stedding (sidebar Y34, menus M13): the sidebar to the window's other
 +      // edge, named by the side it goes to. The menu is built each time it
 +      // opens, so the row's name is the side's now.
@@ -858,7 +881,7 @@ index 087c126fcf4e9..98c2baf1e3d91 100644
        model->AddItemWithStringId(IDC_TOGGLE_VERTICAL_TABS,
                                   switch_to_vertical_id);
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 2892532d3b5be..827ca9366c55f 100644
+index 72417d419783a..85b5f8e6a960a 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -164,6 +164,7 @@
@@ -884,7 +907,7 @@ index 2892532d3b5be..827ca9366c55f 100644
  constexpr int kSnapDistance = 15;
  
  // sidebar Y8: how far past the rail's own width the strip still wears the
-@@ -293,6 +302,12 @@ class VerticalTabStripRegionView::LeadingEdgeObserver
+@@ -311,6 +320,12 @@ class VerticalTabStripRegionView::LeadingEdgeObserver
    ~LeadingEdgeObserver() override = default;
  
    void OnEvent(const ui::Event& event) override {
@@ -897,7 +920,7 @@ index 2892532d3b5be..827ca9366c55f 100644
      view_->OnWindowPointerMoved();
    }
  
-@@ -816,6 +831,17 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -834,6 +849,17 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
                }
              },
              base::Unretained(this)));
@@ -915,7 +938,7 @@ index 2892532d3b5be..827ca9366c55f 100644
    }
  
    state_controller_->SetDelegate(this);
-@@ -1066,6 +1092,13 @@ void VerticalTabStripRegionView::UpdateInteriorMargin(bool collapsed) {
+@@ -1084,6 +1110,13 @@ void VerticalTabStripRegionView::UpdateInteriorMargin(bool collapsed) {
      } else {
        left = gutter;
      }
@@ -929,7 +952,7 @@ index 2892532d3b5be..827ca9366c55f 100644
    }
    // Since M156 the rows are the content area's children, whose layout has
    // the bottom padding already; the top container is placed by
-@@ -1088,6 +1121,12 @@ void VerticalTabStripRegionView::SetCaptionButtonCenterForLayout(
+@@ -1106,6 +1139,12 @@ void VerticalTabStripRegionView::SetCaptionButtonCenterForLayout(
    top_button_container_->SetCaptionButtonCenterForLayout(caption_button_center);
  }
  
@@ -942,7 +965,7 @@ index 2892532d3b5be..827ca9366c55f 100644
  void VerticalTabStripRegionView::SetIsExitingExpandOnHoverForLayout(
      bool is_exiting_expand_on_hover) {
    top_button_container_->SetIsExitingExpandOnHoverForLayout(
-@@ -1268,7 +1307,7 @@ void VerticalTabStripRegionView::AddedToWidget() {
+@@ -1286,7 +1325,7 @@ void VerticalTabStripRegionView::AddedToWidget() {
        leading_edge_observer_ = std::make_unique<LeadingEdgeObserver>(this);
        leading_edge_monitor_ = views::EventMonitor::CreateWindowMonitor(
            leading_edge_observer_.get(), widget->GetNativeWindow(),
@@ -951,7 +974,7 @@ index 2892532d3b5be..827ca9366c55f 100644
      }
    }
    numbers_paint_as_active_subscription_ =
-@@ -1400,6 +1439,16 @@ void VerticalTabStripRegionView::Layout(PassKey) {
+@@ -1432,6 +1471,16 @@ void VerticalTabStripRegionView::Layout(PassKey) {
    // while. Applied only when the answer changes.
    const bool rail = IsRailWidth(width());
    if (applied_rail_form_ != rail) {
@@ -968,7 +991,7 @@ index 2892532d3b5be..827ca9366c55f 100644
      ApplyRailForm(rail);
      // The containers' new margins are not something the layout managers
      // watch: drop this view's cached layout and the content area's for this
-@@ -1452,9 +1501,15 @@ void VerticalTabStripRegionView::Layout(PassKey) {
+@@ -1475,9 +1524,15 @@ void VerticalTabStripRegionView::Layout(PassKey) {
  
    // Manually position the resize area as it overlaps views handled by the flex
    // layout.
@@ -987,7 +1010,7 @@ index 2892532d3b5be..827ca9366c55f 100644
    // sidebar Y22: the handle's bar lies on the stretch the handle reaches over
    // (Y18), the card's gutter, or along the strip's own edge without one. Set
    // on every layout, so a gutter that comes or goes (full screen, the page
-@@ -1515,16 +1570,19 @@ bool VerticalTabStripRegionView::OnKeyPressed(const ui::KeyEvent& event) {
+@@ -1538,16 +1593,19 @@ bool VerticalTabStripRegionView::OnKeyPressed(const ui::KeyEvent& event) {
    if (resize_area_->HasFocus()) {
      int resize_amount = 0;
  
@@ -1010,7 +1033,7 @@ index 2892532d3b5be..827ca9366c55f 100644
  
        float tab_strip_width = width();
        float total_width = GetWidget()->GetRootView()->width();
-@@ -1680,8 +1738,9 @@ gfx::Point VerticalTabStripRegionView::GetLinkDropArrowPosition(
+@@ -1701,8 +1759,9 @@ gfx::Point VerticalTabStripRegionView::GetLinkDropArrowPosition(
  
    // By default have the arrow outside of the browser window pointing towards
    // the tab strip.
@@ -1022,7 +1045,7 @@ index 2892532d3b5be..827ca9366c55f 100644
  
    const bool replace_index =
        drop_index.relative_to_index ==
-@@ -1742,6 +1801,14 @@ gfx::Point VerticalTabStripRegionView::GetLinkDropArrowPosition(
+@@ -1763,6 +1822,14 @@ gfx::Point VerticalTabStripRegionView::GetLinkDropArrowPosition(
  
  void VerticalTabStripRegionView::OnResize(int resize_amount,
                                            bool done_resizing) {
@@ -1037,7 +1060,7 @@ index 2892532d3b5be..827ca9366c55f 100644
    CHECK(tab_strip_view());
    tab_strip_view()->SetIsAnimatingSize(!done_resizing);
    if (!starting_width_on_resize_.has_value()) {
-@@ -2944,7 +3011,8 @@ bool VerticalTabStripRegionView::DoesIntersectRect(
+@@ -2958,7 +3025,8 @@ bool VerticalTabStripRegionView::DoesIntersectRect(
        return true;
      }
      const int reach = ResizeHandleReach();
@@ -1047,7 +1070,7 @@ index 2892532d3b5be..827ca9366c55f 100644
        bounds.set_x(bounds.x() - reach);
      }
      bounds.set_width(bounds.width() + reach);
-@@ -3025,6 +3093,92 @@ void VerticalTabStripRegionView::OnPageFlushChanged() {
+@@ -3039,6 +3107,92 @@ void VerticalTabStripRegionView::OnPageFlushChanged() {
    }
  }
  
@@ -1140,7 +1163,7 @@ index 2892532d3b5be..827ca9366c55f 100644
  bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
    // Only a hidden sidebar the window shows: in F11 or a page's own full
    // screen the strip is not drawn at all, and a reveal there left it open
-@@ -3041,11 +3195,12 @@ bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
+@@ -3055,11 +3209,12 @@ bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
  
  bool VerticalTabStripRegionView::IsAtLeadingEdge(gfx::Point point) const {
    // `point` is in the browser view's coordinates, which are physical: the
@@ -1157,7 +1180,7 @@ index 2892532d3b5be..827ca9366c55f 100644
                                  point.x() < width
                            : point.x() >= 0 && point.x() < kLeadingEdgeWidth;
    return across && point.y() >= 0 && point.y() < browser_view()->height();
-@@ -3064,12 +3219,20 @@ void VerticalTabStripRegionView::OnWindowPointerMoved() {
+@@ -3078,12 +3233,20 @@ void VerticalTabStripRegionView::OnWindowPointerMoved() {
    }
    if (!leading_edge_timer_.IsRunning()) {
      leading_edge_timer_.Start(
@@ -1180,10 +1203,10 @@ index 2892532d3b5be..827ca9366c55f 100644
    // Where the pointer is now: only its moves inside the window are heard, so
    // one that crossed the edge on its way out -- into the next window, or
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 0185935446a09..9245542f470a3 100644
+index 59805a8d46e1d..908b754f68eee 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -146,6 +146,9 @@ class VerticalTabStripRegionView final
+@@ -136,6 +136,9 @@ class VerticalTabStripRegionView final
    void SetCaptionButtonWidthForLayout(int caption_button_width);
    void SetCaptionButtonHeightForLayout(int caption_button_height);
    void SetCaptionButtonCenterForLayout(int caption_button_center);
@@ -1193,7 +1216,7 @@ index 0185935446a09..9245542f470a3 100644
    void SetIsExitingExpandOnHoverForLayout(bool is_exiting_expand_on_hover);
    void SetTransitionButtonOpacity(float opacity);
    bool WillWrapDueToOverflow(int available_width) const;
-@@ -246,6 +249,31 @@ class VerticalTabStripRegionView final
+@@ -236,6 +239,31 @@ class VerticalTabStripRegionView final
    static const VerticalTabStripRegionView* StripOf(
        const BrowserView* browser_view);
    static int ClosedWidthOf(const BrowserView* browser_view);
@@ -1225,7 +1248,7 @@ index 0185935446a09..9245542f470a3 100644
    // sidebar Y19: the pointer at `point`, in the browser view's coordinates,
    // as the window's monitor hears it, with the rest there already over.
    void OnPointerAtForTesting(gfx::Point point);
-@@ -446,8 +474,19 @@ class VerticalTabStripRegionView final
+@@ -430,8 +458,19 @@ class VerticalTabStripRegionView final
    // sidebar Y23: the page flush changed; the card loses or regains its
    // gutters and corners, and the rail its centre, in this window at once.
    void OnPageFlushChanged();
@@ -1245,7 +1268,7 @@ index 0185935446a09..9245542f470a3 100644
    // sidebar Y19: pointer moves anywhere in the window, so a hidden sidebar
    // hears the pointer reach the window's leading edge over the page, where no
    // view of the strip's is.
-@@ -456,6 +495,12 @@ class VerticalTabStripRegionView final
+@@ -440,6 +479,12 @@ class VerticalTabStripRegionView final
    std::unique_ptr<views::EventMonitor> leading_edge_monitor_;
    base::OneShotTimer leading_edge_timer_;
    void OnWindowPointerMoved();
@@ -1392,18 +1415,18 @@ index 5f47213f06d37..487184858a78b 100644
  // comes back with no bar and no rest: the sidebar hidden, a rail that expands
  // on hover, full screen.
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
-index f999460f724f4..de7dd868ec038 100644
+index b3c9630dd5a85..1ef2344d979f8 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
-@@ -17,6 +17,7 @@
+@@ -18,6 +18,7 @@
  #include "chrome/browser/ui/tabs/tab_style.h"
  #include "chrome/browser/ui/ui_features.h"
  #include "chrome/browser/ui/views/event_utils.h"
 +#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
  #include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_style.h"
- #include "chrome/browser/ui/views/tabs/groups/tab_group_accessibility.h"
-@@ -52,6 +53,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_utils.h"
+@@ -55,6 +56,7 @@
  #include "ui/views/layout/layout_types.h"
  #include "ui/views/view.h"
  #include "ui/views/view_class_properties.h"
@@ -1411,32 +1434,29 @@ index f999460f724f4..de7dd868ec038 100644
  #include "ui/views/widget/widget.h"
  
  namespace {
-@@ -550,6 +552,20 @@ views::BubbleAnchor TabGroupHeaderView::GetAnchor() {
- }
- 
- views::BubbleBorder::Arrow TabGroupHeaderView::GetAnchorPosition() const {
+@@ -576,6 +578,17 @@ views::BubbleBorder::Arrow TabGroupHeaderView::GetAnchorPosition() const {
+   if (orientation_ == TabStripOrientation::kHorizontal) {
+     return views::BubbleBorder::Arrow::TOP_LEFT;
+   }
 +  // Stedding (sidebar Y35): in the sidebar a header's card opens beside it
 +  // on the page's side, as a tab row's does (TabView::GetAnchorPosition). A
 +  // sidebar at the window's trailing edge has the page on its leading side;
 +  // the arrow is logical, and views mirrors it in a right-to-left layout.
-+  if (orientation_ == TabStripOrientation::kVertical) {
-+    for (const views::View* view = parent(); view; view = view->parent()) {
-+      if (const auto* const strip =
-+              views::AsViewClass<VerticalTabStripRegionView>(view)) {
-+        return strip->IsAtTrailingEdge()
-+                   ? views::BubbleBorder::Arrow::RIGHT_TOP
-+                   : views::BubbleBorder::Arrow::LEFT_TOP;
-+      }
++  for (const views::View* view = parent(); view; view = view->parent()) {
++    if (const auto* const strip =
++            views::AsViewClass<VerticalTabStripRegionView>(view)) {
++      return strip->IsAtTrailingEdge() ? views::BubbleBorder::Arrow::RIGHT_TOP
++                                       : views::BubbleBorder::Arrow::LEFT_TOP;
 +    }
 +  }
-   return views::BubbleBorder::LEFT_TOP;
+   return views::BubbleBorder::Arrow::LEFT_TOP;
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index b0e0cf072dac2..ce03ac6580dd3 100644
+index 1297fef7d9092..482a0a0e11402 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -1388,6 +1388,17 @@ views::BubbleBorder::Arrow TabView::GetAnchorPosition() const {
+@@ -1416,6 +1416,17 @@ views::BubbleBorder::Arrow TabView::GetAnchorPosition() const {
    // Stedding: a card below a pinned (essentials) tab would cover the Space
    // title and the first rows; every vertical tab's card opens beside the
    // sidebar instead.
@@ -1455,35 +1475,39 @@ index b0e0cf072dac2..ce03ac6580dd3 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index 9fd399adb4f4b..84c79d06e58da 100644
+index 0f51a8776775f..ca50916219ca7 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-@@ -239,7 +239,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -301,12 +301,13 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
      const bool below_caption =
          wrapped_due_to_overflow ||
          (is_exiting_expand_on_hover_ && caption_button_width_ > 0);
--    const int left_alignment = (below_caption || is_exiting_expand_on_hover_)
 +    // Stedding (sidebar Y42): a box at the trailing corner leaves the
 +    // leading side free.
-+    const int left_alignment = (below_caption || is_exiting_expand_on_hover_ ||
-+                                caption_buttons_at_trailing_)
-                                    ? 0
-                                    : caption_button_width_;
+     const int left_alignment =
+         (below_caption || is_exiting_expand_on_hover_ ||
+-         (is_collapsed && is_expand_on_hover))
++         (is_collapsed && is_expand_on_hover) || caption_buttons_at_trailing_)
+             ? 0
+             : caption_button_width_;
+-
      int y_baseline = host_size.height() / 2;
-@@ -291,7 +294,11 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
-               LayoutConstant::kVerticalTabStripCollapsedVerticalPadding);
-     }
- 
--    int right_alignment = host_size.width();
+     // Stedding (sidebar Y7): sharing the row with the traffic lights, the
+     // toggle takes their own centre rather than the container's, so the two
+@@ -364,7 +365,11 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+         is_segmented_expand_on_hover
+             ? std::max(host_size.width(), expected_uncollapsed_width)
+             : host_size.width();
+-    int right_alignment = layout_width;
 +    // Stedding (sidebar Y42): and the trailing buttons end short of it.
 +    int right_alignment =
-+        host_size.width() -
++        layout_width -
 +        (caption_buttons_at_trailing_ && !below_caption ? caption_button_width_
 +                                                        : 0);
  
-     bool wrap_during_animation =
-         caption_button_width_ != 0 && available_width < GetPreferredWidth();
-@@ -478,6 +485,15 @@ void VerticalTabStripTopContainer::SetCaptionButtonCenterForLayout(
+     bool wrap_during_animation = !is_segmented_expand_on_hover &&
+                                  caption_button_width_ != 0 &&
+@@ -563,6 +568,15 @@ void VerticalTabStripTopContainer::SetCaptionButtonCenterForLayout(
    InvalidateLayout(/*avoid_propagate_during_layout=*/true);
  }
  
@@ -1500,10 +1524,10 @@ index 9fd399adb4f4b..84c79d06e58da 100644
      bool is_exiting_expand_on_hover) {
    if (is_exiting_expand_on_hover_ == is_exiting_expand_on_hover) {
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
-index 1aa6e203859d6..28e8f49cd49e3 100644
+index f774a81eaf344..15bf39b2f0a6d 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h
-@@ -87,6 +87,12 @@ class VerticalTabStripTopContainer : public views::View,
+@@ -92,6 +92,12 @@ class VerticalTabStripTopContainer : public views::View,
    // what a button on the caption row lines up with (sidebar Y7).
    void SetCaptionButtonCenterForLayout(int caption_button_center);
    void SetIsExitingExpandOnHoverForLayout(bool is_exiting_expand_on_hover);
@@ -1516,7 +1540,7 @@ index 1aa6e203859d6..28e8f49cd49e3 100644
    bool WillWrapDueToOverflow(int available_width) const;
  
   private:
-@@ -129,6 +135,8 @@ class VerticalTabStripTopContainer : public views::View,
+@@ -140,6 +146,8 @@ class VerticalTabStripTopContainer : public views::View,
    // The caption buttons' bottom edge (sidebar Y7).
    int caption_button_height_ = 0;
    int caption_button_center_ = 0;
@@ -1526,10 +1550,10 @@ index 1aa6e203859d6..28e8f49cd49e3 100644
    // the expand-on-hover animation. This is because the final state needs to be
    // within the wrapped state bounds when leading caption buttons are present.
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
-index 72448503d5d9f..3f279bb4c93df 100644
+index ebd500720e605..0766de591bb0a 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
-@@ -224,6 +224,55 @@ TEST_F(VerticalTabStripTopContainerTest, TheToggleSharesTheCaptionRow) {
+@@ -268,6 +268,55 @@ TEST_F(VerticalTabStripTopContainerTest, TheToggleSharesTheCaptionRow) {
    }
  }
  
@@ -1586,10 +1610,10 @@ index 72448503d5d9f..3f279bb4c93df 100644
    top_container()->SetCaptionButtonWidthForLayout(50);
    top_container()->SetToolbarHeightForLayout(50);
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index f724a2a621fa7..b50272422289f 100644
+index 88db3a171ea16..899b217339561 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -706,7 +706,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -727,7 +727,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        base::StrCat({key("\u2318S", "Ctrl+S"),
                      " and the sidebar\u2019s button close it this way. "
                      "Hidden, the page fills the window; touch the "
@@ -1599,7 +1623,7 @@ index f724a2a621fa7..b50272422289f 100644
                      "sidebar slides back over it."}));
    html_source->AddString("steddingClosedFormIcons", "Shrink to icons");
    html_source->AddString("steddingClosedFormHidden", "Hide it completely");
-@@ -717,6 +718,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -738,6 +739,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "steddingPageFlushSubLabel",
        "No margin and no rounded corners around the page beside the sidebar, "
        "as when the sidebar is hidden.");

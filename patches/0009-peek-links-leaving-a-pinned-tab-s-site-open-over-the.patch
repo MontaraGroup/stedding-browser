@@ -28,8 +28,8 @@ came from, through Chromium's own split view (NEW_SPLIT_VIEW).
 Why: the product's pinned-tab model needs Peek or pinning is a bookmark.
 Removable when: never, unless the pinned-tab model changes.
 ---
+ chrome/browser/BUILD.gn                       |   2 +
  ...ent_browser_client_navigation_throttles.cc |   3 +
- chrome/browser/ui/BUILD.gn                    |   2 +
  .../browser/ui/navigator/browser_navigator.cc |   7 +
  chrome/browser/ui/views/peek/BUILD.gn         |  46 ++
  .../ui/views/peek/peek_navigation_throttle.cc | 180 ++++++++
@@ -46,11 +46,31 @@ Removable when: never, unless the pinned-tab model changes.
  create mode 100644 chrome/browser/ui/views/peek/peek_view.cc
  create mode 100644 chrome/browser/ui/views/peek/peek_view.h
 
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 0ee56b7db171a..b224550cf0689 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3856,6 +3856,7 @@ source_set("browser") {
+     }
+ 
+     # Non-android deps for "ui" target.
++    public_deps += [ "//chrome/browser/ui/views/peek" ]
+     deps += [
+       ":chrome_browser_interface_binders_webui_parts",
+       ":chrome_browser_interface_binders_webui_parts_desktop",
+@@ -3907,6 +3908,7 @@ source_set("browser") {
+       "//chrome/browser/ui:tab_helpers_impl",
+       "//chrome/browser/ui/views/spaces",
+       "//chrome/browser/ui/views/commandbar",
++      "//chrome/browser/ui/views/peek",
+       "//chrome/browser/ui:tab_ui_helper",
+       "//chrome/browser/ui:uma_browsing_activity_observer",
+       "//chrome/browser/ui:unload_controller",
 diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
-index dfa341dccc511..cbfae15ba8e52 100644
+index ce3cc119e6c3c..8f876c40954eb 100644
 --- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
 +++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
-@@ -97,6 +97,7 @@
+@@ -99,6 +99,7 @@
  #else  // BUILDFLAG(IS_ANDROID)
  #include "chrome/browser/background/background_contents_navigation_throttle.h"
  #include "chrome/browser/devtools/devtools_navigation_throttle.h"
@@ -58,7 +78,7 @@ index dfa341dccc511..cbfae15ba8e52 100644
  #include "chrome/browser/page_info/web_view_side_panel_throttle.h"
  #include "chrome/browser/themes/theme_service_factory.h"
  #include "chrome/browser/ui/lens/lens_overlay_side_panel_navigation_throttle.h"
-@@ -622,6 +623,8 @@ void CreateAndAddChromeThrottlesForNavigation(
+@@ -619,6 +620,8 @@ void CreateAndAddChromeThrottlesForNavigation(
    BackgroundContentsNavigationThrottle::MaybeCreateAndAdd(registry);
    web_app::IsolatedWebAppThrottle::MaybeCreateAndAdd(registry);
    DevToolsNavigationThrottle::MaybeCreateAndAdd(registry);
@@ -67,28 +87,8 @@ index dfa341dccc511..cbfae15ba8e52 100644
  #endif  // !BUILDFLAG(IS_ANDROID)
  
    actor::ActorNavigationThrottle::MaybeCreateAndAdd(registry);
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 857b729015339..768b40624f526 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2319,6 +2319,7 @@ static_library("ui") {
-     }
- 
-     # Non-android deps for "ui" target.
-+    public_deps += [ "//chrome/browser/ui/views/peek" ]
-     deps += [
-       ":accelerator_table",
-       ":browser_actions",
-@@ -2341,6 +2342,7 @@ static_library("ui") {
-       ":tab_helpers_impl",
-       "//chrome/browser/ui/views/spaces",
-       "//chrome/browser/ui/views/commandbar",
-+      "//chrome/browser/ui/views/peek",
-       ":tab_ui_helper",
-       ":uma_browsing_activity_observer",
-       ":unload_controller",
 diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
-index b95a279fab859..00234e3a01ad5 100644
+index 1e98a3d7cba4e..1af30227ce807 100644
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
 @@ -4,6 +4,8 @@
@@ -100,7 +100,7 @@ index b95a279fab859..00234e3a01ad5 100644
  #include <algorithm>
  #include <memory>
  #include <optional>
-@@ -1125,6 +1127,11 @@ base::WeakPtr<content::NavigationHandle> ShowTabModalPopup(
+@@ -1144,6 +1146,11 @@ base::WeakPtr<content::NavigationHandle> ShowTabModalPopup(
  }  // namespace internal
  
  base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
@@ -1294,10 +1294,10 @@ index 0000000000000..6c16011927858
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_PEEK_PEEK_VIEW_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index f03ae77f8fd29..43171fb81c7c0 100644
+index 12e6eb412bdc9..c377364f81577 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -5133,6 +5133,7 @@ test("unit_tests") {
+@@ -2903,6 +2903,7 @@ test("unit_tests") {
      "//chrome/browser/ui/file_system_access:unit_tests",
      "//chrome/browser/ui/spaces:unit_tests",
      "//chrome/browser/ui/views/commandbar:unit_tests",

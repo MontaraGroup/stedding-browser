@@ -21,6 +21,7 @@ list.
 Removable when: Chromium's recently-closed list has a page of its own with
 workspace membership.
 ---
+ chrome/browser/BUILD.gn                       |   2 +
  .../api/settings_private/prefs_util.cc        |   2 +
  chrome/browser/resources/BUILD.gn             |   1 +
  .../stedding_page/stedding_page.html.ts       |  15 ++
@@ -28,7 +29,6 @@ workspace membership.
  .../resources/stedding_archive/app.css        | 144 +++++++++++++
  .../browser/resources/stedding_archive/app.ts | 193 +++++++++++++++++
  .../stedding_archive/stedding_archive.html    |  13 ++
- chrome/browser/ui/BUILD.gn                    |   2 +
  chrome/browser/ui/archive/BUILD.gn            |  32 ++-
  chrome/browser/ui/archive/archive_mark.cc     |  85 ++++++++
  chrome/browser/ui/archive/archive_mark.h      |  38 ++++
@@ -49,7 +49,7 @@ workspace membership.
  .../commandbar/command_bar_view_unittest.cc   |  32 +++
  .../frame/vertical_tab_strip_region_view.cc   |  31 +++
  .../frame/vertical_tab_strip_region_view.h    |   3 +
- .../browser/ui/webui/chrome_web_ui_configs.cc |   4 +-
+ .../browser/ui/webui/chrome_web_ui_configs.cc |   5 +-
  .../browser/ui/webui/settings/settings_ui.cc  |   8 +
  .../ui/webui/stedding_archive/BUILD.gn        |  33 +++
  .../stedding_archive_handler.cc               | 145 +++++++++++++
@@ -59,7 +59,7 @@ workspace membership.
  chrome/chrome_paks.gni                        |   1 +
  .../core/tab_restore_service_helper.h         |   4 +-
  tools/gritsettings/resource_ids.spec          |   5 +
- 38 files changed, 1496 insertions(+), 16 deletions(-)
+ 38 files changed, 1497 insertions(+), 16 deletions(-)
  create mode 100644 chrome/browser/resources/stedding_archive/BUILD.gn
  create mode 100644 chrome/browser/resources/stedding_archive/app.css
  create mode 100644 chrome/browser/resources/stedding_archive/app.ts
@@ -75,11 +75,24 @@ workspace membership.
  create mode 100644 chrome/browser/ui/webui/stedding_archive/stedding_archive_ui.cc
  create mode 100644 chrome/browser/ui/webui/stedding_archive/stedding_archive_ui.h
 
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 00cbd9e199d2f..e1999af0ddd5a 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3868,6 +3868,8 @@ source_set("browser") {
+       "//chrome/browser/ui/stedding:tab_numbers",
+       "//chrome/browser/ui/stedding:motion",
+       "//chrome/browser/ui/stedding/theme",
++      "//chrome/browser/ui/archive",
++      "//chrome/browser/ui/webui/stedding_archive",
+       "//chrome/browser/ui/webui/stedding_welcome",
+     ]
+     deps += [
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index a08a9e1a0a7a2..0a04b255e7c0f 100644
+index 9ec7fa3b691d1..d98097533f72c 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -312,6 +312,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -315,6 +315,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kArchiveIdleHours] =
        settings_api::PrefType::kNumber;
@@ -89,7 +102,7 @@ index a08a9e1a0a7a2..0a04b255e7c0f 100644
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kExternalDefaultSpace] =
 diff --git a/chrome/browser/resources/BUILD.gn b/chrome/browser/resources/BUILD.gn
-index 9561f80b49769..12b5c068b52b4 100644
+index e90395ad0ce28..c03db1b064552 100644
 --- a/chrome/browser/resources/BUILD.gn
 +++ b/chrome/browser/resources/BUILD.gn
 @@ -87,6 +87,7 @@ group("resources") {
@@ -519,19 +532,6 @@ index 0000000000000..fdc9cb6084216
 +    <script type="module" src="app.js"></script>
 +  </body>
 +</html>
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 25843e9ed9708..e514f159bcb63 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2347,6 +2347,8 @@ static_library("ui") {
-       ":tab_helpers_impl",
-       "//chrome/browser/ui/views/spaces",
-       "//chrome/browser/ui/stedding/theme",
-+      "//chrome/browser/ui/archive",
-+      "//chrome/browser/ui/webui/stedding_archive",
-       "//chrome/browser/ui/webui/stedding_welcome",
-       "//chrome/browser/ui/stedding/screenshot",
-       "//chrome/browser/ui/stedding:copy_link",
 diff --git a/chrome/browser/ui/archive/BUILD.gn b/chrome/browser/ui/archive/BUILD.gn
 index 38d8b0bf24193..3e22b628fcd81 100644
 --- a/chrome/browser/ui/archive/BUILD.gn
@@ -1282,7 +1282,7 @@ index d48ee3c659d7e..4c323fee0464a 100644
    return extra_data;
  }
 diff --git a/chrome/browser/ui/spaces/BUILD.gn b/chrome/browser/ui/spaces/BUILD.gn
-index ab66e57ae0210..c3a00633a135e 100644
+index 0bd21703ecd28..6fd6039c0e10e 100644
 --- a/chrome/browser/ui/spaces/BUILD.gn
 +++ b/chrome/browser/ui/spaces/BUILD.gn
 @@ -45,6 +45,7 @@ source_set("spaces") {
@@ -1660,7 +1660,7 @@ index 74e38ef6064e5..95525e824ef2b 100644
  
  // With no omnibox classifier in the fixture, typed text falls back to a
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 927df4c8bc211..c6931fcbc1ad6 100644
+index c1cb7b7f7ecce..429d5005da240 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -31,6 +31,7 @@
@@ -1685,7 +1685,7 @@ index 927df4c8bc211..c6931fcbc1ad6 100644
  #include "ui/base/dragdrop/os_exchange_data.h"
  #include "ui/base/interaction/element_tracker.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -220,6 +223,34 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -238,6 +241,34 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
      // The row declares the switcher's height and a fixed flex, exactly as the
      // switcher did when it was a direct child, so the sidebar's vertical
      // layout keeps it at the bottom.
@@ -1721,7 +1721,7 @@ index 927df4c8bc211..c6931fcbc1ad6 100644
          content_area_view_->AddChildView(std::make_unique<views::View>());
      auto* const row_layout =
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index fb079b9bd3ed0..e8ffaa4ae2a84 100644
+index 1dcae8c27477e..0a27cb8af6c86 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 @@ -54,6 +54,7 @@ class VerticalTabStripStateController;
@@ -1732,7 +1732,7 @@ index fb079b9bd3ed0..e8ffaa4ae2a84 100644
  class Label;
  class ResizeArea;
  class Separator;
-@@ -278,6 +279,8 @@ class VerticalTabStripRegionView final
+@@ -246,6 +247,8 @@ class VerticalTabStripRegionView final
    raw_ptr<views::View> content_area_view_ = nullptr;
  
    raw_ptr<spaces::SpaceSwitcherView> space_switcher_ = nullptr;
@@ -1742,33 +1742,34 @@ index fb079b9bd3ed0..e8ffaa4ae2a84 100644
    // presses never reach a view, so a monitor on the window watches them; a
    // chord (Cmd plus a key) hides the numbers again.
 diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-index 8699e6dbdac66..1556a16a67564 100644
+index f37f7c0a70165..62dc71aa1b169 100644
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-@@ -116,8 +116,9 @@
+@@ -119,8 +119,10 @@
+ #include "chrome/browser/ui/webui/multistep_filter_internals/multistep_filter_internals_ui.h"
  #if BUILDFLAG(ENABLE_WEBUI_NTP)
  #include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer_ui.h"
- #include "chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.h"
 -#include "chrome/browser/ui/webui/stedding_welcome/stedding_welcome_ui.h"
++
  #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 +#include "chrome/browser/ui/webui/stedding_archive/stedding_archive_ui.h"
 +#include "chrome/browser/ui/webui/stedding_welcome/stedding_welcome_ui.h"
  #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
  #include "chrome/browser/ui/webui/omnibox_everywhere/omnibox_everywhere_ui.h"
  #include "chrome/browser/ui/webui/omnibox_popup/omnibox_popup_ui.h"
-@@ -387,6 +388,7 @@ void RegisterChromeWebUIConfigs() {
+@@ -396,6 +398,7 @@ void RegisterChromeWebUIConfigs() {
+ #if BUILDFLAG(ENABLE_WEBUI_NTP)
    map.AddWebUIConfig(std::make_unique<NewTabFooterUIConfig>());
-   map.AddWebUIConfig(std::make_unique<NewTabPageThirdPartyUIConfig>());
    map.AddWebUIConfig(std::make_unique<stedding::WelcomeUIConfig>());
 +  map.AddWebUIConfig(std::make_unique<stedding::ArchiveUIConfig>());
  #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
    map.AddWebUIConfig(std::make_unique<NewTabUIConfig>());
    map.AddWebUIConfig(std::make_unique<OmniboxEverywhereUIConfig>());
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 183c7fdb4ae50..d0936f2315ba8 100644
+index ce4f96b0c799b..59b512a0da30b 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -698,6 +698,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -719,6 +719,14 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingSpaceNamePlaceholder", "Space name");
    html_source->AddString("steddingDeleteSpace", "Delete Space");
    html_source->AddString("steddingImportArcLabel", "Import from Arc");
@@ -2117,10 +2118,10 @@ index 0000000000000..4fa770392fe91
 +
 +#endif  // CHROME_BROWSER_UI_WEBUI_STEDDING_ARCHIVE_STEDDING_ARCHIVE_UI_H_
 diff --git a/chrome/chrome_paks.gni b/chrome/chrome_paks.gni
-index 8a4155ff35017..7919988cb586a 100644
+index 80f4011724c8a..b1e50161eecdb 100644
 --- a/chrome/chrome_paks.gni
 +++ b/chrome/chrome_paks.gni
-@@ -241,6 +241,7 @@ template("chrome_extra_paks") {
+@@ -251,6 +251,7 @@ template("chrome_extra_paks") {
          "$root_gen_dir/chrome/password_manager_resources.pak",
          "$root_gen_dir/chrome/profile_internals_resources.pak",
          "$root_gen_dir/chrome/search_engine_choice_resources.pak",
@@ -2129,7 +2130,7 @@ index 8a4155ff35017..7919988cb586a 100644
          "$root_gen_dir/chrome/settings_resources.pak",
          "$root_gen_dir/chrome/side_panel_bookmarks_resources.pak",
 diff --git a/components/sessions/core/tab_restore_service_helper.h b/components/sessions/core/tab_restore_service_helper.h
-index bba43ebb4b835..e2d03b7fd464c 100644
+index 75aad4ba40530..6fc8890bb43e6 100644
 --- a/components/sessions/core/tab_restore_service_helper.h
 +++ b/components/sessions/core/tab_restore_service_helper.h
 @@ -67,7 +67,9 @@ class SESSIONS_EXPORT TabRestoreServiceHelper
@@ -2144,10 +2145,10 @@ index bba43ebb4b835..e2d03b7fd464c 100644
    // Creates a new TabRestoreServiceHelper and provides an object that provides
    // the current time. The TabRestoreServiceHelper does not take ownership of
 diff --git a/tools/gritsettings/resource_ids.spec b/tools/gritsettings/resource_ids.spec
-index 438100b7726b7..cf9e444e94c0f 100644
+index 273ca2a617977..4c51ca105746a 100644
 --- a/tools/gritsettings/resource_ids.spec
 +++ b/tools/gritsettings/resource_ids.spec
-@@ -1804,6 +1804,11 @@
+@@ -1796,6 +1796,11 @@
      "META": {"sizes": {"includes": [10]}},
      "includes": [10240],
    },

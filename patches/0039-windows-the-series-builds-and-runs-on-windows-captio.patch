@@ -116,7 +116,7 @@ Removable when: M8 rebuilds the sidebar and the page card on upstream's
 vertical tabs with the frame's exclusions handled there, and Chromium's own
 importers and backups are used in place of ours.
 ---
- .../extensions/external_provider_impl.cc      |  15 +-
+ .../extensions/external_provider_impl.cc      |  15 ++-
  chrome/browser/ui/layout_constants.cc         |  13 +-
  chrome/browser/ui/spaces/arc_data_importer.cc |  14 +-
  .../browser/ui/spaces/arc_sidebar_importer.cc |  10 +-
@@ -132,34 +132,35 @@ importers and backups are used in place of ours.
  .../theme/page_theme_color_controller.cc      |  20 +++
  .../theme/page_theme_color_controller.h       |   2 +
  chrome/browser/ui/stedding_ui_metrics.h       |  16 +++
+ .../ui/tabs/vertical_tab_strip_state.h        |  10 ++
  .../browser/ui/views/frame/app_menu_button.cc |  20 ++-
  .../ui/views/frame/browser_frame_view_win.cc  |  29 +++-
  chrome/browser/ui/views/frame/browser_view.cc |  17 ++-
  .../layout/stedding_browser_view_layout.cc    |  74 +++++++++-
  .../views/frame/stedding_window_background.cc |  13 +-
- .../frame/vertical_tab_strip_region_view.cc   | 129 +++++++++++++++---
- .../frame/vertical_tab_strip_region_view.h    |  24 +++-
+ .../frame/vertical_tab_strip_region_view.cc   | 127 +++++++++++++++---
+ .../frame/vertical_tab_strip_region_view.h    |  25 +++-
  .../ui/views/spaces/space_switcher_view.cc    |  37 ++++-
  .../ui/views/spaces/space_switcher_view.h     |   7 +
  .../tabs/common/dragged_tabs_container.cc     |  12 +-
  .../tabs/common/pinned_tab_container_view.cc  |  14 +-
- .../tabs/common/tab_group_view_layout.cc      |  22 ++-
+ .../tabs/common/tab_group_view_layout.cc      |  21 ++-
  .../ui/views/tabs/common/tab_strip_view.cc    |  22 +++
  .../ui/views/tabs/common/tab_strip_view.h     |   4 +
  .../tabs/common/tab_strip_view_layout.cc      |  10 +-
  .../browser/ui/views/tabs/common/tab_view.cc  |   8 ++
- .../tabs/common/tab_view_vertical_layout.cc   |  15 +-
- .../unpinned_tab_container_view_layout.cc     |  15 +-
+ .../tabs/common/tab_view_vertical_layout.cc   |  15 ++-
+ .../unpinned_tab_container_view_layout.cc     |  15 ++-
  .../vertical_tab_strip_top_container.cc       |  13 +-
- .../browser/ui/views/toolbar/toolbar_view.cc  |  66 +++++++--
+ .../browser/ui/views/toolbar/toolbar_view.cc  |  66 ++++++---
  .../browser/ui/views/toolbar/toolbar_view.h   |   6 +
- 37 files changed, 640 insertions(+), 98 deletions(-)
+ 38 files changed, 649 insertions(+), 97 deletions(-)
 
 diff --git a/chrome/browser/extensions/external_provider_impl.cc b/chrome/browser/extensions/external_provider_impl.cc
-index 1cf32e1b816ac..9340e989771f1 100644
+index 81dd40bc0fd23..92bc26219077b 100644
 --- a/chrome/browser/extensions/external_provider_impl.cc
 +++ b/chrome/browser/extensions/external_provider_impl.cc
-@@ -885,12 +885,15 @@ void ExternalProviderImpl::CreateExternalProviders(
+@@ -893,12 +893,15 @@ void ExternalProviderImpl::CreateExternalProviders(
          bundled_extension_creation_flags));
  #endif
  #if BUILDFLAG(IS_WIN)
@@ -182,7 +183,7 @@ index 1cf32e1b816ac..9340e989771f1 100644
      provider_list->push_back(std::make_unique<ExternalProviderImpl>(
          service,
 diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_constants.cc
-index f590ae00ff7a4..f69e816db21fd 100644
+index 9430fd4676af1..31f4311d0da4a 100644
 --- a/chrome/browser/ui/layout_constants.cc
 +++ b/chrome/browser/ui/layout_constants.cc
 @@ -6,6 +6,7 @@
@@ -193,7 +194,7 @@ index f590ae00ff7a4..f69e816db21fd 100644
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/ui_features.h"
-@@ -169,7 +170,10 @@ int GetLayoutConstant(LayoutConstant constant) {
+@@ -179,7 +180,10 @@ int GetLayoutConstant(LayoutConstant constant) {
      case LayoutConstant::kVerticalTabStripComboButtonIconSize:
        return 18;
      case LayoutConstant::kVerticalTabStripButtonIconSize:
@@ -205,7 +206,7 @@ index f590ae00ff7a4..f69e816db21fd 100644
      case LayoutConstant::kVerticalTabStripTopButtonPadding:
        return 4;
      case LayoutConstant::kVerticalTabStripFlatEdgeButtonPadding:
-@@ -223,6 +227,13 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
+@@ -233,6 +237,13 @@ gfx::Insets GetLayoutInsets(LayoutInset inset) {
      case BROWSER_APP_MENU_CHIP_PADDING:
        if (touch_ui) {
          return GetLayoutInsets(TOOLBAR_BUTTON);
@@ -601,11 +602,40 @@ index c14b8abcaef53..73ffc5a3c817a 100644
  // Height of one tab row in the vertical tab strip, in DIPs.
  BASE_DECLARE_FEATURE_PARAM(int, kVerticalTabHeight);
  
+diff --git a/chrome/browser/ui/tabs/vertical_tab_strip_state.h b/chrome/browser/ui/tabs/vertical_tab_strip_state.h
+index 904a78b922d63..d2b45a9efa294 100644
+--- a/chrome/browser/ui/tabs/vertical_tab_strip_state.h
++++ b/chrome/browser/ui/tabs/vertical_tab_strip_state.h
+@@ -5,6 +5,8 @@
+ #ifndef CHROME_BROWSER_UI_TABS_VERTICAL_TAB_STRIP_STATE_H_
+ #define CHROME_BROWSER_UI_TABS_VERTICAL_TAB_STRIP_STATE_H_
+ 
++#include "build/build_config.h"
++
+ namespace tabs {
+ 
+ inline constexpr int kVerticalTabStripDefaultUncollapsedWidth = 352;
+@@ -14,7 +16,15 @@ inline constexpr int kVerticalTabStripUncollapsedMinWidth = 126;
+ // TODO(crbug.com/465832180): Replace constant based width final max width for
+ // view.
+ inline constexpr int kVerticalTabStripUncollapsedMaxWidth = 480;
++#if BUILDFLAG(IS_MAC)
++// Stedding (sidebar Y16): wide enough for macOS's window buttons, which sit
++// at the top of the rail; with Chromium's 56 the zoom button lay on the page
++// card's corner (operator, 2026-10-01). The rail plus the card's gutter is
++// the buttons' own box, so they are centred above the rail's rows.
++inline constexpr int kVerticalTabStripCollapsedWidth = 80;
++#else
+ inline constexpr int kVerticalTabStripCollapsedWidth = 56;
++#endif
+ // TODO(crbug.com/465833741): Determine snapping behavior.
+ inline constexpr int kVerticalTabStripCollapseSnapWidth =
+     (kVerticalTabStripUncollapsedMinWidth + kVerticalTabStripCollapsedWidth) /
 diff --git a/chrome/browser/ui/views/frame/app_menu_button.cc b/chrome/browser/ui/views/frame/app_menu_button.cc
-index 919a1e094e519..e3d75fcab1b5b 100644
+index edf4150731b53..88f0c08892155 100644
 --- a/chrome/browser/ui/views/frame/app_menu_button.cc
 +++ b/chrome/browser/ui/views/frame/app_menu_button.cc
-@@ -19,6 +19,8 @@
+@@ -20,6 +20,8 @@
  #include "chrome/browser/ui/views/app_menu/action_app_menu.h"
  #include "chrome/browser/ui/views/chrome_typography.h"
  #include "chrome/browser/ui/views/frame/app_menu_button_observer.h"
@@ -614,7 +644,7 @@ index 919a1e094e519..e3d75fcab1b5b 100644
  #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
  #include "chrome/browser/ui/views/toolbar/app_menu.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
-@@ -57,7 +59,23 @@ views::BubbleAnchor AppMenuButton::GetAnchor() {
+@@ -58,7 +60,23 @@ views::BubbleAnchor AppMenuButton::GetAnchor() {
    auto* const elements = BrowserElementsViews::From(this);
    CHECK(elements);
    auto* const element = elements->GetElement(kFallbackPopupAnchorElementId);
@@ -690,10 +720,10 @@ index 5b7aa7203114f..4aa24a696e736 100644
  
  void BrowserFrameViewWin::LayoutClientView() {
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index ad4d4d1c4fe52..38aecad21f560 100644
+index 1db34f8abbc7b..0d68468c2bf47 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -3089,10 +3089,19 @@ void BrowserView::DisableTabStripEditingForTesting() {
+@@ -3086,10 +3086,19 @@ void BrowserView::DisableTabStripEditingForTesting() {
  
  bool BrowserView::IsToolbarVisible() const {
    // Stedding (docs/features/toolbar.md T8, T10): the address row hides with
@@ -863,10 +893,10 @@ index 86d01a2cd6481..d42626a156c65 100644
    cc::PaintFlags flags;
    flags.setAntiAlias(true);
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index cf97dafd36afa..a731beab88cf8 100644
+index 3689cbb31ce18..375bbd26e45ac 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -280,9 +280,11 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -298,9 +298,11 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
  
      auto* const bottom_row =
          content_area_view_->AddChildView(std::make_unique<views::View>());
@@ -878,7 +908,7 @@ index cf97dafd36afa..a731beab88cf8 100644
      row_layout->set_cross_axis_alignment(
          views::BoxLayout::CrossAxisAlignment::kCenter);
      if (bottom_button_container_) {
-@@ -531,19 +533,13 @@ void VerticalTabStripRegionView::UpdateInteriorMargin(bool collapsed) {
+@@ -549,19 +551,13 @@ void VerticalTabStripRegionView::UpdateInteriorMargin(bool collapsed) {
        collapsed && base::FeatureList::IsEnabled(stedding::kArcStyleWindow)
            ? stedding::kCardGutter.Get()
            : 0;
@@ -904,10 +934,10 @@ index cf97dafd36afa..a731beab88cf8 100644
  }
  
  void VerticalTabStripRegionView::SetCaptionButtonCenterForLayout(
-@@ -707,10 +703,19 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
-   const auto vertical_padding = GetLayoutConstant(
-       LayoutConstant::kVerticalTabStripUncollapsedVerticalPadding);
- 
+@@ -730,6 +726,14 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
+   const int blend_target_width = state_controller_->IsCollapsed()
+                                      ? tabs::kVerticalTabStripCollapsedWidth
+                                      : state_controller_->GetUncollapsedWidth();
 +  // Stedding: the top container keeps the side margins the rail form gives
 +  // it (ApplyRailForm; sidebar Y6, Y8, Y23); upstream's padding on either
 +  // side is the default.
@@ -916,16 +946,19 @@ index cf97dafd36afa..a731beab88cf8 100644
 +          top_button_container_->GetProperty(views::kMarginsKey)) {
 +    top_margins = gfx::Insets::TLBR(0, margins->left(), 0, margins->right());
 +  }
-+
+ 
    views::SizeBounds button_available_size = size_bounds;
-   if (button_available_size.width().is_bounded()) {
+   if (blending_with_organizer_tray) {
+@@ -737,7 +741,7 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
+                                     2 * horizontal_padding);
+   } else if (button_available_size.width().is_bounded()) {
      button_available_size.set_width(button_available_size.width() -
 -                                    2 * horizontal_padding);
 +                                    top_margins.width());
    }
    const gfx::Size button_size =
        top_button_container_->GetPreferredSize(button_available_size);
-@@ -724,7 +729,7 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
+@@ -751,7 +755,7 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
    // specified.
    layout.host_size = gfx::Size(
        size_bounds.width().value_or(
@@ -934,7 +967,7 @@ index cf97dafd36afa..a731beab88cf8 100644
                      tab_strip_size.width(), organizer_panel_size.width()})),
        size_bounds.height().value_or(
            button_size.height() +
-@@ -735,15 +740,12 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
+@@ -762,17 +766,15 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
    // There's a bit of padding at the bottom of the tabstrip.
    available.Inset(gfx::Insets::TLBR(0, 0, vertical_padding, 0));
  
@@ -944,18 +977,20 @@ index cf97dafd36afa..a731beab88cf8 100644
    layout.child_layouts.push_back(
        {.child_view = top_button_container_.get(),
         .visible = true,
--       .bounds = gfx::Rect(horizontal_padding + rail_left_inset_, 0,
--                           std::max(0, available.width() -
--                                           2 * horizontal_padding -
--                                           rail_left_inset_),
-+       .bounds = gfx::Rect(top_margins.left(), 0,
-+                           std::max(0, available.width() - top_margins.width()),
-                            button_size.height())});
+        .bounds = gfx::Rect(
+-           horizontal_padding + rail_left_inset_, 0,
++           top_margins.left(), 0,
+            blending_with_organizer_tray
+                ? button_size.width()
+-               : std::max(0, available.width() - 2 * horizontal_padding -
+-                                 rail_left_inset_),
++               : std::max(0, available.width() - top_margins.width()),
+            button_size.height())});
    available.Inset(gfx::Insets::TLBR(button_size.height(), 0, 0, 0));
  
-@@ -782,6 +784,20 @@ void VerticalTabStripRegionView::Layout(PassKey) {
-   }
-   organizer_panel_was_visible_ = organizer_panel_visible;
+@@ -805,6 +807,20 @@ views::ProposedLayout VerticalTabStripRegionView::CalculateProposedLayout(
+ void VerticalTabStripRegionView::Layout(PassKey) {
+   LayoutSuperclass<BaseTabStripRegionView>(this);
  
 +  // Stedding: the strip's own background is invisible so the window's
 +  // gradient shows through (HANDOFF trap 8). Right while the strip sits
@@ -974,7 +1009,7 @@ index cf97dafd36afa..a731beab88cf8 100644
    // Manually position the resize area as it overlaps views handled by the flex
    // layout.
    resize_area_->SetBoundsRect(gfx::Rect(bounds().right() - resize_area_width_,
-@@ -1170,6 +1186,8 @@ void VerticalTabStripRegionView::AddTabStripView(
+@@ -1181,6 +1197,8 @@ void VerticalTabStripRegionView::AddTabStripView(
        content_parent->GetIndexOf(top_button_separator_);
    CHECK(separator_index.has_value());
    content_parent->AddChildViewAt(std::move(view), separator_index.value() + 1);
@@ -983,8 +1018,8 @@ index cf97dafd36afa..a731beab88cf8 100644
  
    // Pre-set the animation values to the appropriate state.
    auto* const animation_controller =
-@@ -1597,9 +1615,80 @@ void VerticalTabStripRegionView::ResetExpandOnHoverTimers() {
-   }
+@@ -1571,9 +1589,80 @@ void VerticalTabStripRegionView::ResetExpandOnHoverTimers() {
+   expand_on_hover_heuristic_samples_ = 0;
  }
  
 +void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
@@ -1065,7 +1100,7 @@ index cf97dafd36afa..a731beab88cf8 100644
    if (expand) {
      expand_on_hover_start_time_ = base::TimeTicks::Now();
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index dbae57b27c7ae..18bf03d64d3db 100644
+index f7f9713b42ec1..763d635366b12 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 @@ -13,6 +13,7 @@
@@ -1084,23 +1119,23 @@ index dbae57b27c7ae..18bf03d64d3db 100644
  }  // namespace views
  
  // Container for the vertical tabstrip and the other views sharing space with
-@@ -90,7 +92,15 @@ class VerticalTabStripRegionView final
-   // TODO(crbug.com/465832180): Replace constant based width final max width for
-   // view.
-   static constexpr int kUncollapsedMaxWidth = 480;
-+#if BUILDFLAG(IS_MAC)
-+  // Stedding (sidebar Y16): wide enough for macOS's window buttons, which sit
-+  // at the top of the rail; with Chromium's 56 the zoom button lay on the page
-+  // card's corner (operator, 2026-10-01). The rail plus the card's gutter is
-+  // the buttons' own box, so they are centred above the rail's rows.
-+  static constexpr int kCollapsedWidth = 80;
-+#else
-   static constexpr int kCollapsedWidth = 56;
-+#endif
-   // TODO(crbug.com/465833741): Determine snapping behavior.
-   static constexpr int kCollapseSnapWidth =
-       (kUncollapsedMinWidth + kCollapsedWidth) / 2;
-@@ -282,6 +292,16 @@ class VerticalTabStripRegionView final
+@@ -84,6 +86,15 @@ class VerticalTabStripRegionView final
+ 
+   DECLARE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(kAnimationCompletedEvent);
+ 
++  // Stedding: upstream moved these widths to vertical_tab_strip_state.h; the
++  // series' code keeps their old names here.
++  static constexpr int kUncollapsedMinWidth =
++      tabs::kVerticalTabStripUncollapsedMinWidth;
++  static constexpr int kUncollapsedMaxWidth =
++      tabs::kVerticalTabStripUncollapsedMaxWidth;
++  static constexpr int kCollapsedWidth = tabs::kVerticalTabStripCollapsedWidth;
++  static constexpr int kCollapseSnapWidth =
++      tabs::kVerticalTabStripCollapseSnapWidth;
+   explicit VerticalTabStripRegionView(
+       tabs::VerticalTabStripStateController* state_controller,
+       actions::ActionItem* root_action_item,
+@@ -250,6 +261,16 @@ class VerticalTabStripRegionView final
    raw_ptr<views::View> content_area_view_ = nullptr;
  
    raw_ptr<spaces::SpaceSwitcherView> space_switcher_ = nullptr;
@@ -1117,7 +1152,7 @@ index dbae57b27c7ae..18bf03d64d3db 100644
    // archive A7: the row above the switcher that opens the archived view.
    raw_ptr<views::LabelButton> archived_row_ = nullptr;
    // Stedding (tabs R11-R13): row numbers while Cmd is held. Modifier-only
-@@ -316,10 +336,6 @@ class VerticalTabStripRegionView final
+@@ -284,10 +305,6 @@ class VerticalTabStripRegionView final
    // sidebar Y6: the collapsed rail is centred against the card's edge.
    void UpdateInteriorMargin(bool collapsed);
  
@@ -1233,7 +1268,7 @@ index 0217cc7c91675..558b2a23f9878 100644
  
    // The chip for each Space, in model order. Parallel to model_->spaces() and
 diff --git a/chrome/browser/ui/views/tabs/common/dragged_tabs_container.cc b/chrome/browser/ui/views/tabs/common/dragged_tabs_container.cc
-index 2753fb53851ae..16b590dfcc45e 100644
+index 27ad413fc0b54..a49489b65a3a3 100644
 --- a/chrome/browser/ui/views/tabs/common/dragged_tabs_container.cc
 +++ b/chrome/browser/ui/views/tabs/common/dragged_tabs_container.cc
 @@ -8,13 +8,16 @@
@@ -1253,26 +1288,26 @@ index 2753fb53851ae..16b590dfcc45e 100644
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_drag_handler.h"
  #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
-@@ -531,9 +534,16 @@ gfx::Rect DraggedTabsContainer::GetDraggingViewsBoundsAtPointClamped(
-   CHECK(scroll_view);
+@@ -523,9 +526,16 @@ gfx::Rect DraggedTabsContainer::GetDraggingViewsClampingBounds() const {
    gfx::Rect clamping_bounds = views::View::ConvertRectToTarget(
        scroll_view, base::to_address(host_view_), scroll_view->GetLocalBounds());
-+  // Stedding (sidebar Y8): the rail's rows take the column, so a drag in
-+  // the rail clamps to the rail's padding; by the width being drawn.
-+  const bool rail = base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
-+                    scroll_view->width() <=
-+                        VerticalTabStripRegionView::kCollapsedWidth;
-   clamping_bounds.set_width(
-       clamping_bounds.width() -
--      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding));
-+      (rail ? stedding::kRailRowPadding
-+            : GetLayoutConstant(
-+                  LayoutConstant::kVerticalTabStripHorizontalPadding)));
-   bounding_box_for_point.AdjustToFit(clamping_bounds);
- 
-   return bounding_box_for_point;
+   if (drag_layout_ != DragLayout::kHorizontal) {
++    // Stedding (sidebar Y8): the rail's rows take the column, so a drag in
++    // the rail clamps to the rail's padding; by the width being drawn.
++    const bool rail =
++        base::FeatureList::IsEnabled(stedding::kArcStyleWindow) &&
++        scroll_view->width() <= VerticalTabStripRegionView::kCollapsedWidth;
+     clamping_bounds.set_width(
+         clamping_bounds.width() -
+-        GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding));
++        (rail ? stedding::kRailRowPadding
++              : GetLayoutConstant(
++                    LayoutConstant::kVerticalTabStripHorizontalPadding)));
+   }
+   return clamping_bounds;
+ }
 diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-index 5e06d601f61c4..f57c70e92f951 100644
+index d0c30826102e1..5108128fbca17 100644
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 @@ -4,7 +4,9 @@
@@ -1285,7 +1320,7 @@ index 5e06d601f61c4..f57c70e92f951 100644
  
  #include "base/i18n/rtl.h"
  #include "chrome/browser/ui/layout_constants.h"
-@@ -409,9 +411,17 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
+@@ -406,9 +408,17 @@ views::ProposedLayout PinnedTabContainerView::CalculateVerticalLayout(
  
      // Apply horizontal padding immediately at start of collapse animation by
      // including collapsing state.
@@ -1306,14 +1341,13 @@ index 5e06d601f61c4..f57c70e92f951 100644
      // When we are in collapsed state, only one child should be shown per row.
      // During collapse animation and other cases, fit as many as possible.
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-index e504628f10099..fbe4c84aa441a 100644
+index 8116e7a09b0ce..93f6105630f70 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-@@ -5,8 +5,12 @@
- #include "chrome/browser/ui/views/tabs/common/tab_group_view_layout.h"
+@@ -6,8 +6,11 @@
  
  #include <algorithm>
-+
+ 
 +#include "base/feature_list.h"
  #include "chrome/browser/ui/layout_constants.h"
 +#include "chrome/browser/ui/stedding_ui_metrics.h"
@@ -1322,7 +1356,7 @@ index e504628f10099..fbe4c84aa441a 100644
  #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_header_view.h"
-@@ -74,12 +78,21 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -77,12 +80,21 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
  
    // If the tab strip is collapsed then the group line should appear on the
    // leading side of all grouped tabs and the header.
@@ -1346,8 +1380,8 @@ index e504628f10099..fbe4c84aa441a 100644
 +    header_bounds.set_x(collapsed_padding);
    }
  
-   header_bounds.set_y(height);
-@@ -128,8 +141,7 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+   if (tab_group_view->unfocus_header_) {
+@@ -151,8 +163,7 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
      int child_x = 0;
      if (tab_strip_collapse_state !=
          tabs::VerticalTabStripCollapseState::kExpanded) {
@@ -1358,10 +1392,10 @@ index e504628f10099..fbe4c84aa441a 100644
        child_x = TabGroupView::kTabLeadingPadding;
      }
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index 106b10737c87b..1b05b49491d1f 100644
+index f3ea787f99b03..14936524ccfd9 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-@@ -599,6 +599,28 @@ void TabStripView::SetCollapsedState(bool is_collapsed) {
+@@ -589,6 +589,28 @@ void TabStripView::SetCollapsedState(bool is_collapsed) {
    }
  }
  
@@ -1391,10 +1425,10 @@ index 106b10737c87b..1b05b49491d1f 100644
    for (views::ScrollView* scroll_view :
         {pinned_tabs_scroll_view_, unpinned_tabs_scroll_view_}) {
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.h b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-index 5e285a8d11e41..3cfd1370e59bb 100644
+index bfc8439602e60..4aecbc2c15407 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.h
-@@ -84,6 +84,10 @@ class TabStripView final : public views::View, public views::WidgetObserver {
+@@ -85,6 +85,10 @@ class TabStripView final : public views::View, public views::WidgetObserver {
    }
  
    void SetCollapsedState(bool is_collapsed);
@@ -1406,7 +1440,7 @@ index 5e285a8d11e41..3cfd1370e59bb 100644
  
    bool IsPositionInWindowCaption(const gfx::Point& point);
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
-index 76e96f6aa17db..393ac8009af05 100644
+index 0719f959ee01a..df4ef31bfa3ac 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 @@ -14,6 +14,7 @@
@@ -1417,7 +1451,7 @@ index 76e96f6aa17db..393ac8009af05 100644
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
  #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
-@@ -237,8 +238,15 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
+@@ -241,8 +242,15 @@ views::ProposedLayout TabStripViewLayout::CalculateVerticalLayout(
      return layouts;
    }
  
@@ -1435,10 +1469,10 @@ index 76e96f6aa17db..393ac8009af05 100644
    const int region_vertical_padding = GetLayoutConstant(
        LayoutConstant::kVerticalTabStripCollapsedVerticalPadding);
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 101f591036d01..c891e5b4329a1 100644
+index 6fc1dfa0f5342..4ee15f5c1f126 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -1563,6 +1563,14 @@ int TabView::UncollapsedMinWidth() {
+@@ -1591,6 +1591,14 @@ int TabView::UncollapsedMinWidth() {
  
  // static
  int TabView::CollapsedWidth() {
@@ -1450,14 +1484,14 @@ index 101f591036d01..c891e5b4329a1 100644
 +    return VerticalTabStripRegionView::kCollapsedWidth -
 +           stedding::kCardGutter.Get() - 2 * stedding::kRailRowPadding;
 +  }
-   return VerticalTabStripRegionView::kCollapsedWidth -
+   return tabs::kVerticalTabStripCollapsedWidth -
           2 * GetLayoutConstant(
                   LayoutConstant::kVerticalTabStripHorizontalPadding);
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-index 353ac4d8e1784..50aadd824adf0 100644
+index db3c3bdab6610..4fbb8e9387335 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-@@ -118,9 +118,18 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
+@@ -120,9 +120,18 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
        continue;
      }
      if (is_child_visible && can_render_child) {
@@ -1517,10 +1551,10 @@ index dcd4e5224c7db..7df7afa43d812 100644
    // Stedding: the boundary between the Space-pinned run and the rest goes
    // after the last child the predicate accepts (or at the top when there is
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index f96973299376a..1d0c53c24c9be 100644
+index c2e16344615fc..0909e49edfa59 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-@@ -129,9 +129,18 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -187,9 +187,18 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        current_y = std::max(current_y, CaptionClearance());
      }
  
@@ -1540,7 +1574,7 @@ index f96973299376a..1d0c53c24c9be 100644
                    ? 0
                    : std::max(0, (host_size.width() - pref_size.width()) / 2);
        gfx::Rect bounds(x, current_y, pref_size.width(), pref_size.height());
-@@ -144,7 +153,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -202,7 +211,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
  
      if (collapse_button_ && collapse_button_->GetVisible()) {
        const gfx::Size pref_size = collapse_button_->GetPreferredSize();
@@ -1550,10 +1584,10 @@ index f96973299376a..1d0c53c24c9be 100644
                    : std::max(0, (host_size.width() - pref_size.width()) / 2);
        gfx::Rect bounds(x, current_y, pref_size.width(), pref_size.height());
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-index f6e2833c01748..12923a69524af 100644
+index ef1c1245749f3..e19aa79d72dd0 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-@@ -1506,27 +1506,59 @@ void ToolbarView::Layout(PassKey) {
+@@ -1502,27 +1502,59 @@ void ToolbarView::Layout(PassKey) {
      }
    }
  
@@ -1620,7 +1654,7 @@ index f6e2833c01748..12923a69524af 100644
  void ToolbarView::OnThemeChanged() {
    views::AccessiblePaneView::OnThemeChanged();
    if (!initialized_) {
-@@ -1617,13 +1649,17 @@ void ToolbarView::InitLayout() {
+@@ -1613,13 +1645,17 @@ void ToolbarView::InitLayout() {
      location_bar_view_->SetProperty(views::kMarginsKey,
                                      gfx::Insets::VH(0, location_bar_margin));
  
@@ -1641,7 +1675,7 @@ index f6e2833c01748..12923a69524af 100644
        // Cap the bar's width with a flex rule of its own. Left to itself it
        // prefers the whole toolbar, so there is no leftover for the spacers to
        // take and nothing to centre it in. SetPreferredSize() does not do this:
-@@ -1638,11 +1674,11 @@ void ToolbarView::InitLayout() {
+@@ -1634,11 +1670,11 @@ void ToolbarView::InitLayout() {
                    [](const views::View* view, const views::SizeBounds& bounds) {
                      gfx::Size size = view->GetPreferredSize(bounds);
                      // The cap is what the field takes when there is room; the
@@ -1659,10 +1693,10 @@ index f6e2833c01748..12923a69524af 100644
                          size.width(), view->GetMinimumSize().width(),
                          bounds.width().is_bounded()
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.h b/chrome/browser/ui/views/toolbar/toolbar_view.h
-index 7530fc9fb7d69..4665d6bd47025 100644
+index c147c4d8d0048..dc2fbc4aebe9b 100644
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.h
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
-@@ -249,6 +249,11 @@ class ToolbarView : public views::AccessiblePaneView,
+@@ -245,6 +245,11 @@ class ToolbarView : public views::AccessiblePaneView,
    gfx::Size GetMinimumSize() const override;
    void Layout(PassKey) override;
    void OnThemeChanged() override;
@@ -1674,7 +1708,7 @@ index 7530fc9fb7d69..4665d6bd47025 100644
    bool AcceleratorPressed(const ui::Accelerator& acc) override;
    void ChildPreferredSizeChanged(views::View* child) override;
    void ChildVisibilityChanged(View* child) override;
-@@ -424,6 +429,7 @@ class ToolbarView : public views::AccessiblePaneView,
+@@ -419,6 +424,7 @@ class ToolbarView : public views::AccessiblePaneView,
    // button clusters they mark.
    raw_ptr<views::View> stedding_left_spacer_ = nullptr;
    raw_ptr<views::View> stedding_right_spacer_ = nullptr;

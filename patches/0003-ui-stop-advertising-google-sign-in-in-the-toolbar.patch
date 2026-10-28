@@ -54,13 +54,13 @@ its own onboarding that makes the question ours to ask.
  15 files changed, 117 insertions(+), 23 deletions(-)
 
 diff --git a/chrome/browser/history/top_sites_factory.cc b/chrome/browser/history/top_sites_factory.cc
-index 2b2e9f41874d7..bec4816239288 100644
+index 6e6647bc91c40..20f1cb9d459b8 100644
 --- a/chrome/browser/history/top_sites_factory.cc
 +++ b/chrome/browser/history/top_sites_factory.cc
 @@ -65,9 +65,10 @@ void InitializePrepopulatedPageList(
      history::PrepopulatedPageList* prepopulated_pages) {
  #if !BUILDFLAG(IS_ANDROID)
-   DCHECK(prepopulated_pages);
+   CHECK(prepopulated_pages, base::NotFatalUntil::M161);
 -  PrefService* pref_service = profile->GetPrefs();
 -  bool hide_web_store_icon =
 -      pref_service->GetBoolean(policy::policy_prefs::kHideWebStoreIcon);
@@ -156,10 +156,10 @@ index feff9bdf64552..af48d135380ea 100644
    }
  
 diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
-index d733ae8b320e3..75cf7dcc1f6f4 100644
+index 257eee5f0e7f7..b40713d9bd36e 100644
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -342,7 +342,8 @@ export let routes: SettingsRoutes = Router.getInstance().getRoutes();
+@@ -341,7 +341,8 @@ export let routes: SettingsRoutes = Router.getInstance().getRoutes();
  // Returns the "effective" route when at chrome://settings/.
  export function getTopLevelRoute(): Route {
    if (!loadTimeData.getBoolean('isGuest')) {
@@ -170,10 +170,10 @@ index d733ae8b320e3..75cf7dcc1f6f4 100644
  
    let guestTopLevelRoute = routes.SEARCH;
 diff --git a/chrome/browser/search/search.cc b/chrome/browser/search/search.cc
-index 6d3e318b62f14..a0fde2e70f0d1 100644
+index a9fdb0a96fe37..c89fd37207796 100644
 --- a/chrome/browser/search/search.cc
 +++ b/chrome/browser/search/search.cc
-@@ -197,6 +197,15 @@ struct NewTabURLDetails {
+@@ -202,6 +202,15 @@ struct NewTabURLDetails {
      if (default_is_google) {
        return NewTabURLDetails(local_url, NEW_TAB_URL_VALID);
      }
@@ -242,10 +242,10 @@ index adafa857b61f9..3808ea381ea55 100644
  #include "chrome/browser/first_run/first_run.h"
  #include "chrome/browser/profiles/profile.h"
 diff --git a/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc b/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc
-index c35e4c87eec61..00663764e4007 100644
+index aedbca990b7dc..9c0d28f720480 100644
 --- a/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc
 +++ b/chrome/browser/ui/views/profiles/avatar_toolbar_button_state_manager.cc
-@@ -107,6 +107,12 @@ std::optional<base::TimeDelta> g_show_signin_pending_text_delay_for_testing;
+@@ -100,6 +100,12 @@ std::optional<base::TimeDelta> g_show_signin_pending_text_delay_for_testing;
  
  constexpr base::TimeDelta kPromoDuration = base::Seconds(20);
  std::optional<base::TimeDelta> g_promo_duration_for_testing;
@@ -258,7 +258,7 @@ index c35e4c87eec61..00663764e4007 100644
  #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
  
  constexpr base::TimeDelta kOnSigninDuration = base::Seconds(20);
-@@ -948,6 +954,10 @@ class PromoStateProviderCoordinator
+@@ -929,6 +935,10 @@ class PromoStateProviderCoordinator
        return;
      }
  
@@ -270,10 +270,10 @@ index c35e4c87eec61..00663764e4007 100644
        Trigger();
      }
 diff --git a/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc b/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc
-index 151c14c9ab043..e6f9863252466 100644
+index bfc7d44eb66f0..c7b3546feb0f7 100644
 --- a/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc
 +++ b/chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.cc
-@@ -85,6 +85,12 @@ void CreateAndAddNewTabPageThirdPartyUiHtmlSource(Profile* profile,
+@@ -89,6 +89,12 @@ void CreateAndAddNewTabPageThirdPartyUiHtmlSource(Profile* profile,
    };
  
    source->AddLocalizedStrings(kStrings);
@@ -284,13 +284,13 @@ index 151c14c9ab043..e6f9863252466 100644
 +                    u"Press " + open_accelerator.GetShortcutText() +
 +                        u" to search, open a URL, or find a tab");
  
-   const ui::ThemeProvider* theme_provider =
-       webui::GetThemeProviderDeprecated(web_contents);
+ #if BUILDFLAG(IS_ANDROID)
+   // TODO(crbug.com/572046023): Add support for custom background images.
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index c1bb5d445e89d..223d11bd6fde9 100644
+index 0e2111a106d6c..521b9a4796363 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -658,9 +658,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -679,9 +679,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    // Within the AI subpage are separate sections for Glic, for GEIC, and for all
    // other AI features. The visibility of these is separately controlled, but
    // we want to show the subpage if any of them are enabled.
@@ -309,10 +309,10 @@ index c1bb5d445e89d..223d11bd6fde9 100644
                            show_ai_features_section);
  
 diff --git a/components/regional_capabilities/program_settings.cc b/components/regional_capabilities/program_settings.cc
-index 575191713ef3c..f0928601dee08 100644
+index 08286c181c423..a454ab085f134 100644
 --- a/components/regional_capabilities/program_settings.cc
 +++ b/components/regional_capabilities/program_settings.cc
-@@ -35,7 +35,17 @@ constexpr ProgramSettings kWaffleSettings{
+@@ -36,7 +36,17 @@ constexpr ProgramSettings kWaffleSettings{
          },
  };
  
@@ -331,7 +331,7 @@ index 575191713ef3c..f0928601dee08 100644
    ProgramSettings ret = kWaffleSettings;
    ret.choice_screen_eligibility_config->restrict_to_associated_countries = true;
    return ret;
-@@ -101,6 +111,11 @@ bool IsInProgramRegion(Program program,
+@@ -111,6 +121,11 @@ bool IsInProgramRegion(Program program,
    if (program == Program::kDefault) {
      return true;  // All countries can be associated with the default program.
    }
@@ -343,7 +343,7 @@ index 575191713ef3c..f0928601dee08 100644
  
    return std::ranges::contains(
        GetSettingsForProgram(program).associated_countries, country_id);
-@@ -144,11 +159,10 @@ const ProgramSettings& GetSettingsForProgram(Program program) {
+@@ -155,11 +170,10 @@ const ProgramSettings& GetSettingsForProgram(Program program) {
        NOTREACHED();
  #endif
      case Program::kWaffle:
@@ -356,9 +356,9 @@ index 575191713ef3c..f0928601dee08 100644
 +      // upstream enables by default would only ever hide the chooser from a
 +      // user whose country cannot be determined.
 +      return kSteddingSettings;
+     case Program::kScone:
+       return kNoOpSconeSettings;
      case Program::kDefault:
-       return kDefaultSettings;
-   }
 diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
 index 85b0c960533ac..51d798955c1c0 100644
 --- a/components/search_engines/template_url_prepopulate_data.cc

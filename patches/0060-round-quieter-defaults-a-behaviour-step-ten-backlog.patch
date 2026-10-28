@@ -31,12 +31,12 @@ them are fixed here, each with its behaviour id and a test.
 Removable when: never; these are Stedding's own behaviours.
 ---
  chrome/app/stedding_strings.grdp              |  32 +
+ chrome/browser/BUILD.gn                       |   3 +
  .../api/settings_private/prefs_util.cc        |   6 +
  .../browser/global_keyboard_shortcuts_mac.mm  |  11 +
  .../stedding_page/stedding_page.html.ts       |  22 +
  .../resources/stedding_welcome/app.css        |  58 +-
  .../browser/resources/stedding_welcome/app.ts | 218 ++++++-
- chrome/browser/ui/BUILD.gn                    |   3 +
  chrome/browser/ui/accelerator_table.cc        |  16 +
  chrome/browser/ui/archive/BUILD.gn            |  39 ++
  chrome/browser/ui/archive/archived_tabs.cc    |  13 +-
@@ -213,11 +213,30 @@ index 5a9e282f25e41..8f19d7ec36045 100644
 +    Undo
 +  </message>
  </grit-part>
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 41d8f6839a13f..e99d8c934539d 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3860,11 +3860,14 @@ source_set("browser") {
+     public_deps += [
+       "//chrome/browser/ui/stedding:prefs",
+       "//chrome/browser/ui/views/peek",
++      "//chrome/browser/ui/views/stedding:sidebar_resize_handle",
+       "//chrome/browser/ui/views/switcher",
+       "//chrome/browser/ui/stedding/screenshot",
+       "//chrome/browser/ui/stedding:copy_link",
++      "//chrome/browser/ui/stedding:media_keys",
+       "//chrome/browser/ui/stedding:pin_lifecycle",
+       "//chrome/browser/ui/stedding:private_window",
++      "//chrome/browser/ui/stedding:site_cookies",
+       "//chrome/browser/ui/stedding:sleep_tabs",
+       "//chrome/browser/ui/stedding:tab_names",
+       "//chrome/browser/ui/stedding:tab_numbers",
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 411ee06799198..561c302ccfa64 100644
+index 5281b3a111fc2..8c0528f4b29e1 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -329,6 +329,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -332,6 +332,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kNumber;
    (*s_allowlist)[stedding::prefs::kSidebarClosedForm] =
        settings_api::PrefType::kNumber;
@@ -226,7 +245,7 @@ index 411ee06799198..561c302ccfa64 100644
    (*s_allowlist)[::prefs::kEnableQuietGeolocationPermissionUi] =
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[::prefs::kHttpsFirstBalancedMode] =
-@@ -341,6 +343,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -344,6 +346,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kUiAnimate] =
        settings_api::PrefType::kBoolean;
@@ -235,7 +254,7 @@ index 411ee06799198..561c302ccfa64 100644
    (*s_allowlist)[stedding::prefs::kPinsCloseSleeps] =
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kSpaceSleepMinutes] =
-@@ -351,6 +355,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -354,6 +358,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kCtrlTabMru] =
        settings_api::PrefType::kBoolean;
@@ -716,34 +735,11 @@ index af5a82dccdba0..79cc41d2ec622 100644
  addWebUiListener('import-data-status-changed', (status: unknown) => {
    state.importStatus = status as string;
    render();
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 0c9a802d50394..daba9e441f5be 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2324,6 +2324,7 @@ static_library("ui") {
-     public_deps += [
-       "//chrome/browser/ui/stedding:prefs",
-       "//chrome/browser/ui/views/peek",
-+      "//chrome/browser/ui/views/stedding:sidebar_resize_handle",
-     ]
-     deps += [
-       ":accelerator_table",
-@@ -2352,8 +2353,10 @@ static_library("ui") {
-       "//chrome/browser/ui/webui/stedding_welcome",
-       "//chrome/browser/ui/stedding/screenshot",
-       "//chrome/browser/ui/stedding:copy_link",
-+      "//chrome/browser/ui/stedding:media_keys",
-       "//chrome/browser/ui/stedding:pin_lifecycle",
-       "//chrome/browser/ui/stedding:private_window",
-+      "//chrome/browser/ui/stedding:site_cookies",
-       "//chrome/browser/ui/stedding:sleep_tabs",
-       "//chrome/browser/ui/stedding:tab_names",
-       "//chrome/browser/ui/stedding:tab_numbers",
 diff --git a/chrome/browser/ui/accelerator_table.cc b/chrome/browser/ui/accelerator_table.cc
-index 2cec266013af6..fe42289d13858 100644
+index c3a3aedaac9bc..e3e27486f811f 100644
 --- a/chrome/browser/ui/accelerator_table.cc
 +++ b/chrome/browser/ui/accelerator_table.cc
-@@ -194,6 +194,13 @@ const AcceleratorMapping kAcceleratorMap[] = {
+@@ -188,6 +188,13 @@ const AcceleratorMapping kAcceleratorMap[] = {
       IDC_STEDDING_CAPTURE_FULL_PAGE},
      {ui::VKEY_P, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
       IDC_STEDDING_COMMAND_PALETTE},
@@ -757,7 +753,7 @@ index 2cec266013af6..fe42289d13858 100644
  #if BUILDFLAG(IS_WIN)
      // Alt+1 to Alt+9 jump to a Space, as in Arc for Windows (spaces B18).
      // Linux has Alt+N on the tabs, so this is Windows' alone until M9.
-@@ -361,6 +368,15 @@ const AcceleratorMapping kSteddingCtrlAltAcceleratorMap[] = {
+@@ -354,6 +361,15 @@ const AcceleratorMapping kSteddingCtrlAltAcceleratorMap[] = {
       IDC_STEDDING_COPY_MARKDOWN_LINK},
      {ui::VKEY_N, kSteddingCtrlAlt | ui::EF_SHIFT_DOWN,
       IDC_STEDDING_NEW_BLANK_WINDOW},
@@ -1818,10 +1814,10 @@ index 00ae689a50765..166a2b0cb8f4e 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 545dce6953db2..0cb7d5a577403 100644
+index e7cef09553af3..28237549476b4 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -83,6 +83,7 @@
+@@ -85,6 +85,7 @@
  #include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
  #include "chrome/browser/ui/side_panel/side_panel_ui.h"
  #include "chrome/browser/ui/singleton_tabs.h"
@@ -1829,7 +1825,7 @@ index 545dce6953db2..0cb7d5a577403 100644
  #include "chrome/browser/ui/spaces/space.h"
  #include "chrome/browser/ui/spaces/space_commands.h"
  #include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_manager.h"
-@@ -90,7 +91,9 @@
+@@ -92,7 +93,9 @@
  #include "chrome/browser/ui/stedding/address_row.h"
  #include "chrome/browser/ui/stedding/copy_link.h"
  #include "chrome/browser/ui/stedding/little_window.h"
@@ -1839,7 +1835,7 @@ index 545dce6953db2..0cb7d5a577403 100644
  #include "chrome/browser/ui/stedding/stedding_command_ids.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/features.h"
-@@ -974,6 +977,14 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -986,6 +989,14 @@ void BrowserCommandController::HandleCommandWithDisposition(
          row->Toggle();
        }
        break;
@@ -1854,7 +1850,7 @@ index 545dce6953db2..0cb7d5a577403 100644
      // Stedding: Arc's keyboard for Spaces (docs/features/spaces.md B18-B22).
      case IDC_STEDDING_SPACE_1:
      case IDC_STEDDING_SPACE_2:
-@@ -1004,12 +1015,24 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -1016,12 +1027,24 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_STEDDING_MOVE_TAB_TO_PREVIOUS_SPACE:
        spaces::MoveActiveTabToNeighbourSpace(browser_, /*forward=*/false);
        break;
@@ -1879,7 +1875,7 @@ index 545dce6953db2..0cb7d5a577403 100644
  #if BUILDFLAG(IS_CHROMEOS)
      case IDC_TAKE_SCREENSHOT:
        TakeScreenshot();
-@@ -2105,6 +2128,18 @@ void BrowserCommandController::InitCommandState() {
+@@ -2163,6 +2186,18 @@ void BrowserCommandController::InitCommandState() {
    command_updater_->UpdateCommandEnabled(IDC_STEDDING_CAPTURE_REGION, true);
    command_updater_->UpdateCommandEnabled(IDC_STEDDING_CAPTURE_FULL_PAGE, true);
    command_updater_->UpdateCommandEnabled(IDC_STEDDING_TOGGLE_ADDRESS_ROW, true);
@@ -1898,7 +1894,7 @@ index 545dce6953db2..0cb7d5a577403 100644
    command_updater_->UpdateCommandEnabled(
        IDC_STEDDING_NEW_BLANK_WINDOW, !browser_->GetProfile()->IsOffTheRecord());
    command_updater_->UpdateCommandEnabled(
-@@ -2384,6 +2419,10 @@ void BrowserCommandController::UpdateCommandsForTabState() {
+@@ -2449,6 +2484,10 @@ void BrowserCommandController::UpdateCommandsForTabState() {
    // Page-related commands
    command_updater_->UpdateCommandEnabled(IDC_VIEW_SOURCE,
                                           CanViewSource(browser_));
@@ -1910,10 +1906,10 @@ index 545dce6953db2..0cb7d5a577403 100644
    command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
  
 diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
-index dee070906d131..29565d8631f77 100644
+index f8fdb233510c4..3b4c6e9b50300 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
-@@ -1484,6 +1484,10 @@ void CloseTab(BrowserWindowInterface* browser) {
+@@ -1489,6 +1489,10 @@ void CloseTab(BrowserWindowInterface* browser) {
  
    if (only_active_split_tab_selected) {
      RecordTabCloseCount(1);
@@ -1925,7 +1921,7 @@ index dee070906d131..29565d8631f77 100644
      return;
    }
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
-index b195a0008391f..258e9f9eccb45 100644
+index 6f8924a357cea..480118d36e56e 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
 +++ b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
 @@ -37,6 +37,7 @@ if (!is_android) {
@@ -1937,7 +1933,7 @@ index b195a0008391f..258e9f9eccb45 100644
        "//chrome/browser/ui/views/frame:browser_view_header",
        "//chrome/browser/ui/views/frame:contents_web_view",
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index acc75dfec4412..3f44ada0f88b1 100644
+index fd7e5c78d0e20..cb71b54028e3a 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -47,6 +47,7 @@
@@ -1956,7 +1952,7 @@ index acc75dfec4412..3f44ada0f88b1 100644
  #include "components/printing/browser/print_composite_client.h"
  #include "components/split_tabs/split_tab_id.h"
  #include "components/tabs/public/split_tab_data.h"
-@@ -821,6 +823,14 @@ void BrowserWebContentsDelegate::SetContentsBounds(content::WebContents* source,
+@@ -813,6 +815,14 @@ void BrowserWebContentsDelegate::SetContentsBounds(content::WebContents* source,
  
  void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
                                                   const GURL& url) {
@@ -1971,7 +1967,7 @@ index acc75dfec4412..3f44ada0f88b1 100644
    std::vector<StatusBubble*> status_bubbles =
        browser_ui_controller_->GetStatusBubbles();
    for (StatusBubble* status_bubble : status_bubbles) {
-@@ -829,7 +839,7 @@ void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
+@@ -821,7 +831,7 @@ void BrowserWebContentsDelegate::UpdateTargetURL(content::WebContents* source,
      ContentsWebView* anchor =
          static_cast<ContentsWebView*>(status_bubble_views->base_view());
      if (source == anchor->GetWebContents()) {
@@ -1981,10 +1977,10 @@ index acc75dfec4412..3f44ada0f88b1 100644
      }
    }
 diff --git a/chrome/browser/ui/browser_window/internal/BUILD.gn b/chrome/browser/ui/browser_window/internal/BUILD.gn
-index 687bf8fb030f4..fdac4c00f4508 100644
+index 7c9b12a4b64a4..e1cf9341e5ee9 100644
 --- a/chrome/browser/ui/browser_window/internal/BUILD.gn
 +++ b/chrome/browser/ui/browser_window/internal/BUILD.gn
-@@ -102,6 +102,7 @@ source_set("internal") {
+@@ -100,6 +100,7 @@ source_set("internal") {
        "//chrome/browser/ui:ui_controller_factory",
        "//chrome/browser/ui:ui_features",
        "//chrome/browser/ui/animation",
@@ -1993,10 +1989,10 @@ index 687bf8fb030f4..fdac4c00f4508 100644
        "//chrome/browser/ui/browser_active_state_manager",
        "//chrome/browser/ui/browser_ui_controller",
 diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
-index 50bc26be3e397..7464a2c22b0d5 100644
+index a7402a68951d7..99d12d03aab93 100644
 --- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
 +++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
-@@ -46,6 +46,7 @@
+@@ -47,6 +47,7 @@
  #include "chrome/browser/ttc/core/ttc_keyed_service.h"
  #include "chrome/browser/ui/ai_overlay_dialog/ai_overlay_dialog_controller_views.h"
  #include "chrome/browser/ui/animation/browser_animation_controller.h"
@@ -2004,7 +2000,7 @@ index 50bc26be3e397..7464a2c22b0d5 100644
  #include "chrome/browser/ui/archive/tab_archiver.h"
  #include "chrome/browser/ui/bookmarks/bookmark_bar_controller.h"
  #include "chrome/browser/ui/bookmarks/bookmarks_service_feature.h"
-@@ -283,6 +284,10 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
+@@ -284,6 +285,10 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
      // Auto-archive follows the Space model: it asks it which tabs are pinned.
      tab_archiver_ = std::make_unique<stedding::TabArchiver>(
          *browser, *browser->GetProfile()->GetPrefs());
@@ -2016,7 +2012,7 @@ index 50bc26be3e397..7464a2c22b0d5 100644
          *browser);
    }
 diff --git a/chrome/browser/ui/browser_window/public/browser_window_features.h b/chrome/browser/ui/browser_window/public/browser_window_features.h
-index 2d5ad740fca16..50776065faf38 100644
+index a57a32afaa175..26f29a85c4a57 100644
 --- a/chrome/browser/ui/browser_window/public/browser_window_features.h
 +++ b/chrome/browser/ui/browser_window/public/browser_window_features.h
 @@ -120,6 +120,7 @@ class SpaceModel;
@@ -2053,7 +2049,7 @@ index 43a700fcadd34..7fc1ff3f52ef9 100644
      {IDC_SHOW_HISTORY, ui::EF_COMMAND_DOWN, ui::VKEY_Y},
      {IDC_VIEW_SOURCE, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::VKEY_U},
 diff --git a/chrome/browser/ui/spaces/BUILD.gn b/chrome/browser/ui/spaces/BUILD.gn
-index 5b0f379743d3b..27533f7a8d6cf 100644
+index 296a24836898b..5dd67d5fa1fa3 100644
 --- a/chrome/browser/ui/spaces/BUILD.gn
 +++ b/chrome/browser/ui/spaces/BUILD.gn
 @@ -21,6 +21,7 @@ source_set("spaces") {
@@ -5010,10 +5006,10 @@ index 02a7256de2133..bc21e3853e63d 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/tabs/tab_menu_model.cc b/chrome/browser/ui/tabs/tab_menu_model.cc
-index 7994a0e8fa70a..2fb5376ef08cf 100644
+index bf6ec80d0928f..a6d12391b5a9c 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model.cc
 +++ b/chrome/browser/ui/tabs/tab_menu_model.cc
-@@ -250,11 +250,14 @@ void TabMenuModel::BuildStedding(int index) {
+@@ -251,11 +251,14 @@ void TabMenuModel::BuildStedding(int index) {
                            IDS_TAB_CXMENU_SOUND_MUTE_SITE, num_tabs)
                      : l10n_util::GetPluralStringFUTF16(
                            IDS_TAB_CXMENU_SOUND_UNMUTE_SITE, num_tabs));
@@ -5029,7 +5025,7 @@ index 7994a0e8fa70a..2fb5376ef08cf 100644
  
    AddSeparator(ui::NORMAL_SEPARATOR);
    AddItem(TabStripModel::CommandCopyURL,
-@@ -721,12 +724,14 @@ void TabMenuModel::Build(int index) {
+@@ -730,12 +733,14 @@ void TabMenuModel::Build(int index) {
                                               num_tabs));
      AddItemWithStringId(TabStripModel::CommandSteddingSleepOthersInSpace,
                          IDS_STEDDING_SLEEP_OTHERS_IN_SPACE);
@@ -5047,10 +5043,10 @@ index 7994a0e8fa70a..2fb5376ef08cf 100644
      AddItemWithStringId(TabStripModel::CommandSteddingRenameTab,
                          IDS_STEDDING_RENAME_TAB);
 diff --git a/chrome/browser/ui/tabs/tab_menu_model_unittest.cc b/chrome/browser/ui/tabs/tab_menu_model_unittest.cc
-index 3bf8f64313f97..494a9734cbfcf 100644
+index d257d09c799a5..4ee53e2da7a92 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model_unittest.cc
 +++ b/chrome/browser/ui/tabs/tab_menu_model_unittest.cc
-@@ -104,6 +104,7 @@ TEST_F(TabMenuModelTest, SteddingOrder) {
+@@ -106,6 +106,7 @@ TEST_F(TabMenuModelTest, SteddingOrder) {
          TabStripModel::CommandToggleSiteMuted,
          TabStripModel::CommandSteddingResetToHome,
          TabStripModel::CommandSteddingSetHome,
@@ -5058,7 +5054,7 @@ index 3bf8f64313f97..494a9734cbfcf 100644
          -1,
          TabStripModel::CommandCopyURL,
          TabStripModel::CommandSteddingCopyMarkdownLink,
-@@ -380,6 +381,9 @@ TEST_F(TabMenuModelTest, ExtensionItems) {
+@@ -382,6 +383,9 @@ TEST_F(TabMenuModelTest, ExtensionItems) {
  #endif
  
  TEST_F(TabMenuModelTest, EphemeralGroupOmitsRemoveFromGroup) {
@@ -5069,7 +5065,7 @@ index 3bf8f64313f97..494a9734cbfcf 100644
    // Initialize MenuManager for the TestingProfile.
    extensions::MenuManagerFactory::GetInstance()->SetTestingFactoryAndUse(
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index dac395a982115..1bef1d9ac5b1e 100644
+index fe7f0b8e1cead..b839a55b30c2b 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -15,6 +15,7 @@
@@ -5080,7 +5076,7 @@ index dac395a982115..1bef1d9ac5b1e 100644
  #include <vector>
  
  #include "base/auto_reset.h"
-@@ -2888,6 +2889,7 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -2906,6 +2907,7 @@ bool TabStripModel::IsContextMenuCommandEnabled(
      case CommandSteddingSleepOthersInSpace:
      case CommandSteddingResetToHome:
      case CommandSteddingSetHome:
@@ -5088,7 +5084,7 @@ index dac395a982115..1bef1d9ac5b1e 100644
      case CommandSteddingRenameTab:
      case CommandSteddingMoveToSpaceMenu:
      case CommandSteddingMoveToSpaceFirst:
-@@ -3305,6 +3307,7 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -3323,6 +3325,7 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
      case CommandSteddingSleepOthersInSpace:
      case CommandSteddingResetToHome:
      case CommandSteddingSetHome:
@@ -5096,7 +5092,7 @@ index dac395a982115..1bef1d9ac5b1e 100644
      case CommandSteddingRenameTab:
      case CommandSteddingMoveToSpaceMenu:
      case CommandSteddingMoveToSpaceFirst:
-@@ -5297,6 +5300,82 @@ bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
+@@ -5312,6 +5315,82 @@ bool TabStripModel::MoveTabsToFolder(const std::vector<int> indices,
    return moved;
  }
  
@@ -5180,10 +5176,10 @@ index dac395a982115..1bef1d9ac5b1e 100644
      const std::vector<int>& indices,
      int destination_index,
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.h b/chrome/browser/ui/tabs/tab_strip_model.h
-index c1e61a202c3b6..db2c9c0758373 100644
+index 47cdd786cb158..fce27ad7c9884 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.h
 +++ b/chrome/browser/ui/tabs/tab_strip_model.h
-@@ -757,6 +757,15 @@ class TabStripModel {
+@@ -761,6 +761,15 @@ class TabStripModel {
    // of the folder is shown on the way out.
    void CloseFolderTabs(tabs::FolderTabCollection* folder);
  
@@ -5200,10 +5196,10 @@ index c1e61a202c3b6..db2c9c0758373 100644
    // The tabs take on the pinnedness of the tabs already in the group. Tabs
    // before the group will move to the start, while tabs after the group will
 diff --git a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
-index 624e96bdc3e83..76e68c0e01cc1 100644
+index 12ce4889defbd..d1f996909883c 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model_unittest.cc
-@@ -7197,6 +7197,97 @@ TEST_F(TabStripModelTest, CloseFolderTabsClosesACollapsedFolderAtOnce) {
+@@ -7198,6 +7198,97 @@ TEST_F(TabStripModelTest, CloseFolderTabsClosesACollapsedFolderAtOnce) {
    tabstrip()->CloseAllTabs();
  }
  
@@ -5302,10 +5298,10 @@ index 624e96bdc3e83..76e68c0e01cc1 100644
    tabstrip()->AppendWebContents(CreateWebContents(), true);
    tabstrip()->AddToNewGroup({0});
 diff --git a/chrome/browser/ui/toasts/BUILD.gn b/chrome/browser/ui/toasts/BUILD.gn
-index 9ed4bc17ac364..e808b89965643 100644
+index ef1ed2e859e5d..b2b589fb594b8 100644
 --- a/chrome/browser/ui/toasts/BUILD.gn
 +++ b/chrome/browser/ui/toasts/BUILD.gn
-@@ -60,9 +60,11 @@ source_set("impl") {
+@@ -59,9 +59,11 @@ source_set("impl") {
      "//chrome/browser/profiles:profile",
      "//chrome/browser/send_tab_to_self",
      "//chrome/browser/skills:public",
@@ -5315,13 +5311,13 @@ index 9ed4bc17ac364..e808b89965643 100644
      "//chrome/browser/ui/stedding/screenshot",
 +    "//chrome/browser/ui:stedding_ui_metrics",
      "//chrome/browser/translate",
+     "//chrome/browser/ttc/core:features",
      "//chrome/browser/ui:browser_commands",
-     "//chrome/browser/ui:browser_element_identifiers",
 diff --git a/chrome/browser/ui/toasts/api/toast_id.cc b/chrome/browser/ui/toasts/api/toast_id.cc
-index ce12a57bdf193..ff1c5c164751c 100644
+index a8ace767963c4..f8967c3457062 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.cc
 +++ b/chrome/browser/ui/toasts/api/toast_id.cc
-@@ -133,6 +133,10 @@ std::string_view GetToastName(ToastId toast_id) {
+@@ -137,6 +137,10 @@ std::string_view GetToastName(ToastId toast_id) {
        return "SteddingCaptureSaved";
      case ToastId::kSteddingRouted:
        return "SteddingRouted";
@@ -5333,26 +5329,26 @@ index ce12a57bdf193..ff1c5c164751c 100644
  
    NOTREACHED();
 diff --git a/chrome/browser/ui/toasts/api/toast_id.h b/chrome/browser/ui/toasts/api/toast_id.h
-index 1bcfadb40eda5..2987a699cfde6 100644
+index 9f4458abbc163..cf055424825aa 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.h
 +++ b/chrome/browser/ui/toasts/api/toast_id.h
-@@ -89,7 +89,13 @@ enum class ToastId {
+@@ -91,7 +91,13 @@ enum class ToastId {
    // A tab moved to the Space its site is routed to (docs/features/routing.md
    // D4); the button undoes it.
-   kSteddingRouted = 63,
+   kSteddingRouted = 65,
 -  kMaxValue = kSteddingRouted,
 +  // The site's cookies cleared and the page reloaded
 +  // (docs/features/commandbar.md K24).
-+  kSteddingSiteCookiesCleared = 64,
++  kSteddingSiteCookiesCleared = 66,
 +  // Tabs the user closed (docs/features/tabs.md R25); the button reopens
 +  // them where they were (R27).
-+  kSteddingTabsClosed = 65,
++  kSteddingTabsClosed = 67,
 +  kMaxValue = kSteddingTabsClosed,
  };
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
  
 diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
-index ea9ccdf3108b1..fa3241ca7173b 100644
+index 8c40807d8b24e..13f6665040488 100644
 --- a/chrome/browser/ui/toasts/toast_controller.cc
 +++ b/chrome/browser/ui/toasts/toast_controller.cc
 @@ -33,6 +33,7 @@
@@ -5363,7 +5359,7 @@ index ea9ccdf3108b1..fa3241ca7173b 100644
  #include "chrome/browser/ui/toasts/api/toast_id.h"
  #include "chrome/browser/ui/toasts/api/toast_registry.h"
  #include "chrome/browser/ui/toasts/api/toast_specification.h"
-@@ -265,6 +266,14 @@ void ToastController::UpdateToastWidgetVisibility(bool show_toast_widget) {
+@@ -278,6 +279,14 @@ void ToastController::UpdateToastWidgetVisibility(bool show_toast_widget) {
  }
  
  bool ToastController::ShouldRenderToastOverWebContents() {
@@ -5379,18 +5375,18 @@ index ea9ccdf3108b1..fa3241ca7173b 100644
                                  base::to_address(browser_window_interface_))
                                  ->ShouldHideUIForFullscreen();
 diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
-index af6e8f89cbe5e..c0d9f0b75b01b 100644
+index 5281953918ead..d572873dff7e2 100644
 --- a/chrome/browser/ui/toasts/toast_service.cc
 +++ b/chrome/browser/ui/toasts/toast_service.cc
-@@ -20,6 +20,7 @@
- #include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
+@@ -21,6 +21,7 @@
  #include "chrome/browser/skills/skills_ui_window_controller.h"
  #include "chrome/browser/translate/chrome_translate_client.h"
+ #include "chrome/browser/ttc/core/features.h"
 +#include "chrome/browser/ui/archive/closed_tabs_undo.h"
  #include "chrome/browser/ui/browser_commands.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-@@ -439,6 +440,40 @@ void ToastService::RegisterToasts(
+@@ -426,6 +427,40 @@ void ToastService::RegisterToasts() {
                                 base::Unretained(browser_window_interface)))
            .Build());
  
@@ -5432,7 +5428,7 @@ index af6e8f89cbe5e..c0d9f0b75b01b 100644
        ToastId::kSkillSaved,
        ToastSpecification::Builder(
 diff --git a/chrome/browser/ui/toasts/toast_view.cc b/chrome/browser/ui/toasts/toast_view.cc
-index 00a2ed2b1c5ad..ca1c95c8996e7 100644
+index 8b3c567466770..bf4c638a32297 100644
 --- a/chrome/browser/ui/toasts/toast_view.cc
 +++ b/chrome/browser/ui/toasts/toast_view.cc
 @@ -28,6 +28,8 @@
@@ -5444,7 +5440,7 @@ index 00a2ed2b1c5ad..ca1c95c8996e7 100644
  #include "ui/views/controls/button/image_button.h"
  #include "ui/views/controls/button/image_button_factory.h"
  #include "ui/views/controls/button/md_text_button.h"
-@@ -472,8 +474,17 @@ gfx::Rect ToastView::GetBubbleBounds() {
+@@ -480,8 +482,17 @@ gfx::Rect ToastView::GetBubbleBounds() {
  
    // Take bubble out of its original bounds to cross "line of death", unless in
    // fullscreen mode where the top container isn't rendered.
@@ -5464,7 +5460,7 @@ index 00a2ed2b1c5ad..ca1c95c8996e7 100644
    return gfx::Rect(x, y, width, preferred_size.height());
  }
 diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
-index 44b1137063d0b..fa17387bbf145 100644
+index 39f62dabeff60..8a62d59401988 100644
 --- a/chrome/browser/ui/views/commandbar/BUILD.gn
 +++ b/chrome/browser/ui/views/commandbar/BUILD.gn
 @@ -8,6 +8,7 @@ source_set("commandbar") {
@@ -5493,7 +5489,7 @@ index 44b1137063d0b..fa17387bbf145 100644
    ]
 @@ -50,9 +53,11 @@ source_set("unit_tests") {
      "//chrome/browser/profiles:profile",
-     "//chrome/browser/ui",
+     "//chrome/browser",
      "//chrome/browser/ui/spaces",
 +    "//chrome/browser/ui/stedding:address_row",
      "//chrome/browser/ui/stedding:prefs",
@@ -6828,10 +6824,10 @@ index 15f984e751498..0225937770fa4 100644
        CardGutter(views()) == 0
            ? 0.f
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 70d526e81fc38..39ef2b15ed604 100644
+index cda282b884f36..1f7d25eb34d5b 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -60,16 +60,21 @@
+@@ -61,16 +61,21 @@
  #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
  #include "chrome/browser/ui/views/frame/shadow_frame_view.h"
  #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
@@ -6868,7 +6864,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
  #include "ui/views/focus/focus_manager.h"
  #include "ui/views/interaction/element_tracker_views.h"
  #include "ui/views/layout/box_layout.h"
-@@ -446,7 +455,12 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -464,7 +473,12 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
    // Views that go into the content area above
    // --------------
  
@@ -6882,7 +6878,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
    resize_area_->SetProperty(views::kViewIgnoredByLayoutKey, true);
    resize_area_->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
    views::FocusRing::Install(resize_area_);
-@@ -465,6 +479,12 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -483,6 +497,12 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
          stedding::prefs::kSidebarClosedForm,
          base::BindRepeating(&VerticalTabStripRegionView::OnClosedFormChanged,
                              base::Unretained(this)));
@@ -6895,7 +6891,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
    }
  
    state_controller_->SetDelegate(this);
-@@ -664,20 +684,34 @@ void VerticalTabStripRegionView::UpdateInteriorMargin(bool collapsed) {
+@@ -682,20 +702,34 @@ void VerticalTabStripRegionView::UpdateInteriorMargin(bool collapsed) {
    // than in the rail alone (3 DIP left of centre until 2026-09-05). The
    // margins collapse with the children's own, so the containers get the
    // shift spelled out.
@@ -6936,7 +6932,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
      applied_rail_form_.reset();
    }
  }
-@@ -1006,6 +1040,15 @@ void VerticalTabStripRegionView::Layout(PassKey) {
+@@ -1029,6 +1063,15 @@ void VerticalTabStripRegionView::Layout(PassKey) {
    resize_area_->SetBoundsRect(gfx::Rect(bounds().right() - resize_area_width_,
                                          0, resize_area_width_,
                                          bounds().height()));
@@ -6952,7 +6948,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
    shadow_frame_->SetBoundsRect(GetLocalBounds());
  
    // Ensure that we update the drop arrow position so that it does not render in
-@@ -1126,6 +1169,51 @@ bool VerticalTabStripRegionView::HasOrganizerPanelView() const {
+@@ -1147,6 +1190,51 @@ bool VerticalTabStripRegionView::HasOrganizerPanelView() const {
    return organizer_panel_view_ != nullptr;
  }
  
@@ -7004,7 +7000,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
  void VerticalTabStripRegionView::HandleMouseExited() {
    // On Windows, we get mouse exit events when moving between the caption area
    // and client as well as when we transition between web contents area
-@@ -1297,6 +1385,29 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
+@@ -1321,6 +1409,29 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
    }
  }
  
@@ -7034,7 +7030,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
  void VerticalTabStripRegionView::SetCollapsedStateUpdatedCallback(
      base::RepeatingCallback<void(bool)> callback) {
    update_state_controller_collapsed_callback_ = std::move(callback);
-@@ -2121,6 +2232,15 @@ int VerticalTabStripRegionView::SteddingCardGutter(
+@@ -2131,6 +2242,15 @@ int VerticalTabStripRegionView::SteddingCardGutter(
          return 0;
        }
      }
@@ -7050,7 +7046,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
      if (strip && strip->IsHiddenCompletely()) {
        return 0;
      }
-@@ -2128,6 +2248,18 @@ int VerticalTabStripRegionView::SteddingCardGutter(
+@@ -2138,6 +2258,18 @@ int VerticalTabStripRegionView::SteddingCardGutter(
    return stedding::kCardGutter.Get();
  }
  
@@ -7069,7 +7065,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
  // static
  const VerticalTabStripRegionView* VerticalTabStripRegionView::StripOf(
      const BrowserView* browser_view) {
-@@ -2194,6 +2326,33 @@ void VerticalTabStripRegionView::OnClosedFormChanged() {
+@@ -2204,6 +2336,33 @@ void VerticalTabStripRegionView::OnClosedFormChanged() {
    }
  }
  
@@ -7103,7 +7099,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
  bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
    // Only a hidden sidebar the window shows: in F11 or a page's own full
    // screen the strip is not drawn at all, and a reveal there left it open
-@@ -2203,7 +2362,8 @@ bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
+@@ -2213,7 +2372,8 @@ bool VerticalTabStripRegionView::CanRevealFromLeadingEdge() const {
    // and skips that, the way it already skips the real cursor.
    return IsHiddenCompletely() && !is_expanded_on_hover_ && browser_view() &&
           GetVisible() && browser_view()->GetVisible() &&
@@ -7113,7 +7109,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
           force_collapse_lock_count_ == 0 && keep_current_state_lock_count_ == 0;
  }
  
-@@ -2278,6 +2438,8 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+@@ -2288,6 +2448,8 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
    // otherwise, past the gutter's worth of interior margin the collapsed
    // strip carries (sidebar Y6, Y8). With the open padding the toggle sat
    // 3.5 DIP right of the rows' centre in a container narrower than itself.
@@ -7122,7 +7118,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
    const int padding =
        arc_style && rail
            ? stedding::kRailRowPadding
-@@ -2285,13 +2447,13 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+@@ -2295,13 +2457,13 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
                  LayoutConstant::kVerticalTabStripHorizontalPadding);
    top_button_container_->SetProperty(
        views::kMarginsKey,
@@ -7139,7 +7135,7 @@ index 70d526e81fc38..39ef2b15ed604 100644
      return;
    }
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 23d4c1fa43ed3..1039d02f17d9f 100644
+index 91f035d628c1b..275ea6a40e20e 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 @@ -22,6 +22,7 @@
@@ -7150,7 +7146,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
  #include "chrome/browser/ui/views/tabs/common/folder_drag_target.h"
  #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
  #include "chrome/browser/ui/views/tabs/hovercard/tab_hover_card_controller.h"
-@@ -164,6 +165,9 @@ class VerticalTabStripRegionView final
+@@ -154,6 +155,9 @@ class VerticalTabStripRegionView final
    void OnMouseEntered(const ui::MouseEvent& event) override;
    void OnMouseMoved(const ui::MouseEvent& event) override;
    void OnMouseExited(const ui::MouseEvent& event) override;
@@ -7160,7 +7156,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
  
    std::unique_ptr<ExpandOnHoverLock> GetExpandOnHoverLock(
        ExpandOnHoverLockType lock_type) override;
-@@ -198,7 +202,9 @@ class VerticalTabStripRegionView final
+@@ -188,7 +192,9 @@ class VerticalTabStripRegionView final
      return target_collapse_state_.uncollapsed_width;
    }
  
@@ -7171,7 +7167,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    VerticalTabStripTopContainer* top_button_container_for_testing() {
      return top_button_container_;
    }
-@@ -223,9 +229,14 @@ class VerticalTabStripRegionView final
+@@ -213,9 +219,14 @@ class VerticalTabStripRegionView final
    // animations: the rail's, or none when the sidebar closes to nothing.
    int CollapsedWidthNow() const;
    // The page card's gutter in `browser_view` now: the card_gutter parameter,
@@ -7188,7 +7184,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    // `browser_view`'s strip, if it has one, and its closed width.
    static const VerticalTabStripRegionView* StripOf(
        const BrowserView* browser_view);
-@@ -349,8 +360,16 @@ class VerticalTabStripRegionView final
+@@ -333,8 +344,16 @@ class VerticalTabStripRegionView final
                           const gfx::Rect& rect) const override;
    // How far past the strip's edge the handle reaches: the card's gutter.
    int ResizeHandleReach() const;
@@ -7205,7 +7201,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    PrefChangeRegistrar closed_form_registrar_;
    // sidebar Y19: pointer moves anywhere in the window, so a hidden sidebar
    // hears the pointer reach the window's leading edge over the page, where no
-@@ -368,6 +387,11 @@ class VerticalTabStripRegionView final
+@@ -352,6 +371,11 @@ class VerticalTabStripRegionView final
    // The gutter's worth of interior margin the collapsed strip carries
    // (sidebar Y6), for the button containers' margins in ApplyRailForm.
    int rail_left_ = 0;
@@ -7217,7 +7213,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    // Whether the rows are in their rail form right now (ApplyRailForm):
    // the floating Space name stays away in the rail (sidebar Y14).
    bool rail_form_ = false;
-@@ -399,10 +423,14 @@ class VerticalTabStripRegionView final
+@@ -383,10 +407,14 @@ class VerticalTabStripRegionView final
    raw_ptr<views::Separator> top_button_separator_ = nullptr;
    raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
    raw_ptr<views::View> gemini_button_ = nullptr;
@@ -7234,7 +7230,7 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    void UpdateInteriorMargin(bool collapsed);
  
    const raw_ptr<tabs::VerticalTabStripStateController> state_controller_;
-@@ -449,6 +477,13 @@ class VerticalTabStripRegionView final
+@@ -434,6 +462,13 @@ class VerticalTabStripRegionView final
    // Closes the unpinned tabs of the active Space; the Clear affordance.
    void ClearCurrentSpaceTabs();
  
@@ -7249,10 +7245,10 @@ index 23d4c1fa43ed3..1039d02f17d9f 100644
    // Stedding: names the Space title row after the active Space and relays
    // out the Space boundary.
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-index 2a0261a92f771..d6ad8950a0ed3 100644
+index fe516ba12f735..05556d83583fa 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-@@ -767,15 +767,22 @@ void LocationBarView::CentreSteddingCluster() {
+@@ -782,15 +782,22 @@ void LocationBarView::CentreSteddingCluster() {
    // toolbar T18: the chip, the address and the page actions read as one
    // cluster on the field's centre, as Safari's compact bar draws them,
    // instead of the address hugging the field's left edge and the actions its
@@ -7279,7 +7275,7 @@ index 2a0261a92f771..d6ad8950a0ed3 100644
        ime_inline_autocomplete_view_->GetVisible() ||
        omnibox_additional_text_view_->GetVisible()) {
      return;
-@@ -830,6 +837,12 @@ void LocationBarView::CentreSteddingCluster() {
+@@ -845,6 +852,12 @@ void LocationBarView::CentreSteddingCluster() {
      view->SetX(view->x() + shift);
    }
    omnibox_view_->SetBounds(box.x() + shift, box.y(), text_width, box.height());
@@ -7292,7 +7288,7 @@ index 2a0261a92f771..d6ad8950a0ed3 100644
  }
  
  void LocationBarView::SteddingClusterMayHaveChanged() {
-@@ -1128,7 +1141,11 @@ void LocationBarView::Layout(PassKey) {
+@@ -1145,7 +1158,11 @@ void LocationBarView::Layout(PassKey) {
    }
  
    LayoutSuperclass<View>(this);
@@ -7304,7 +7300,7 @@ index 2a0261a92f771..d6ad8950a0ed3 100644
  }
  
  void LocationBarView::OnThemeChanged() {
-@@ -1533,6 +1550,15 @@ void LocationBarView::RefreshBackground() {
+@@ -1564,6 +1581,15 @@ void LocationBarView::RefreshBackground() {
  
    if (is_popup_mode_) {
      SetBackground(views::CreateSolidBackground(background_color_));
@@ -7320,7 +7316,7 @@ index 2a0261a92f771..d6ad8950a0ed3 100644
    } else {
      SetBackground(CreateRoundRectBackground(
          background_color_, border_color, size(),
-@@ -1541,8 +1567,16 @@ void LocationBarView::RefreshBackground() {
+@@ -1572,8 +1598,16 @@ void LocationBarView::RefreshBackground() {
    }
  
    // Keep the views::Textfield in sync. It needs an opaque background to
@@ -7340,7 +7336,7 @@ index 2a0261a92f771..d6ad8950a0ed3 100644
    // The divider between indicators and request chips should have the same color
    // as the omnibox.
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.h b/chrome/browser/ui/views/location_bar/location_bar_view.h
-index 96fa2d7dbc148..1abe43e4671a3 100644
+index 704555481e283..58e7975c2f36e 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.h
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
 @@ -139,6 +139,13 @@ class LocationBarView
@@ -7357,7 +7353,7 @@ index 96fa2d7dbc148..1abe43e4671a3 100644
    // Returns the location bar border radius in DIPs.
    int GetBorderRadius() const;
    static int ComputeBorderRadius(gfx::Size size);
-@@ -353,6 +360,10 @@ class LocationBarView
+@@ -355,6 +362,10 @@ class LocationBarView
    void CentreSteddingCluster();
    void SteddingClusterMayHaveChanged();
    std::optional<int> stedding_centre_x_;
@@ -8085,10 +8081,10 @@ index 0000000000000..5f47213f06d37
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
-index 20c31eed03afb..b069c754c1faf 100644
+index 3bb7cc798fb5c..d76e0eb82ea6b 100644
 --- a/chrome/browser/ui/views/tabs/common/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
-@@ -105,11 +105,13 @@ source_set("impl") {
+@@ -107,11 +107,13 @@ source_set("impl") {
    deps = [
      "//base:i18n",
      "//cc/paint",
@@ -8102,7 +8098,7 @@ index 20c31eed03afb..b069c754c1faf 100644
      "//chrome/browser/ui/stedding:menu_rules",
      "//chrome/browser/ui/stedding:tab_menu_verbs",
      "//chrome/browser/ui/stedding:tab_names",
-@@ -273,7 +275,10 @@ source_set("unit_tests") {
+@@ -275,7 +277,10 @@ source_set("unit_tests") {
      "//components/vector_icons",
      "//skia",
      "//testing/gtest",
@@ -8599,13 +8595,13 @@ index bae4501cff4a6..d8e94b3d4c620 100644
 +
  }  // namespace
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
-index 8aef4eba18e72..34df6fbc8115e 100644
+index 9dc74bfba6025..e189a7fdc7b16 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
-@@ -7,10 +7,12 @@
- #include <variant>
+@@ -8,10 +8,12 @@
  #include <vector>
  
+ #include "base/check_deref.h"
 +#include "base/feature_list.h"
  #include "base/memory/weak_ptr.h"
  #include "base/metrics/histogram_functions.h"
@@ -8615,7 +8611,7 @@ index 8aef4eba18e72..34df6fbc8115e 100644
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
  #include "chrome/browser/ui/browser_command_controller.h"
-@@ -18,6 +20,7 @@
+@@ -19,6 +21,7 @@
  #include "chrome/browser/ui/browser_element_identifiers.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -8623,7 +8619,7 @@ index 8aef4eba18e72..34df6fbc8115e 100644
  #include "chrome/browser/ui/spaces/space_model.h"
  #include "chrome/browser/ui/stedding/tab_menu_verbs.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
-@@ -583,6 +586,26 @@ void TabStripCollectionController::CloseFolderTabs(
+@@ -585,6 +588,26 @@ void TabStripCollectionController::CloseFolderTabs(
    model_->CloseFolderTabs(folder);
  }
  
@@ -8651,10 +8647,10 @@ index 8aef4eba18e72..34df6fbc8115e 100644
      tabs::TabInterface* tab,
      TabStripModel::ContextMenuCommand command_id,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h
-index eb6b203d49b29..6e6fd63271504 100644
+index 706310d0a16f4..8bea89c7f199e 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h
-@@ -130,6 +130,11 @@ class TabStripCollectionController : public TabContextMenuController::Delegate {
+@@ -136,6 +136,11 @@ class TabStripCollectionController : public TabContextMenuController::Delegate {
    // Stedding (docs/features/menus.md M7): the folder header's verbs.
    void MoveTabsOutOfFolder(tabs::FolderTabCollection* folder);
    void CloseFolderTabs(tabs::FolderTabCollection* folder);
@@ -8667,10 +8663,10 @@ index eb6b203d49b29..6e6fd63271504 100644
    // Updates the browser theme when focus mode is active for a tab group.
    // Only updates themes for permanent tab groups; non-group focus mode does not
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 4a011a1069f6c..69afb6c892f4d 100644
+index ed25d459af67f..35ec77d9c9d1d 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -791,7 +791,23 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
+@@ -794,7 +794,23 @@ void TabView::OnMouseReleased(const ui::MouseEvent& event) {
    }
    if (event.IsOnlyMiddleMouseButton()) {
      if (HitTestPoint(event.location())) {
@@ -8696,10 +8692,10 @@ index 4a011a1069f6c..69afb6c892f4d 100644
    } else if (event.IsOnlyLeftMouseButton() &&
               !(event.IsShiftDown() || shift_on_press) &&
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index 0e2664e59c7ca..76e7d1bb22c28 100644
+index 4aa645d1b5555..7281c449f496a 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -548,6 +548,7 @@ if (!is_android) {
+@@ -568,6 +568,7 @@ if (!is_android) {
        ":impl",
        ":settings",
        "//base/test:test_support",
@@ -8708,10 +8704,10 @@ index 0e2664e59c7ca..76e7d1bb22c28 100644
        "//chrome/browser:global_features",
        "//chrome/browser/affiliations",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index e6e3762f2f2b9..c14b893c3e00a 100644
+index 7660cd12a3b7b..33c41fc40934f 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -701,9 +701,19 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -722,9 +722,19 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                      "sidebar slides back over it."}));
    html_source->AddString("steddingClosedFormIcons", "Shrink to icons");
    html_source->AddString("steddingClosedFormHidden", "Hide it completely");
@@ -8733,7 +8729,7 @@ index e6e3762f2f2b9..c14b893c3e00a 100644
    html_source->AddString("steddingSpacesTitle", "Spaces");
    html_source->AddString(
        "steddingSpacesIntro",
-@@ -883,6 +893,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -904,6 +914,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingArchive12h", "12 hours");
    html_source->AddString("steddingArchive1d", "1 day");
    html_source->AddString("steddingArchive3d", "3 days");
@@ -8741,7 +8737,7 @@ index e6e3762f2f2b9..c14b893c3e00a 100644
    html_source->AddString("steddingSpaceSleepLabel",
                           "Put a Space to sleep after leaving it");
    html_source->AddString(
-@@ -953,6 +964,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -974,6 +985,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
            "says.",
            "Follows Windows\u2019 animation setting; off stills Stedding "
            "whatever Windows says."));
@@ -8755,7 +8751,7 @@ index e6e3762f2f2b9..c14b893c3e00a 100644
    html_source->AddString(
        "steddingPinsCloseSleepsLabel",
        base::StrCat({key("\u2318W", "Ctrl+W"),
-@@ -960,6 +978,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -981,6 +999,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString("steddingPinsCloseSleepsSubLabel",
                           "The row stays; unpin to remove it. Off closes the "
                           "tab, as Chromium does.");

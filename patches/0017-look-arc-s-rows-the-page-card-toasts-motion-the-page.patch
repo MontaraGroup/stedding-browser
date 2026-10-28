@@ -59,11 +59,11 @@ take these shapes upstream.
  .../tabs/common/stedding_tab_row_rules.cc     | 29 ++++++
  .../tabs/common/stedding_tab_row_rules.h      | 41 +++++++++
  .../common/stedding_tab_row_rules_unittest.cc | 88 +++++++++++++++++++
- .../ui/views/tabs/common/tab_strip_view.cc    | 30 ++++---
+ .../ui/views/tabs/common/tab_strip_view.cc    | 31 ++++---
  .../tabs/common/tab_view_vertical_layout.cc   | 65 ++++++++++++++
  .../tabs/common/tab_view_vertical_layout.h    |  4 +
  .../hovercard/tab_hover_card_controller.cc    |  8 +-
- 40 files changed, 846 insertions(+), 98 deletions(-)
+ 40 files changed, 847 insertions(+), 98 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/motion.cc
  create mode 100644 chrome/browser/ui/stedding/motion.h
  create mode 100644 chrome/browser/ui/stedding/motion_unittest.cc
@@ -780,26 +780,26 @@ index f934c495713d1..4deed16d987f9 100644
  
  #endif  // CHROME_BROWSER_UI_STEDDING_UI_METRICS_H_
 diff --git a/chrome/browser/ui/toasts/BUILD.gn b/chrome/browser/ui/toasts/BUILD.gn
-index 9879f682e771b..295067cf8391c 100644
+index 9491603bcf623..b02261625c934 100644
 --- a/chrome/browser/ui/toasts/BUILD.gn
 +++ b/chrome/browser/ui/toasts/BUILD.gn
-@@ -60,6 +60,8 @@ source_set("impl") {
+@@ -59,6 +59,8 @@ source_set("impl") {
      "//chrome/browser/profiles:profile",
      "//chrome/browser/send_tab_to_self",
      "//chrome/browser/skills:public",
 +    "//chrome/browser/ui/stedding:motion",
 +    "//chrome/browser/ui/stedding/screenshot",
      "//chrome/browser/translate",
+     "//chrome/browser/ttc/core:features",
      "//chrome/browser/ui:browser_commands",
-     "//chrome/browser/ui:browser_element_identifiers",
 diff --git a/chrome/browser/ui/toasts/api/toast_id.cc b/chrome/browser/ui/toasts/api/toast_id.cc
-index 695b2e9c08d37..b8ce68a80aa20 100644
+index 651027f68e200..f845afe6757ea 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.cc
 +++ b/chrome/browser/ui/toasts/api/toast_id.cc
-@@ -127,6 +127,10 @@ std::string_view GetToastName(ToastId toast_id) {
-       return "EmailVerificationError";
-     case ToastId::kAutofillAiSuggestionRemoved:
-       return "AutofillAiSuggestionRemoved";
+@@ -131,6 +131,10 @@ std::string_view GetToastName(ToastId toast_id) {
+       return "TtcGenericError";
+     case ToastId::kTtcNoMicrophoneError:
+       return "TtcNoMicrophoneError";
 +    case ToastId::kSteddingLinkCopiedClean:
 +      return "SteddingLinkCopiedClean";
 +    case ToastId::kSteddingCaptureSaved:
@@ -808,25 +808,25 @@ index 695b2e9c08d37..b8ce68a80aa20 100644
  
    NOTREACHED();
 diff --git a/chrome/browser/ui/toasts/api/toast_id.h b/chrome/browser/ui/toasts/api/toast_id.h
-index c2002a8499dff..313d89b813e53 100644
+index b5818a5a7f3bd..0a257e8f0a986 100644
 --- a/chrome/browser/ui/toasts/api/toast_id.h
 +++ b/chrome/browser/ui/toasts/api/toast_id.h
-@@ -81,7 +81,12 @@ enum class ToastId {
-   kScheduledRestartOnIdle = 58,
-   kEmailVerificationError = 59,
+@@ -83,7 +83,12 @@ enum class ToastId {
    kAutofillAiSuggestionRemoved = 60,
--  kMaxValue = kAutofillAiSuggestionRemoved,
+   kTtcGenericError = 61,
+   kTtcNoMicrophoneError = 62,
+-  kMaxValue = kTtcNoMicrophoneError,
 +  // Stedding: a link copied with its tracking parameters removed
 +  // (docs/features/copy-link.md L5) and a screenshot delivered
 +  // (docs/features/screenshot.md C5).
-+  kSteddingLinkCopiedClean = 61,
-+  kSteddingCaptureSaved = 62,
++  kSteddingLinkCopiedClean = 63,
++  kSteddingCaptureSaved = 64,
 +  kMaxValue = kSteddingCaptureSaved,
  };
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
  
 diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
-index 4b17a935547ff..ea9ccdf3108b1 100644
+index 77b520e599e7a..8c40807d8b24e 100644
 --- a/chrome/browser/ui/toasts/toast_controller.cc
 +++ b/chrome/browser/ui/toasts/toast_controller.cc
 @@ -4,6 +4,10 @@
@@ -840,7 +840,7 @@ index 4b17a935547ff..ea9ccdf3108b1 100644
  #include <memory>
  #include <optional>
  #include <string>
-@@ -353,6 +357,11 @@ void ToastController::CreateToast(ToastParams params,
+@@ -366,6 +370,11 @@ void ToastController::CreateToast(ToastParams params,
    if (spec->has_throbber()) {
      toast_view->AddThrobber();
    }
@@ -853,7 +853,7 @@ index 4b17a935547ff..ea9ccdf3108b1 100644
    if (spec->has_close_button()) {
      toast_view->AddCloseButton(
 diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
-index 9b2b675d3188c..5ff5f0f408d83 100644
+index 75b8c1991c632..f6d26d9a2597c 100644
 --- a/chrome/browser/ui/toasts/toast_service.cc
 +++ b/chrome/browser/ui/toasts/toast_service.cc
 @@ -4,6 +4,9 @@
@@ -866,7 +866,7 @@ index 9b2b675d3188c..5ff5f0f408d83 100644
  #include <memory>
  
  #include "base/feature_list.h"
-@@ -394,6 +397,33 @@ void ToastService::RegisterToasts(
+@@ -381,6 +384,33 @@ void ToastService::RegisterToasts() {
            .AddGlobalScoped()
            .Build());
  
@@ -901,10 +901,10 @@ index 9b2b675d3188c..5ff5f0f408d83 100644
        ToastId::kSkillSaved,
        ToastSpecification::Builder(
 diff --git a/chrome/browser/ui/toasts/toast_view.cc b/chrome/browser/ui/toasts/toast_view.cc
-index 1ccad3af2426a..00a2ed2b1c5ad 100644
+index f4146712eba13..8b3c567466770 100644
 --- a/chrome/browser/ui/toasts/toast_view.cc
 +++ b/chrome/browser/ui/toasts/toast_view.cc
-@@ -375,7 +375,7 @@ void ToastView::AnimationProgressed(const gfx::Animation* animation) {
+@@ -383,7 +383,7 @@ void ToastView::AnimationProgressed(const gfx::Animation* animation) {
  }
  
  void ToastView::AnimateIn() {
@@ -913,7 +913,7 @@ index 1ccad3af2426a..00a2ed2b1c5ad 100644
      return;
    }
  
-@@ -496,7 +496,7 @@ void ToastView::OnThemeChanged() {
+@@ -488,7 +488,7 @@ gfx::Rect ToastView::GetBubbleBounds() {
  
  void ToastView::AnimateOut(base::OnceClosure callback,
                             bool show_height_animation) {
@@ -923,7 +923,7 @@ index 1ccad3af2426a..00a2ed2b1c5ad 100644
      return;
    }
 diff --git a/chrome/browser/ui/toasts/toast_view.h b/chrome/browser/ui/toasts/toast_view.h
-index 114ce4245a3e8..457daeba5ffa1 100644
+index f61a1be8bad91..07b3fc1e24d7e 100644
 --- a/chrome/browser/ui/toasts/toast_view.h
 +++ b/chrome/browser/ui/toasts/toast_view.h
 @@ -100,6 +100,9 @@ class ToastView : public views::BubbleDialogDelegateView,
@@ -936,7 +936,7 @@ index 114ce4245a3e8..457daeba5ffa1 100644
    // Animates out the toast, then closes the toast widget.
    void Close(ToastCloseReason close_reason);
  
-@@ -145,6 +148,7 @@ class ToastView : public views::BubbleDialogDelegateView,
+@@ -144,6 +147,7 @@ class ToastView : public views::BubbleDialogDelegateView,
    const raw_ptr<const gfx::VectorIcon> icon_ = nullptr;
    const std::optional<ui::ImageModel> image_override_;
    bool render_toast_over_web_contents_;
@@ -945,7 +945,7 @@ index 114ce4245a3e8..457daeba5ffa1 100644
    bool has_action_button_ = false;
    bool has_throbber_ = false;
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index dcfb69696b040..3ac8a15da8aa7 100644
+index 318e00469c7eb..af6f7c485ce58 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -1229,6 +1229,15 @@ gfx::Rect BrowserView::GetFindBarBoundingBox() const {
@@ -965,7 +965,7 @@ index dcfb69696b040..3ac8a15da8aa7 100644
    // otherwise use the contents container.
    auto* const immersive_mode_controller =
 diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
-index 6a221594b09f0..3daf9d542af37 100644
+index c5fbcca726471..b5824f9cba52c 100644
 --- a/chrome/browser/ui/views/frame/browser_widget.cc
 +++ b/chrome/browser/ui/views/frame/browser_widget.cc
 @@ -4,6 +4,8 @@
@@ -977,7 +977,7 @@ index 6a221594b09f0..3daf9d542af37 100644
  #include <memory>
  #include <utility>
  
-@@ -509,6 +511,12 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
+@@ -501,6 +503,12 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
            web_app::AppBrowserController::From(browser_view_->browser())) {
      key.app_controller = app_controller;
      key.app_background_color = app_controller->GetBackgroundColor();
@@ -1326,7 +1326,7 @@ index 7cf111ea1a7df..eaff7f63ba93f 100644
             const_cast<SpaceModel&>(*model_).SpaceForTab(tab) != *menu_space_;
    }
 diff --git a/chrome/browser/ui/views/status_bubble_views.cc b/chrome/browser/ui/views/status_bubble_views.cc
-index e85542cf2aec2..052e5cbc23326 100644
+index ed3565d194160..c41782cdf5b03 100644
 --- a/chrome/browser/ui/views/status_bubble_views.cc
 +++ b/chrome/browser/ui/views/status_bubble_views.cc
 @@ -4,6 +4,9 @@
@@ -1412,7 +1412,7 @@ index e85542cf2aec2..052e5cbc23326 100644
    bubble_rect.Inset(
        gfx::InsetsF()
            .set_left(style_ == BubbleStyle::kStandardRight ? 0 : inset)
-@@ -798,6 +827,12 @@ void StatusBubbleViews::Reposition() {
+@@ -799,6 +828,12 @@ void StatusBubbleViews::Reposition() {
    int height = GetPreferredHeight();
    int base_view_height = base_view_->bounds().height();
    gfx::Point origin(-overlap, base_view_height - height + overlap);
@@ -1426,10 +1426,10 @@ index e85542cf2aec2..052e5cbc23326 100644
  }
  
 diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
-index 192c546fe7c91..9bc9ca98919e5 100644
+index acb9086bdac6b..889a68e4a82ff 100644
 --- a/chrome/browser/ui/views/tabs/common/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
-@@ -85,6 +85,8 @@ source_set("impl") {
+@@ -87,6 +87,8 @@ source_set("impl") {
      "tab_view.h",
      "tab_view_horizontal_layout.cc",
      "tab_view_horizontal_layout.h",
@@ -1438,7 +1438,7 @@ index 192c546fe7c91..9bc9ca98919e5 100644
      "tab_view_vertical_layout.cc",
      "tab_view_vertical_layout.h",
      "unpinned_tab_container_view.cc",
-@@ -100,6 +102,7 @@ source_set("impl") {
+@@ -102,6 +104,7 @@ source_set("impl") {
      "//chrome/browser:primitives",
      "//chrome/browser/dictation",
      "//chrome/browser/glic",
@@ -1446,7 +1446,7 @@ index 192c546fe7c91..9bc9ca98919e5 100644
      "//chrome/browser/glic/browser_ui:glow",
      "//chrome/browser/glic/browser_ui:glow_controller",
      "//chrome/browser/tab_group_sync:factories",
-@@ -235,6 +238,7 @@ source_set("unit_tests") {
+@@ -237,6 +240,7 @@ source_set("unit_tests") {
    testonly = true
    sources = [
      "folder_drag_target_unittest.cc",
@@ -1631,7 +1631,7 @@ index 0000000000000..1a58f9bd0376a
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
-index 93734af34c6d0..fb2514157758b 100644
+index c25d2df9e8970..49cead7bc4939 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
 @@ -4,10 +4,6 @@
@@ -1645,7 +1645,7 @@ index 93734af34c6d0..fb2514157758b 100644
  #include "base/callback_list.h"
  #include "base/functional/bind.h"
  #include "base/memory/raw_ptr.h"
-@@ -18,12 +14,14 @@
+@@ -18,11 +14,14 @@
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
  #include "chrome/browser/ui/color/chrome_color_id.h"
  #include "chrome/browser/ui/layout_constants.h"
@@ -1655,12 +1655,12 @@ index 93734af34c6d0..fb2514157758b 100644
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/views/frame/browser_view.h"
  #include "chrome/browser/ui/views/frame/frame_separator.h"
- #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 +#include "chrome/browser/ui/views/tabs/common/clear_tabs_separator.h"
  #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
-@@ -39,10 +37,14 @@
+@@ -38,10 +37,14 @@
  #include "components/prefs/pref_service.h"
  #include "components/tabs/public/tab_collection_types.h"
  #include "components/tabs/public/tab_group.h"
@@ -1675,7 +1675,7 @@ index 93734af34c6d0..fb2514157758b 100644
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/layout/layout_types.h"
  #include "ui/views/layout/proposed_layout.h"
-@@ -289,20 +291,28 @@ void TabStripView::SetUpSpaceBoundary(
+@@ -286,20 +289,28 @@ void TabStripView::SetUpSpaceBoundary(
    }
    auto clear_line = std::make_unique<ClearTabsSeparator>();
    clear_line_ = clear_line.get();
@@ -1711,7 +1711,7 @@ index 93734af34c6d0..fb2514157758b 100644
  
  void TabStripView::SetSpaceTitle(const std::u16string& title,
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-index 17bb6201013bb..b1fb0b1a36ae2 100644
+index 666d76572eb50..d0168fd9fcda2 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 @@ -4,6 +4,8 @@
@@ -1722,7 +1722,7 @@ index 17bb6201013bb..b1fb0b1a36ae2 100644
 +
  #include "chrome/browser/glic/browser_ui/tab_underline_view.h"
  #include "chrome/browser/ui/layout_constants.h"
- #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
 @@ -13,6 +15,7 @@
  #include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
@@ -1730,8 +1730,8 @@ index 17bb6201013bb..b1fb0b1a36ae2 100644
 +#include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
  #include "chrome/browser/ui/views/tabs/tab_style_views.h"
- 
-@@ -67,6 +70,14 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
+ #include "ui/views/view_utils.h"
+@@ -68,6 +71,14 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
    const bool is_centered = (TabView().pinned_ || TabView().collapsed_) &&
                             !TabView().IsInExpandOnHover(width);
  
@@ -1746,7 +1746,7 @@ index 17bb6201013bb..b1fb0b1a36ae2 100644
    int placed_children = 0;
    for (const auto& child : tab_children_configs_) {
      const bool can_render_child =
-@@ -75,6 +86,32 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
+@@ -76,6 +87,32 @@ views::ProposedLayout TabViewVerticalLayout::CalculateProposedLayout(
              : (child.min_width + child.padding < bounds_remaining.width() ||
                 placed_children < 2);
      const bool is_child_visible = IsChildVisible(child.view, width);
@@ -1779,7 +1779,7 @@ index 17bb6201013bb..b1fb0b1a36ae2 100644
      if (is_child_visible && can_render_child) {
        layouts.child_layouts.emplace_back(
            child.view.get(), is_child_visible,
-@@ -146,6 +183,24 @@ gfx::Rect TabViewVerticalLayout::GetChildBounds(const gfx::Rect& container,
+@@ -147,6 +184,24 @@ gfx::Rect TabViewVerticalLayout::GetChildBounds(const gfx::Rect& container,
    return gfx::Rect(x, y, preferred_width, preferred_height);
  }
  
@@ -1804,7 +1804,7 @@ index 17bb6201013bb..b1fb0b1a36ae2 100644
  bool TabViewVerticalLayout::IsChildVisible(const views::View* child_view,
                                             const int width) const {
    if (child_view == TabView().title_) {
-@@ -166,11 +221,21 @@ bool TabViewVerticalLayout::IsChildVisible(const views::View* child_view,
+@@ -168,11 +223,21 @@ bool TabViewVerticalLayout::IsChildVisible(const views::View* child_view,
    }
  
    if (child_view == TabView().icon_) {
@@ -1849,7 +1849,7 @@ index 2d721ef6ff80b..a5973a121d8a3 100644
                             const TabChildConfig& config,
                             const bool center) const;
 diff --git a/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_controller.cc b/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_controller.cc
-index e9b830d6bc64b..33bc38d57b837 100644
+index 4c97d6087c950..53ec43c920956 100644
 --- a/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_controller.cc
 +++ b/chrome/browser/ui/views/tabs/hovercard/tab_hover_card_controller.cc
 @@ -4,6 +4,8 @@
@@ -1861,7 +1861,7 @@ index e9b830d6bc64b..33bc38d57b837 100644
  #include <algorithm>
  #include <optional>
  
-@@ -392,8 +394,12 @@ bool TabHoverCardController::AreHoverCardImagesEnabled() {
+@@ -393,8 +395,12 @@ bool TabHoverCardController::AreHoverCardImagesEnabled() {
  
  // static
  bool TabHoverCardController::UseAnimations() {

@@ -22,19 +22,19 @@ Removable when: upstream's expand-on-hover delay becomes a preference of its
 own with a click that restarts it.
 ---
  .../api/settings_private/prefs_util.cc        |  2 +
- .../stedding_page/stedding_page.html.ts       | 16 ++++++++
+ .../stedding_page/stedding_page.html.ts       | 16 +++++
  chrome/browser/ui/stedding/stedding_prefs.cc  |  1 +
  chrome/browser/ui/stedding/stedding_prefs.h   |  4 ++
- .../frame/vertical_tab_strip_region_view.cc   | 39 +++++++++++++++++--
- .../frame/vertical_tab_strip_region_view.h    |  3 ++
- .../browser/ui/webui/settings/settings_ui.cc  | 12 ++++++
- 7 files changed, 74 insertions(+), 3 deletions(-)
+ .../frame/vertical_tab_strip_region_view.cc   | 68 +++++++++++++++++++
+ .../frame/vertical_tab_strip_region_view.h    | 20 ++++++
+ .../browser/ui/webui/settings/settings_ui.cc  | 12 ++++
+ 7 files changed, 123 insertions(+)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 9aab0c94409bc..a139b56fea180 100644
+index e71cd38467c65..bc479b637c53a 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -325,6 +325,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -328,6 +328,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kNumber;
    (*s_allowlist)[stedding::prefs::kSidebarTextSize] =
        settings_api::PrefType::kNumber;
@@ -98,36 +98,45 @@ index 5955ed5a4535d..7cc52c5e2a2b1 100644
  // it walks the sidebar in order.
  inline constexpr char kCtrlTabMru[] = "stedding.tabs.ctrl_tab_mru";
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index a731beab88cf8..507c222619577 100644
+index 375bbd26e45ac..c8332adc9cd4a 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -1162,8 +1162,14 @@ void VerticalTabStripRegionView::ClickEventHandler::OnMouseEvent(
-   if (event->type() == ui::EventType::kMousePressed &&
-       region_view_->state_controller_->IsExpandOnHoverEnabled() &&
-       !region_view_->is_expanded_on_hover()) {
-+    // Stedding (sidebar Y11): a click in the rail starts the user's pause
-+    // again, so a tab can be chosen without the sidebar opening on top of
-+    // the choice.
-+    const base::TimeDelta stedding_delay = region_view_->SteddingHoverDelay();
-     region_view_->RestartExpandOnHoverTimer(
--        tabs::kVerticalTabsExpandOnHoverClickDelay.Get());
-+        stedding_delay.is_zero()
-+            ? tabs::kVerticalTabsExpandOnHoverClickDelay.Get()
-+            : stedding_delay);
+@@ -1178,6 +1178,25 @@ void VerticalTabStripRegionView::RegionViewFocusListener::OnDidChangeFocus(
    }
  }
  
-@@ -1498,7 +1504,23 @@ void VerticalTabStripRegionView::UpdateExpandOnHoverState(
++// Stedding (sidebar Y11): upstream dropped its click delay with the timer;
++// the user's pause keeps both, and a click in the rail starts it again, so a
++// tab can be chosen without the sidebar opening on top of the choice.
++VerticalTabStripRegionView::ClickEventHandler::ClickEventHandler(
++    VerticalTabStripRegionView* region_view)
++    : region_view_(region_view) {}
++
++void VerticalTabStripRegionView::ClickEventHandler::OnMouseEvent(
++    ui::MouseEvent* event) {
++  if (event->type() == ui::EventType::kMousePressed &&
++      region_view_->state_controller_->IsExpandOnHoverEnabled() &&
++      !region_view_->is_expanded_on_hover()) {
++    const base::TimeDelta stedding_delay = region_view_->SteddingHoverDelay();
++    if (!stedding_delay.is_zero()) {
++      region_view_->RestartExpandOnHoverTimer(stedding_delay);
++    }
++  }
++}
++
+ void VerticalTabStripRegionView::AddTabStripView(
+     std::unique_ptr<views::View> view) {
+   view->SetProperty(
+@@ -1509,9 +1528,41 @@ void VerticalTabStripRegionView::UpdateExpandOnHoverState(
          hover_card_controller()->GetHoverCardHideLock();
    }
  
--  if (tabs::kVerticalTabsExpandOnHoverUseVelocityHeuristic.Get()) {
 +  // Stedding (sidebar Y11): the rail expands after a pause the user sets,
 +  // 2 s by default, so its rows can be clicked and its tabs switched
-+  // without the sidebar opening. Chromium's 350 ms, and the velocity
-+  // heuristic that opens sooner still, made every visit to the rail an
-+  // opening (operator, 2026-09-09). A click in the rail starts the wait
-+  // again (ClickEventHandler). Zero keeps Chromium's timing below.
++  // without the sidebar opening. Chromium's velocity heuristic made every
++  // visit to the rail an opening (operator, 2026-09-09). A click in the rail
++  // starts the wait again (ClickEventHandler). Zero keeps Chromium's
++  // heuristic below.
 +  const base::TimeDelta stedding_delay = SteddingHoverDelay();
 +  if (!stedding_delay.is_zero()) {
 +    if (!expand_on_hover_timer_.IsRunning()) {
@@ -136,26 +145,43 @@ index a731beab88cf8..507c222619577 100644
 +          base::BindOnce(&VerticalTabStripRegionView::AnimateExpandOnHover,
 +                         base::Unretained(this),
 +                         /*expand=*/true));
-+      AddPreTargetHandler(&click_handler_);
++      if (!click_handler_added_) {
++        AddPreTargetHandler(&click_handler_);
++        click_handler_added_ = true;
++      }
 +    }
-+  } else if (tabs::kVerticalTabsExpandOnHoverUseVelocityHeuristic.Get()) {
-     CalculateMouseVelocityForExpandOnHover();
-   } else if (expand_on_hover_timer_.IsRunning()) {
-     // If the timer is already running then we are already waiting to
-@@ -1602,7 +1624,8 @@ void VerticalTabStripRegionView::ResetExpandOnHoverTimers() {
-   if (expand_on_hover_timer_.IsRunning()) {
-     expand_on_hover_timer_.Stop();
- 
--    if (tabs::IsExpandOnHoverClickDelayEnabled()) {
-+    if (tabs::IsExpandOnHoverClickDelayEnabled() ||
-+        !SteddingHoverDelay().is_zero()) {
-       RemovePreTargetHandler(&click_handler_);
-     }
-   }
-@@ -1615,6 +1638,16 @@ void VerticalTabStripRegionView::ResetExpandOnHoverTimers() {
-   }
++    return;
++  }
+   CalculateMouseVelocityForExpandOnHover();
  }
  
++void VerticalTabStripRegionView::RestartExpandOnHoverTimer(
++    const base::TimeDelta& delay) {
++  if (expand_on_hover_timer_.IsRunning()) {
++    expand_on_hover_timer_.Start(
++        FROM_HERE, delay,
++        base::BindOnce(&VerticalTabStripRegionView::AnimateExpandOnHover,
++                       base::Unretained(this),
++                       /*expand=*/true));
++  }
++}
++
+ void VerticalTabStripRegionView::OnMouseVelocityHeuristicInterval() {
+   const bool should_expand =
+       state_controller_->IsExpandOnHoverEnabled() &&
+@@ -1587,6 +1638,23 @@ void VerticalTabStripRegionView::ResetExpandOnHoverTimers() {
+   time_at_expand_on_hover_timer_start_ = std::nullopt;
+   point_at_expand_on_hover_timer_start_ = std::nullopt;
+   expand_on_hover_heuristic_samples_ = 0;
++
++  // Stedding (sidebar Y11): the user's pause and its click handler.
++  expand_on_hover_timer_.Stop();
++  if (click_handler_added_) {
++    RemovePreTargetHandler(&click_handler_);
++    click_handler_added_ = false;
++  }
++}
++
 +base::TimeDelta VerticalTabStripRegionView::SteddingHoverDelay() const {
 +  if (!base::FeatureList::IsEnabled(stedding::kArcStyleWindow) ||
 +      !browser_view() || !browser_view()->browser()) {
@@ -164,30 +190,52 @@ index a731beab88cf8..507c222619577 100644
 +  return base::Milliseconds(
 +      std::max(0, browser_view()->browser()->GetProfile()->GetPrefs()->GetInteger(
 +                      stedding::prefs::kSidebarHoverDelayMs)));
-+}
-+
+ }
+ 
  void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
-   const bool arc_style =
-       base::FeatureList::IsEnabled(stedding::kArcStyleWindow);
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-index 18bf03d64d3db..41825236f9319 100644
+index 763d635366b12..3c9c52e478742 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
-@@ -299,6 +299,9 @@ class VerticalTabStripRegionView final
+@@ -268,6 +268,24 @@ class VerticalTabStripRegionView final
    // Applied on the collapse state and again by the expand-on-hover animation,
    // which widens the strip without changing the state (sidebar Y6).
    void ApplyRailForm(bool rail);
 +  // sidebar Y11: the pause before the rail expands on hover, from the
 +  // profile; zero means Chromium's own timing.
 +  base::TimeDelta SteddingHoverDelay() const;
++  // Stedding (sidebar Y11): a click in the rail starts the user's pause again.
++  void RestartExpandOnHoverTimer(const base::TimeDelta& delay);
++  class ClickEventHandler : public ui::EventHandler {
++   public:
++    explicit ClickEventHandler(VerticalTabStripRegionView* region_view);
++    ClickEventHandler(const ClickEventHandler&) = delete;
++    ClickEventHandler& operator=(const ClickEventHandler&) = delete;
++    ~ClickEventHandler() override = default;
++
++    // ui::EventHandler:
++    void OnMouseEvent(ui::MouseEvent* event) override;
++
++   private:
++    raw_ptr<VerticalTabStripRegionView> region_view_;
++  };
    // The gutter's worth of interior margin the collapsed strip carries
    // (sidebar Y6), for the button containers' margins in ApplyRailForm.
    int rail_left_ = 0;
+@@ -331,6 +349,8 @@ class VerticalTabStripRegionView final
+       update_state_controller_collapsed_callback_;
+ 
+   base::OneShotTimer expand_on_hover_timer_;
++  ClickEventHandler click_handler_{this};
++  bool click_handler_added_ = false;
+   bool is_expanded_on_hover_ = false;
+   bool suppress_expand_on_hover_ = false;
+   std::optional<base::TimeTicks> expand_on_hover_start_time_;
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index cb9e9d4e12767..e10caf4f5e10b 100644
+index 08bb76ea69897..529cf66924a4e 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -799,6 +799,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -820,6 +820,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "The Archived page and the command bar show tabs closed within this "
        "time; the sidebar's Archived row opens the page.");
    html_source->AddString("steddingArchiveKeep7d", "7 days");

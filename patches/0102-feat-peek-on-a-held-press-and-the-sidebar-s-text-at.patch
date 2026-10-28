@@ -37,7 +37,8 @@ Removable when: never.
  .../ui/stedding/stedding_prefs_unittest.cc    |   3 +
  chrome/browser/ui/stedding_ui_metrics.cc      |   5 +-
  .../ui/stedding_ui_metrics_unittest.cc        |   7 +-
- chrome/browser/ui/tab_helpers.cc              |   3 +
+ chrome/browser/ui/tabs/BUILD.gn               |   5 +
+ chrome/browser/ui/tabs/tab_features.cc        |   5 +
  chrome/browser/ui/views/peek/BUILD.gn         |  11 +-
  .../ui/views/peek/peek_navigation_throttle.cc |  32 ++--
  .../ui/views/peek/peek_navigation_throttle.h  |   9 ++
@@ -50,15 +51,15 @@ Removable when: never.
  .../stedding_welcome_handler_unittest.cc      |  25 ++++
  chrome/test/stedding/peek_browsertest.cc      |  53 +++++++
  chrome/test/stedding/welcome_browsertest.cc   |  77 +++++++---
- 23 files changed, 595 insertions(+), 55 deletions(-)
+ 24 files changed, 602 insertions(+), 55 deletions(-)
  create mode 100644 chrome/browser/ui/views/peek/peek_press.cc
  create mode 100644 chrome/browser/ui/views/peek/peek_press.h
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 8b2355ffb2f35..b1ef9f2680ab7 100644
+index 96f5b8c847126..c9be2589d2fbc 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -346,6 +346,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -349,6 +349,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kBoolean;
    (*s_allowlist)[stedding::prefs::kPeekEnabled] =
        settings_api::PrefType::kBoolean;
@@ -364,27 +365,52 @@ index 72da0c412c9f8..04aef1ef153b5 100644
    SetSidebarTextSize(0);
    EXPECT_EQ(44, SidebarRowHeight());
  }
-diff --git a/chrome/browser/ui/tab_helpers.cc b/chrome/browser/ui/tab_helpers.cc
-index 19444c1dce549..c5b83340667a7 100644
---- a/chrome/browser/ui/tab_helpers.cc
-+++ b/chrome/browser/ui/tab_helpers.cc
-@@ -163,6 +163,7 @@
- #include "chrome/browser/ui/stedding/dark_pages.h"
- #include "chrome/browser/ui/stedding_ui_metrics.h"
- #include "chrome/browser/ui/ui_features.h"
+diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
+index 200e7bc1d4cd8..bdde31ef467a6 100644
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -539,6 +539,11 @@ if (!is_android) {
+     }
+ 
+     deps = [
++      # Stedding: the tab helpers TabFeatures attaches (dark pages Dk14, peek
++      # P18).
++      "//chrome/browser/ui:stedding_ui_metrics",
++      "//chrome/browser/ui/stedding:dark_pages",
++      "//chrome/browser/ui/views/peek",
+       "//chrome/browser/ui/archive:closed_folder",
+       ":tab_group",
+       ":tab_model",
+diff --git a/chrome/browser/ui/tabs/tab_features.cc b/chrome/browser/ui/tabs/tab_features.cc
+index 43710edaa9299..daf0ac357a483 100644
+--- a/chrome/browser/ui/tabs/tab_features.cc
++++ b/chrome/browser/ui/tabs/tab_features.cc
+@@ -190,6 +190,7 @@
+ #include "chrome/browser/ui/views/location_bar/lens_overlay_homework_page_action_controller.h"
+ #include "chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h"
+ #include "chrome/browser/ui/views/passwords/manage_passwords_page_action_controller.h"
 +#include "chrome/browser/ui/views/peek/peek_press.h"
- #include "components/image_fetcher/core/image_fetcher_service.h"
- #include "components/omnibox/browser/omnibox_field_trial.h"
- #include "components/web_modal/web_contents_modal_dialog_manager.h"
-@@ -462,6 +463,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents,
+ #include "chrome/browser/ui/views/side_panel/customize_chrome/side_panel_controller_views.h"
+ #include "chrome/browser/ui/views/tab_sharing/tab_capture_contents_border_helper.h"
+ #include "chrome/browser/ui/views/translate/translate_page_action_controller.h"
+@@ -1429,6 +1430,8 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
    // the switch itself.
    if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
-     stedding::DarkPagesTabHelper::CreateForWebContents(web_contents);
+     stedding::DarkPagesTabHelper::CreateForWebContents(tab.GetContents());
 +    // peek P18: the press a link from a pinned tab is followed with.
-+    stedding::PeekPress::CreateForWebContents(web_contents);
++    stedding::PeekPress::CreateForWebContents(tab.GetContents());
    }
- #endif  // !BUILDFLAG(IS_ANDROID)
-   RecentlyAudibleHelper::CreateForWebContents(web_contents);
+ 
+   if (site_engagement::SiteEngagementService::IsEnabled()) {
+@@ -2126,6 +2129,8 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
+   // the switch itself.
+   if (base::FeatureList::IsEnabled(stedding::kArcStyleWindow)) {
+     stedding::DarkPagesTabHelper::CreateForWebContents(new_contents);
++    // peek P18: the press a link from a pinned tab is followed with.
++    stedding::PeekPress::CreateForWebContents(new_contents);
+   }
+ 
+   if (site_engagement::SiteEngagementService::IsEnabled()) {
 diff --git a/chrome/browser/ui/views/peek/BUILD.gn b/chrome/browser/ui/views/peek/BUILD.gn
 index 3cd882d05a04a..f424f60c23cf9 100644
 --- a/chrome/browser/ui/views/peek/BUILD.gn
@@ -815,10 +841,10 @@ index 08de8d7512665..4f4f8fc9a13bf 100644
    for (const Case& each : cases) {
      SCOPED_TRACE(base::StrCat(
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index c4581af13ef7e..d5fcd863cc06b 100644
+index 05578cad5e9e1..01b46851aca75 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -815,6 +815,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -836,6 +836,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                      key("\u21E7\u2318O", "Ctrl+Shift+O"),
                      " puts it beside the pinned tab; Escape or a click on this "
                      "window closes it."}));
@@ -834,7 +860,7 @@ index c4581af13ef7e..d5fcd863cc06b 100644
    // import I20.
    html_source->AddString("steddingSidebarFilesLabel", "Export and import");
    html_source->AddString(
-@@ -976,7 +985,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -997,7 +1006,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddString(
        "steddingTextSizeSubLabel",
        "Tab titles, the Space title, folder names and the New Tab row.");

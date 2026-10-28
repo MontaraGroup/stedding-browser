@@ -37,13 +37,12 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  build/apple/tweak_info_plist.py               |  43 ++
  chrome/BUILD.gn                               |  21 +
  chrome/app/app-Info.plist                     |  21 +
- chrome/browser/BUILD.gn                       |   1 +
+ chrome/browser/BUILD.gn                       |   3 +
  chrome/browser/app_controller_mac.mm          |  14 +
  chrome/browser/chrome_browser_main_mac.mm     |  35 +
  .../api/settings_private/prefs_util.cc        |   5 +
  .../settings/about_page/about_page.ts         |  10 +-
  .../stedding_page/stedding_page.html.ts       |  27 +-
- chrome/browser/ui/BUILD.gn                    |   5 +
  chrome/browser/ui/cocoa/main_menu_builder.mm  |  18 +
  chrome/browser/ui/stedding/BUILD.gn           |  52 ++
  chrome/browser/ui/stedding/app_updater.cc     | 106 +++
@@ -63,6 +62,7 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  .../ui/stedding/thanks_pages_unittest.cc      |  95 +++
  chrome/browser/ui/views/commandbar/BUILD.gn   |   1 +
  .../ui/views/commandbar/command_bar_view.cc   |  26 +
+ chrome/browser/ui/views/frame/BUILD.gn        |   5 +
  chrome/browser/ui/views/frame/browser_view.cc |   5 +-
  .../frame/vertical_tab_strip_region_view.cc   |  17 +
  chrome/browser/ui/views/stedding/BUILD.gn     |  26 +
@@ -79,7 +79,7 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  chrome/test/stedding/BUILD.gn                 |   5 +
  chrome/test/stedding/updates_browsertest.cc   | 352 +++++++++
  third_party/.gitignore                        |   2 +
- 45 files changed, 2733 insertions(+), 22 deletions(-)
+ 45 files changed, 2735 insertions(+), 22 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/app_updater.cc
  create mode 100644 chrome/browser/ui/stedding/app_updater.h
  create mode 100644 chrome/browser/ui/stedding/app_updater_mac.mm
@@ -95,10 +95,10 @@ another mechanism (Chromium's updater, a Windows one) replaces the Sparkle half.
  create mode 100644 chrome/test/stedding/updates_browsertest.cc
 
 diff --git a/build/apple/tweak_info_plist.py b/build/apple/tweak_info_plist.py
-index 23d3c4d244596..71a9fcdf623f5 100755
+index d91204a320f42..e6d607914d787 100755
 --- a/build/apple/tweak_info_plist.py
 +++ b/build/apple/tweak_info_plist.py
-@@ -109,6 +109,28 @@ def _GetVersion(version_format, values, overrides=None):
+@@ -108,6 +108,28 @@ def _GetVersion(version_format, values, overrides=None):
      return result
  
  
@@ -127,7 +127,7 @@ index 23d3c4d244596..71a9fcdf623f5 100755
  def _AddVersionKeys(
      plist, version_format_for_key, version=None, overrides=None
  ):
-@@ -429,6 +451,14 @@ def Main(argv):
+@@ -428,6 +450,14 @@ def Main(argv):
          default=None,
          help='The version string [major.minor.build.patch]',
      )
@@ -142,7 +142,7 @@ index 23d3c4d244596..71a9fcdf623f5 100755
      parser.add_option(
          '--privileged_helper_id',
          dest='privileged_helper_id',
-@@ -505,6 +535,19 @@ def Main(argv):
+@@ -504,6 +534,19 @@ def Main(argv):
      ):
          return 2
  
@@ -163,7 +163,7 @@ index 23d3c4d244596..71a9fcdf623f5 100755
      if options.use_breakpad:
          if options.branding is None:
 diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
-index d98c86e5dace9..9836a4f0f821a 100644
+index f1d133b6cda97..678fa6ade8e1a 100644
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
 @@ -16,6 +16,8 @@ import("//build/config/win/manifest.gni")
@@ -175,7 +175,7 @@ index d98c86e5dace9..9836a4f0f821a 100644
  import("//chrome/chrome_paks.gni")
  import("//chrome/common/features.gni")
  import("//chrome/process_version_rc_template.gni")
-@@ -520,6 +522,11 @@ if (is_win) {
+@@ -525,6 +527,11 @@ if (is_win) {
        "--scm=1",
        "--bundle_id=$chrome_mac_bundle_id",
      ]
@@ -187,7 +187,7 @@ index d98c86e5dace9..9836a4f0f821a 100644
      if (enable_updater) {
        args += [ "--privileged_helper_id=$privileged_helper_name" ]
        if (is_chrome_branded) {
-@@ -572,6 +579,11 @@ if (is_win) {
+@@ -575,6 +582,11 @@ if (is_win) {
        bundle_deps += [ ":chromium_updater_privileged_helper" ]
      }
  
@@ -199,7 +199,7 @@ index d98c86e5dace9..9836a4f0f821a 100644
      if (enable_stripping) {
        # At link time, preserve the global symbols specified in the .exports
        # file. All other global symbols will be marked as private. The default
-@@ -693,6 +705,15 @@ if (is_win) {
+@@ -696,6 +708,15 @@ if (is_win) {
      ]
    }
  
@@ -247,14 +247,16 @@ index 6fada0a2b1a1f..7f1942bcd47dd 100644
  </dict>
  </plist>
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 801ec541b12ae..f5d35d7cfd7b1 100644
+index 12a9d6a527221..e0f5f6d6187d5 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1553,6 +1553,7 @@ source_set("core") {
+@@ -1732,6 +1732,9 @@ source_set("core") {
        "//chrome/browser/ui:browser_mac",
        "//chrome/browser/ui/browser_window:create_browser_window",
        "//chrome/browser/ui/cocoa",
 +      "//chrome/browser/ui/stedding:app_updater",
++      "//chrome/browser/ui/stedding:thanks_pages",
++      "//chrome/browser/ui/views/stedding:update_pill",
        "//chrome/browser/ui/views:color_provider_browser_helper",
        "//chrome/browser/web_applications/os_integration/mac:web_app_shortcut_copier_lib",
        "//chrome/browser/webshare",
@@ -363,10 +365,10 @@ index b269f1610a55d..6f3171837b4d8 100644
  
  void ChromeBrowserMainPartsMac::DidEndMainMessageLoop() {
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-index 561c302ccfa64..64ab713cbdf03 100644
+index 8c0528f4b29e1..8d5fa358e3b6c 100644
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
-@@ -325,6 +325,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+@@ -328,6 +328,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
        settings_api::PrefType::kNumber;
    (*s_allowlist)[stedding::prefs::kSidebarTextSize] =
        settings_api::PrefType::kNumber;
@@ -461,22 +463,6 @@ index 26a4ad66b0f8d..1dd7bbeb7c093 100644
    <div class="cr-row section-header" id="spacesHeader">
      <div class="flex">
        <h2 class="cr-title-text">$i18n{steddingSpacesTitle}</h2>
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 7586ae41a0741..4d264ea867c3d 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2329,6 +2329,11 @@ static_library("ui") {
-     if (is_win) {
-       deps += [ "//chrome/browser/ui/views/stedding:altgr_chords" ]
-     }
-+    deps += [
-+      "//chrome/browser/ui/stedding:app_updater",
-+      "//chrome/browser/ui/stedding:thanks_pages",
-+      "//chrome/browser/ui/views/stedding:update_pill",
-+    ]
-     deps += [
-       ":accelerator_table",
-       ":browser_actions",
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
 index a438c231cbe6f..34e2f9ddc5baf 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
@@ -2256,7 +2242,7 @@ index 0000000000000..cfc52f56a460e
 +}  // namespace
 +}  // namespace stedding
 diff --git a/chrome/browser/ui/views/commandbar/BUILD.gn b/chrome/browser/ui/views/commandbar/BUILD.gn
-index a1951187b8071..a1973941c440e 100644
+index 83f2154812890..0a33ccd453209 100644
 --- a/chrome/browser/ui/views/commandbar/BUILD.gn
 +++ b/chrome/browser/ui/views/commandbar/BUILD.gn
 @@ -14,6 +14,7 @@ source_set("commandbar") {
@@ -2311,8 +2297,31 @@ index 71882207ed482..61c5e67a64363 100644
      // commandbar K28 (BACKLOG S-116): a row per service's blank document,
      // each opening the service's own new-document address in a new tab of
      // the active Space. Normal windows only (K15).
+diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
+index 7332c2f50cc74..5f19513ff40d4 100644
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -563,6 +563,9 @@ source_set("vertical_tab_strip_region_view") {
+     ":frame_separator",
+     ":safe_invoke",
+     ":shadow",
++    # updates Up4: the pill at the sidebar's foot; private P1: the coat.
++    "//chrome/browser/ui/stedding:private_window",
++    "//chrome/browser/ui/views/stedding:update_pill",
+     "//chrome/app:generated_resources",
+     "//chrome/browser/ui:browser_actions",
+     "//chrome/browser/ui:browser_element_identifiers",
+@@ -769,6 +772,8 @@ source_set("browser_view") {
+   deps = [
+     ":stedding_fullscreen_sidebar_toggle",
+     ":stedding_window_background",
++    # updates Up10: the thank-you page after an update.
++    "//chrome/browser/ui/stedding:thanks_pages",
+     ":app_menu_button",
+     ":browser_frame_view",
+     ":browser_native_widget",
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 6f156fed0a0b9..73bcc4803f083 100644
+index 6fb848e2b1135..7e8540c92f934 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -122,6 +122,7 @@
@@ -2336,18 +2345,18 @@ index 6f156fed0a0b9..73bcc4803f083 100644
    // The fullscreen transition clears out focus, but there are some cases (for
    // example, new window in Mac fullscreen with toolbar showing) where we need
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 74d3411c37090..8bc9b9467146d 100644
+index 2b69d51a30513..735a3916efd76 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -82,6 +82,7 @@
- #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_utils.h"
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
  #include "chrome/browser/ui/views/tabs/vertical/top_container_button.h"
 +#include "chrome/browser/ui/views/stedding/update_pill.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.h"
-@@ -387,6 +388,13 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
+@@ -405,6 +406,13 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
          views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
                                   views::MaximumFlexSizeRule::kPreferred));
      archived_row_ = content_area_view_->AddChildView(std::move(archived_row));
@@ -2361,7 +2370,7 @@ index 74d3411c37090..8bc9b9467146d 100644
  
      auto* const bottom_row =
          content_area_view_->AddChildView(std::make_unique<views::View>());
-@@ -2508,6 +2516,15 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
+@@ -2518,6 +2526,15 @@ void VerticalTabStripRegionView::ApplyRailForm(bool rail) {
              vector_icons::kHistoryIcon, kColorTabForegroundInactiveFrameActive,
              stedding::SidebarFaviconSize() + (rail ? 4 : 0)));
    }
@@ -3000,17 +3009,17 @@ index d283426af1757..807ea85399397 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index 76e7d1bb22c28..5be9e7c0d9e23 100644
+index 7281c449f496a..bb7f39bc4bfec 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -189,6 +189,7 @@ source_set("impl") {
+@@ -195,6 +195,7 @@ source_set("impl") {
      ":settings",
      "//chrome/app:command_ids",
      "//chrome/app:generated_resources",
 +    "//chrome/browser/ui/stedding:app_updater",
      "//chrome/app/vector_icons",
+     "//chrome/browser:browser_features",
      "//chrome/browser:browser_process",
-     "//chrome/browser:browser_process_platform_part",
 diff --git a/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc b/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc
 index c36737ae91c45..f4bcdbec34f34 100644
 --- a/chrome/browser/ui/webui/settings/browser_lifetime_handler.cc
@@ -3040,10 +3049,10 @@ index c36737ae91c45..f4bcdbec34f34 100644
  }
  
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index b4f865b925e5d..40dabe2fecde1 100644
+index cdaa3965ddd9e..ce91605c15b6c 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -843,6 +843,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -864,6 +864,24 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "Send what you type to the search engine for suggestions");
    html_source->AddString("steddingSuggestSubLabel",
                           "Off keeps every keystroke local until Enter.");
@@ -3069,7 +3078,7 @@ index b4f865b925e5d..40dabe2fecde1 100644
                           "Hide the address row with the sidebar");
    html_source->AddString(
 diff --git a/chrome/installer/mac/signing/parts.py b/chrome/installer/mac/signing/parts.py
-index caf9b6f5447af..8573618e430c6 100644
+index 0a3ba9233e99e..82bc0b7fca849 100644
 --- a/chrome/installer/mac/signing/parts.py
 +++ b/chrome/installer/mac/signing/parts.py
 @@ -205,6 +205,43 @@ def get_parts(config):
@@ -3525,7 +3534,7 @@ index 0000000000000..124e9114f368d
 +
 +}  // namespace
 diff --git a/third_party/.gitignore b/third_party/.gitignore
-index 33637b2b240bf..0bddc10f9499c 100644
+index fb98853dc6b65..e8f0f91e2957c 100644
 --- a/third_party/.gitignore
 +++ b/third_party/.gitignore
 @@ -94,6 +94,8 @@

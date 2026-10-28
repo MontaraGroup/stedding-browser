@@ -45,7 +45,7 @@ its code (patches/README.md, the round-patch exception).
  chrome/browser/app_controller_mac.mm          |  64 ++++++--
  .../browser/resources/stedding_welcome/app.ts |  89 +++++++++--
  .../ssl/https_first_mode_settings_tracker.cc  |   4 +
- ...ps_first_mode_settings_tracker_unittest.cc |  47 ++++--
+ ...ps_first_mode_settings_tracker_unittest.cc |  25 ++-
  chrome/browser/ui/archive/closed_tabs_undo.cc |   9 ++
  chrome/browser/ui/archive/closed_tabs_undo.h  |   2 +
  .../ui/spaces/arc_data_importer_unittest.cc   |   9 +-
@@ -62,7 +62,7 @@ its code (patches/README.md, the round-patch exception).
  .../views/tabs/common/clear_tabs_separator.cc |  80 +++++++++-
  .../views/tabs/common/clear_tabs_separator.h  |   9 ++
  .../common/stedding_tab_row_rules_unittest.cc |  49 ++++++
- .../tabs/common/tab_group_header_view.cc      |  81 +++++++++-
+ .../tabs/common/tab_group_header_view.cc      |  79 +++++++++-
  .../views/tabs/common/tab_group_header_view.h |  10 ++
  .../common/tab_group_header_view_unittest.cc  |  45 ++++++
  chrome/common/chrome_paths_internal.h         |  12 ++
@@ -74,7 +74,7 @@ its code (patches/README.md, the round-patch exception).
  .../test/stedding/media_keys_browsertest.cc   |  39 ++---
  .../stedding/shortcut_file_mac_browsertest.mm | 143 ++++++++++++++++++
  chrome/test/stedding/welcome_browsertest.cc   |  14 ++
- 32 files changed, 1052 insertions(+), 92 deletions(-)
+ 32 files changed, 1036 insertions(+), 84 deletions(-)
  create mode 100644 chrome/test/stedding/shortcut_file_mac_browsertest.mm
 
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
@@ -427,10 +427,10 @@ index 1ae6671e99cdd..0bc30371bf856 100644
        if (prefs->GetBoolean(prefs::kHttpsOnlyModeAutoEnabled)) {
          return HttpsFirstModeStartupState::kEnabledBalancedTypicallySecure;
 diff --git a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
-index cc083ed865f63..3e772bd9ae47a 100644
+index 0d0d0d5e190fd..e3387940c7c2a 100644
 --- a/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
 +++ b/chrome/browser/ssl/https_first_mode_settings_tracker_unittest.cc
-@@ -1204,10 +1204,10 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupBalancedModeAvailable) {
+@@ -1206,10 +1206,10 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupBalancedModeAvailable) {
    ASSERT_TRUE(service);
  
    // Creating the HttpsFirstModeService should emit the "setting at startup"
@@ -443,61 +443,7 @@ index cc083ed865f63..3e772bd9ae47a 100644
  }
  
  // Tests that the correct setting at startup is logged, when Balanced Mode
-@@ -1247,9 +1247,11 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, AdvancedProtectionStatusChange) {
-           profile());
-   ASSERT_TRUE(aps_manager);
- 
--  // Initially, the Strict HFM pref is disabled.
-+  // Initially, the Strict HFM pref is disabled. Stedding (privacy Q2):
-+  // balanced mode is on by default.
-   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
--  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
-+  EXPECT_EQ(service->GetCurrentSetting(),
-+            HttpsFirstModeSetting::kEnabledBalanced);
- 
-   // Enable Advanced Protection. This should not change the pref, but
-   // GetCurrentSetting should now return kEnabledFull.
-@@ -1257,10 +1259,12 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, AdvancedProtectionStatusChange) {
-   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
-   EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kEnabledFull);
- 
--  // Disable Advanced Protection. GetCurrentSetting should return to kDisabled.
-+  // Disable Advanced Protection. GetCurrentSetting should return to what it
-+  // was: balanced, Stedding's default.
-   aps_manager->SetAdvancedProtectionStatusForTesting(false);
-   EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
--  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
-+  EXPECT_EQ(service->GetCurrentSetting(),
-+            HttpsFirstModeSetting::kEnabledBalanced);
- }
- 
- // Checks that enabling Advanced Protection clears the HTTP allowlist, just as a
-@@ -1287,9 +1291,12 @@ TEST_F(HttpsFirstModeSettingsTrackerTest,
-   content::StoragePartition* storage_partition =
-       profile()->GetDefaultStoragePartition();
- 
--  ASSERT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
-+  // Stedding: balanced is the default (docs/PRIVACY.md), where upstream's is
-+  // disabled; the allowlist is cleared on the change all the same.
-+  ASSERT_EQ(service->GetCurrentSetting(),
-+            HttpsFirstModeSetting::kEnabledBalanced);
- 
--  // Allowlist a host for http while HTTPS-First Mode is disabled.
-+  // Allowlist a host for http before Advanced Protection is enabled.
-   state->AllowHttpForHost("http-allowed.com", storage_partition);
-   EXPECT_TRUE(
-       state->IsHttpAllowedForHost("http-allowed.com", storage_partition));
-@@ -1307,7 +1314,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest,
-   EXPECT_TRUE(
-       state->IsHttpAllowedForHost("http-allowed.com", storage_partition));
-   aps_manager->SetAdvancedProtectionStatusForTesting(false);
--  EXPECT_EQ(service->GetCurrentSetting(), HttpsFirstModeSetting::kDisabled);
-+  EXPECT_EQ(service->GetCurrentSetting(),
-+            HttpsFirstModeSetting::kEnabledBalanced);
-   EXPECT_TRUE(
-       state->IsHttpAllowedForHost("http-allowed.com", storage_partition));
- }
-@@ -1341,7 +1349,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
+@@ -1349,7 +1349,8 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
    EXPECT_FALSE(
        safe_browsing::IsEnhancedProtectionEnabled(*profile()->GetPrefs()));
    EXPECT_TRUE(IsBalancedModeEnabled(profile()->GetPrefs()));
@@ -507,17 +453,17 @@ index cc083ed865f63..3e772bd9ae47a 100644
  
    // 3. Enable ESB. Balanced Mode should now be enabled by default.
    safe_browsing::SetEnhancedProtectionPref(profile()->GetPrefs(), true);
-@@ -1370,6 +1379,9 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, BalancedModeEnabledForEsbUsers) {
- }
+@@ -1382,6 +1383,9 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
+   feature_list.InitAndDisableFeature(
+       features::kHttpsFirstBalancedModeAutoEnable);
  
- TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
 +  // Stedding (privacy Q2): balanced mode is on by default; off is the
 +  // user's choice.
 +  profile()->GetPrefs()->SetBoolean(prefs::kHttpsFirstBalancedMode, false);
    base::HistogramTester histograms;
    HttpsFirstModeService* service =
        HttpsFirstModeServiceFactory::GetForProfile(profile());
-@@ -1380,6 +1392,21 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
+@@ -1392,6 +1396,21 @@ TEST_F(HttpsFirstModeSettingsTrackerTest, StartupDetailedState_Disabled) {
        HttpsFirstModeStartupState::kDisabled, 1);
  }
  
@@ -1349,10 +1295,10 @@ index 3227a45ec8739..41509b61d4017 100644
  }  // namespace
  }  // namespace stedding
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
-index ee897b06f49c1..333382a938a4e 100644
+index 413c423e53986..bb22edf9cc5e7 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
-@@ -7,14 +7,17 @@
+@@ -8,14 +8,17 @@
  #include "base/task/single_thread_task_runner.h"
  #include "build/build_config.h"
  #include "build/buildflag.h"
@@ -1368,9 +1314,9 @@ index ee897b06f49c1..333382a938a4e 100644
  #include "chrome/browser/ui/views/event_utils.h"
 +#include "chrome/browser/ui/views/tabs/common/stedding_tab_row_rules.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_style.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_utils.h"
  #include "chrome/browser/ui/views/tabs/groups/tab_group_accessibility.h"
- #include "chrome/browser/ui/views/tabs/groups/tab_group_editor_bubble_tracker.h"
-@@ -33,6 +36,7 @@
+@@ -35,6 +38,7 @@
  #include "ui/base/mojom/menu_source_type.mojom-shared.h"
  #include "ui/base/ui_base_features.h"
  #include "ui/color/color_provider.h"
@@ -1378,7 +1324,7 @@ index ee897b06f49c1..333382a938a4e 100644
  #include "ui/gfx/color_utils.h"
  #include "ui/views/accessibility/view_accessibility.h"
  #include "ui/views/animation/ink_drop.h"
-@@ -50,6 +54,14 @@
+@@ -53,6 +57,14 @@
  #include "ui/views/view_class_properties.h"
  #include "ui/views/widget/widget.h"
  
@@ -1393,21 +1339,7 @@ index ee897b06f49c1..333382a938a4e 100644
  namespace {
  constexpr int kIconSize = 16;
  constexpr int kFocusRingInset = 2;
-@@ -172,7 +184,12 @@ TabGroupHeaderView::TabGroupHeaderView(
-           &TabGroupHeaderView::OnBubbleClosed, base::Unretained(this)));
- 
-   SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
--  SetInteriorMargin(gfx::Insets::VH(0, GetHorizontalInset()));
-+  // Stedding: room for the group's dot before the title.
-+  SetInteriorMargin(
-+      IsSteddingRow()
-+          ? gfx::Insets::TLBR(0, GetHorizontalInset() + kSteddingDotRoom, 0,
-+                              GetHorizontalInset())
-+          : gfx::Insets::VH(0, GetHorizontalInset()));
-   SetDefault(views::kFlexBehaviorKey,
-              views::FlexSpecification(
-                  views::MinimumFlexSizeRule::kScaleToMinimumSnapToZero,
-@@ -388,6 +405,7 @@ void TabGroupHeaderView::OnMouseMoved(const ui::MouseEvent& event) {
+@@ -416,6 +428,7 @@ void TabGroupHeaderView::OnMouseMoved(const ui::MouseEvent& event) {
  void TabGroupHeaderView::OnMouseEntered(const ui::MouseEvent& event) {
    delegate_->UpdateHoverCard(TabSlotController::HoverCardUpdateType::kHover);
    UpdateEditorBubbleButtonVisibility();
@@ -1415,7 +1347,7 @@ index ee897b06f49c1..333382a938a4e 100644
  }
  
  void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
-@@ -398,6 +416,22 @@ void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
+@@ -426,6 +439,22 @@ void TabGroupHeaderView::OnMouseExited(const ui::MouseEvent& event) {
  #else
    UpdateEditorBubbleButtonVisibility();
  #endif
@@ -1438,7 +1370,7 @@ index ee897b06f49c1..333382a938a4e 100644
  }
  
  void TabGroupHeaderView::OnFocus() {
-@@ -521,7 +555,13 @@ void TabGroupHeaderView::OnDataChanged(
+@@ -552,7 +581,13 @@ void TabGroupHeaderView::OnDataChanged(
    if (delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral()) {
      OnTabCountChanged();
    } else {
@@ -1452,8 +1384,8 @@ index ee897b06f49c1..333382a938a4e 100644
 +            : tab_group_visual_data_.title());
    }
  
-   UpdateColors();
-@@ -600,6 +640,10 @@ SkColor TabGroupHeaderView::GetForegroundColor() const {
+   SetInteriorMargin(GetHeaderInsets());
+@@ -632,6 +667,10 @@ SkColor TabGroupHeaderView::GetForegroundColor() const {
    if (!GetColorProvider()) {
      return SK_ColorBLACK;
    }
@@ -1464,7 +1396,7 @@ index ee897b06f49c1..333382a938a4e 100644
    if (delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral()) {
      const bool frame_active = GetWidget() && GetWidget()->ShouldPaintAsActive();
      return GetColorProvider()->GetColor(
-@@ -616,8 +660,12 @@ void TabGroupHeaderView::UpdateColors() {
+@@ -648,8 +687,12 @@ void TabGroupHeaderView::UpdateColors() {
    const SkColor background_color = GetBackgroundColor();
    const SkColor foreground_color = GetForegroundColor();
  
@@ -1479,23 +1411,31 @@ index ee897b06f49c1..333382a938a4e 100644
  
    // Update save tab group related items, the sync icon and attention
    // indicator.
-@@ -658,8 +706,12 @@ void TabGroupHeaderView::UpdateColors() {
+@@ -690,8 +733,12 @@ void TabGroupHeaderView::UpdateColors() {
    }
  
    // Update background.
 -  SetBackground(
--      views::CreateRoundedRectBackground(background_color, GetCornerRadius()));
+-      views::CreateRoundedRectBackground(background_color, GetCornerRadii()));
 +  if (IsSteddingRow()) {
 +    UpdateSteddingBackground();
 +  } else {
 +    SetBackground(views::CreateRoundedRectBackground(background_color,
-+                                                     GetCornerRadius()));
++                                                     GetCornerRadii()));
 +  }
  }
  
  void TabGroupHeaderView::UpdateEditorBubbleButtonVisibility() {
-@@ -727,5 +779,22 @@ int TabGroupHeaderView::GetHorizontalInset() const {
-   return TabGroupStyle::GetInsetsForHeaderChip(orientation_).left();
+@@ -790,8 +837,30 @@ gfx::Insets TabGroupHeaderView::GetHeaderInsets() const {
+       delegate_->IsGroupFocused()) {
+     return TabGroupStyle::GetInsetsForFocusedHeaderChip();
+   }
++  // Stedding: room for the group's dot before the title.
++  if (IsSteddingRow()) {
++    return gfx::Insets::TLBR(0, GetHorizontalInset() + kSteddingDotRoom, 0,
++                             GetHorizontalInset());
++  }
+   return gfx::Insets::VH(0, GetHorizontalInset());
  }
  
 +bool TabGroupHeaderView::IsSteddingRow() const {
@@ -1518,10 +1458,10 @@ index ee897b06f49c1..333382a938a4e 100644
  BEGIN_METADATA(TabGroupHeaderView)
  END_METADATA
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view.h b/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
-index a06c09e58d60e..d3185746f3886 100644
+index a7784a030564b..1e1c61a2f11b4 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.h
-@@ -89,6 +89,7 @@ class TabGroupHeaderView : public views::FlexLayoutView,
+@@ -91,6 +91,7 @@ class TabGroupHeaderView : public views::FlexLayoutView,
    void OnMouseMoved(const ui::MouseEvent& event) override;
    void OnMouseEntered(const ui::MouseEvent& event) override;
    void OnMouseExited(const ui::MouseEvent& event) override;
@@ -1529,7 +1469,7 @@ index a06c09e58d60e..d3185746f3886 100644
    void OnFocus() override;
    void OnBlur() override;
    void AddedToWidget() override;
-@@ -125,6 +126,15 @@ class TabGroupHeaderView : public views::FlexLayoutView,
+@@ -127,6 +128,15 @@ class TabGroupHeaderView : public views::FlexLayoutView,
    views::Label* title_label_for_testing() { return group_header_label_; }
  
   private:
@@ -1546,10 +1486,10 @@ index a06c09e58d60e..d3185746f3886 100644
    void OnBubbleOpened();
    void OnBubbleClosed();
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
-index 2c4c231fb3276..993179a690cfd 100644
+index 4cca85eb84ee3..8d4d939339d60 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view_unittest.cc
-@@ -22,8 +22,11 @@
+@@ -23,8 +23,11 @@
  #include "testing/gmock/include/gmock/gmock.h"
  #include "testing/gtest/include/gtest/gtest.h"
  #include "ui/base/l10n/l10n_util.h"
@@ -1561,7 +1501,7 @@ index 2c4c231fb3276..993179a690cfd 100644
  #include "ui/gfx/text_elider.h"
  #include "ui/views/controls/button/label_button.h"
  #include "ui/views/test/views_test_base.h"
-@@ -166,6 +169,48 @@ TEST_F(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
+@@ -167,6 +170,48 @@ TEST_F(TabGroupHeaderViewTest, TitleLabelHeightWhenConstrained) {
              constrained_height);
  }
  

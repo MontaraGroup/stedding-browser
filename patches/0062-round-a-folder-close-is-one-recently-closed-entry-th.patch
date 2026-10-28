@@ -51,8 +51,8 @@ Forward and Reload with no ground under them; each change has its
 behaviour id and tests that failed before the fix.
 Removable when: never; these are Stedding's own behaviours.
 ---
+ chrome/browser/BUILD.gn                       |   1 +
  chrome/browser/app_controller_mac.mm          |   8 +
- chrome/browser/ui/BUILD.gn                    |   1 +
  chrome/browser/ui/archive/BUILD.gn            |  16 ++
  chrome/browser/ui/archive/archive_mark.cc     |  53 +++++
  chrome/browser/ui/archive/archive_mark.h      |  20 ++
@@ -113,6 +113,18 @@ Removable when: never; these are Stedding's own behaviours.
  create mode 100644 chrome/test/stedding/quiet_start_browsertest.cc
  create mode 100644 chrome/test/stedding/settings_security_browsertest.cc
 
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index e99d8c934539d..2b8f74028e80d 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -3874,6 +3874,7 @@ source_set("browser") {
+       "//chrome/browser/ui/stedding:motion",
+       "//chrome/browser/ui/stedding/theme",
+       "//chrome/browser/ui/archive",
++      "//chrome/browser/ui/archive:closed_folder",
+       "//chrome/browser/ui/webui/stedding_archive",
+       "//chrome/browser/ui/webui/stedding_welcome",
+     ]
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
 index 383bd2a485e7b..46359d22b1a5e 100644
 --- a/chrome/browser/app_controller_mac.mm
@@ -139,18 +151,6 @@ index 383bd2a485e7b..46359d22b1a5e 100644
    } else {
      service->RestoreMostRecentEntry(context);
    }
-diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index daba9e441f5be..f7ef16312d9f2 100644
---- a/chrome/browser/ui/BUILD.gn
-+++ b/chrome/browser/ui/BUILD.gn
-@@ -2349,6 +2349,7 @@ static_library("ui") {
-       "//chrome/browser/ui/views/spaces",
-       "//chrome/browser/ui/stedding/theme",
-       "//chrome/browser/ui/archive",
-+      "//chrome/browser/ui/archive:closed_folder",
-       "//chrome/browser/ui/webui/stedding_archive",
-       "//chrome/browser/ui/webui/stedding_welcome",
-       "//chrome/browser/ui/stedding/screenshot",
 diff --git a/chrome/browser/ui/archive/BUILD.gn b/chrome/browser/ui/archive/BUILD.gn
 index e5a630392e3db..63c4768f928dd 100644
 --- a/chrome/browser/ui/archive/BUILD.gn
@@ -709,10 +709,10 @@ index 0c83ecf469891..4a4e42399d9f0 100644
      return;
    }
 diff --git a/chrome/browser/ui/browser_window/internal/BUILD.gn b/chrome/browser/ui/browser_window/internal/BUILD.gn
-index fdac4c00f4508..c64663a8fb8ff 100644
+index e1cf9341e5ee9..e6a57154a3315 100644
 --- a/chrome/browser/ui/browser_window/internal/BUILD.gn
 +++ b/chrome/browser/ui/browser_window/internal/BUILD.gn
-@@ -103,6 +103,8 @@ source_set("internal") {
+@@ -101,6 +101,8 @@ source_set("internal") {
        "//chrome/browser/ui:ui_features",
        "//chrome/browser/ui/animation",
        "//chrome/browser/ui/archive:undo",
@@ -722,10 +722,10 @@ index fdac4c00f4508..c64663a8fb8ff 100644
        "//chrome/browser/ui/browser_active_state_manager",
        "//chrome/browser/ui/browser_ui_controller",
 diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
-index 7464a2c22b0d5..c81161d9faae7 100644
+index 99d12d03aab93..81c3ec86c86fc 100644
 --- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
 +++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
-@@ -93,6 +93,8 @@
+@@ -94,6 +94,8 @@
  #include "chrome/browser/ui/side_panel/side_panel_registry.h"
  #include "chrome/browser/ui/signin/signin_view_controller.h"
  #include "chrome/browser/ui/spaces/space_model.h"
@@ -733,8 +733,8 @@ index 7464a2c22b0d5..c81161d9faae7 100644
 +#include "chrome/browser/ui/stedding/theme/page_theme_color_controller.h"
  #include "chrome/browser/ui/sync/browser_synced_window_delegate.h"
  #include "chrome/browser/ui/tabs/organizer/organizer_panel_controller.h"
- #include "chrome/browser/ui/tabs/saved_tab_groups/most_recent_shared_tab_update_store.h"
-@@ -290,6 +292,13 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
+ #include "chrome/browser/ui/tabs/organizer/organizer_panel_utils.h"
+@@ -291,6 +293,13 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
      closed_tabs_undo_ = std::make_unique<stedding::ClosedTabsUndo>(*browser);
      folder_session_ = std::make_unique<stedding::FolderSessionService>(
          *browser);
@@ -749,7 +749,7 @@ index 7464a2c22b0d5..c81161d9faae7 100644
  
    if (base::FeatureList::IsEnabled(features::kGlicActorUi) &&
 diff --git a/chrome/browser/ui/browser_window/public/browser_window_features.h b/chrome/browser/ui/browser_window/public/browser_window_features.h
-index 50776065faf38..6be3520173e81 100644
+index 26f29a85c4a57..41b9e699f7178 100644
 --- a/chrome/browser/ui/browser_window/public/browser_window_features.h
 +++ b/chrome/browser/ui/browser_window/public/browser_window_features.h
 @@ -121,6 +121,7 @@ class SpaceModel;
@@ -772,11 +772,11 @@ index 50776065faf38..6be3520173e81 100644
    std::unique_ptr<ttc::AiOverlayDialogController> ai_overlay_dialog_controller_;
  
 diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
-index e1f0771d90bf3..879c89aa95e77 100644
+index c8352aebb0337..ac568016a982d 100644
 --- a/chrome/browser/ui/cocoa/BUILD.gn
 +++ b/chrome/browser/ui/cocoa/BUILD.gn
-@@ -123,6 +123,7 @@ source_set("cocoa") {
-   ]
+@@ -120,6 +120,7 @@ source_set("cocoa") {
+   public_deps = [ "//chrome/browser/ui:browser_live_tab_context" ]
  
    deps = [
 +    "//chrome/browser/ui/archive:closed_folder",
@@ -784,7 +784,7 @@ index e1f0771d90bf3..879c89aa95e77 100644
      "//chrome/app/theme:chrome_unscaled_resources_grit",
      "//chrome/browser:app_controller_mac",
 diff --git a/chrome/browser/ui/cocoa/history_menu_bridge.h b/chrome/browser/ui/cocoa/history_menu_bridge.h
-index 68e966a56abed..fd24cd45a9a65 100644
+index e633510c2c70f..ff8e63205c7bc 100644
 --- a/chrome/browser/ui/cocoa/history_menu_bridge.h
 +++ b/chrome/browser/ui/cocoa/history_menu_bridge.h
 @@ -9,6 +9,7 @@
@@ -1057,7 +1057,7 @@ index 67819c2389ccf..d4e994ad1cc7c 100644
    // just load the URL.
    if (node.session_id.is_valid()) {
 diff --git a/chrome/browser/ui/color/BUILD.gn b/chrome/browser/ui/color/BUILD.gn
-index 2c2eb05acb63a..054f5aa28064a 100644
+index cc638e48e02db..629b2dad31fcc 100644
 --- a/chrome/browser/ui/color/BUILD.gn
 +++ b/chrome/browser/ui/color/BUILD.gn
 @@ -16,6 +16,18 @@ source_set("color_headers") {
@@ -1079,7 +1079,7 @@ index 2c2eb05acb63a..054f5aa28064a 100644
  source_set("mixers") {
    sources = [
      "chrome_color_mixer.cc",
-@@ -54,6 +66,7 @@ source_set("mixers") {
+@@ -52,6 +64,7 @@ source_set("mixers") {
    deps = [
      "//chrome/browser/ui:stedding_ui_metrics",
      ":color_headers",
@@ -1087,7 +1087,7 @@ index 2c2eb05acb63a..054f5aa28064a 100644
      "//build:branding_buildflags",
      "//chrome/app/theme:theme_resources",
      "//chrome/browser/task_manager/common",
-@@ -185,6 +198,7 @@ source_set("stedding_unit_tests") {
+@@ -186,6 +199,7 @@ source_set("stedding_unit_tests") {
    sources = [ "stedding_color_mixer_unittest.cc" ]
    deps = [
      ":mixers",
@@ -1423,10 +1423,10 @@ index 739d0e9e7db2f..32d7faf39c977 100644
    AddTab(browser(), GURL("https://example.com/"));
    AddTab(browser(), GURL("https://example.org/"));
 diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
-index 93e4bfb76987e..dce11d8458598 100644
+index 83c3ced24a4f7..b0b7aaab9b991 100644
 --- a/chrome/browser/ui/tabs/BUILD.gn
 +++ b/chrome/browser/ui/tabs/BUILD.gn
-@@ -388,6 +388,7 @@ if (!is_android) {
+@@ -393,6 +393,7 @@ if (!is_android) {
        ":tab_strip_model_observer",
        ":tabs",
        "//chrome/app:command_ids",
@@ -1434,7 +1434,7 @@ index 93e4bfb76987e..dce11d8458598 100644
        "//chrome/browser/commerce",
        "//chrome/browser/content_settings:content_settings_factory",
        "//chrome/browser/extensions",
-@@ -535,6 +536,7 @@ if (!is_android) {
+@@ -537,6 +538,7 @@ if (!is_android) {
      }
  
      deps = [
@@ -1443,7 +1443,7 @@ index 93e4bfb76987e..dce11d8458598 100644
        ":tab_model",
        ":tab_strip",
 diff --git a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc
-index 96269a9aea8c8..c8aaea89903a4 100644
+index 9f467ba218f62..155c04db63532 100644
 --- a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc
 +++ b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.cc
 @@ -21,6 +21,7 @@
@@ -1454,7 +1454,7 @@ index 96269a9aea8c8..c8aaea89903a4 100644
  #include "chrome/browser/favicon/favicon_service_factory.h"
  #include "chrome/browser/favicon/favicon_utils.h"
  #include "chrome/browser/favicon/history_ui_favicon_request_handler_factory.h"
-@@ -277,10 +278,13 @@ bool RecentTabsSubMenuModel::GetAcceleratorForCommandId(
+@@ -272,10 +273,13 @@ bool RecentTabsSubMenuModel::GetAcceleratorForCommandId(
      const std::optional<size_t> parent_index =
          parent_id == -1 ? std::nullopt : GetIndexOfCommandId(parent_id);
  
@@ -1470,7 +1470,7 @@ index 96269a9aea8c8..c8aaea89903a4 100644
          parent_index == recent_tabs_title_index_.value() + 1;
      if (group_or_window_is_first_item) {
        *accelerator = reopen_closed_tab_accelerator_;
-@@ -396,6 +400,11 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
+@@ -381,6 +385,11 @@ void RecentTabsSubMenuModel::ExecuteCommand(int command_id, int event_flags) {
      base::RecordAction(base::UserMetricsAction("WrenchMenu_OpenRecentSplit"));
      service->RestoreEntryById(context, local_split_items_.at(command_id),
                                disposition);
@@ -1482,7 +1482,7 @@ index 96269a9aea8c8..c8aaea89903a4 100644
    } else {
      CHECK(IsCommandType(CommandType::Submenu, command_id) ||
            IsCommandType(CommandType::OtherDevice, command_id));
-@@ -500,10 +509,25 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
+@@ -474,10 +483,25 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
                                IDS_RECENT_TABS);
  
      int added_count = 0;
@@ -1509,7 +1509,7 @@ index 96269a9aea8c8..c8aaea89903a4 100644
        switch (entry->type) {
          case sessions::tab_restore::Type::TAB: {
            auto& tab = static_cast<const sessions::tab_restore::Tab&>(*entry);
-@@ -690,6 +714,33 @@ void RecentTabsSubMenuModel::BuildLocalWindowItem(
+@@ -635,6 +659,33 @@ void RecentTabsSubMenuModel::BuildLocalWindowItem(
                                                            : kTabOldIcon));
  }
  
@@ -1543,7 +1543,7 @@ index 96269a9aea8c8..c8aaea89903a4 100644
  void RecentTabsSubMenuModel::BuildLocalGroupItem(
      const sessions::tab_restore::Group& group,
      size_t curr_model_index) {
-@@ -1107,6 +1158,9 @@ void RecentTabsSubMenuModel::ClearLocalEntries() {
+@@ -1020,6 +1071,9 @@ void RecentTabsSubMenuModel::ClearLocalEntries() {
    local_group_items_.clear();
    local_split_items_.clear();
    local_window_items_.clear();
@@ -1554,7 +1554,7 @@ index 96269a9aea8c8..c8aaea89903a4 100644
  }
  
 diff --git a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h
-index 52600474533fb..09ef701353ab4 100644
+index 424cd1179592c..15b28487af5cf 100644
 --- a/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h
 +++ b/chrome/browser/ui/tabs/recent_tabs_sub_menu_model.h
 @@ -36,6 +36,10 @@ namespace sessions {
@@ -1579,7 +1579,7 @@ index 52600474533fb..09ef701353ab4 100644
    void BuildLocalGroupItem(const sessions::tab_restore::Group& group,
                             size_t curr_model_index);
  
-@@ -284,6 +292,9 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
+@@ -279,6 +287,9 @@ class RecentTabsSubMenuModel : public ui::SimpleMenuModel,
  
    // Group items for local recently closed groups.
    GroupItems local_group_items_;
@@ -1590,7 +1590,7 @@ index 52600474533fb..09ef701353ab4 100644
    // Split items for local recently closed splits.
    SplitItems local_split_items_;
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 1bef1d9ac5b1e..c9126f32491c9 100644
+index b839a55b30c2b..b05f59cf8df25 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -40,6 +40,7 @@
@@ -1609,7 +1609,7 @@ index 1bef1d9ac5b1e..c9126f32491c9 100644
  #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
  #include "chrome/browser/ui/browser_command_controller.h"
  #include "chrome/browser/ui/browser_commands.h"
-@@ -5247,6 +5249,17 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
+@@ -5262,6 +5264,17 @@ void TabStripModel::CloseFolderTabs(tabs::FolderTabCollection* folder) {
        delegate_->AddTabAt(GURL(), -1, /*foreground=*/true);
      }
    }
@@ -1628,10 +1628,10 @@ index 1bef1d9ac5b1e..c9126f32491c9 100644
        base::BindRepeating(
            [](const std::vector<tabs::TabInterface*>& list) { return list; },
 diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
-index ab8805612ea19..863ddd912f214 100644
+index 03f0d29abe54d..7e2a06d620a65 100644
 --- a/chrome/browser/ui/views/frame/browser_widget.cc
 +++ b/chrome/browser/ui/views/frame/browser_widget.cc
-@@ -513,21 +513,23 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
+@@ -505,21 +505,23 @@ ui::ColorProviderKey BrowserWidget::GetColorProviderKey() const {
            web_app::AppBrowserController::From(browser_view_->browser())) {
      key.app_controller = app_controller;
      key.app_background_color = app_controller->GetBackgroundColor();
@@ -1666,7 +1666,7 @@ index ab8805612ea19..863ddd912f214 100644
  #if BUILDFLAG(IS_CHROMEOS)
    // ChromeOS SystemWebApps use the OS theme all the time.
 diff --git a/chrome/browser/ui/views/frame/contents_container_view.cc b/chrome/browser/ui/views/frame/contents_container_view.cc
-index febd158b3d5f1..9fc7b3c18e195 100644
+index 5407bd717cc8c..3a559eee1a44e 100644
 --- a/chrome/browser/ui/views/frame/contents_container_view.cc
 +++ b/chrome/browser/ui/views/frame/contents_container_view.cc
 @@ -8,6 +8,7 @@
@@ -2058,7 +2058,7 @@ index 244eacae5d791..8c1153eae6d8a 100644
    base::ScopedObservation<SpaceModel, SpaceModel::Observer> observation_{this};
    std::optional<size_t> drag_chip_;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
-index a375430858fe8..cc2a9d03bee2b 100644
+index 86331af3bb8d8..5b2c606a2856b 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
 @@ -10,6 +10,7 @@
@@ -2066,10 +2066,10 @@ index a375430858fe8..cc2a9d03bee2b 100644
  #include "base/containers/flat_map.h"
  #include "base/containers/flat_set.h"
 +#include "base/scoped_observation.h"
+ #include "third_party/abseil-cpp/absl/container/inlined_vector.h"
  #include "ui/base/class_property.h"
  #include "ui/compositor/layer.h"
- #include "ui/gfx/animation/animation.h"
-@@ -17,6 +18,7 @@
+@@ -18,6 +19,7 @@
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/view.h"
  #include "ui/views/view_class_properties.h"
@@ -2077,7 +2077,7 @@ index a375430858fe8..cc2a9d03bee2b 100644
  #include "ui/views/view_utils.h"
  #include "ui/views/widget/widget.h"
  
-@@ -70,6 +72,30 @@ std::optional<views::SizeBound> TabCollectionAnimatingLayoutManager::Delegate::
+@@ -71,6 +73,30 @@ std::optional<views::SizeBound> TabCollectionAnimatingLayoutManager::Delegate::
  
  void TabCollectionAnimatingLayoutManager::Delegate::OnAnimationEnded() {}
  
@@ -2105,12 +2105,12 @@ index a375430858fe8..cc2a9d03bee2b 100644
 +  base::ScopedObservation<views::View, views::ViewObserver> observation_{this};
 +};
 +
- TabCollectionAnimatingLayoutManager::TabCollectionAnimatingLayoutManager(
-     std::unique_ptr<LayoutManagerBase> target_layout_manager,
-     Delegate& delegate,
-@@ -251,9 +277,32 @@ void TabCollectionAnimatingLayoutManager::OnInstalled(views::View* host) {
+ TabCollectionAnimatingLayoutManager::AnimationCoordinator::AnimationCoordinator(
+     views::View& view)
+     : views::AnimationDelegateViews(&view) {
+@@ -387,9 +413,32 @@ void TabCollectionAnimatingLayoutManager::LayoutImpl() {
+ void TabCollectionAnimatingLayoutManager::OnInstalled(views::View* host) {
    LayoutManagerBase::OnInstalled(host);
-   views::AnimationDelegateViews::SetView(host);
    host->SetProperty(kHasAnimatingLayoutManagerKey, true);
 +  host_observer_ = std::make_unique<HostObserver>(*this, host);
    RecalculateTarget();
@@ -2142,15 +2142,20 @@ index a375430858fe8..cc2a9d03bee2b 100644
      const views::ProposedLayout& starting_layout) {
    // Create a set of current child views for fast lookup. This is necessary
 diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
-index 0407b26b8ae13..a453a62966e77 100644
+index 039c0090468a9..94d14d09b4526 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
 +++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h
-@@ -139,7 +139,16 @@ class TabCollectionAnimatingLayoutManager
+@@ -188,12 +188,21 @@ class TabCollectionAnimatingLayoutManager : public views::LayoutManagerBase {
    void LayoutImpl() override;
    void OnInstalled(views::View* host) override;
  
 +
   private:
+   // Invoked by `AnimationCoordinator` as the shared animation progresses or
+   // ends.
+   void OnAnimationProgressed();
+   void OnAnimationEnded();
+ 
 +  // Stedding: a child destroyed outright, not animated out
 +  // (TabCollectionNode::RemoveChild with no remove callback), leaves the lookup
 +  // maps and layouts below before it is deleted. Closing a folder's tabs left
@@ -2162,7 +2167,7 @@ index 0407b26b8ae13..a453a62966e77 100644
    // Sets `starting_layout_` and `target_layout_` respectively. Clients must
    // set these via the below helpers to ensure `start_view_bounds_map_` and
    // `target_view_set_` reflect the current layout state.
-@@ -246,6 +255,8 @@ class TabCollectionAnimatingLayoutManager
+@@ -324,6 +333,8 @@ class TabCollectionAnimatingLayoutManager : public views::LayoutManagerBase {
    // to its target size. In such cases animating the host's preferred size
    // avoids clipping close / fade-out animations.
    const bool animate_host_size_ = false;
@@ -2172,7 +2177,7 @@ index 0407b26b8ae13..a453a62966e77 100644
  
  extern const ui::ClassProperty<bool>* const kHasAnimatingLayoutManagerKey;
 diff --git a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc
-index 99a08715a4367..e7700f7f162db 100644
+index 495a43a648cd3..e7f591aa25883 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager_unittest.cc
 @@ -4,6 +4,9 @@
@@ -2185,8 +2190,8 @@ index 99a08715a4367..e7700f7f162db 100644
  #include <memory>
  #include <tuple>
  #include <vector>
-@@ -303,6 +306,31 @@ TEST_P(TabCollectionAnimatingLayoutManagerTest,
-   }
+@@ -678,6 +681,31 @@ TEST_P(TabCollectionAnimatingLayoutManagerTest,
+   EXPECT_EQ(prev_pos_in_host, 20);
  }
  
 +// Stedding: a child destroyed outright, not animated out, while an animation
