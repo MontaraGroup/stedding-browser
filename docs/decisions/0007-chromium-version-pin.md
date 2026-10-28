@@ -35,7 +35,9 @@ and configuration may not, because those are what silently go stale.
   owner: "always latest one", and the pin went from M153 straight to the M155
   early-stable build. Amended again 2026-10-23, the owner: a milestone almost nobody
   runs yet is not worth a six-hour rebuild of both machines; M157 waits for its
-  rollout, about a week after early stable.)
+  rollout, about a week after early stable. On 2026-10-28 the owner had M157's stable
+  cut, 157.0.8103.31, prepared and merged before the rollout, so `tooling/check-pin`
+  reports the pin `ahead` until Mac stable serves M157.)
 - **Extended stable is not our channel.** It trades feature currency for enterprise
   change-management we do not need, and it eventually stops receiving fixes.
 - Moving the pin is always its own commit, recording the version, the upstream

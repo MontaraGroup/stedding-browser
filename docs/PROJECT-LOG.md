@@ -14,7 +14,9 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 
 The owner asked for the move to Chromium 157 to be prepared and not released. Google's
 schedule puts M157 on the stable channel on 2026-11-03; the series sits on 157.0.8103.31, the
-stable cut, on the branch `m157` (`tooling/chromium-version` and `patches/`, pushed, not merged).
+stable cut (`tooling/chromium-version` and `patches/`). It was prepared on the branch `m157` and
+merged into `main` on the owner's word after the checks below, ahead of Google's rollout; the
+last commit of `main` on the 156 series is `1791465`, where a 156 point release would start.
 The rebase changed 69 of the 110 patches and added 0111; what M157 changed under them is
 `docs/HANDOFF.md` trap 134. Reviews of the whole range-diff in four parts, each by two other
 reviewers, found lost braces, colliding toast ids, a dropped default and a Windows-only link
