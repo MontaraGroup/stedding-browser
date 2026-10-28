@@ -24,14 +24,14 @@ Removable when: never as a feature; the tab_view.cc and tab_close_button
 hunks go if Chromium's vertical tab strip grows its own pinned-tab close
 rule.
 ---
- chrome/browser/ui/stedding/pin_lifecycle.cc   |  53 ++++++++
- chrome/browser/ui/stedding/pin_lifecycle.h    |  16 +++
- .../browser/ui/views/tabs/common/tab_view.cc  | 108 ++++++++++++++--
+ chrome/browser/ui/stedding/pin_lifecycle.cc   |  53 ++++++
+ chrome/browser/ui/stedding/pin_lifecycle.h    |  16 ++
+ .../browser/ui/views/tabs/common/tab_view.cc  | 126 +++++++++++++-
  .../browser/ui/views/tabs/common/tab_view.h   |  11 ++
- .../ui/views/tabs/tab/tab_close_button.cc     |  14 ++-
- .../ui/views/tabs/tab/tab_close_button.h      |   8 ++
- .../stedding/sidebar_click_browsertest.cc     | 115 ++++++++++++++++--
- 7 files changed, 308 insertions(+), 17 deletions(-)
+ .../ui/views/tabs/tab/tab_close_button.cc     |  14 +-
+ .../ui/views/tabs/tab/tab_close_button.h      |   8 +
+ .../stedding/sidebar_click_browsertest.cc     | 161 +++++++++++++++++-
+ 7 files changed, 372 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding/pin_lifecycle.cc b/chrome/browser/ui/stedding/pin_lifecycle.cc
 index 82fa940de9b92..564f7899d292c 100644
@@ -132,7 +132,7 @@ index 8a46207879611..4ac6898c8dc58 100644
  // the menu was opened on, or the selection that holds it): its row shows
  // Cmd-W's shortcut, and does what Cmd-W does (the owner, 2026-10-20). It
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index d9d40dc9c5659..b99d9dd3da121 100644
+index d9d40dc9c5659..4fb3278960009 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -100,6 +100,7 @@
@@ -249,7 +249,7 @@ index d9d40dc9c5659..b99d9dd3da121 100644
    }
  
    if (active_) {
-@@ -1957,6 +1998,57 @@ void TabView::CloseButtonPressed(const ui::Event& event) {
+@@ -1957,6 +1998,75 @@ void TabView::CloseButtonPressed(const ui::Event& event) {
        from_mouse ? CloseTabSource::kFromMouse : CloseTabSource::kFromTouch);
  }
  
@@ -277,27 +277,45 @@ index d9d40dc9c5659..b99d9dd3da121 100644
 +          .AddParagraph(ui::DialogModelLabel(
 +              u"It is unpinned and closed. Reopen Closed Tab brings it "
 +              u"back."))
-+          .AddOkButton(base::BindOnce(
-+                           [](tabs::TabHandle handle) {
-+                             // Still a pin, by the same rule: one unpinned or
-+                             // closed while the question was open is left.
-+                             tabs::TabInterface* const pin = handle.Get();
-+                             BrowserWindowInterface* const window =
-+                                 pin ? pin->GetBrowserWindowInterface()
-+                                     : nullptr;
-+                             if (window && stedding::RowCloseFor(window, pin) !=
-+                                               stedding::RowClose::kClose) {
-+                               stedding::RemovePinnedRow(window, pin);
-+                             }
-+                           },
-+                           handle),
-+                       ui::DialogModel::Button::Params().SetLabel(u"Remove"))
++          .AddOkButton(
++              base::BindOnce(
++                  [](tabs::TabHandle handle) {
++                    // After the question has closed: closing the tab takes
++                    // its row, which closes a question still open over it,
++                    // and that close reached for the x on a row already out
++                    // of the window -- the browser stopped (the owner,
++                    // 2026-10-28, on 0.3.0 beta 22).
++                    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++                        FROM_HERE, base::BindOnce(
++                                       [](tabs::TabHandle handle) {
++                                         // Still a pin, by the same rule: one
++                                         // unpinned or closed meanwhile is
++                                         // left.
++                                         tabs::TabInterface* const pin =
++                                             handle.Get();
++                                         BrowserWindowInterface* const window =
++                                             pin ? pin->GetBrowserWindowInterface()
++                                                 : nullptr;
++                                         if (window &&
++                                             stedding::RowCloseFor(window, pin) !=
++                                                 stedding::RowClose::kClose) {
++                                           stedding::RemovePinnedRow(window, pin);
++                                         }
++                                       },
++                                       handle));
++                  },
++                  handle),
++              ui::DialogModel::Button::Params().SetLabel(u"Remove"))
 +          .AddCancelButton(base::DoNothing())
 +          // Return alone never removes a pin: the user says so.
 +          .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
 +          .Build();
 +  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
 +      std::move(dialog_model), close_button_, views::BubbleBorder::LEFT_CENTER);
++  // The x is not lit while the question shows: the light is undone as the
++  // question closes, and a question closed with its row did that on a button
++  // no longer in a window.
++  bubble->set_highlight_button_when_shown(false);
 +  views::Widget* const widget = views::BubbleDialogDelegate::CreateBubbleDeprecated(
 +      std::move(bubble), views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
 +  pin_remove_bubble_ = widget->GetWeakPtr();
@@ -396,10 +414,19 @@ index 957cc621a610b..745b8da43d1cb 100644
  
  #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_TAB_CLOSE_BUTTON_H_
 diff --git a/chrome/test/stedding/sidebar_click_browsertest.cc b/chrome/test/stedding/sidebar_click_browsertest.cc
-index fb9d9aef66584..5ab20768306f4 100644
+index fb9d9aef66584..af09dca3c17ac 100644
 --- a/chrome/test/stedding/sidebar_click_browsertest.cc
 +++ b/chrome/test/stedding/sidebar_click_browsertest.cc
-@@ -2230,10 +2230,21 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
+@@ -122,6 +122,8 @@
+ #include "ui/views/focus/focus_manager.h"
+ #include "ui/views/test/dialog_test.h"
+ #include "ui/views/test/views_test_utils.h"
++#include "ui/views/animation/ink_drop.h"
++#include "ui/views/animation/ink_drop_state.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/any_widget_observer.h"
+@@ -2230,10 +2232,21 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
      }
  
      {
@@ -424,7 +451,7 @@ index fb9d9aef66584..5ab20768306f4 100644
        EXPECT_TRUE(model->IsSpacePinned(pin));
        EXPECT_TRUE(pin->GetContents()->WasDiscarded());
        EXPECT_EQ(home, pin->GetContents()->GetLastCommittedURL());
-@@ -2303,6 +2314,58 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
+@@ -2303,6 +2316,102 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
        dialog->view()->AcceptAppModalDialog();  // Leave.
        ASSERT_NO_FATAL_FAILURE(expect_closed_by_the_rule(pin));
      }
@@ -480,10 +507,54 @@ index fb9d9aef66584..5ab20768306f4 100644
 +      EXPECT_EQ(before, tabs->GetActiveTab()) << "the row on screen moved";
 +      EXPECT_TRUE(model->IsSpacePinned(pin)) << "Remove took the other pin";
 +    }
++
++    {
++      // pins H29 with Stedding's animations off (motion O3): the row goes
++      // the moment the tab closes, with the question still open over its x.
++      // Closing the question then reached for the x's highlight on a row
++      // already out of the window, and the browser stopped on a CHECK (the
++      // owner, 2026-10-28, on 0.3.0 beta 22).
++      SCOPED_TRACE("Remove with the animations off");
++      PrefService* const prefs = browser()->GetProfile()->GetPrefs();
++      prefs->SetBoolean(stedding::prefs::kUiAnimate, false);
++      ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++          browser(), home, WindowOpenDisposition::NEW_FOREGROUND_TAB,
++          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++      tabs::TabInterface* const third = tabs->GetActiveTab();
++      model->SetSpacePinned(third, true);
++      const int with_third = tabs->count();
++      tabs->ActivateTabAt(tabs->GetIndexOfTab(before));
++      const tabs::TabHandle handle = third->GetHandle();
++      ASSERT_NO_FATAL_FAILURE(press_close_button(third));  // The minus.
++      ASSERT_TRUE(base::test::RunUntil([&]() {
++        return !handle.Get() || handle.Get()->GetContents()->WasDiscarded();
++      })) << "the minus did not sleep the pin";
++      ASSERT_NO_FATAL_FAILURE(press_close_button(third));  // The x.
++      TabView* const row = RowFor(tabs->GetIndexOfTab(third));
++      ASSERT_TRUE(row);
++      views::Widget* const bubble = row->pin_remove_bubble_for_testing();
++      ASSERT_TRUE(bubble) << "no question before removing a pin";
++      // The x is not lit while the question shows, so the question's close
++      // has nothing to undo on it.
++      EXPECT_NE(views::InkDropState::ACTIVATED,
++                views::InkDrop::Get(row->close_button_for_testing())
++                    ->GetInkDrop()
++                    ->GetTargetInkDropState())
++          << "the question lit the x";
++      const base::WeakPtr<views::Widget> question = bubble->GetWeakPtr();
++      bubble->widget_delegate()->AsDialogDelegate()->AcceptDialog();
++      ASSERT_TRUE(base::test::RunUntil([&]() { return !handle.Get(); }))
++          << "Remove left the pin";
++      EXPECT_TRUE(!question || question->IsClosed())
++          << "the question outlived the pin";
++      EXPECT_EQ(with_third - 1, tabs->count());
++      EXPECT_EQ(before, tabs->GetActiveTab()) << "the row on screen moved";
++      prefs->SetBoolean(stedding::prefs::kUiAnimate, true);
++    }
    }();
  
    // pins H3, tabs R4 (the owner, 2026-10-21): a pin closed while it plays
-@@ -2445,24 +2508,60 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
+@@ -2445,24 +2554,60 @@ IN_PROC_BROWSER_TEST_F(SidebarClickTest, ClosingAPinSendsItHomeByOneRule) {
      tabs::TabInterface* const plain = tab_strip_model()->GetActiveTab();
      const int count = tab_strip_model()->count();
  

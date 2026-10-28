@@ -2,6 +2,21 @@
 
 What was built, newest first. Nothing here is needed to do a task: `AGENTS.md` carries what is true now, `BACKLOG.md` the order of work, `PLAN.md` the owner's decisions. This file was the "State of the project" section of `AGENTS.md` until 2026-09-30. This log starts at 2026-10-15. Closed work from before that is the table in [docs/history/archive.md](history/archive.md).
 
+## 2026-10-28 -- 0.4.0 beta 1, and a crash in 0.3.0 beta 22
+
+The owner found that Remove, in the question a pinned tab's x asks, crashed 0.3.0 beta 22: the
+tab's close took its row at once (the animations off), the row closed the question still open
+over its x, and that close reached for the x's highlight on a row already out of the window, a
+CHECK. The x is no longer lit while the question shows, and Remove closes the tab once the
+question has closed (pins H29, patch 0110). Released as 0.4.0 beta 1 on Chromium 157.0.8103.31,
+with issues 14, 35 and 42 and the pinned-folder drop.
+
+A read of the whole series, each finding then checked against the code by a second reading
+that tried to refute it, confirmed 107 faults out of 126 raised. All were already in 0.3.0
+beta 22, so none held the release back. They are S-338 to S-351, by area, in the order they
+will be fixed: cookie jars, a private window's Clear, a pin's Leave-site question, the first
+launch's profile move, sync, updates and captures first, for 0.4.0 beta 2.
+
 ## 2026-10-28 -- GitHub issues 14, 35 and 42
 
 On main, and not in a release; the owner asked for all three.
@@ -39,7 +54,7 @@ Patch 0074 turns off `kUseActionsForBrowserCommands`, under which no Stedding co
 
 ## 2026-10-27 -- 0.3.0 beta 22: GitHub issues 50, 48 and 13, pull request 49
 
-Released 2026-10-28 as [v0.3.0-beta.22](release-notes/v0.3.0-beta.22.md), on Chromium 156.0.8078.48, for macOS and Windows, with both update feeds. The site and the Homebrew cask follow. Issue 50 (patch 0110, pins H29), as shipped: on a pinned tab that is not on screen the x asks *Remove this pinned tab?* before it unpins and closes it, and on the pin on screen the button stays a minus that sleeps the tab. Issue 48: Copy Link, with its toast, in a little window. Issue 13: Settings › Shortcuts can trade the Space keys and the row keys, or move either set to ⌃⌘ (Alt+Shift on Windows). Pull request 49: ⌘T on a folder's last tab, when it is the window's last, opens below the folder.
+Released 2026-10-28 as [v0.3.0-beta.22](https://github.com/ysalitrynskyi/stedding-browser/releases/tag/v0.3.0-beta.22), on Chromium 156.0.8078.48, for macOS and Windows, with both update feeds. The site and the Homebrew cask follow. Issue 50 (patch 0110, pins H29), as shipped: on a pinned tab that is not on screen the x asks *Remove this pinned tab?* before it unpins and closes it, and on the pin on screen the button stays a minus that sleeps the tab. Issue 48: Copy Link, with its toast, in a little window. Issue 13: Settings › Shortcuts can trade the Space keys and the row keys, or move either set to ⌃⌘ (Alt+Shift on Windows). Pull request 49: ⌘T on a folder's last tab, when it is the window's last, opens below the folder.
 
 ## 2026-10-27 -- Pull request 49: ⌘T on a folder's last tab (S-324), released in beta 22
 
