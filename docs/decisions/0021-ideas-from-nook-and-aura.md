@@ -15,7 +15,7 @@ A third-party piece comes from its own project, under its own license, and gets 
 
 AI stays out ([ADR 0020](0020-no-bundled-model.md)). Boosts stay deferred ([ADR 0012](0012-defer-boosts-and-easels.md)). If they return, the shape is a live preview while typing and a switch per site in the page menu, with the CSS applied as the page starts loading.
 
-The behaviours are on [ROADMAP.md](../ROADMAP.md) M10. Each one stands on its own spec rows. Shortcut customisation is the one [PRODUCT.md](../PRODUCT.md) §12 counts toward 1.0.
+The behaviours are on [ROADMAP.md](../ROADMAP.md) M10. Each one stands on its own spec rows. [PRODUCT.md](../PRODUCT.md) §12 counts shortcut customisation, the Site Control Center, Developer Mode, extensions and import toward 1.0.
 
 Read, and left out:
 

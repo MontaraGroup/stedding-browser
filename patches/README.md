@@ -22,8 +22,7 @@ apart so it can be dropped on its own when the releases are official builds.
 The series cites docs by the paths they had when the text was written. `PLAN.md`'s
 item ids (`TAB-1`, `SPC-4`, and the rest) are the audit in
 [docs/history/plan-2026-09-26.md](../docs/history/plan-2026-09-26.md).
-`docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` are sections of
-[docs/history/archive.md](../docs/history/archive.md).
+`docs/ROUND6-PLAN.md` and `docs/ARC-ROUND2.md` are not in this repository.
 
 Icons, logos and installer images are replaced from
 [../branding/](../branding/) by `tooling/apply-branding`. That copy is not a patch.

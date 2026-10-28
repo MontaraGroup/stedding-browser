@@ -39,8 +39,10 @@ in the checkout is `stedding-work` ([patches/README.md](../patches/README.md)).
 ### Patch discipline
 
 - **One logical change per patch.** A patch does one thing. A round of feedback
-  that touches many features at once is the exception, and
-  [patches/README.md](../patches/README.md) lists those patches.
+  that touches many features at once is one patch when folding each part back
+  would conflict with later patches.
+  [patches/README.md](../patches/README.md) says so; the patch's message says
+  what it covers.
 - **Every patch carries a header.** `Subject:`, `Why:` and `Removable when:`
   are required. `tooling/update-patches` will not export without the last two,
   and `tooling/check-repo patches` checks the same. The diffstat under the
@@ -184,17 +186,15 @@ A point release on the milestone the checkout already holds is
 passes for a same-milestone bump. The floor is then 25 GB
 (`STEDDING_SYNC_POINT_RELEASE_MIN_FREE_GB`, never under 20; trap 45). A missing
 checkout, or one on another milestone, is a full sync and keeps the 150 GB
-floor. Trap 44 is the re-sync that was done once the checkout had been deleted
-for disk.
+floor. Trap 44 is the full disk floor a fresh checkout needs.
 
 `tooling/build-chromium` wants 60 GB free before it starts.
 `STEDDING_MIN_FREE_GB` lowers that, never under 20.
 
 On Windows the same 150 GB sync floor applies. The script's figure for the
-shallow tree is about 26 GB of source, against the Mac's 65. What a Windows
-build costs in memory and disk is in [HANDOFF.md](HANDOFF.md) (traps 53, 54,
-57 and 60). The sanitizer and checks directories are removed when the run is
-done. The release directory is the one that stays (`BACKLOG.md` S-58).
+shallow tree is about 26 GB of source, against the Mac's 65. What a milestone
+move costs that checkout, and what a full build costs in memory, is in
+[HANDOFF.md](HANDOFF.md) (traps 53 and 54).
 
 **No `node_modules` above the checkout.** Chromium's TypeScript build walks
 parent directories the way node does, so a `node_modules` in a parent
@@ -261,8 +261,7 @@ The sync fetches the one tag it builds (`--no-fetch-tags --ref refs/tags/<pin>`)
 is refused, because that checkout has no cache.
 
 `gclient` reads `GIT_CACHE_PATH`, so dependencies use the same cache. The cache
-survives a pin move, which is what makes moving the pin cheap
-([ADR 0003](decisions/0003-chromium-minimal-patch-fork.md)).
+survives a pin move, so the next fetch is not a full download.
 
 `tooling/build-chromium` copies `tooling/args/<config>.gn` into the output
 directory as `args.gn`. It builds a tree that is vanilla at the pin, or a
@@ -379,9 +378,11 @@ The longer record is [HANDOFF.md](HANDOFF.md).
 
 The policy is [PRIVACY.md](PRIVACY.md). This section is the mechanics.
 
-No request leaves the machine for Google, or for anyone else, unless the user
-asked for something that requires it. Safety features a browser is expected to
-have stay, and the tradeoff is written down.
+Requests that leave by default are listed in [PRIVACY.md](PRIVACY.md): the
+update check, thank-you pages, security component updates, Safe Browsing list
+updates, and a network-time query. Nothing else leaves unless the user asked
+for something that requires it. Safety features a browser is expected to have
+stay, and the tradeoff is written down there.
 
 - **Google API keys are not shipped.** Google account sign-in and Chrome Sync
   are absent. Sync of the sidebar is a folder the user picks (patch 0101,
@@ -411,8 +412,9 @@ have stay, and the tradeoff is written down.
   Nothing protected by Widevine plays, including Netflix, Disney+, Prime Video
   and Spotify's web player (`BACKLOG.md` S-270). Shipping it needs a licence
   from Google.
-- **Search, suggestions, spellcheck, translate, and DNS and preconnect
-  defaults** are in [PRIVACY.md](PRIVACY.md). A fresh profile does not check
+- **Search and suggestion defaults** are in [PRIVACY.md](PRIVACY.md).
+  Translate and preconnect are unchanged from Chromium
+  ([PRIVACY.md](PRIVACY.md), Still to do). A fresh profile does not check
   Google's account list and does not register with Google's push service
   (privacy Q11, Q12).
 
@@ -468,8 +470,9 @@ and app-shim ids, Mach and Mojo rendezvous names, the keychain groups under
 
 Three files still hard-code `org.chromium.Chromium` (`BACKLOG.md` S-175;
 SER-3 in [docs/history/plan-2026-09-26.md](history/plan-2026-09-26.md)). No
-patch in the series changes those comparisons. ADR 0009 says they are patched.
-They are not.
+patch in the series changes those comparisons.
+[ADR 0009](decisions/0009-macos-bundle-identifier.md) records that they do not
+follow `MAC_BUNDLE_ID`.
 
 | Where | What |
 |---|---|
@@ -501,7 +504,7 @@ Chromium's signer (`chrome/installer/mac/signing`). After stapling, `spctl`
 must answer `accepted, source=Notarized Developer ID`, or the script fails.
 The identity and the notary profile are `STEDDING_SIGN_IDENTITY` and
 `STEDDING_NOTARY_ARGS`, from the operator's environment, never from this
-repository (`BACKLOG.md` S-17).
+repository.
 
 Patch 0051 is what makes that signer work with a Developer ID on current
 macOS. Upstream assessed the app with Gatekeeper before notarizing it, which
@@ -537,7 +540,7 @@ sidebar's pill ([docs/features/updates.md](features/updates.md), ADR 0022). An
 unsigned local build does not start Sparkle, so a development copy does not
 replace itself.
 
-On Windows, Stedding's own updater has done this since beta 19 (patch 0073,
+On Windows, Stedding's own updater has done this since 0.2.0 beta 19 (patch 0073,
 ADR 0023, [ADR 0026](decisions/0026-a-windows-update-key.md) for its key). It
 uses the same schedule (patch 0078), checks the feed's Ed25519 signature
 against the key every Windows build carries, checks the installer's length and

@@ -60,8 +60,7 @@ An early Mac build kept the profile in
 Storage". The first launch that finds no Stedding profile copies that profile
 across, when it is Stedding's, and leaves the old folder as it was. If another
 browser is using the old folder, Stedding asks you to **Quit** and close it, or
-to **Start a New Profile**. It copies the key once, so macOS may ask once for
-access to the Chromium item. Keep the old folder until you have checked that
+to **Start a New Profile**. It copies the key once. macOS may ask for access to the Chromium item, and asks again on the next launch if you refuse. Keep the old folder until you have checked that
 your tabs and Spaces came across.
 
 ### Uninstalling
@@ -151,14 +150,13 @@ Search, Import, Appearance, Behaviour, Default browser and Keys.
    history, and passwords only if you tick them, because the file holds them as
    plain text. Through Chromium's importer: Safari's bookmarks, or Firefox's
    bookmarks and history, on the Mac; Firefox, with passwords, Internet
-   Explorer or the old Edge, on Windows; and a bookmarks HTML file on the Mac.
+   Explorer or the old Edge, on Windows; and a bookmarks HTML file on either platform.
    Chrome, Brave, the new Edge, Vivaldi and Chromium are not offered.
 3. The colour scheme (system, light or dark), a Space colour, and the sidebar
    text size. A fresh profile uses 14 until you pick another.
 4. How Stedding behaves. Idle tabs stay until you choose a time to archive
    them. The closed sidebar shrinks to icons, or hides. A Space stays awake
-   after you leave it until you choose a time. A link from a pinned tab opens
-   in a peek on a click until you choose otherwise.
+   after you leave it until you choose a time. A link from a pinned tab to another site opens in a peek on a click until you choose otherwise.
 5. Set Stedding as the default browser, if you want.
 6. The keys worth knowing.
 

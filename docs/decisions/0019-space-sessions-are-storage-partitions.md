@@ -13,7 +13,7 @@ A full Chromium profile per Space would split extensions, preferences and histor
 
 An isolated Space is still one profile. Its web tabs are created with `SiteInstance::CreateForFixedStoragePartition` against `StoragePartitionConfig::Create(context, "spaces", profile_id, /*in_memory=*/false)` (patch 0046; the domain string is `kSpacePartitionDomain`).
 
-`RegistryEntry::profile_id` is that partition name. Empty means the Space has never been isolated. A non-empty value is a random `base::Token`, written the first time isolation is turned on and kept afterwards. The `isolated` flag beside it says whether the Space is isolated now, so turning it off and on again reattaches the same jar (patch 0049). A registry written before the flag existed reads a token as on (`SpaceRegistryTest.OldRegistryTokenMeansIsolated`). The value is the partition name only.
+`RegistryEntry::profile_id` is that partition name. Empty means the Space has never been isolated. The first time isolation is turned on, a random `base::Token` is written and kept. A value already stored stays the partition name as it is. The `isolated` flag beside it says whether the Space is isolated now, so turning it off and on again reattaches the same jar (patch 0049). A registry written before the flag existed reads a token as on (`SpaceRegistryTest.OldRegistryTokenMeansIsolated`). The value is the partition name only.
 
 Isolation is off until it is turned on for that Space. `stedding.spaces.own_session`, off by default, starts each new Space isolated (patch 0084). The browser's own pages stay on the profile's jar (`SpaceStoragePartitionTest.OnlyTheWebLivesInASpacesJar`). A private window has no Spaces. A Blank Window has no Space registry, so it offers no Independent session (`SpaceMenuJarTest.ABlankWindowOffersNoIndependentSession`, patch 0071).
 
@@ -29,4 +29,4 @@ Two isolated Spaces can be signed into the same site at once. Spaces that are no
 
 Deleting an isolated Space wipes its partition once its tabs have moved (sessions S17). Clear Independent Session on the chip menu wipes the jar in place and keeps the Space and its `profile_id` (sessions S13). Turning isolation off keeps the jar.
 
-Binding two Spaces to one jar, or giving a Space its own extension set, needs a later ADR. In [PRODUCT.md](../PRODUCT.md) §2, a Space's "profile" means this partition.
+Binding two Spaces to one jar, or giving a Space its own extension set, needs a later ADR. In [PRODUCT.md](../PRODUCT.md) §2, a Space's own session is this partition.

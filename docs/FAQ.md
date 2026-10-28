@@ -10,12 +10,12 @@ series of patches. See the [README](../README.md).
 **What does it have that Arc did not, and the other way round?**
 It is open source and needs no account. A Space can keep its own sign-ins inside one
 profile, so one site can be signed in as work in one Space and as you in another. One
-switch turns every website dark. Any page can become an app with a window of its own.
+switch turns every website dark. A web page can become an app with a window of its own.
 **Clear Site Cookies and Reload** clears the cookies of the site in front of you, in
 that tab’s sign-in, and reloads it; other sites are left alone. Arc still has Boosts,
 Easels, the sidebar’s mini player, the Library panel and Live Folders, shared Spaces,
 and AI. Both lists are in the README: [What Arc never had](../README.md#what-arc-never-had)
-and [what Arc has that Stedding does not, yet](../README.md#what-arc-has-that-stedding-does-not-yet).
+and [what Arc has that Stedding does not](../README.md#what-arc-has-that-stedding-does-not).
 
 **Is it a fork of Arc?**
 No. Arc is closed source, so nothing of it can be reused. Stedding is written on
@@ -97,7 +97,7 @@ asleep on its pinned page the button is an ✕: it asks *Remove this pinned tab?
 Cancel is the default, and **Remove** unpins and closes it. ⇧⌘T (Ctrl+Shift+T) brings
 it back. **Unpin from This Space** or **Remove from Essentials** removes one too. An
 essentials card has no close button; ⌘W and a middle click still follow the same rule.
-Turn off **⌘W on a pinned tab puts it to sleep** in Settings → Stedding → Tabs, and
+Turn off **⌘W on a pinned tab puts it to sleep** (**Ctrl+W on a pinned tab puts it to sleep** on Windows) in Settings → Stedding → Tabs, and
 ⌘W, the close button and a middle click close the pin, with no question.
 
 **Can I pin a tab by dragging it?**
@@ -150,8 +150,7 @@ have no separator.
 **What happens to tabs I do not close?**
 Nothing, until you choose a time in Settings → Stedding → Tabs → **Archive tabs
 nobody has looked at for** (6 hours, 12 hours, 1 day, 3 days or 7 days; Never until
-you choose). Idle tabs then move to the Archived row at the foot of the sidebar,
-grouped by day, one click from coming back. Pinned tabs and tabs in a folder never
+you choose). Idle tabs then leave the sidebar. **Archived**, on the line above the Spaces, opens them grouped by day. **Restore** on a row brings that tab back. Pinned tabs and tabs in a folder never
 archive.
 
 **Why do most tabs look dimmed after a restart?**
@@ -166,8 +165,7 @@ Yes. Settings → Stedding → Tabs → **Put tabs to sleep after** offers Never
 default), 5 minutes, 30 minutes or 4 hours. A tab you have not looked at for that
 long sleeps: its row stays, and it reloads when you open it. Essentials stay awake,
 and so does a tab playing sound, on a call, showing picture in picture, or holding
-text you typed. The command bar’s **Sleep Other Tabs** does it at once in every Space
-and window, except each window’s tab on screen and the essentials. When memory runs
+text you typed. The command bar’s **Sleep Other Tabs** does it at once in every Space, in every normal window, except each window’s tab on screen, the essentials, and a tab playing sound, on a call, showing picture in picture, holding text you typed, or otherwise in use. When memory runs
 short, the tab you saw longest ago sleeps first, unless those rules keep it awake.
 
 **I closed a tab by mistake.**
@@ -183,8 +181,7 @@ how to leave full screen** is on. A page that fills the screen by itself, such a
 video, always shows its own note.
 
 **Can a tab sit indented under the page it came from?**
-Yes, if you want it. A link you open in a new tab (a middle click, ⌘-click or
-Ctrl+click) opens just below its page. Settings → Stedding → Tabs → **Show tabs
+Yes, if you want it. A link you open in a new tab (a middle click, or ⌘-click (Ctrl+click on Windows)) opens just below its page. Settings → Stedding → Tabs → **Show tabs
 under the tab that opened them** draws it a level to the right, and a link opened
 from it a level further. Close the page and its tabs move up a level. Essentials and
 pinned tabs take no children, so their links stay at the left. The indent is off
@@ -193,8 +190,7 @@ until you turn it on.
 **Which tab do I see after I close one?**
 The tab you used before it in the same Space, the one a quick ⌃⇥ (Ctrl+Tab) would
 show, while its row is in view, so the list does not jump. If that row is scrolled
-out of view, or you have not used another tab there since the browser started, you
-get the tab below it, otherwise the one above. Putting a tab to sleep, and ⌘W on a
+out of view, or you have not used another tab there since the browser started, you get the tab below it, or the one above when nothing is below. Putting a tab to sleep, and ⌘W on a
 pinned tab, land on that same tab. When a Space’s last tab closes, it shows the
 essential you used there last, or the first essential if you have not used one. With
 no essential, it opens a new tab.
@@ -258,7 +254,7 @@ tab with a new one. A tab’s right-click menu has **New Split View with Current
 When Stedding is your default browser, a link from another app opens in a little
 window, to read and close. **Open in Stedding**, ⌘O (Ctrl+O on Windows), or the
 page’s right-click menu moves the page into a tab of your window, without reloading
-it. ⇧⌘O (Ctrl+Shift+O) puts it in a split instead. Settings → Stedding → Peek and
+it. ⇧⌘O (Ctrl+Shift+O) puts it in a split with the tab on screen, or in a tab of its own when that tab is already split, pinned, or outside the active Space. Settings → Stedding → Peek and
 little windows turns little windows off. On Windows the little window keeps Windows’
 own title bar.
 

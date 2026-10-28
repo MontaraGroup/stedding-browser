@@ -272,7 +272,7 @@ The mark and the palette exist. The mark is generated from one geometry file,
 The browser's light chrome is Tailwind's slate-300 (`#CBD5E1`). The dark chrome is
 a blue-to-plum gradient, `#21263A` to `#31243A`. A Space's colour tints the sidebar
 and nothing else. Chromium's own surfaces keep its baseline palette (patch 0105,
-[S-310](../BACKLOG.md)). The mark's amber dot stays; it is the one amber left
+[S-310](history/archive.md)). The mark's amber dot stays; it is the one amber left
 (S-310). Neither the mark nor the palette has an ADR.
 
 Rules for any new visual work:
@@ -364,7 +364,7 @@ as far as WebKit supports them. No Windows build.
 
 | What was read | In Stedding |
 |---|---|
-| An ad blocker, with a "blocked page, continue?" screen | Request blocking, off by default (blocker Bk1–Bk13). The blocked-page screen is not built (Bk20–Bk23). |
+| An ad blocker, with a "blocked page, continue?" screen | Request blocking, off by default (blocker Bk1–Bk13). The blocked-page screen is not built (Bk20). |
 | Tracking parameters stripped from every link opened | Built (clean links, S-89). |
 | Child tabs under their opener, and Back returning to it | The nesting is built (tabs R56–R59). Back returning to the opener is not (R60). |
 | A second press of a chord a web app also binds reaches the browser | Not built (S-90). |
@@ -376,7 +376,7 @@ as far as WebKit supports them. No Windows build.
 | Closed tabs reopened from a stack kept across launches | A closed tab can be reopened (S-97), and Recently Closed lists it. |
 | History and Downloads in the sidebar | Built (S-98). |
 | Import from Dia, and from Safari's export file | Dia's bookmarks, history and passwords, and Safari's export, are built (import I28–I32, I34–I42). Dia's sidebar is not (I33). Settings and command-bar rows for those imports are not built. |
-| Folders in the pinned list | Built (S-107). The Arc importer still turns a pinned folder into an ordinary one (import I3). |
+| Folders in the pinned list | Built (folders F38). The Arc importer still turns a pinned folder into an ordinary one (import I3, S-107). |
 | A launch that loads only the selected tab | Built (tabs R45–R48). |
 | Tabs that sleep on a timer | Built (tabs R39–R44). |
 | One panel of site controls | Built into the page-info panel (site controls Si1–Si11). |
@@ -427,7 +427,6 @@ persisted width and state, a settings toggle, in-product help and interactive te
 The decision to build Stedding's sidebar on that view, rather than replace the tab
 strip, is [ADR 0010](decisions/0010-ride-upstream-vertical-tabs.md).
 
-On the 157 pin the launch flag that ADR names, `kVerticalTabsLaunch`, is gone.
 Upstream registers `vertical_tabs.enabled` false, so a stock build hides the strip
 until the user turns it on. Patch 0001 registers it true. Expand-on-hover is a
 separate preference, `vertical_tabs.expand_on_hover`, which upstream already
@@ -474,7 +473,7 @@ forked and embedded without copyleft. No other project in the table offers all t
 - **No sync service of our own.** Google Sync is not available to a Chromium fork
   ([PRIVACY.md](PRIVACY.md)). The sidebar can sync through a folder the user picks,
   off by default
-  ([ADR 0029](decisions/0029-sidebar-sync-through-a-folder.md)): Spaces, pins, folders
+  ([ADR 0029](decisions/0029-sidebar-sync-through-a-folder.md)): Spaces, pins, pinned folders
   and essentials. Stedding makes no network request for it. Open tabs, history and
   passwords stay on each machine.
 - **One maintainer.** Brave has a company. Zen has a large community. The BSD licence

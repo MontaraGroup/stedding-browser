@@ -20,9 +20,9 @@ every release.
 | M1 — Branded build, installable image | Done: `Stedding.app`, bundle id `dev.stedding.Stedding` (ADR 0009), `tooling/package-dmg`, codecs (ADR 0008). | A recorded idle-network run on a real keychain, long enough for the push service (S-50) |
 | M2 — Sidebar with vertical tabs | Done, on Chromium's own vertical tabs (ADR 0010), with folders (ADR 0013), pinned tabs, the rail, density, and a sidebar that hides completely. | — |
 | M3 — Workspaces | Done as Spaces (ADR 0015, ADR 0016). A Space can have cookies of its own (ADR 0019). | — |
-| M4 — Command bar | Done (`docs/features/commandbar.md`). ⌘L opens the bar with the page's address in it. | A click on the address row does not open the bar (K12, S-127) |
+| M4 — Command bar | Partly done (`docs/features/commandbar.md`). ⌘L opens the bar with the page's address in it. | A click on the address does not open the bar, and Move Tab acts on the active tab only (K12, S-127). Turn Bookmarks into Pinned Tabs stays listed with nothing to convert (K16, S-158). |
 | M5 — Split view | Partly done: Chromium's split view, the sidebar's verbs on both panes, and a split made by dragging a tab onto the page (J10–J15). | ⌘W on a split (J3), a Space pin that joins a split (J5), and ⌘1–9 counting a split once (J2): S-102 |
-| M6 — Settings, import, polish | Done except the open rows. | Import from Chrome, Brave and the new Edge (S-101, `PLAN.md` decision 8). Arc's splits and archived items, and a 400-tab import inside the budgets (S-103, I5, I7). The rows still short of one test or one look, including the screen-reader pass (S-129, WIN-3). |
+| M6 — Settings, import, polish | Done except the open rows. | Arc's splits and archived items, and a 400-tab import inside the budgets (S-103, I5, I7). The rows still short of one test or one look, including a screen reader on the rail's New Tab and Archived rows (S-129, sidebar Y15). |
 | M7 — Signed, notarized, auto-updating; site live | The Mac image is signed and notarized (S-17) and updates itself from 0.2.0 beta 16 (ADR 0022). Windows updates itself from 0.2.0 beta 19 (ADR 0023, ADR 0026, S-215). The site is https://stedding.dev. | The rollback path tried for real. Updates on Linux are M9 (S-216). |
 
 ## M8 — Windows port
@@ -81,7 +81,7 @@ Downloads in the sidebar (S-98); dark pages, one switch with exceptions in both 
 (S-100, `docs/features/dark-pages.md`); child tabs nested under the opener (S-92,
 R56–R59); Dia's bookmarks, history and passwords, and Safari's export file (S-101,
 I28–I32, I34–I42); site controls in the page-info panel (S-118, Si1–Si11); undo after
-closing tabs (S-97); S-119 to S-124; three of S-125's conveniences.
+closing tabs (S-97); S-119 to S-124; the copy button on the address (copy-link L7).
 
 Still open:
 
@@ -93,15 +93,13 @@ Still open:
   (S-92, R60).
 - "Show here / Go to window" for a page open in another window (S-94).
 - The mini player (S-95, Mp1–Mp4). Picture in picture by key is released (S-122, Mp5).
-- A Space's two-colour gradient, and the command bar's selected row in the Space's colour
-  (S-99). An emoji and a colour, including one each for light and dark, are released
-  (B41–B44).
-- Dia's sidebar (S-101, I33), and import from Chrome, Brave and the new Edge (`PLAN.md`
-  decision 8).
+- A Space's two-colour gradient, and the command bar's selected row in the Space's colour,
+  are not built. An emoji and a colour, including one each for light and dark, are released
+  (B41–B44, S-99).
+- Dia's sidebar (S-101, I33).
 - Site controls' remaining check (S-118, Si12). Si1–Si11 are not yet seen live.
-- Four conveniences (S-125): a copy button on the address on hover; an empty essentials
-  row that is a drop target; each Space's stored size in Settings; "Open in the system
-  viewer" on the PDF toolbar.
+- Three conveniences (S-125): an empty essentials row that is a drop target; each Space's
+  stored size in Settings; "Open in the system viewer" on the PDF toolbar.
 
 What was read and left out is in ADR 0021.
 
@@ -241,7 +239,7 @@ has stored one yet. Each spec's rows and their tests are the record so far.
 - **VoiceOver.** Every Stedding surface (sidebar, Spaces, command bar, split controls,
   settings) is navigable and operable with VoiceOver: correct roles and labels, focus
   announced, no unreachable control. A scripted VoiceOver pass per release. Not done for
-  any release yet (S-129, `docs/history/plan-2026-09-26.md` WIN-3).
+  any release yet (S-140, S-141, S-148; sidebar Y15 in S-129).
 - **Full keyboard use.** Every action the mouse can do has a key. Focus is always
   visible. There is no focus trap. Checked by completing the UX walkthrough with the
   mouse disconnected.

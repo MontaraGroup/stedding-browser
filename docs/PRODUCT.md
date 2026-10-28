@@ -24,7 +24,7 @@ Arc is a fixed target: its maker put it in maintenance mode in May 2025 and move
 | **[not applicable]** | Exists in Arc but is a property of Arc's business, not a browser capability. |
 | **[deferred]** | Real Arc behaviour, kept here but not in the first releases (ADR 0012). |
 | **[never]** | Decided against for good (ADR 0020). |
-| **[cut]** | Taken out by the owner's decision of 2026-09-26 (`PLAN.md`, decision 4; the cuts are in `history/plan-2026-09-26.md`, section 2). |
+| **[cut]** | Taken out by the owner's decision of 2026-09-26 (`PLAN.md`, decision 4; patch 0055 applied them). |
 | **[M10]** | Beyond parity: `ROADMAP.md` M10, one `BACKLOG.md` id each, built from written descriptions (ADR 0021). Not a condition of 1.0 unless it says so. |
 
 "No spec row yet" marks a feature with no home but this document.
@@ -63,19 +63,21 @@ a `+` (`features/sidebar.md` Y44). The Library is not this foot (§9).
   on an essentials card and in the rail, and the card's reset control, show only while
   "Mark pinned tabs that left their page" is on, which is off by default (H28).
   Option-click on the favicon, or **Reset to Pinned Page**, goes home; a plain click
-  only selects. `⌘W`, a middle click or the menu's Close unloads a pin and sends it
-  back to its home, in its place, after a page's own "Leave site?" (`PLAN.md`
-  decision 11; H3, H9, H16). With that setting off, those three close the pin. On a
-  Space pin the close button is a minus while the pin is awake ("Close, keep pinned",
-  the same unload) and an x once it is asleep at home, which asks "Remove this pinned
-  tab?" before the row goes (H29). A new pin joins the end of the run (H14).
+  only selects. While "⌘W on a pinned tab puts it to sleep" is on, which it is at
+  first, `⌘W`, a middle click or the menu's Close unloads a pin and sends it back to
+  its home, in its place, after a page's own "Leave site?" (`PLAN.md` decision 11;
+  H3, H16). On a Space pin the close button is then a minus while the pin is awake
+  ("Close, keep pinned", the same unload) and an x once it is asleep at home, which
+  asks "Remove this pinned tab?" before the row goes (H29). With that setting off,
+  `⌘W`, the close button and a middle click close the pin (H9). A new pin joins the end of the run (H14).
 - **Favorites** **[1.0]** — Stedding's essentials: tabs visible in *every* Space, above
   the Space title, drawn as cards. Distinct from Pinned Tabs (`features/spaces.md` B6).
   They are shared by every Space, except in a Space with an Independent session, whose
-  essentials are its own and which shows only those (`PLAN.md` decision 14; `S-254`,
-  GitHub issue 8, ADR 0028). Arc's importer takes the first twelve (import I11). A
-  sidebar file stops at twelve, and sync turns any past the twelfth into pins of the
-  first Space (sidebar-file Sf41). The sidebar's own model does not cap the row (I11).
+  essentials are its own. That Space shows no shared essential, unless every Space has
+  its own session, when the shared ones show in each (`PLAN.md` decision 14; `S-254`,
+  GitHub issue 8, ADR 0028). Arc's importer takes the first twelve (import I11), and
+  Import sidebar… stops at twelve the same way. Sync turns any past the twelfth into
+  pins of the first Space (sidebar-file Sf41). The sidebar itself does not cap the row.
 - **Unpinned Tabs** **[1.0]** — below the Clear line, auto-archived when idle once the
   user picks a time (§11). `⇧⌘K` clears them as a set (`features/spaces.md` B20). The
   Clear line is there even when nothing is pinned (B17).
@@ -137,7 +139,7 @@ a `+` (`features/sidebar.md` Y44). The Library is not this foot (§9).
   deletion waits for a yes. Settings keeps Undo and backups. Not a sync service: no
   account, no server, no network request; the user's own sync tool or a shared drive
   moves the files (`features/sidebar-file.md` Sf7–Sf42, ADR 0029, `S-282`). Rows still
-  open are marked in that spec. ADR 0029 is still proposed.
+  open are marked in that spec. The owner's acceptance of ADR 0029 is still open.
 - **Copy URL, and copy as Markdown** **[1.0]** — `⇧⌘C` and `⌥⇧⌘C`, with tracking
   parameters removed, and a Copy Link button at the address field's right end.
   Option-click (Alt-click on Windows) copies the Markdown link. The button is on by
@@ -168,8 +170,8 @@ a `+` (`features/sidebar.md` Y44). The Library is not this foot (§9).
   sidebar a sideways scroll steps to the next or previous Space: a tilt wheel or Shift
   with the wheel, and on Windows a touchpad's sideways scroll and Ctrl with the wheel
   (`features/spaces.md` B39, `PLAN.md` decision 15, GitHub issue 10). On the Mac a
-  two-finger swipe follows the fingers (B35). Windows does not do that swipe yet
-  (`history/plan-2026-09-26.md` TAB-31). The icons live at the sidebar's foot.
+  two-finger swipe follows the fingers (B35). Windows steps without following the
+  fingers (B39, `history/plan-2026-09-26.md` TAB-31). The icons live at the sidebar's foot.
 - **Create, rename, reorder, delete** **[1.0]** — `+` creates. The Space's title row
   opens its menu (Edit Space…, colour, rename, delete). Drag a Space icon, or Move
   Left / Move Right, to reorder (B27). Deleting a Space asks first. The question names
@@ -181,7 +183,7 @@ a `+` (`features/sidebar.md` Y44). The Library is not this foot (§9).
   for each of the light and dark looks, tinting the sidebar. Light, dark or automatic
   for the whole browser (`features/welcome.md` W4, W7; `features/spaces.md` B31,
   B41–B44). Not built: a two-colour gradient, and the command bar's selected row in
-  the Space's colour (`S-99`).
+  the Space's colour.
 - **Per-Space sessions** **[1.0]** — a Space can keep its own cookies, HTTP cache and
   site storage, so the same site can be signed in with different accounts in different
   Spaces of one window. Opt-in per Space; off, Spaces share the profile's jar.
@@ -254,8 +256,8 @@ a `+` (`features/sidebar.md` Y44). The Library is not this foot (§9).
   from a tab's menu. Dragging a tab onto the page makes one too, from the sidebar or
   the horizontal strip: the half under the pointer lights in the Space's colour, and
   the dropped page takes that half (`features/splits.md` J10–J15; GitHub issue 7).
-  More than two panes, or panes stacked vertically, are **[post-1.0]** (`ROADMAP.md`
-  M5).
+  More than two panes are **[post-1.0]**. Stacked panes are drawn, and a switch
+  between side by side and stacked redraws the corners (splits J7).
 - **A split is a tab** **[1.0]** — one sidebar row, and one unit for pin, sleep, move
   to a Space and rename (`features/splits.md` J1, J4).
 - **Persistence** **[1.0]** — returning to the row, and a restart, bring the split back
@@ -424,7 +426,7 @@ no spec row yet).
   Dock tile and a launcher in Stedding Apps, and "Install page as app…" on Windows,
   with a Start menu entry (`features/web-apps.md` Wa1, Wa2, Wa7, Wa8). The app's
   window has no sidebar and no Stedding card; it has its own title bar (Wa9). The app
-  keeps the session of the Space it was made in (ADR 0025, proposed) and takes no
+  keeps the session of the Space it was made in (ADR 0025) and takes no
   links from the browser until the user turns that on for it (Wa15).
 - **Arc Search (iOS/Android)** **[not applicable]** — mobile is out of scope
   (`ROADMAP.md`).
@@ -460,8 +462,7 @@ What Arc never had, rebuilt from written descriptions of Nook and Aura and never
   double click that resets its width (`features/sidebar.md` Y22), the page flush
   against the window (Y23), Close Duplicate Tabs (commandbar K26), a middle click on
   the sidebar's empty ground that opens the command bar (Y24), and a switch for the
-  link address shown on hover (`features/page.md` U9). Not built (`S-125`): a copy
-  button on the address that appears on hover, an empty essentials row that says it
+  link address shown on hover (`features/page.md` U9). Not built (`S-125`): an empty essentials row that says it
   is a drop target, each Space's stored size in Settings, and "Open in the system
   viewer" on the PDF viewer.
 
@@ -509,7 +510,7 @@ Chromium's built-in vertical tab strip supplies the tab model
 
 The page sits on a rounded card, with the window's ground as a mat at the top, the
 right and the bottom (the `card_gutter`, 6 DIP; the sidebar side has none). The
-address row is the top of that card, with no gap and no hairline under it, in the
+address row is the top of that card, with no gap under it and a hairline a tenth of the contrast colour where it meets the page, in the
 page's own colour: the colour the page draws along its top edge, else its
 `theme-color`, else its background, with the row's icons and text flipped for
 contrast (`features/toolbar.md` T3, T7, T15, T31). With the sidebar hidden completely,
@@ -542,7 +543,7 @@ the corner radius (sidebar Y1); Comfortable is the match below.
 
 | Element | What it is |
 |---|---|
-| **Essentials** | The cards above all Spaces: visible whichever Space is active, except a Space with an Independent session, which shows only its own (ADR 0028) |
+| **Essentials** | The cards above all Spaces: visible whichever Space is active, except a Space with an Independent session, which shows only its own, unless every Space has its own session, when the shared ones show in each (ADR 0028) |
 | Space title | The active Space's icon and name, when there are two or more Spaces. It opens the Space menu (spaces B16) |
 | Space-pinned tabs | Ordinary rows, favicon and title, pinned within the current Space, and folders of them (folders F38) |
 | Clear line | A hairline with `Clear` at its right end, which closes the Space's unpinned tabs and leaves the pins (spaces B17, B20) |

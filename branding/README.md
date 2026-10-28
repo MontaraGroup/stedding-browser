@@ -29,7 +29,7 @@ That scaled file is what `chrome://theme/current-channel-logo` serves. A WebUI t
 
 `chrome_product.icon` replaces `omnibox::kChromeProductIcon`: the chip on a chrome:// page, and rows that draw the same icon, including the default-browser item in the app menu. `product_refresh.icon` replaces `vector_icons::kProductRefreshIcon`. The rounded icons are on in every Stedding build (patch 0042). An infobar that speaks for the browser then uses the refresh icon in light mode and the product icon in dark mode. "Continue where you left off" and the default-browser prompt are two of those infobars.
 
-The favicons are the icon of a page with none of its own: a tab's row, a bookmark, a history entry, the command bar. The `_dark` files are for a dark ground.
+The favicons are the icon of a page with none of its own: a tab's row, a bookmark, a history entry. The `_dark` files are for a dark ground.
 
 The Windows `.ico` files are the application, HTML document and PDF document icons: the taskbar, the title bar, Explorer, the Start menu and Alt-Tab. `Logo.png` and `SmallLogo.png` are the Start menu tiles (`Square150x150Logo`, and `Square70x70Logo` with `Square44x44Logo`).
 

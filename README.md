@@ -65,7 +65,7 @@ Each release's notes are on the
    you out of the site in front of you and nothing else; Close Duplicate Tabs is one command
    away. [Spec](docs/features/commandbar.md)
 6. **Your sidebar on every computer.** Pick any folder your computers share (iCloud, Dropbox,
-   Syncthing and more). Each Stedding keeps its Spaces, pins, folders and essentials there, and
+   Syncthing and more). Each Stedding keeps its Spaces, pins, pinned folders and essentials there, and
    makes no network request of its own. [Spec](docs/features/sidebar-file.md)
 7. **Links without trackers, and blocking if you want it.** `utm_` and similar parameters
    come off the links you open; ad and tracker blocking is built in, off until you turn it
@@ -80,8 +80,7 @@ Each release's notes are on the
 
 - **The sidebar**: vertical tabs, essentials as cards, pinned tabs that remember their page,
   nested folders (in the pinned tabs too), and ⌘S (Ctrl+S) to fold it to a rail of icons or
-  hide it. ⌘W (Ctrl+W) on a pinned tab sends it back to its page, asleep, in its place. The
-  x on a pin you are not viewing asks before it removes the pin.
+  hide it. ⌘W (Ctrl+W) on a pinned tab sends it back to its page, asleep, in its place. While it is awake the close button is a minus that does the same, on screen or not. Once it is asleep the button is an x that asks before it removes the pin.
 - **Spaces** with their own colour and icon: switch with the chips, ⌃1–⌃9 (Alt+1–Alt+9), a
   two-finger swipe, or the mouse's sideways scroll over the sidebar. A Space can keep its own
   cookies, so one site can be signed into twice.
@@ -95,8 +94,7 @@ Each release's notes are on the
 - **Little windows** for links from other apps, with **Open in Stedding** to keep the page as
   a tab; sites **routed** to their Space, **sleeping tabs**, and an **archive** for idle tabs,
   off until you choose.
-- **Local development tabs** wear a yellow and black dashed outline. At Comfortable density
-  they also show their host and port.
+- **Local development tabs** wear a yellow and black dashed outline while on screen. At Comfortable density every local tab with a title shows its host and port.
 - **Copy the link** clean of trackers (⇧⌘C, Ctrl+Shift+C) or as Markdown, **screenshots** by
   key, mute and picture in picture by key.
 - **Arc in one click**: Spaces, essentials, pins, folders, tabs, history and passwords, on the
@@ -206,7 +204,7 @@ behave as they do in Chrome.
 | Google services | No sign-in, sync, telemetry or experiments. Chromium's component updates and network time stay ([PRIVACY.md](docs/PRIVACY.md)) | ✓ |
 | Ad and tracker blocking | Built in, from EasyList and EasyPrivacy; off until you turn it on | ✓ |
 | Sync | Your sidebar, through a folder your own sync app keeps; no account | Your folder |
-| Import | Arc (Mac and Windows), Dia, Safari's export file, Firefox. Chrome and Brave later | Most |
+| Import | Arc (Mac and Windows), Dia, Safari's export file, Firefox. Chrome, Brave, the new Edge, Vivaldi and Chromium are not offered | Most |
 | Updates | Checked against a signature, in the background, with a switch to turn them off | ✓ |
 | Safe Browsing | Waits on a Google API key (`S-75`) | Not yet |
 | Netflix, Disney+, Prime Video, Spotify | Need Widevine, which needs a licence from Google first (`S-270`) | Not yet |

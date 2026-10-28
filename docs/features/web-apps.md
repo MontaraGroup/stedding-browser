@@ -2,7 +2,7 @@
 
 Status: **Wa1–Wa7, Wa9–Wa15, Wa18, Wa20, Wa21 and Wa23 built. Wa8 is Chromium's Windows install, with no Stedding test. Wa16, Wa17 and Wa22 are not checked on a real update or launch. Wa19 is not built.**
 
-Any web page can become an app: a window with no browser around it, an icon in the Dock or the Start menu, and the session of the Space it was made in. On the Mac the command is "Add to Dock…". On Windows it keeps Chromium's "Install page as app…". A page with an installable manifest installs as that app; any other page is a do-it-yourself app named in the dialog. Nothing is fetched but what the page itself names.
+A page Chromium can make an app of can become an app: a window with no browser around it, an icon in the Dock or the Start menu, and the session of the Space it was made in. On the Mac the command is "Add to Dock…". On Windows it keeps Chromium's "Install page as app…". A page with an installable manifest installs as that app; any other page is a do-it-yourself app named in the dialog. Nothing is fetched but what the page itself names.
 
 Stedding's changes to Chromium's web apps:
 

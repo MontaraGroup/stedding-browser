@@ -1,6 +1,6 @@
 # Feature: Independent Space sessions
 
-Status: **S1–S13, S16, S17 and S19–S36 built. S14, S15, S18 and S33 withdrawn.** S32's live look and sound checks have not run (`docs/features/acceptance.md`, "The session mark").
+Status: **S1–S13, S16, S17, S19–S32 and S34–S36 built. S14, S15, S18 and S33 withdrawn.** S32's live look and sound checks have not run (`docs/features/acceptance.md`, "The session mark").
 Owner docs: `docs/decisions/0019-space-sessions-are-storage-partitions.md`, `docs/PRODUCT.md` §2, `docs/features/spaces.md`, `docs/features/windows.md` G5.
 
 A Space can keep its own cookies, HTTP cache and site storage, so the same site can be signed in with different credentials in different Spaces of one window. Off by default. Extensions, settings, history and saved passwords stay on the profile.

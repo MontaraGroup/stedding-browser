@@ -13,11 +13,11 @@ Sparkle 2.10.0 applies updates on the Mac. `tooling/fetch-sparkle` takes that re
 
 The feed is `updates/appcast.xml`, read from `main` on `raw.githubusercontent.com`. `tooling/publish-appcast` writes it after a release. The image and the feed are both signed with the project's EdDSA key (`SURequireSignedFeed` and `SUVerifyUpdateBeforeExtraction` in `chrome/app/app-Info.plist`). The private key is in the publishing Mac's login keychain, account `stedding` (`tooling/publish-appcast`). It is not in this repository.
 
-Automatic updates are on by default (`stedding.updates.automatic`, registered `true`), with a switch in Settings › Stedding › Updates. The browser checks at a launch when the last check is more than an hour old, and every six hours after that (`SUScheduledCheckInterval` 21600, `stedding::kUpdateCheckInterval`, patch 0078, updates Up1). With the switch off, Sparkle is not started, so there is no update request until the user chooses Check for Updates.
+Automatic updates are on by default (`stedding.updates.automatic`, registered `true`), with a switch in Settings › Stedding › Updates. Ten seconds after a launch, when the last check is more than an hour old or there is none, the browser asks Sparkle to check. Sparkle then checks every six hours (`SUScheduledCheckInterval` 21600, `stedding::kUpdateCheckInterval`, patch 0078, updates Up1). With the switch off, Sparkle is not started, so there is no update request until the user chooses Check for Updates.
 
 Only a bundle signed by a team starts the updater. A copy built locally, signed ad hoc, does not replace itself.
 
-The thank-you pages are on stedding.dev and are not on the update path. After install the browser opens `https://stedding.dev/thanks/`. After an update it opens `https://stedding.dev/thanks/updated/#v` plus the version. The version is in the fragment. If the site is down, the update still installs.
+The thank-you pages are on stedding.dev and are not on the update path. When the welcome flow ends, the browser opens `https://stedding.dev/thanks/` once per installation. On the first launch of a later version it opens `https://stedding.dev/thanks/updated/#v` plus the version. The version is in the fragment. If the site is down, the update still installs.
 
 `CFBundleVersion` carries Stedding's version as `<10000 + 1000 × major + 10 × minor + patch>.<n>`, with 999 for a release (0.2.0-beta.16 is 10020.16). Sparkle and LaunchServices compare that key (updates Up11).
 

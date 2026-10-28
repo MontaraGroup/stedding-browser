@@ -25,5 +25,4 @@ The same note is under [The name](../VISION.md#the-name).
 - Product docs are in this repository.
 - Hosting has to present a valid certificate. Plain HTTP is not available on .dev.
 - stedding.com is not this project's. Some typed traffic goes elsewhere. Buying it is not part of this decision.
-- Another domain is registered only to redirect here.
 - The site's registrar and DNS accounts stay locked (two-factor authentication, a transfer lock). Updates do not use them.

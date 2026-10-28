@@ -15,9 +15,9 @@ At or below 1% of a platform's stable users, a build is a partial rollout (early
 
 Moving the pin is its own commit. The file records the tag, the milestone, the upstream commit, the channel and the date. The pin stays back only for a named, fixed blocker, written in that commit.
 
-On 2026-10-28 the owner merged M157's stable cut, 157.0.8103.31, into main before Mac stable served it. The file records the channel as beta. `tooling/check-pin` reports `ahead` until Mac stable serves M157. Google's schedule puts M157 on stable on 2026-11-03. The published release, 0.3.0 beta 22, was built on Chromium 156.0.8078.48. The pin still moves to the build Mac stable serves once that build is past 1% ([BACKLOG.md](../../BACKLOG.md) S-278).
+On 2026-10-28 the owner merged M157's stable cut, 157.0.8103.31, into main before Mac stable served it. The file records the channel as beta. `tooling/check-pin` reports `ahead` until Mac stable serves an M157 build to more than 1% of users. Google's schedule puts M157 on stable on 2026-11-03. The published release, 0.3.0 beta 22, was built on Chromium 156.0.8078.48. The pin still moves to the build Mac stable serves once that build is past 1% ([BACKLOG.md](../../BACKLOG.md) S-278).
 
-A security update on stable is a rebased release within 7 days when the fix is in the wild, and within 14 days otherwise ([ROADMAP.md](../ROADMAP.md#the-quality-bar)). `tooling/check-pin` runs daily. The `upstream` workflow opens one issue while the pin is behind, and closes it when the pin is current.
+A security update on stable is a rebased release within 7 days when the fix is in the wild, and within 14 days otherwise ([ROADMAP.md](../ROADMAP.md#the-quality-bar)). `tooling/check-pin` runs daily. The `upstream` workflow opens one issue while the pin is not current, and closes it when the pin is current.
 
 ## Consequences
 

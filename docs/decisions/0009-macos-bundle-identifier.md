@@ -19,7 +19,7 @@ Chromium's default is `org.chromium.Chromium`. The domain we own is stedding.dev
 
 ## Consequences
 
-The profile is `~/Library/Application Support/Stedding`. Saved passwords use the keychain item "Stedding Safe Storage" ([INSTALL.md](../INSTALL.md)). A profile an earlier beta left in `~/Library/Application Support/Chromium`, with the key "Chromium Safe Storage", is copied across on the first launch that finds no Stedding folder, when that profile carries Stedding's own preferences. If another browser is using the old folder, Stedding asks first (patch 0050, [windows.md](../features/windows.md) N8).
+The profile is `~/Library/Application Support/Stedding`. Saved passwords use the keychain item "Stedding Safe Storage" ([INSTALL.md](../INSTALL.md)). A profile an earlier beta left in `~/Library/Application Support/Chromium` is copied across when Stedding's folder holds no user data yet and Stedding created that profile (`com.stedding.` in its preferences, or a `stedding` dictionary). Chromium's folder is left in place. Passwords those builds saved used the keychain item "Chromium Safe Storage". If another browser is using the old folder, Stedding asks first (patch 0057, [windows.md](../features/windows.md) N8).
 
 The signed Mac app uses this bundle id. The Mac image has been signed and notarized since 0.2.0 beta 10 ([ROADMAP.md](../ROADMAP.md) M7).
 

@@ -14,7 +14,7 @@ How to build is in the [README](README.md#building-from-source). Open work is
 
 ## What helps now
 
-- **Running the betas and saying what is wrong.** Install the latest pre-release, use
+- **Running the betas and saying what is wrong.** Install the latest release, use
   it, and open an issue for each thing that is worse. That is the fastest way to help.
 - **Bugs and ideas.** An issue that reports a bug is fixed. An issue that asks for a
   feature is a suggestion: it is built only after the owner agrees

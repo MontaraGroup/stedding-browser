@@ -34,11 +34,12 @@ A technical user downloads an installer, opens it, imports their profile, and pr
 it within a day. Every milestone ends in something installable and usable. Shippable
 and polished wins over interesting.
 
-Concretely (`docs/ROADMAP.md`, "The quality bar"):
+Concretely:
 
 - Every merged change keeps the browser buildable and runnable.
-- Features ship complete: keyboard shortcuts, settings entry, edge cases, polish —
-  or they don't ship.
+- A feature is shipped only when the UX completeness list in `docs/ROADMAP.md`
+  ("The quality bar") is met. Missing any item on it, the feature is not shipped.
+  The list starts with keyboard shortcuts, a settings entry and edge cases.
 - No telemetry by default. Privacy defaults are product features (`docs/PRIVACY.md`).
 - Full Chrome extension compatibility is a hard requirement, and a reason for the
   Chromium base (ADR 0003).
@@ -68,7 +69,8 @@ Details are in `docs/ARCHITECTURE.md`.
 1. `tooling/dev status`: the pin, the patch count, the checkout, and whether the test
    binaries exist. Every number in a doc comes from this, or from a command, never from
    prose. The pin on main may not be the pin of the latest release: `gh release list`
-   is what users have. `VERSION` is the name of the release being prepared.
+   is what users have. `VERSION` names the latest release until the next one is cut;
+   `tooling/publish-release` tags `v<VERSION>`.
 2. `PLAN.md` (the owner's decisions, and when an item is done), then `BACKLOG.md`.
 3. `docs/HANDOFF.md`: the "Fast path" and the trap index at its top. Read a trap when
    its topic comes up.
@@ -94,8 +96,8 @@ The short form. `docs/AGENT-LOOP.md` has the detail.
    they quit Arc and any clipboard manager before the keyboard checks: Arc takes ⌥⌘N
    (trap 64) and a clipboard manager takes ⇧⌘C (trap 94) from every app while it runs.
 3. **Supervise long jobs; do not poll them.** A build or run past a few minutes is one
-   detached job that writes a status file and a last line (`tooling\win\build-until-done.ps1`,
-   `tooling/dev`). Wait for that line. Post one status line, with a number in it, before
+   detached job. On Windows, `tooling\win\build-until-done.ps1` writes a status file
+   and ends it with `SUPERVISOR_EXIT=`. Wait for that line. Post one status line, with a number in it, before
    any wait over ten minutes. A step killed at the end of three chunks in a row is
    stuck: the supervisor stops with exit 4 and names it (trap 57). Time that step by hand.
 4. **One pass should find everything.** A check that aborts at its first failure hides
@@ -121,7 +123,7 @@ The short form. `docs/AGENT-LOOP.md` has the detail.
 | Secrets, machine paths, personal data | Never committed: this repo is public |
 | What lives in this repository | The product, its tooling, its specs and its user docs, kept concise. Anything else stays outside it |
 | Screen captures and recordings | The window under test only, taken by its window id: `tooling/capture-windows` (stills, through `tooling/capture-state` and `tooling/drive`'s `shot`) and `tooling/record-window` (video). Never the screen, never another app's window, never a recording of the whole display cropped afterwards (trap 133) |
-| Real input (pointer, keyboard) | Only with the operator's yes, and only into the window under test. `tooling\win\drive.ps1` also waits until the operator's hands are off. `tooling/drive` on the Mac does not watch for that, and it runs only when nobody is at the machine (trap 27) |
+| Real input (pointer, keyboard) | Only with the operator's yes, and only into the window under test. `tooling\win\drive.ps1` also waits until the operator's hands are off (trap 27). `tooling/drive` on the Mac does not watch for that, and it runs only when nobody is at the machine (trap 3) |
 | Deleting | Your own build output and scratch only. Ask before anything else |
 | System settings | Not yours to change, including the default browser and clipboard history: ask the operator to flip them |
 | A number or a claim you did not measure | `TBD`, never a guess (and never typed into a doc that `tooling/dev status` can derive) |
@@ -155,7 +157,7 @@ commands.
 | `docs/AGENT-LOOP.md` | The working procedure: order of evidence, ask once, supervise long jobs, one pass finds everything, then research, spec, test, implement, patch; and what Arc switchers ask for |
 | `docs/features/` | One spec per feature: numbered behaviours, each with its test. `acceptance.md` holds the scripts run on a real build before a release, and the record of each run |
 | `PLAN.md` | The owner's standing decisions, and when an item counts as done |
-| `docs/history/` | `plan-2026-09-26.md`, the 2026-09-26 audit (TAB-1, SPC-4, ...), which the code cites by that path; and `archive.md`: closed backlog items, the project log before 2026-10-15, round 6, the operator's rounds 2 to 11, and the code review (S-179 to S-210) |
+| `docs/history/` | `plan-2026-09-26.md`, the 2026-09-26 audit (TAB-1, SPC-4, ...), which the code cites by that path; and `archive.md`: the closed backlog. S-179 to S-210, the code review, are rows in that table |
 | `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids; closed items move to `docs/history/archive.md` |
 | `docs/HANDOFF.md` | Where things live, the fast path, dev parameters, the traps already paid for (with an index) |
 | `docs/PROJECT-LOG.md` | What was built since 2026-10-15, round by round, with the evidence. History, not instructions |

@@ -13,7 +13,7 @@ Platforms ship in this order:
 
 1. **macOS.** It was the development machine, so the edit-build-test loop was fastest there, and Arc's audience was mostly there.
 2. **Windows.** The largest desktop population, after a Mac build was shipping.
-3. **Linux.** The most packaging work per user reached. People who want it sooner can build from source.
+3. **Linux.** The most packaging work per user reached.
 
 The order sequences installers, signing, and updates. Linux stays in the order. A feature is not written so that only macOS can have it.
 

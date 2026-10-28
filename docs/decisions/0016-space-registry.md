@@ -11,12 +11,12 @@ Copying every tab into every window would leave two of each and no real one. A s
 
 ## Decision
 
-- A profile-level **`SpaceRegistry`** (a `KeyedService`) owns the Space list and its order: name, icon, colour, and whether that Space’s pinned run is collapsed. It is the preference `stedding.spaces.registry`, written on every change (patch 0036; pins H17).
-- **`SpaceModel` stays per window.** It keeps the active Space and each open tab’s membership, observes the registry, and forwards add, remove, move, rename, icon and colour to it.
-- **A pinned tab is a tab of one window.** Essentials and pins stay with that window’s tabs ([windows.md](../features/windows.md) G1). The ghost row in the other windows — muted favicon, “in another window” on hover, a click to move the page, Option-click to focus the window that has it — is this decision and is not built (windows G2, `BACKLOG.md` S-94).
+- A profile-level **`SpaceRegistry`** (a `KeyedService`) owns the Space list and its order. Each entry has a name, an icon, a colour, whether that colour was chosen, an optional dark colour, a profile id, an isolation flag, and whether that Space’s pinned run is collapsed (windows G0). It is the preference `stedding.spaces.registry`, written on every change (patch 0036; pins H17).
+- **`SpaceModel` stays per window.** It keeps the active Space and each open tab’s membership, observes the registry, and forwards add, remove, move, rename, icon, colour, pinned-run collapse and isolation to it.
+- **A pinned tab is a tab of one window.** Essentials and pins stay with that window’s tabs ([windows.md](../features/windows.md) G1). There is no ghost row in the other windows. “Show here / Go to window” for a tab that lives in another window is not built (windows G2, `BACKLOG.md` S-94).
 - **The session stays per window.** Extra data keeps the active Space and the memberships. The registry is the preference. A window that brings a Space the registry does not know adds it (patch 0036).
 - **A registry Space carries `profile_id`.** What the field means is 0019.
-- **New Blank Window** (the app menu; ⌥⇧⌘N on the Mac, Ctrl+Alt+Shift+N on Windows) does not follow the registry. It keeps a Space list of its own (`SpaceWindowTest.BlankWindowHasItsOwnSpaces`). A private window has no `SpaceModel` ([private.md](../features/private.md) V3).
+- **New Blank Window** (the command bar; ⌥⇧⌘N on the Mac, Ctrl+Alt+Shift+N on Windows) does not follow the registry. It keeps a Space list of its own (`SpaceWindowTest.BlankWindowHasItsOwnSpaces`). A private window has no `SpaceModel` ([private.md](../features/private.md) V3).
 
 ## Consequences
 

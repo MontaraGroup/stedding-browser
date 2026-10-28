@@ -15,9 +15,10 @@ still open is a BACKLOG row that names its id.
 2. Peek is on by default (the owner, 2026-10-25; `S-93`). `stedding.peek.enabled` registers
    true (`patches/0106-feat-peek-explains-itself-and-sync-says-what-folder.patch`).
 3. The Space sleep timer defaults to Never. `stedding.spaces.sleep_minutes` registers as 0.
-   A tab sleeps only when `MaySleep` in `sleep_tabs.cc` allows it (`docs/features/tabs.md` R6).
-4. The cuts listed in the history file, section 2, are approved. Patch 0055 applied them
-   (`S-61`). The sidebar folder in that list stays withdrawn as specified
+   A tab sleeps only when `MaySleep` in `sleep_tabs.cc` allows it. A Space pin or an essential sent home by decision 11 is the exception: it is unloaded whatever it is doing (`docs/features/tabs.md` R6).
+4. The cuts named in the message of
+   `patches/0055-fix-cut-unwired-helpers-and-close-the-open-holes.patch` are approved,
+   and that patch applied them (`S-61`). The sidebar folder stays withdrawn
    (`docs/features/sidebar-file.md` Sf3). Sync through a folder, decision 18, is what
    replaced it.
 5. ⌘9 selects the last visible row (`docs/features/tabs.md` R10, R11).
@@ -25,8 +26,9 @@ still open is a BACKLOG row that names its id.
    No tab switch (`docs/features/folders.md` F3).
 7. Deleting a Space asks first. Deleting the active Space then shows its neighbour. Only the
    last Space cannot be deleted (`docs/features/spaces.md` B5).
-8. Do not document an import from Chrome, Brave or Edge until that importer exists. It is
-   `S-101` (the history file's WEB-15).
+8. Do not document an import from Chrome, Brave or Edge until that importer exists. The
+   history file's WEB-15 records that it was dropped. Patch 0057 removed the reader patch
+   0055 had added.
 9. Little windows get no Space commands. "Open in Stedding" is the way into the main window
    (`docs/features/little.md` E2, E7).
 10. Tests that pin a bug are decided from the spec row and Arc's behaviour. Ask the owner only
@@ -87,7 +89,7 @@ A green unit test does not close anything. An item is closed when all of these h
 ## How items are taken
 
 - **One root cause is one change.** Items that share a cause are fixed together. Finish one
-  change's check before starting the next. A fix goes into the patch that introduced the code
+  change's check before starting the next. A fix goes into the patch that owns the code
   (`tooling/fold-fix`, `patches/README.md`).
 - **Confirm before fixing.** A finding that was read in the code but not seen happening is
   reproduced first: a failing test, or the failure on a real build. If an honest attempt does

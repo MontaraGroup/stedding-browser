@@ -17,6 +17,6 @@ Where a feature needs Arc's account, sync or servers, parity is the local capabi
 
 ## Consequences
 
-1.0 in [ROADMAP.md](../ROADMAP.md) is that parity, at the quality bar, minus what later decisions defer or refuse. What is built, partial or still open is the feature spec under `docs/features/` and [BACKLOG.md](../../BACKLOG.md).
+That parity, minus what later decisions defer or refuse, is the product target. 1.0 in [ROADMAP.md](../ROADMAP.md) is the quality gate on what ships, and it adds nothing new. What is built, partial or still open is the feature spec under `docs/features/` and [BACKLOG.md](../../BACKLOG.md).
 
 ADR 0010 stands. Upstream's vertical tabs are how the sidebar is built.

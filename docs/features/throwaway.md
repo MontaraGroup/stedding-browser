@@ -2,7 +2,7 @@
 
 Status: **withdrawn** (patch 0055). Nothing in the browser opens a throwaway Space.
 
-A throwaway Space would have been an in-memory partition, forgotten when its last tab closed or the browser quit. What was built came back after a restart with an empty jar, and its tabs would have been restored into the shared jar. A persistent intern that holds a Space's cookies is a separate rule, and was never built (ADR 0020).
+A throwaway Space would have been an in-memory partition, forgotten when its last tab closed or the browser quit. What was built came back after a restart with an empty jar, and its tabs would have been restored into the shared jar. A persistent agent that holds a Space's cookies is a separate rule, and was never built (ADR 0020).
 
 ## Behaviours
 

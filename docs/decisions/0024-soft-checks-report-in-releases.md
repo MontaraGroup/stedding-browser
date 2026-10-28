@@ -19,6 +19,6 @@ In a build without DCHECKs, a soft check logs and writes a dump without crashing
 
 The dump stays on the machine. Stedding uploads no crash reports ([PRIVACY.md](../PRIVACY.md)).
 
-Suites on the release configuration do not stop on a soft check. One that fires there is an `ERROR` line in the log. Only the checks builds fail the process.
+Suites on the release configuration do not stop on a soft check. One that fires there is an `ERROR` line in the log. A build with DCHECKs stops on a soft check: `mac-checks`, `win-checks`, `debug` and `win-debug`.
 
-The hunk stays in the series until releases are official builds (S-168). A soft check that Stedding's own code reaches is still fixed. The welcome flow's later pick no longer reaches the check named above.
+The hunk stays in the series until releases are official builds (S-168). A soft check that Stedding's own code reaches is still fixed. A later pick in the welcome flow is saved as a Settings change, so the choice-screen check in `SearchEngineChoiceService::RecordChoiceMade` passes.

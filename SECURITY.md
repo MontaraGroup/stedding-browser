@@ -15,8 +15,8 @@ Include:
 - Steps to reproduce, or a clear explanation of the flaw.
 - The impact, as you understand it.
 - Whether an AI tool found the issue or wrote the report. Reproduce it on a
-  released build before you send it. A report that nobody has reproduced is
-  closed ([CONTRIBUTING.md](CONTRIBUTING.md#ai-tools)).
+  released build before you send it. A report whose tool use was not disclosed, or that its author cannot explain, is
+closed ([CONTRIBUTING.md](CONTRIBUTING.md#ai-tools)).
 
 ## Response expectations
 
@@ -81,7 +81,7 @@ Report it here when a Stedding patch changes the behaviour.
 
 ## Supported versions
 
-Only the newest pre-release for a platform is supported. Support means a fix,
+Only the newest release for a platform is supported. Support means a fix,
 when there is one, goes into a newer release. It is not a promise of help or
 of a fix.
 
@@ -93,7 +93,7 @@ one before 1.0.
 
 | Version | Supported |
 |---|---|
-| The newest pre-release on [Releases](https://github.com/ysalitrynskyi/stedding-browser/releases) with a file for your platform | Yes |
-| Any earlier pre-release | No. Install the newest. |
+| The newest release on [Releases](https://github.com/ysalitrynskyi/stedding-browser/releases) with a file for your platform | Yes |
+| Any earlier release | No. Install the newest. |
 
 `VERSION` at the repository root is the version this tree builds.

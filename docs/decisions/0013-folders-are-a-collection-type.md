@@ -7,7 +7,7 @@ Date: 2026-08-31
 
 A folder is a named, collapsible container of tabs in the sidebar. Folders nest. Tabs inside a folder are not auto-archived ([archive.md](../features/archive.md) A4).
 
-Making a Chrome tab group contain another group does not do this. `TabModel::UpdateProperties` walks a tab’s ancestors and writes each group’s id onto the tab, so the outermost group wins and the inner membership is gone. Group code also assumes one group per tab and a contiguous range. Patch 0008 records that.
+Making a Chrome tab group contain another group does not do this. `TabModel::UpdateProperties` walks a tab’s ancestors and writes each group’s id onto the tab, so the outermost group wins and the inner membership is gone. A tab has one group id, which that walk overwrites. Patch 0008 records that, in `components/tabs/public/folder_tab_collection.h`.
 
 ## Decision
 

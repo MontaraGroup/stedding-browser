@@ -1,6 +1,6 @@
 # 0029 — The sidebar syncs through a folder the user picks
 
-Status: Built in patch 0101 and released in 0.3.0 beta 16, on the recommended answers. The owner’s acceptance of this record is still open (`BACKLOG.md` `S-282`). Current behaviour, row by row: `docs/features/sidebar-file.md` Sf7–Sf42.
+Status: Built in patch 0101 and released in 0.3.0 beta 16. The owner’s acceptance of this record is still open (`BACKLOG.md` `S-282`). Current behaviour, row by row: `docs/features/sidebar-file.md` Sf7–Sf42.
 Date: 2026-10-25
 
 ## Context
@@ -45,5 +45,5 @@ Two simpler designs were set aside: one that never deletes without a question, a
 
 - The merge, the file reader and writer, the ledger, the per-window tracker, the applier and a profile service sit beside the importer. The importer stays add-only. The two share the id helpers and the unloaded-tab insert. Preferences are `stedding.sidebar_sync.folder`, `stedding.sidebar_sync.install_id` and `stedding.sidebar_sync.device_name`. Renaming those, or `Stedding Sidebar Sync`, needs a migration.
 - Patch 0106 (Sf42) adds a note when the picked folder does not look like one a known sync tool keeps. Any folder still works.
-- `docs/features/sidebar-file.md` is the behaviour. Still not built there: Sf11, Sf14, Sf20, Sf21, Sf24, Sf25 and Sf31. Sf16 merges every list’s order but applies it to the Space list only, and a pin added elsewhere joins the end of its run (Sf17). Sf28 names a conflict copy in Settings and has no toast. Sf30 and Sf32 are not yet run on a signed build.
+- `docs/features/sidebar-file.md` is the behaviour. Sf11 is not in the series. Sf14, Sf20, Sf21, Sf24 and Sf31 are in patch 0101. Sf25 holds a move that would reload a loaded tab into another session; a change while a tab is dragged does not wait. Sf16 merges every list’s order but applies it to the Space list only, and a pin added elsewhere joins the end of its run (Sf17). Sf28 names a conflict copy in Settings and has no toast. Sf30 and Sf32 are not yet run on a signed build.
 - A computer away for more than 180 days can bring removed items back as additions. The bulk guard holds a large batch. Pins in a closed window stay in the ledger and keep travelling, and come back only through Bring them here or by reopening the window, until windows G2 (`S-94`).

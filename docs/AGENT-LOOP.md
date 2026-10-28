@@ -89,8 +89,8 @@ it, and revert that edit before folding. `git status` on the file is clean of th
 edit first.
 
 Fold each fix into the patch that owns the code (`tooling/fold-fix`). The script stops
-on a conflict and moves nothing. A correction a later patch's context blocks goes into
-the last patch that touches the file (trap 50).
+on a conflict and moves nothing (trap 22). When a fold into the owner would conflict
+with a later patch on the same lines, the change is its own patch (`patches/README.md`).
 
 ## Real use, safely
 
@@ -321,14 +321,13 @@ another application: on the Mac from the start, on Windows since 0.3.0 beta 7
 **Sync has no Stedding account and no Stedding server** (`docs/ROADMAP.md`,
 `docs/PRIVACY.md`). The answer to the **475** is a folder the user's own sync tool
 keeps: the sidebar syncs through it, off by default
-(`docs/decisions/0029-sidebar-sync-through-a-folder.md`, released in 0.3.0 beta 16; the
-ADR is still Proposed). A Space also exports and imports as a file. What is still owed
+(`docs/decisions/0029-sidebar-sync-through-a-folder.md`, released in 0.3.0 beta 16; the owner's acceptance of the ADR is still open). A Space also exports and imports as a file. What is still owed
 is `S-282`.
 
 ### Deferred
 
 Boosts and Easels stay deferred (`docs/decisions/0012-defer-boosts-and-easels.md`,
-`docs/ROADMAP.md`). Extensions already answer them.
+`docs/ROADMAP.md`). Extensions already answer Boosts.
 
 - **Boosts: 4 upvotes.** Zen shipped this. Almost nobody asked.
 - **Easels: 41 upvotes**, with the community calling it extension-shaped and expensive.
@@ -342,8 +341,7 @@ The same snapshot has 412 for folders and 475 for sync.
 builds no horizontal layout of its own
 (`docs/decisions/0010-ride-upstream-vertical-tabs.md`).
 
-**Tree-style tabs: 280 upvotes.** Folders shipped. A link opened in a new tab nests
-under its opener (`docs/features/tabs.md` R56–R59, `S-92`). Back at a child's first
+**Tree-style tabs: 280 upvotes.** Folders shipped. A link opened in a new tab is drawn under its opener only while "Show tabs under the tab that opened them" is on (`docs/features/tabs.md` R56–R59, settings T26, `S-92`). That setting is off by default, and while it is off a new link is no one's child. Back at a child's first
 page, which closes the child, is still open (R60).
 
 **A bundled model: ~20 upvotes**, with pushback. ADR 0020: Stedding ships no bundled

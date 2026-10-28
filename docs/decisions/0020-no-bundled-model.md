@@ -5,7 +5,7 @@ Date: 2026-09-16
 
 ## Context
 
-[PRODUCT.md](../PRODUCT.md) §8 listed Arc Max as needing a decision: hover previews, tidy titles, tidy downloads, tidy tabs, Ask on Page, Instant Links, and chat in the command bar. Built-in AI is not on the path to 1.0 ([ROADMAP.md](../ROADMAP.md)). Nothing sends page content or browsing data to a model without an explicit user action ([VISION.md](../VISION.md)). An agent that held a Space's cookies would undo [ADR 0019](0019-space-sessions-are-storage-partitions.md): those partitions exist so credentials stay in the Space.
+[PRODUCT.md](../PRODUCT.md) §8 listed Arc Max as needing a decision: hover previews, tidy titles, tidy downloads, tidy tabs, Ask on Page, Instant Links, and chat in the command bar. Built-in AI is not on the path to 1.0 ([ROADMAP.md](../ROADMAP.md)). Stedding sends no page content or browsing data to a model. A later feature that does needs an ADR of its own, and is opt-in, clearly labelled and off by default ([VISION.md](../VISION.md)). An agent that held a Space's cookies would undo [ADR 0019](0019-space-sessions-are-storage-partitions.md): those partitions exist so credentials stay in the Space.
 
 ## Decision
 

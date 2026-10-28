@@ -1,6 +1,6 @@
 # Performance measurements
 
-**There is no current measurement.** The budgets in `docs/ROADMAP.md#the-quality-bar` are overhead against vanilla Chromium at the same pin, configuration and hardware. The only comparison on record is from 2026-09-02, below. The pin and the series have moved since (`tooling/dev status`), and nothing has been measured again. The release steps build `release` (`docs/HANDOFF.md`, "Release channel"). The record below is the official arguments, and it is a record of that build, not of a release.
+**There is no current measurement.** The budgets in `docs/ROADMAP.md#the-quality-bar` are overhead against vanilla Chromium at the same pin, configuration and hardware. The only comparison on record is from 2026-09-02, below. The pin and the series have moved since (`tooling/dev status`), and nothing has been measured again. The release steps build `release` on the Mac and `win-release` on Windows (`docs/HANDOFF.md`, "Release channel"). The record below was taken with the `official` arguments, and it is a record of that build, not of a published release.
 
 ## How to measure
 
@@ -13,7 +13,7 @@ tooling/measure/harness.py all --sites local --app <Stedding app> --out docs/per
 
 Measure the two builds one after the other, at the same pin and in the same configuration. `tooling/args/vanilla.gn` has the same arguments as `tooling/args/official.gn`. Build the vanilla app from the checkout detached at the pin, after `tooling/apply-branding --revert`. `tooling/build-chromium` builds only a checkout that is at the pin, or a descendant of it.
 
-`--sites local` loads the ten pages in `tooling/measure/local-sites/` (`sites-local.txt`) as `file:` URLs, with no network. That list is the one for the overhead budgets. `--sites live` loads the ten sites in `tooling/measure/sites.txt`, and it is only for the absolute budgets. Name each new file with the build, the configuration and the pin.
+`--sites local` loads the ten pages in `tooling/measure/local-sites/` (`sites-local.txt`) as `file:` URLs, with no network. That list is the one for the overhead budgets. `--sites live` loads the ten sites in `tooling/measure/sites.txt`. Warm startup and memory use the list `--sites` names. Cold startup always times a trivial local page. The harness does not measure the sidebar tab switch or the command bar. Name each new file with the build, the configuration and the pin.
 
 What the harness records:
 
@@ -51,6 +51,6 @@ The live pair (14:16 UTC and 14:27 UTC):
 | Warm startup, ten tabs restored | 0.78 s (0.75–0.96) | 0.77 s (0.74–0.97) | −0.6% | within 10% |
 | Physical footprint, ten tabs after 60 s idle | 1.26 GB (1.13–2.13) | 1.71 GB (1.27–1.96) | +35.9% | over 10% (20 and 35 processes) |
 
-The local rows are within 10%, and `S-37` was closed on them. The live cold start and footprint are over 10%. Those two were put down to third-party frames and machine state, because the local pair shows none. The same Stedding build at 04:39 UTC, on the live list, measured 5697 MB across 107 processes. The live pair's process counts, 20 and 35, were not explained.
+The local rows are within 10%, and `S-37` was closed on them. The live cold start and footprint are over 10%. Cold startup does not load the site list, so third-party frames do not explain the live cold miss; the live and local cold runs were hours apart. The live footprint does load the ten sites, and the local footprint shows no overhead. The same Stedding build at 04:39 UTC, on the live list, measured 5697 MB across 107 processes. The live pair's process counts, 20 and 35, were not explained.
 
 Of the six budgets, three were measured. Sidebar tab switching and the command bar have no measurement in the harness.

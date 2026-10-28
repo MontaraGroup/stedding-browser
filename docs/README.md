@@ -35,11 +35,11 @@ Everything under `docs/`, grouped by who it is for.
 | [features/](features/) | One specification per feature: each behaviour, its test, and whether it is built, partial or planned |
 | [features/acceptance.md](features/acceptance.md) | The scripts run on a real build before a release, the core loop first, with a table of every run |
 | [decisions/](decisions/) | Architecture decision records |
-| [history/](history/) | The audit of 2026-09-26 ([plan-2026-09-26.md](history/plan-2026-09-26.md), whose ids the code cites: TAB-1, SPC-4, and the rest) and [archive.md](history/archive.md): closed backlog items, the project log before 2026-10-15, round 6 (R6-01 to R6-32), the operator's rounds 2 to 11, and the code review of 2026-10-15 (S-179 to S-210) |
+| [history/](history/) | The audit of 2026-09-26 ([plan-2026-09-26.md](history/plan-2026-09-26.md), whose ids the code cites: TAB-1, SPC-4, and the rest) and [archive.md](history/archive.md): closed backlog items, including the code review of 2026-10-15 (S-179 to S-210) |
 | [perf/](perf/) | How to measure the performance budgets. The one comparison is from 2026-09-02, on Chromium 153; nothing current |
 | [images/readme/STORYBOARD.md](images/readme/STORYBOARD.md) | How the README's animation is made |
 | [../tooling/README.md](../tooling/README.md) | The build, capture and release scripts |
 | [../branding/README.md](../branding/README.md) | The mark, the palette, and how the assets are generated |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) · [../SECURITY.md](../SECURITY.md) | How to contribute; how to report a vulnerability |
 
-`images/` holds the captures the docs show. `tooling/check-geometry` re-measures the card gutters and corner radius in `docs/images/*.png`.
+`images/` holds the captures the docs show. `tooling/check-geometry` re-measures the card gutters and corner radius in the captures named in `tooling/probes/geometry.json`.

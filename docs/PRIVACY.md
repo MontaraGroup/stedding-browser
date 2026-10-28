@@ -45,6 +45,9 @@ your choice.
 | Thank-you pages | stedding.dev: `/thanks/` when the welcome flow ends, once per installation; `/thanks/updated/#v`*version* on the first launch of each later version. The second is turned off with "Show a thank-you page after an update". | A plain page request. The version is in the fragment, which the browser does not send. The pages are not on the update path and load nothing from another host ([ADR 0022](decisions/0022-sparkle-updates-the-mac.md)). | The project's thanks, and a link to sponsor it. |
 | Security component updates | Google's component updater, `update.googleapis.com`, with downloads from `edgedl.me.gvt1.com`, as in stock Chromium. One component is not registered: Google's Subresource Filter Rules (`features/blocker.md` Bk4). | Component name and version. | Security data Chromium ships as components, certificate revocation among it. Which components to mirror or drop is decided before 1.0 (`BACKLOG.md` S-241). |
 | Safe Browsing list updates | `safebrowsing.googleapis.com`. The request is made and refused: these builds carry no API key, so no page is checked. See "Safe Browsing". | The list-update request. Google does not receive your browsing history from it. The request does carry your IP. | The setting is on. The lists stay empty. |
+| Download check | `sb-ssl.google.com`, while Safe Browsing is on, for a file Chromium's download check covers. | The check, with the placeholder API key. | Not the page check above. Turning it off is open (`BACKLOG.md` S-238). |
+| Password leak check | `passwordsleakcheck-pa.googleapis.com`, when a password is saved. The preference defaults on. | A short hash of the username and an encrypted copy of the username and password, with the placeholder API key. No account. | Chromium's leak check. Turning it off is open (`BACKLOG.md` S-238). |
+| Translate | `translate.googleapis.com`, while Translate is on (the default), when a page is offered for translation. | The language list, and the translate script if the page is translated. | Turning it off is still to do. |
 | Network time | `clients2.google.com` | A request for the current time. | Chromium judges certificate dates with it. Turning it off is still to do. |
 | The user's own browsing | Sites the user visits, including the DNS, TLS (OCSP and certificate transparency) and favicon traffic that browsing implies. | Whatever the user does. | This is a web browser. |
 | Extension install and update | Chrome Web Store (Google). | Ordinary store traffic. | Only when the user installs or updates an extension. See "Extensions". |
@@ -72,7 +75,9 @@ your choice.
   `PrivacyDefaultsTest.AutofillAsksNoServer`). Autofill fills from its own
   heuristics.
 - No certificate report. Chrome can send Google a sample of certificates
-  (`sctauditing-pa.googleapis.com`) once it enforces certificate transparency.
+  (`safebrowsing.google.com/safebrowsing/clientreport/chrome-sct-auditing`)
+  once it enforces certificate transparency, after a lookup at
+  `sctauditing-pa.googleapis.com`.
   Stedding enforces certificate transparency and reports nothing, whatever the
   Safe Browsing setting (`S-237`,
   `CertificateReportsTest.NoCertificateIsReported`).
@@ -83,7 +88,6 @@ your choice.
   when a site the user allows subscribes to it.
 
 An idle capture on a real login keychain is still owed (`BACKLOG.md` S-50).
-The push and account claims above rest on that test.
 
 ## Crash reports
 
@@ -127,8 +131,12 @@ the list update is refused. The local lists stay empty. No page is checked,
 whichever mode is chosen. Settings › Privacy and security › Security says so,
 above the modes (`features/privacy.md` Q13,
 `SettingsSecurityTest.ThePageSaysSafeBrowsingDoesNotWork`). The requests still
-reach Google. The route the owner chose, lists through stedding.dev with the
-key on the server (`BACKLOG.md` S-75), is set aside for now.
+reach Google. A file Chromium's download check covers is still sent to
+`sb-ssl.google.com`, and saving a password is still sent to
+`passwordsleakcheck-pa.googleapis.com`. Both carry the placeholder API key.
+Turning them off is open (`BACKLOG.md` S-238). The route the owner chose,
+lists through stedding.dev with the key on the server (`BACKLOG.md` S-75),
+is set aside for now.
 
 The stance, once it is settled:
 
@@ -349,7 +357,7 @@ consequences:
 | Try HTTPS first | On (balanced mode) | Turn off |
 | Quiet notification and location prompts | On | Turn off |
 | Ad topics, site-suggested ads and ad measurement | Off, with no switch to turn them on | — |
-| Safe Browsing | The setting is on (hash-prefix only). It is not active: list updates are refused without an API key | Turn off. Enhanced mode is still offered; see above |
+| Safe Browsing | The setting is on (hash-prefix only). Page checks are not active: list updates are refused without an API key. A checked download and a saved password are still sent | Turn off. Enhanced mode is still offered; see above |
 | Google sync | Not available | — |
 | Sidebar sync through a folder | Off. See "Sync" for what the file holds | Settings › Stedding › Sync and import |
 | WebRTC local IPs | Hidden (mDNS) | Stricter policies through an extension |
@@ -396,9 +404,9 @@ the two differ.
 | Download | The release's own image, `https://github.com/ysalitrynskyi/stedding-browser/releases/download/v`*version*`/Stedding-`*version*`-arm64.dmg` (Mac) or `Stedding-`*version*`-win-x64.exe` (Windows), only when the feed lists a later version. On both platforms `github.com` redirects to `release-assets.githubusercontent.com`, which serves the file. |
 | Sends | A plain HTTPS GET. On the Mac it carries Sparkle's user agent, which names the browser and its version. On Windows it goes through the browser's own network stack with the cache disabled and Chromium's reduced user agent, which names Chrome's major version and the Windows platform. No cookies, no account, no install id, no machine id, no system profile (`SUEnableSystemProfiling` is off and the browser adds no parameters), nothing in the query. |
 | Receives | The feed: each release's version, minimum system, size, and signature. |
-| Frequency | Ten seconds after a launch when the last check is more than an hour old, or there has been none, then every six hours while the browser runs. However often it is launched, a check the server answered is not repeated within the hour. On Windows a check that could not reach the feed does not count: the next comes within the hour, and a later launch checks at once. A check the user asks for (Stedding › Check for Updates… on the Mac, the command bar, or the About page) runs when asked. |
+| Frequency | Ten seconds after a launch when the last check is more than an hour old, or there has been none, then every six hours while the browser runs. However often it is launched, a check the server answered is not repeated within the hour. On Windows a check that could not reach the feed does not count: the next comes within the hour, and a later launch checks at once. A check the user asks for (Stedding › Check for Updates… on the Mac, or Check for Updates in the command bar) runs when asked. Opening the About page checks only while automatic updates are on. |
 | Default | On, with "Update Stedding automatically" in Settings › Stedding › Updates. |
-| Verified | On the Mac, the image against the project's EdDSA public key before it is unpacked, and the feed's own signature; Sparkle then checks the new app's code signature. On Windows, the feed and the installer are checked against the Ed25519 update key the build carries before either is used, and only a copy the installer put in place runs the updater. On the Mac only a bundle signed by a team starts the updater. A build made locally never runs it. |
+| Verified | On the Mac, the image against the project's EdDSA public key before it is unpacked, and the feed's own signature; Sparkle then checks the new app's code signature. On Windows, the feed and the installer are checked against the Ed25519 update key the build carries before either is used, and only a copy the installer put in place runs the updater. On the Mac only a bundle signed by a team starts the updater. A build signed ad hoc never runs it. |
 
 **What GitHub can see.** An IP address, a user agent (on the Mac, one that
 names Stedding's version; on Windows, Chrome's major version and the

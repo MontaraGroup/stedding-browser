@@ -23,12 +23,12 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 | Clear: close the Space's unpinned tabs | ⇧⌘K | Ctrl+Shift+K |
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
 | In a little window or a peek: move the page into your window as a tab, as Open in Stedding or Open as Tab does. A new window opens when none is open | ⌘O | Ctrl+O |
-| In a little window or a peek: send the page into a split of your window (File menu and the page's menu: Open in Split View) | ⇧⌘O | Ctrl+Shift+O |
+| In a little window or a peek: send the page into a split of your window (the page's menu, and on the Mac the File menu: Open in Split View). The page opens as its own tab when the tab it would join is an essential, already in a split, or outside the active Space, or when that window has no tab yet | ⇧⌘O | Ctrl+Shift+O |
 | In a little window or a peek: close it. The page gets Escape first when it uses that key | Esc | Esc |
 
 ### Switching Spaces with the mouse
 
-Over the sidebar, or over its icons, scroll sideways: to the right for the next Space, to the left for the one before. Scrolling up and down still scrolls the tabs. After each change the wheel waits a moment, so a fast spin does not run through every Space.
+Over the sidebar, or over its icons, scroll sideways. With a wheel, and with a sideways swipe on Windows, to the right is the next Space and to the left the one before. On the Mac, two fingers follow the hand, so a swipe to the left is the next Space and a swipe to the right the one before. Scrolling up and down still scrolls the tabs. After each change the wheel waits a moment, so a fast spin does not run through every Space.
 
 | How | macOS | Windows |
 |---|---|---|
@@ -42,7 +42,7 @@ Over the sidebar, or over its icons, scroll sideways: to the right for the next 
 | Action | macOS | Windows |
 |---|---|---|
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
-| Open the bar in actions mode. ⇥ switches to actions mode and keeps what you typed as the filter; ⇥ at the end of the start of a search engine's name makes a search chip for that site instead | ⇧⌘P | Ctrl+Shift+P |
+| Open the bar in actions mode. ⇥ switches to actions mode and keeps what you typed as the filter. When the bar offers to search a site and the caret is at the end of what you typed, ⇥ makes a search chip for that site instead | ⇧⌘P | Ctrl+Shift+P |
 | Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
 | Run an extension. The bar lists your extensions. Keep the keys down and press the chord again, or ↓ ↑, to choose. Let go to run it. Esc runs none; on the Mac ⌘. does too | ⌘E | Ctrl+Alt+E |
 | Jump to one of the first eight rows you can see, or to the last one with 9. Hold ⌘ / Ctrl a moment to see the numbers | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
@@ -56,7 +56,7 @@ Over the sidebar, or over its icons, scroll sideways: to the right for the next 
 | Split with the page on screen: drag a tab onto the page's left or right half, and let go when that half lights | drag | drag |
 | Mute the tab or unmute it. A split's two panes go together | ⌃M | Ctrl+M |
 | Reopen closed tabs, one at a time, each in its Space and folder. With Settings → Stedding → Tabs → Offer Undo after closing tabs on, the toast's Undo brings back a whole close | ⇧⌘T | Ctrl+Shift+T |
-| On a pinned tab, while Settings → Stedding → Tabs → "⌘W / Ctrl+W on a pinned tab puts it to sleep" is on (it is at first): unload it and send it back to its pinned page, keeping its place. The minus on an awake pin, a middle click, and the menu's Close do the same. A pin already asleep at that page shows an x that asks before removing it | ⌘W | Ctrl+W |
+| On a pinned tab, while Settings → Stedding → Tabs → "⌘W on a pinned tab puts it to sleep" is on (on Windows the row is "Ctrl+W on a pinned tab puts it to sleep"; it is on at first): unload it and send it back to its pinned page, keeping its place. The minus on an awake pin, a middle click, and the menu's Close do the same. A pin already asleep at that page shows an x that asks before removing it | ⌘W | Ctrl+W |
 
 ## Page
 
@@ -101,7 +101,7 @@ Running an extension is ⌘E on the Mac, as in Arc, and Ctrl+Alt+E on Windows, w
 
 Independent session is not a shortcut. It is a check item on the Space chip menu, a toggle on each Space in Settings → Stedding → Spaces, and an **Independent Session** row in the command bar's actions mode. It is off at first.
 
-The tab-group chords are not bound. Those rows are absent from the short tab menus, which are on at first. Settings → Stedding → Pages and menus → Short context menus brings Chromium's menu back, still without those chords.
+The tab-group chords are not bound. Those rows are absent from the short tab menus, which are on at first. Turning off Settings → Stedding → Pages and menus → Short context menus brings Chromium's menu back, still without those chords.
 
 ## Notes
 

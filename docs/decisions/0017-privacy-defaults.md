@@ -14,8 +14,8 @@ Blocking third-party cookies breaks some sign-in flows and embedded widgets.
 These are registered defaults of Chromium’s own preferences, in patch 0030 ([privacy.md](../features/privacy.md)):
 
 - Third-party cookies are blocked in normal windows. `profile.cookie_controls_mode` is Block third-party. Chromium blocks them in Incognito only. Q1.
-- HTTPS-First balanced mode is on (`https_first_balanced_mode`). Q2.
-- “Ask a web service about navigation errors” is off (`alternate_error_pages.enabled`). Q3.
+- HTTPS-First balanced mode is on (`https_first_balanced_mode_enabled`). Q2.
+- “Show Stedding’s own error pages” is on. The switch is inverted on `alternate_error_pages.enabled`, which defaults to false. Q3.
 - Quiet notification and geolocation prompts are on, and the adaptive (CPSS) choice of those settings is off. The settings page treats the two as one control and checks they are never both on. Q5.
 - Search suggestions are off (`search.suggest_enabled`). Q7.
 
@@ -23,7 +23,7 @@ Global Privacy Control has no Chromium preference. It is the local-state prefere
 
 Topics, Protected Audience and Attribution already default off in Chromium. Stedding does not turn them on. Q6.
 
-Q1–Q7 are one row each in the Privacy block of chrome://settings/stedding, bound to one preference, the protective side on. A row that binds a Chromium preference is not a `stedding.*` preference, so it sits outside the rule that a Stedding toggle starts on (settings T2). The third-party-cookie row says that when a site breaks, the eye in the address row allows cookies for that site (patch 0030, and the same string as of patch 0109).
+Q1 is one menu. Q2, Q3, Q4 and Q7 are one switch each. Q5 is two switches, for notifications and for geolocation. Q6 is a text row with no switch. The protective choice is the default. A row that binds a Chromium preference is not a `stedding.*` preference. Settings T2 lists Stedding’s own toggles, and several of those start off. The third-party-cookie row says “If a site breaks, the eye in the address row allows them there” (patch 0109).
 
 ## Consequences
 

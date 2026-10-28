@@ -6,7 +6,7 @@ The core loop is BACKLOG `S-173`. It has passed on installed builds on the Mac a
 
 Owner docs: [PLAN.md](../../PLAN.md) ("When an item is done"), [the quality bar](../ROADMAP.md#the-quality-bar), [docs/history/plan-2026-09-26.md](../history/plan-2026-09-26.md) TST-6.
 
-The published release is 0.3.0 beta 22, on Chromium 156.0.8078.48. The series on main is Chromium 157.0.8103.31 and is not released. The next release would be 0.3.0 beta 23. `VERSION` is what that release is called.
+The published release is 0.3.0 beta 22, on Chromium 156.0.8078.48. The series on main is Chromium 157.0.8103.31 and is not released. The next release would be 0.3.0 beta 23. `VERSION` still reads `0.3.0-beta.22`; the next release starts by bumping that file.
 
 ## The core loop
 
@@ -90,7 +90,7 @@ None recorded.
 
 ## The session mark
 
-The live checks [sessions.md](sessions.md) S32–S34 and [spaces.md](spaces.md) B38 wait on: how the cookie mark looks and sounds, which no browser test sees.
+The live checks [sessions.md](sessions.md) S32 and S34 and [spaces.md](spaces.md) B38 wait on: how the cookie mark looks and sounds, which no browser test sees.
 
 ### Before the run
 
@@ -166,7 +166,7 @@ The live checks [web-apps.md](web-apps.md) cites: what its browser tests cannot 
 | `wa_app_light`, `wa_app_dark`, `wa_app_theme_color` | Open each app in Light and in Dark; `b.test/app/` with its `theme-color`, `a.test/plain.html` without one. Open its menu, and find on the page (⌘F, Ctrl+F). | The page runs edge to edge under Chromium's title bar: no sidebar, no Spaces, no address row, no mat or rounded card around the page; the find bar sits on the page's corner. The title bar takes the page's colour when it names one, else the window's ground, legible in both modes. The menu is Chromium's (App info, Copy URL, Open in Stedding, Uninstall…); on the Mac the menu bar has no Spaces menu and no Add to Dock (Wa9, Wa10, windows G7). |
 | `wa_session` | In the app made in Work, open `b.test/whoami.html`. Then the app's menu → Open in Stedding; then, from the page in Work, the address row's "Open in <App>" chip; then, in the app, a link to `a.test`. | The app's page holds Work's cookie, not Home's, from its first request. Open in Stedding puts the page in a tab of Work, on screen, not reloaded; the chip moves it back; the link leaving the app opens in a tab of Work (Wa11, Wa14). |
 | `wa_session_off` | Turn Work's Independent session off from its chip menu, with the app's window open; answer the question; open a new page of the app; turn the session on again. Then delete Work, with the app's window open. | The question names the app ("… will use the shared session while it is off."), even with no Work tab open. The open app window stays signed in as Work until it closes; a new page of the app holds the shared cookie; on again, Work's. Deleting Work names the app ("… will then use the shared session."), and Work's site data is erased only once the app's window has closed (Wa13; sessions S10, S17; spaces B5). |
-| `wa_relaunch` | With the app's window open, open chrome://restart in a browser tab; after the restart close the app's window and press ⇧⌘T (Ctrl+Shift+T). Then quit and start Stedding normally. | After the restart the app's window comes back, still in Work's session; ⇧⌘T brings it back the same way. A plain start restores the browser's windows and not the app's (Wa12). Note whether the archive page (⇧⌘P, "Show Archived Tabs") lists the app's page ([archive.md](archive.md), notes). |
+| `wa_relaunch` | With the app's window open, open chrome://restart in a browser tab; after the restart close the app's window and press ⇧⌘T (Ctrl+Shift+T). Then, with the next launch set to continue where you left off, quit and start Stedding. | After the restart the app's window comes back, still in Work's session; ⇧⌘T brings it back the same way. That start restores the browser's windows and not the app's (Wa12). Note whether the archive page (⇧⌘P, "Show Archived Tabs") lists the app's page ([archive.md](archive.md), notes). |
 | `wa_launch_quit` | Quit Stedding. Launch an app from the Dock (the Mac) or the Start menu (Windows). | Stedding starts and opens the app's window. Write down whatever else opens, the browser's windows or not: Wa22 takes what the real build does. |
 | `wa_update` | With an app installed, update Stedding to the next release the way a user gets it (on the Mac through the feed, on Windows with the next installer over this one); launch the app afterwards. On Windows, then uninstall Stedding. | The app launches from its tile or shortcut after the update, with no launcher to rebuild by hand; on Windows the uninstall deletes the app's shortcuts (Wa16, Wa17). Needs two releases, so it runs with the next release. |
 | `wa_uninstall` | From each app's window menu, Uninstall <App>…, the first with "Also clear data" ticked. | The launcher goes (on the Mac the tile Stedding added goes too, and the Dock restarts once), or the Start menu entry and the desktop shortcut on Windows. The box for clearing data says "This also signs the tabs of “Work” out of the site." and, ticked, Work's tabs of the site are signed out; the app is gone from chrome://apps (Wa18). |
@@ -198,7 +198,7 @@ The live checks [peek.md](peek.md) cites: what a person does with a peek on a re
 | `pk_dialog` | In the peek, press the page's button. | The page's dialog shows in the peek (P6). |
 | `pk_as_tab` | Open a peek; press Open as Tab, then the same with ⌘O (Ctrl+O). | The page becomes the active tab of the window, under the Clear line, without loading again; the peek is gone (P7). |
 | `pk_split` | Open a peek; press Open in Split View, then the same with ⇧⌘O (Ctrl+Shift+O). | The page sits in a split beside the pinned tab, and the pair's row leaves the pinned run for under the Clear line (P9, splits J5). |
-| `pk_essential` | Drag the pin into the essentials, click its link. Right-click the peek's page; on the Mac, open the File menu. | The peek offers Open as Tab alone: on its row, in the page menu, and in the File menu, whose first row reads Open as Tab (P9). |
+| `pk_essential` | Drag the pin into the essentials, click its link. Right-click the peek's page; on the Mac, open the File menu. | The peek offers Open as Tab alone: on its row, as the page menu's first row, and on the Mac File menu's Open File row (P9). |
 | `pk_close` | Open a peek; click the window's margin outside it. Open it again; press Escape. Open it again; press ⌘W (Ctrl+W). Open it again; wait a second, click the window's margin, then the pin's link at once. | Each closes the peek, and the window is in front, the pinned tab where it was; the link clicked straight after opens the peek again (P14). |
 | `pk_fullscreen` | Put the window in full screen (⌃⌘F on the Mac, F11 on Windows), click the pin's link. | The peek opens over the full-screen window, in its Space on the Mac, not on another desktop (P6). |
 | `pk_redirect` | In the pinned mail or chat app, click a link to another site, then a link to the app's own pages, then its "Sign in" or account link. | The first peeks; the second and the third go on in the pin (P2, P15, P16). |
@@ -320,7 +320,7 @@ The live checks [sidebar-panels.md](sidebar-panels.md) cite: what the browser te
 
 | Id | Do | Expect |
 |---|---|---|
-| `sp_keys` | Press ⌘Y (Ctrl+H), then ⇧⌘J and ⌥⌘L (Ctrl+J), then the same again; click into the panel's search field and press ⌘Y (Ctrl+H) again. | History opens in the sidebar's column, Downloads replaces it, the same key closes it; with the focus in the panel the key still closes it (Pn1, Pn2). |
+| `sp_keys` | Press ⌘Y (Ctrl+H), then ⇧⌘J or ⌥⌘L (Ctrl+J), then the same again; click into the panel's search field and press ⌘Y (Ctrl+H) again. | History opens in the sidebar's column, Downloads replaces it, the same key closes it; with the focus in the panel the key still closes it (Pn1, Pn2). |
 | `sp_glass` | On the Mac, set the sidebar narrower than 340 DIP and open History. | The sidebar is drawn at least 340 DIP wide with the glass behind all of it; closed, it is narrow again (Pn4). |
 | `sp_look` | Open each panel in each Space, in light and in dark. | Every row, heading and button reads clearly over the Space's colour; the panel has no ground of its own (Pn16). |
 | `sp_caption` | With the address row shown, click into the search field and press on the panel's header. | The field takes the focus and the window does not move (Pn16). |
@@ -384,7 +384,7 @@ The live checks [sidebar-file.md](sidebar-file.md) Sf7–Sf41 cite, which the te
 | `sy_join` | Mac: Settings → Stedding → Sync and import → Set up…, pick the shared folder, Start syncing. PC: the same; tick the pairs; Combine. | The sheet names the Mac and its counts and the pairs; after Combine, one Space per pair on both, the Mac's pins unloaded on the PC; nothing open closed (Sf9, Sf10, Sf17). |
 | `sy_edit` | Mac: rename a Space; PC within the same minute: recolour it. Pin a page on the PC. | Both computers show the new name and colour within a few seconds of the sync tool moving the file; the pin arrives unloaded on the Mac (Sf13, Sf15). |
 | `sy_remove` | PC: unpin one pin; close a window holding pins; quit and relaunch. | The unpinned pin goes on the Mac (into Recently Closed if never opened there); the window's pins stay on the Mac (Sf18, Sf19, Sf21). |
-| `sy_bulk` | PC: unpin five pins at once; delete a Space. | The Mac shows one row for the five with Apply and Keep, and one for the Space with Delete here… and Keep; nothing goes until answered (Sf22, Sf23). |
+| `sy_bulk` | PC: unpin five pins at once; delete a Space. | One row for that computer. A batch that deletes a Space uses Delete here… and Keep; the five pins wait in that same batch, with no second row of Apply and Keep. Nothing goes until answered (Sf22, Sf23). |
 | `sy_copy` | Edit the PC's file on both machines while Syncthing is paused, then resume. | A conflict copy is named with Show in folder and Dismiss; nothing in it applies (Sf28). |
 | `sy_cloud` | Mac: an iCloud Drive folder; Remove Download on the PC's file; Sync now. PC: OneDrive with Files On-Demand. | "Waiting for … to download", nothing removed; the change applies once the file is down (Sf30). |
 | `sy_prompt` | Mac: pick a folder in Documents and one on a network volume; quit and relaunch. | Any prompt shows right after the pick with Stedding's sentence, and at a launch only once a window is up (Sf32). |

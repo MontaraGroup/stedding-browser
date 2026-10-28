@@ -8,7 +8,7 @@ docs here or in the backlog. What each feature does now is its spec under
 
 | Id | Item | Closed by |
 |---|---|---|
-| S-332 | A pinned tab's x removes it, after asking (issue 50) | Released 2026-10-28 in 0.3.0 beta 22 (pins H29, patch 0110); changed the same day on main: the minus on every awake pin, the x once it is asleep. |
+| S-332 | A pinned tab's x removes it, after asking (issue 50) | Released 2026-10-28 in 0.3.0 beta 22: on a pin that is not on screen the x asks before it removes the pin, and on the pin on screen the button is a minus that sleeps it. The same day on main, patch 0110 (pins H29) changed that: a minus on every awake pin, an x once it is asleep. |
 | S-316 | Sidebar row text shifted when a page's colour arrived | Fixed in patch 0105 (`SteddingColorMixerTest.APagesColourLeavesTheRowsTextAlone`); closed 2026-10-28. |
 | S-313 | Settings › Stedding reorganised | Built in patch 0109: a card for each group, with jump buttons (settings T13); closed 2026-10-28. |
 | S-312 | Sync through a folder says what to pick (issue 38's follow-up) | Built in patch 0106 (sidebar-file Sf42), released in 0.3.0 beta 18. |
@@ -54,8 +54,8 @@ docs here or in the backlog. What each feature does now is its spec under
 | S-268 | A hover state on the New Tab row (issue 12) | Built 2026-10-22 in patch 0083 (sidebar Y32). |
 | S-259 | A Copy Link button in the address field (issue 11) | Built 2026-10-22 in patch 0083 (copy-link L7, settings T28). On by default. |
 | S-260 | A held drag onto a Space chip switches | Built 2026-10-22 in patch 0083 (spaces B12): half a second on the chip switches. |
-| S-261 | A folder dragged into another folder | Built 2026-10-22 in patch 0083 (folders F10, F38, F39). |
-| S-262 | The tab list ended against the sidebar’s edge | Built 2026-10-22 in patch 0083 (sidebar Y30): a long list scrolls half a row past the end. |
+| S-261 | A folder dragged into another folder | Built 2026-10-22 in patch 0083 (folders F38, F39). |
+| S-262 | The tab list ended against the sidebar’s edge | Built 2026-10-22 in patch 0083 (sidebar Y30): a long list scrolls half the list’s height past the end. |
 | S-263 | A pin sent home kept the last page’s title | Fixed 2026-10-22 in patch 0083 (pins H1, H3): the row shows the home at once. |
 | S-264 | A link’s tab sat a level to the right | Changed 2026-10-22 in patch 0083 (settings T26, tabs R57): nesting is off by default. |
 | S-265 | Every folder looked grey | Fixed 2026-10-22 in patch 0083 (tabs R7, folders F12): a header is never drawn asleep. |
@@ -99,7 +99,7 @@ docs here or in the backlog. What each feature does now is its spec under
 | S-221 | A right-hand sidebar test was flaky on Windows | Closed 2026-10-19 in patch 0072. Passed in 0.2.0 beta 20’s three Windows runs. |
 | S-226 | A private window’s row never took the page colour | Fixed 2026-10-18 (toolbar T21): a transparent sample is no colour. Passed on 0.2.0 beta 20’s ASan run. |
 | S-227 | The infobar container kept its height | Fixed 2026-10-19 in patch 0072. Passed in 0.2.0 beta 20’s Windows runs. |
-| S-225 | A replaced split came back apart after Restore | Fixed 2026-10-18 (sessions S12). Shipped in 0.2.0 beta 20. |
+| S-225 | A replaced split came back apart after Restore | Fixed 2026-10-18 (splits J1, sessions S12). Shipped in 0.2.0 beta 20. |
 | S-248 | Later Windows acceptance parts started behind other apps | Tooling, 2026-10-19: the fixture brings the window forward before it waits. |
 | S-215 | The Windows updater | Built 2026-10-19 in patch 0073 (updates Up14–Up22, ADR 0023). First in 0.2.0 beta 19. |
 | S-72 | A second Windows release on one pin installed as a repair | Fixed 2026-10-19 in patch 0073 (updates Up22): each build carries Stedding’s own version. |
@@ -162,9 +162,9 @@ docs here or in the backlog. What each feature does now is its spec under
 | S-116 | New Documents | Built in patch 0061, 0.2.0 beta 14 (commandbar K28): eleven services, a fixed list. |
 | S-130 | Auto-archive is Never by default | Set in patch 0060, 0.2.0 beta 14 (archive A6, settings T8). |
 | S-131 | A welcome step for how Stedding behaves | Built in patch 0060, 0.2.0 beta 14 (welcome W12). |
-| S-132 | The address hover cut the first letter | Fixed in patch 0060, 0.2.0 beta 14 (toolbar T34): the band runs from the chip to the actions. |
+| S-132 | The address hover cut the first letter | Fixed in patch 0060, 0.2.0 beta 14 (toolbar T34): the field stays whole when hovered, and the address paints no background of its own. |
 | S-133 | Toasts covered the address row | Fixed in patch 0060, 0.2.0 beta 14 (toolbar T35): a toast sits under the row. |
-| S-77 | Every search engine showed a globe in welcome | Fixed in patch 0060, 0.2.0 beta 14 (welcome W2): each engine shows its initial. |
+| S-77 | Every search engine showed a globe in welcome | Fixed in patch 0060, 0.2.0 beta 14 (welcome W2): each prepopulated engine shows its own mark, and an engine without one shows its initial. |
 | S-124 | The page flush against the window | Built in patch 0060, 0.2.0 beta 14, off by default (sidebar Y23, settings T15). |
 | S-123 | The sidebar edge shows where to drag | Built in patch 0060, 0.2.0 beta 14 (sidebar Y22): a double click restores the width. |
 | S-122 | Mute and picture in picture by key | Built in patch 0060, 0.2.0 beta 14 (tabs R29, commandbar K25, player Mp5). |
@@ -195,7 +195,7 @@ docs here or in the backlog. What each feature does now is its spec under
 | S-46 | Round 7: the operator’s look at beta 3 | Closed 2026-09-05 in patches 0037 and 0038 (toolbar T15, sidebar Y6). Shipped in v0.2.0-beta.4. |
 | S-42 | Space colour on the welcome flow | Built in patch 0018 (welcome W7): the swatches tint the first Space at once. |
 | S-41 | Download progress on the sidebar button | Built (toolbar T14): the sidebar button shows the ring. The test is in patches 0071 and 0099. |
-| S-44 | Round 6: Zen mods and beyond | Landed 2026-09-05 as patches 0016–0036. The plan is under Round 6 in this file. |
+| S-44 | Round 6: Zen mods and beyond | Landed 2026-09-05 as patches 0016–0036. |
 | S-43 | About page version label | Built in patch 0018 (settings T10): About names Stedding’s version and the Chromium pin. Verified 2026-09-05. |
 | S-40 | Capture toast | Built in patch 0017 (screenshot C5), verified 2026-09-05. Off the Mac the button says “Show in folder” (S-83). |
 | S-38 | Full-screen toolbar over the sidebar | Closed 2026-09-02 in patch 0002 (operator round 4): the toolbar is inset by the sidebar. |
@@ -210,7 +210,7 @@ docs here or in the backlog. What each feature does now is its spec under
 | S-8 | Popup windows have no Spaces | Covered by PopupSpaceTest (spaces B14). |
 | S-34 | Peek for a new tab from a pinned tab | Built in patch 0009 (peek P8). On with Peek since 2026-10-25 (PLAN.md decision 2). |
 | S-15 | Settings surface | Built in patch 0010: chrome://settings/stedding (docs/features/settings.md). |
-| S-33 | A setting to hide the new-tab shortcut row | Built (new-tab N5): the third toggle in Stedding’s settings. |
+| S-33 | A setting to hide the new-tab shortcut row | Built (new-tab N5, settings T5): a switch hides the most-visited shortcut row. |
 | S-14 | Peek | Built in patch 0009. Withdrawn 2026-09-26; on by default since 2026-10-25 (PLAN.md decision 2). |
 | S-28 | A Stedding new tab page | Built in patch 0003 (docs/features/new-tab.md): a local page, no Web Store tile. |
 | S-32 | Branding leftovers in chrome://settings | “About Stedding”, and the Stedding mark in the chip, app menu and WebUI. |
@@ -219,15 +219,15 @@ docs here or in the backlog. What each feature does now is its spec under
 | S-30 | Import entry in the app menu | Present (menus M3, import I14): Import Bookmarks and Settings stays in the app menu. |
 | S-13 | Performance baselines from the official build | Recorded 2026-09-02: cold 0.63 s, warm 0.77 s, 5.7 GB, 107 processes (docs/perf/README.md). Not current. |
 | S-20 | Folder drop highlight | The hovered header paints its highlight, and the drop lands inside (folders F7). |
-| S-16 | Import from Chrome, Arc and Firefox | Closed 2026-09-01. macOS Chromium import is Safari and Firefox (PLAN.md decision 8). Arc is Stedding’s importer. |
+| S-16 | Import from Chrome, Arc and Firefox | Closed 2026-09-01. On the Mac, Chromium’s importer brings in Safari and Firefox. Chrome, Brave and Edge stay undocumented until that importer exists (PLAN.md decision 8, S-101). Stedding’s own importer brings in Arc. |
 | S-27 | Sidebar collapse button | Kept: it is the sidebar toggle. The tab-group and tab-search combo was removed (patch 0002). |
 | S-7 | Command bar across Spaces | Covered by CommandBarViewTest (spaces B13). |
 | S-26 | First-run search engine chooser | Chromium’s chooser shipped in patch 0003. Skipping the welcome step records DuckDuckGo (welcome W2, 2026-10-18). |
-| S-12 | capture --assert | tooling/assert-capture and tooling/probes/window.json, 14 probes. |
+| S-12 | capture --assert | tooling/assert-capture and tooling/probes/window.json, 23 probes. |
 | S-21 | De-Google the new tab page and omnibox | Built in patch 0003 (new-tab N1): DuckDuckGo is the default, and the new tab page is local. |
 | S-22 | Essentials as a grid of cards | Built in patch 0002. Since 2026-10-22, up to four cards, then two rows (sidebar Y33). |
 | S-23 | Sidebar top row | Built in patch 0002: the tab-group combo, its hairline and the profile avatar are gone. |
-| S-24 | Default Space chip glyph | Built in patch 0004: a Space with no icon shows a glyph from the menu’s list. |
+| S-24 | Default Space chip glyph | Built in patch 0004: a Space with no icon shows a default glyph, a dot in its colour (spaces B11, B42). The Space menu does not list a fixed set of icons. |
 | S-5 | New Tab row | Built in patch 0002: above the unpinned tabs, under Clear. The row opens the command bar. |
 | S-25 | The typed text as a command bar row | Built in patch 0005: the bar shows the typed text as an Open or Search row. |
 | S-3 | Live restart check for Spaces and folders | tooling/drive quits and relaunches; the list stays (spaces B9). |

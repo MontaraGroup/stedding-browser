@@ -1,195 +1,121 @@
 # The README's animation: storyboard
 
-One animated GIF under the README's header, `docs/images/readme/demo.gif`, with an MP4
-of the same take beside it (`demo.mp4`) for the website and the release notes. It
-shows what Stedding is in about half a minute, at a pace a person can follow, and
-loops without a seam. `tooling/readme/record-demo.sh` makes it from the steps files
-in [tooling/readme/steps/](../../../tooling/readme/steps/); how to run it is in
-[tooling/readme/README.md](../../../tooling/readme/README.md).
+One animated GIF under the README's header, `docs/images/readme/demo.gif`, and `demo.mp4` of the same take. It shows what Stedding is in under 40 seconds, at a pace a person can follow, and loops without a seam. `tooling/readme/record-demo.sh` makes it from the steps in [tooling/readme/steps/](../../../tooling/readme/steps/). How to run it is [tooling/readme/README.md](../../../tooling/readme/README.md).
+
+`timeline.txt` is a take's own length. `media.py` notes when that length is outside 25 to 40 seconds.
 
 ## The picture
 
 | | |
 |---|---|
 | Window | 1400 × 880 points, the size `tooling/drive` opens, at the top left of the main display |
-| Colours | Light (slate) by default. Page colours read best against light pages, and the night gradient bands in a 256-colour GIF; `--scheme dark` makes the other one |
-| Frame | The window with its own rounded corners on the brand's slate (#2F4858), a 28 px margin at 1400 px wide |
-| Captions | A 64 px lane under the window: the keys in a pale teal (#99F6E4, Tailwind teal-200), the words near white (#F1F5F9), one caption per scene, a short blank between two |
-| Pointer | Visible. It glides between targets on an eased path (0.3 to 0.6 s) and never jumps; clicks draw no ring unless `--show-clicks` |
-| Length | 25 to 40 seconds: 38.6 in the take of 2026-10-21; `timeline.txt` gives a take's own |
-| Loop | The last frame is the first: Work, the GitHub page, the pointer at rest |
-| GIF | 1200 px wide at 15 fps, down to 12 fps and 1040 px if it would pass 8 MB |
-| MP4 | 1400 px wide, 30 fps, H.264 |
+| Colours | Light by default. `--scheme dark` records the other one. Page colours read best against light pages, and a night gradient bands in a 256-colour GIF |
+| Frame | The window, with its own rounded corners, on the brand's slate (#2F4858): a 28 px margin, then 12 px, then the caption lane, at 1400 px wide |
+| Captions | A 64 px lane. The keys are #99F6E4, the words #F1F5F9, one caption per scene, with a short blank between two when the scene is long enough |
+| Pointer | Visible. It glides on one eased `move` (0.3 to 0.6 s in the steps; 0.5 s when a glide gives no time) and does not jump. Clicks draw no ring. `--show-clicks` adds one only for the `screencapture` recorder |
+| GIF | 15 fps at 1200 px wide, then 12 fps at 1200, 1120 and 1040 px, until the file is within 8 MB |
+| MP4 | The same composed picture, 1400 px wide, 30 fps, H.264 (CRF 18, faststart) |
 
-The pace, everywhere:
+The pace the steps are written to:
 
-- One idea per scene, and each scene opens on a still frame (the scene's marker).
-- Every state stays on screen 1.3 s or more before the next change.
-- One thing moves at a time: the pointer, or the window, never both.
-- Typing comes in two short bursts, the way a person types.
-- Nothing flashes: dark pages stay on for two seconds and go off once.
+- One idea per scene. Each scene opens on a still frame, the scene's marker.
+- One thing moves at a time: the pointer, or the window.
+- Typing comes in two short bursts.
+- Dark pages stays on for two seconds, then goes off.
 
 ## What is in the window
 
-The fixture is built before the recording, and none of it is recorded.
+The fixture is built before the recording, and none of that building is recorded. The pages are `common.sh`'s `DEMO_URLS`. `pin_tabs/4/folder_tabs/6` makes the essentials and the folder about a second after the window opens: the first four pages are pinned, and the next two are a folder whose last tab is nested. `steps/setup.steps` does the rest with keys: it files four tabs into the other Spaces, pins Django and PyPI, and names the folders with a double click on each name (folders F4).
 
 | Space | Colour, icon | Its tabs |
 |---|---|---|
-| (essentials) | in every Space | GitHub (the project's repository), MDN, DuckDuckGo, Hacker News |
-| Work | Moss, 💼 | pinned: Django, PyPI; a folder Docs holding MDN's CSS reference and a nested folder Python with the Python tutorial; the sample app on localhost:5173; GitHub Trending |
+| Essentials | shared | GitHub trending, Swift, this week; MDN; DuckDuckGo; Hacker News. Shown in Work and Reading. Personal's own session shows none of them (spaces B6) |
+| Work | Moss, 💼 | Pinned: Django, PyPI. A folder Docs holding MDN's CSS reference and a nested folder Python with the Python tutorial. The sample app on localhost:5173. The project's repository |
 | Personal | Plum, 🏠, its own session | OpenStreetMap, Lobsters |
 | Reading | Clay, 📚 | NASA, Apollo 11 (Wikipedia) |
 
-Made with as little real input as possible: the Spaces, their colours, icons and the
-own session come from a seeded profile (`media.py seed`), the essentials and the
-folder from the capture params `pin_tabs/4/folder_tabs/6`. Real input does the rest
-(`steps/setup.steps`): the keys that move four tabs to the other Spaces and pin two,
-and the double clicks that name the folders.
+The first frame and the last are Work on the Swift trending essential, the pointer at rest (150, 720). The project's repository is a tab in the list, not the page on screen.
 
 ## Pages
 
-Real sites that are stable, need no sign-in, show no consent banner and have nothing
-that moves on its own, plus a local page of this repository. GitHub stands for an
-example page everywhere; never rust-lang.org; no Wikipedia page on screen (its
-fundraising banners), no chromium.org (its title reads "Home"), no python.org (its
-examples rotate, and the motion threw the captions' sync) and no typescriptlang.org
-(a cookie notice across its top in a split's half). A page in a split is half the
-window wide: its top edge has to keep its colour at that width too.
+Real sites that stay still, need no sign-in and show no banner, plus a local page of this repository. A page that moves on its own can take the place of the command bar when the captions are synced. A page in a split is half the window wide, so its top edge has to keep its colour at that width too. If a header has changed colour, pick another page whose top edge is one strong colour, put it in `common.sh` and in the steps, and check it in a rehearsal.
 
-| Page | Address | Why | Check at rehearsal |
+| Page | Address | Where it is | Check at rehearsal |
 |---|---|---|---|
-| The project on GitHub | github.com/ysalitrynskyi/stedding-browser | The first and last frame: Stedding showing its own README | The page is white and still; no banner |
-| Django | www.djangoproject.com | A dark green header: the row turns green | The row is green |
-| PyPI | pypi.org | A blue header: the row turns blue | The row is blue; no notice bar |
-| OpenStreetMap | www.openstreetmap.org | A map, the colour of the Personal Space's scene; the preroll closes its welcome and any promotion in its side panel | The tiles have loaded; the side panel shows only the search |
-| NASA | www.nasa.gov | Reading's page, dark along its top at any width: the split's left half, its part of the row dark (until 2026-10-23 Arch Linux, which the owner found dated) | The row's left part is dark |
-| Apollo 11 | en.wikipedia.org/wiki/Apollo_11 | Reading's white page: the split's right half, its part of the row white; both halves go dark together (until 2026-10-23 LWN.net) | The page is white |
-| Sample app | localhost:5173 (`tooling/readme/pages/sample-app/`) | A local development page, teal across its top (#14B8A6) | The outline and host:port, once built |
-| Sample API | localhost:8797 (`tooling/readme/pages/sample-api/`) | A second local page, for the still | |
-
-If a site's header has changed colour, pick another page whose top edge is one strong
-colour, put it in `common.sh` and in the steps, and check it in a rehearsal.
+| Swift trending | github.com/trending/swift?since=weekly | The first and last frame, the first essential | The page is still, and the address row has taken its colour |
+| Django | www.djangoproject.com | Work's first pin. The row turns green | The row is green |
+| PyPI | pypi.org | Work's second pin. The row turns blue. Preroll clicks the top edge in case a notice is there | The row is blue, and no notice bar |
+| OpenStreetMap | www.openstreetmap.org | Personal's page in the command-bar scene. Preroll closes its welcome and any promotion in the side panel | The tiles have loaded. The side panel shows only the search |
+| NASA | www.nasa.gov | Reading. The split's left half, dark along the top | The row's left part is dark |
+| Apollo 11 | en.wikipedia.org/wiki/Apollo_11 | Reading's page on screen. The split's right half, white | The page is white |
+| Sample app | localhost:5173 (`tooling/readme/pages/sample-app/`) | A Work tab, teal across its top (#14B8A6). Its row shows the host and port at the default Comfortable density | The outline, and host:port, once the window is up |
+| Sample API | localhost:8797 (`tooling/readme/pages/sample-api/`) | The `local-tabs` still only | |
 
 ## Scenes
 
-The times are a take's own (`timeline.txt`, the take of 2026-10-21 on the 0.3.0 beta 1
-build): each scene runs from its marker to the next. Coordinates are window points,
-read from a layout run's pictures (`shots/setup-*.png`) and a rehearsal's markers.
+Coordinates are window points in the steps. Read them again from a layout run's `shots/setup-*.png` and a rehearsal's `marks/` when a build moves the rows. Each scene runs from its marker to the next.
 
-| # | Scene (`steps/`) | Seconds | What happens (keys, clicks) | On screen | Caption |
-|---|---|---|---|---|---|
-| | `setup`, `preroll` | cut | The fixture is built, quit and reopened; every page a scene shows is loaded once; back to Work and its GitHub essential, the pointer at rest (150, 720) | | |
-| 1 | `hero` | 2.3 | Nothing: the window at rest | Work: essentials, pins, the folder, the tabs; the GitHub page on its card, the address row in the page's colour | Stedding: an open-source, Arc-style browser built on Chromium |
-| 2 | `colour` | 6.6 | Glide to Django's row, click; glide to PyPI's row, click; back to the rest point | The page changes and the address row with it: green, then blue | The address row takes each page's own colour |
-| 3 | `bar` | 7.0 | ⌘T; type "open", a beat, "street"; ↓; Return | The bar over the page lists the OpenStreetMap tab with its Space; Return slides the sidebar to Personal, its plum tint, the map | **⌘T** Search, open a site, or jump to any tab in any Space |
-| 4 | `spaces` | 4.1 | A beat on Personal; glide to the third chip, click | Reading slides in, clay, its Apollo 11 page | **⌃1–⌃9** Spaces, each in its own colour, with its own cookies if you like |
-| 5 | `split` | 7.4 | Glide to NASA's row, the one not on screen; press, drag it level out of the sidebar onto the page's left half; hold; let go; back to the rest point | The press shows NASA for a moment; over the page Apollo 11 is back and its left half lights in clay with "Create split view"; the drop puts Arch on the left and LWN on the right, the address row dark grey over one and white over the other, blended over the gap, and the sidebar's row becomes the split's two halves | Drag a tab onto the page for split view, the address row in each page's colour |
-| 6 | `dark` | 4.2 | ⌥⇧⌘D, two seconds, ⌥⇧⌘D | Both pages of the split go dark at once, the row with them, and come back | **⌥⇧⌘D** Every website dark at once, with no white flash |
-| 7 | `end` | 7.2 | Glide to the first chip, click; glide to the GitHub essential, click; glide to the rest point; hold | Work slides back with its PyPI page, then the first frame again; the split stays in Reading, out of sight | stedding.dev · free and open source · macOS and Windows |
+| # | Scene (`steps/`) | What the steps do | On screen | Caption |
+|---|---|---|---|---|
+| | `setup`, `preroll` | Cut. The fixture is built, quit and reopened. Every page a scene shows is loaded once. Back to Work and the trending essential, the pointer at rest | | |
+| 1 | `hero` | Nothing. The window at rest | Work: essentials, pins, the folder, the tabs. The trending page on its card, the address row in the page's colour | Stedding: an open-source, Arc-style browser built on Chromium |
+| 2 | `colour` | Glide to Django's row, click. Glide to PyPI's row, click. Back to the rest point | The page changes, and the address row with it: green, then blue | The address row takes each page's own colour |
+| 3 | `bar` | ⌘T. Type "open", a beat, "street". ↓. Return | The bar lists the OpenStreetMap tab and its Space. Return slides the sidebar to Personal, its plum tint, the map, and the mark of its own session | **⌘T** Search, open a site, or jump to any tab in any Space |
+| 4 | `spaces` | A beat on Personal. Glide to the third chip, click | Reading slides in, clay, its Apollo 11 page | **⌃1–⌃9** Spaces, each in its own colour, with its own cookies if you like |
+| 5 | `split` | Glide to NASA's row, the one not on screen. Press, drag it level out of the sidebar onto the page's left half, hold, let go. Back to the rest point | Apollo 11 stays on screen through the drag (tabs R61, splits J10). Over the page its left half lights in clay with "Create split view". The drop puts NASA on the left and Apollo 11 on the right. The address row is dark over one and white over the other, with the window's ground over the gap (toolbar T41). The sidebar's row becomes the split's two halves | Drag a tab onto the page for split view, the address row in each page's colour |
+| 6 | `dark` | ⌥⇧⌘D, two seconds, ⌥⇧⌘D | Both pages of the split go dark at once, the row with them, and come back | **⌥⇧⌘D** Every website dark at once, with no white flash |
+| 7 | `end` | Glide to the first chip, click. Glide to the first essential, click. Glide to the rest point. Hold | Work slides back on the PyPI page scene 2 left there, then the first frame again. The split stays in Reading, out of sight | stedding.dev · free and open source · macOS and Windows |
 
-The split is made in Reading, not in Work, so the last frame is still the first: a
-split in Work would change Work's list, and the loop would show it. The press that
-starts the drag selects the dragged row, so its page shows until the pointer is over
-the page (splits J10); that is the product's behaviour, not the take's. The mark of a
-Space with its own session needs no scene of its own: it is on screen in scenes 3
-and 4.
+The split is made in Reading, so the last frame is still the first. A split in Work would change Work's list, and the loop would show it. The dragged row is the one not on screen: a page dropped on itself makes no split (splits J13). Confirm NASA's row from `marks/split.png` before a take. The mark of a Space with its own session is on screen in scenes 3 and 4.
 
-Two scenes are written but left out of the default take, because with them it runs
-past 40 seconds: `rail` (the sidebar folded to icons and opened again; a still and a
-README line show it) and `local` (a tab on a local server; the sample app's row shows
-its host and port in every frame). `--scenes` puts either back.
+`rail` and `local` are written and left out of the default take, so the take stays under 40 seconds. `rail` folds the sidebar to icons and opens it again (⌘S). `local` clicks the sample app, whose row already shows its host and port in the other frames. `--scenes` puts either back. `local` belongs right after `colour`.
 
-Keys are chosen so nothing outside the browser takes them: the chips switch Spaces in
-scenes 4 and 7 and ⌥⌘← in the fixture, because macOS takes ⌃1–⌃9 once a second
-desktop exists (the caption still names them).
+The recorded scenes switch Spaces with the chips, and the fixture comes back with ⌥⌘←. macOS takes ⌃1–⌃9 once a second desktop exists. The caption still names those keys.
 
 ## Left out of the animation
 
-Each of these is a still, a short clip (below) or a line of the README instead: folders
-and pinned tabs up close (a slash on a wandered pin is too small at GIF size), folders in
-the pinned tabs and the rail at Compact and Dense (0.3.0 beta 1; each would need a scene of
-its own past 40 seconds), the rail and the archive (the same), little windows and apps from
-pages (a second window), the Arc import, the welcome flow, and private windows.
+These are a still, a clip, or a line of the README. Folders and a wandered pin up close are too small at GIF size. The rail, the archive, little windows, apps made from pages, the Arc import, the welcome flow and private windows are the same: each would be a scene of its own past 40 seconds, and a still or a clip already shows it.
 
-## The clips of what is new
+## The clips
 
-Four short clips under the README's "New in 0.3", one idea each, made on the 0.3.0 beta 1
-build on 2026-10-21; the website shows the same clips as MP4s, with one more of the split
-scene as a tour item. Each is one
-`tooling/drive` run on a fresh copy of the demo's fixture (`steps/setup.steps`): a cut
-preroll loads the pages, the command bar opens and closes once to sync the recording's
-clock (as the demo's `bar` scene does), and the clip runs from a still frame to a hold on
-the result. The frame is the demo's, 1200 px wide with no caption lane (the README and
-the site caption them); the two sidebar clips show the window's top left 760 × 478 points
-at 1.5 times the size, so the rows can be read.
+Four short clips in the README, under Highlights. Each is one idea, made as one `tooling/drive` run on a fresh copy of the demo fixture (`steps/setup.steps`). A cut preroll loads the pages. The command bar opens and closes once to sync the recording's clock, as the demo's `bar` scene does. The clip runs from a still frame to a hold on the result.
 
-| File | Seconds | What happens |
-|---|---|---|
-| `clip-pinned-folder.gif` | 7.0 | Work; the Docs folder (its nested Python folder closed) dragged by its header from under the line to between the Django and PyPI pins; the bar shows the place; the folder settles there |
-| `clip-space-scroll.gif` | 7.1 | Work on Django; a sideways wheel notch over the sidebar four times: Personal, Reading, Personal, Work. Work comes back to its own last tab, not an essential, so the clip starts on Django and loops without a seam |
-| `clip-little-window.gif` | 7.0 | Reading on LWN; `open -a <app> https://docs.djangoproject.com/en/stable/` from outside opens the little window, its row Django's green; a click on Open in Stedding moves it into Reading |
-| `clip-pin-close.gif` | 6.4 | Work; Django's pin wandered to its overview page (the slash); ⌘W: the pin sleeps at home, in place, and PyPI shows; a click wakes Django on its home page |
+The frame is the demo's, 1200 px wide, with no caption lane. The two sidebar clips show the window's top left 760 × 478 points at 1.5 times the size, so the rows can be read.
 
-Two things a take needs: the pointer comes to a row over no tab row it slows on (a glide
-that eases out over a tab row opens that row's hover card, and the card stays up through
-a drag that starts next), and the little window's clip is a launch without
-`--window-size` and `--window-position`, which `tooling/drive` passes and the window
-sizer gives every window, the little one included (docs/HANDOFF.md, trap 26); the session
-brings the main window back at the fixture's place without them.
+| File | What happens |
+|---|---|
+| `clip-pinned-folder.gif` | Work. The Docs folder, its nested Python folder closed, dragged by its header from under the line to between the Django and PyPI pins. The bar shows the place. The folder settles there |
+| `clip-space-scroll.gif` | Work on Django. A sideways wheel notch over the sidebar four times: Personal, Reading, Personal, Work. Work comes back to its own last tab, not an essential, so the clip starts on Django and loops without a seam. Reading is on Apollo 11 |
+| `clip-little-window.gif` | Reading on Apollo 11. `open -a <app> https://docs.djangoproject.com/en/stable/` from outside opens the little window, its row Django's green. A click on Open in Stedding moves it into Reading |
+| `clip-pin-close.gif` | Work. Django's pin has wandered (the slash). ⌘W: the pin sleeps at home, in place, and PyPI shows. A click wakes Django on its home page |
+
+Two things a take needs. The pointer comes to a row over no tab row it would slow on: a glide that eases out over a tab row opens that row's hover card, and the card stays up through a drag that starts next. The little window is a launch without `--window-size` and `--window-position`. `tooling/drive` passes both, and the window sizer gives them to every window, the little one included ([docs/HANDOFF.md](../../HANDOFF.md) trap 26). The session brings the main window back to the fixture's place without them.
 
 ## Real input only where nothing else shows it
 
-Every still is taken with no input at all (`tooling/readme/capture-stills.sh`, through
-`tooling/capture-state`), and so is everything in the fixture that a seed or a param
-can make. Motion cannot be seeded: typing in the bar, a Space sliding in, a tab
-dragged onto the page. Those take one driven run with real pointer and keys, which starts only after
-nobody has touched the Mac for a while and stops if anyone does.
+Every still is taken with no input (`tooling/readme/capture-stills.sh`, through `tooling/capture-state`). So is everything in the fixture that a seed or a param can make. Motion cannot be seeded: typing in the bar, a Space sliding in, a tab dragged onto the page. Those take one driven run with the real pointer and keys. It starts only after nobody has touched the Mac for a while, and it stops if anyone does.
 
-When the Mac cannot be left alone, `record-demo.sh slideshow` makes an input-free GIF
-from the stills, crossfaded, with the same captions. It has no pointer and no motion,
-so it is the fallback, not the plan.
+When the Mac cannot be left alone, `record-demo.sh slideshow` makes the GIF and the MP4 from the stills, crossfaded, with the same captions. It has no pointer and no motion. It is the fallback.
 
 ## Recording and conversion
 
-- **Recorder.** macOS's own `screencapture -v` on the window's rectangle; if it
-  records nothing on this Mac, ffmpeg's avfoundation input on the whole display, cut
-  to the window (on the Mac of 2026-10-21, ffmpeg). `record-demo.sh probe` tells which
-  works; both need the terminal's Screen Recording permission.
-- **Pointer.** A glide is one `move` step of `tooling/drive`: eased, on time, its two
-  ends checked as a drag's are. Rendered as hover steps, each of which checks the
-  window and lists the processes, a half-second glide took about two seconds and moved
-  in visible jumps, and the take ran near 80 seconds.
-- **Clock.** Each scene opens with a capture of the window (`shot`); the files' times
-  are the scene boundaries. The command bar opening in scene 3 is the largest change on
-  screen in the second around its marker, which gives the recorder's delay; `--offset`
-  overrides it. A page that moves on its own under the bar can take that place, which
-  is one reason the pages hold still.
-- **Composition.** The first marker is the window captured by its id, with transparent
-  corners: its alpha cuts the corners out of every frame, so no desktop shows behind
-  them. The window goes on the slate ground, the caption lane under it.
-- **GIF.** Two passes: `palettegen` (256 colours, from every frame) then `paletteuse`
-  with ordered (Bayer) dithering at scale 4, and only the changed rectangle of each
-  frame redrawn. Ordered dithering puts the same pattern on the same pixels in every
-  frame, so flat interface colour does not shimmer and unchanged areas cost nothing;
-  error diffusion would make gradients crawl. `mpdecimate` drops frames that repeat the
-  one before, so a held state costs one frame.
+- **Recorder.** `tooling/record-window` when `swiftc` is available: the browser's window alone, with the pointer (trap 133). `--recorder screencapture` records the window's rectangle of the screen. `--recorder ffmpeg` records the whole display, and convert cuts the window out. `record-demo.sh probe` says which of those two screen recorders produced frames. Both need the terminal's Screen Recording permission.
+- **Clock.** Each scene opens with a capture of the window (`shot`). The files' times are the scene boundaries. The command bar opening in scene 3 is the largest change on screen around its marker, which gives the recorder's delay. The bar opens about 0.15 s after the marker is written. `--offset` overrides the delay. A page that moves on its own under the bar can take that place.
+- **Composition.** The first marker is the window captured by its id, with transparent corners. Its alpha cuts the corners out of every frame. The window goes on the slate ground, the caption lane under it. A window recorded alone carries the system's capture badge where the traffic lights are. Convert paints the lights of an active window over it.
+- **GIF.** Two passes: `palettegen` (256 colours, from every frame), then `paletteuse` with ordered (Bayer) dithering at scale 4, and only the changed rectangle of each frame redrawn. Ordered dithering puts the same pattern on the same pixels in every frame, so flat interface colour does not shimmer. `mpdecimate` drops a frame that repeats the one before, so a held state costs one frame.
 - **MP4.** From the same composed take: H.264, CRF 18, faststart.
 
 ## Before a take
 
 - The operator's yes for real input, then nobody at the Mac.
-- Their own Stedding quit (the scripts refuse to start beside it), and Arc and any
-  clipboard manager too (each takes a chord from every app while it runs).
-- Do Not Disturb on, so no notification lands on the window.
-- One desktop in Mission Control is safest; the steps avoid ⌃1–⌃9 anyway.
+- Their own Stedding quit. The scripts refuse to start beside it. Arc and any clipboard manager quit too: each takes a chord from every app while it runs.
+- With a screen recorder, Do Not Disturb on, so no notification lands on the rectangle. The window recorder does not take other windows or the desktop.
+- One desktop in Mission Control is the safest. The steps avoid ⌃1–⌃9 anyway.
 - The display shows at least 1400 × 880 points under the menu bar.
 
 ## Checks on the result
 
-- `layout`: the coordinates in `steps/` match the fixture's pictures (a build that
-  moves the sidebar's rows needs them read again).
-- `rehearse`: each frame in `marks/` is the state its scene starts from.
-- `demo.mp4`, watched once through: captions on their scenes, the pointer never jumps,
-  no white flash, no banner, no link address in the corner from a resting pointer, the
-  first and last frames the same.
+- `layout`: the coordinates in `steps/` match the fixture's pictures.
+- `rehearse`: each frame in `marks/` is the state its scene starts from. `marks/dark.png` is the split as the drop left it.
+- `demo.mp4`, watched once through: captions on their scenes, the pointer never jumps, no white flash, no banner, no link address in the corner from a resting pointer, the first and last frames the same.
 - `timeline.txt`: 25 to 40 seconds. `demo.gif`: 8 MB or less.

@@ -1,6 +1,6 @@
 # 0025 — An app made from a page keeps the session of its Space
 
-Status: Implemented in patch 0072. Behaviour: `docs/features/web-apps.md` Wa11–Wa15. That spec still lists the owner’s choice (decision 2) as open; the product uses this rule.
+Status: Implemented in patch 0072. Behaviour: `docs/features/web-apps.md` Wa11–Wa15. That spec’s decision 2 is this rule.
 Date: 2026-10-18
 
 ## Context

@@ -7,7 +7,7 @@ Date: 2026-08-30
 
 Upstream leaves `proprietary_codecs` off and `ffmpeg_branding` as `"Chromium"`. VP8, VP9, AV1, Opus and Vorbis play. H.264 and AAC do not. Google Chrome ships those codecs under licences Google holds. A fork does not inherit them. The code is in the tree; two build flags turn it on.
 
-A browser that fails on a large share of the web's video misses the bar in [AGENTS.md](../../AGENTS.md): a technical user should prefer it to Chrome within a day.
+A browser that fails on a large share of the web's video misses the bar in [AGENTS.md](../../AGENTS.md): a technical user should prefer it within a day.
 
 ## Decision
 
