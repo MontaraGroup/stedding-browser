@@ -61,13 +61,13 @@ Chromium's page info gains the same controls.
  .../page_info/stedding_site_controls_view.h   | 235 +++++
  .../stedding_site_controls_view_unittest.cc   | 274 ++++++
  chrome/test/stedding/BUILD.gn                 |  11 +
- .../hidden_row_controls_browsertest.cc        |  91 +-
+ .../hidden_row_controls_browsertest.cc        |  84 +-
  .../stedding/isolation_mark_browsertest.cc    |  98 ++
  .../stedding/site_controls_browsertest.cc     | 656 +++++++++++++
  chrome/test/stedding/space_jar_browsertest.cc | 211 +++++
  components/page_info/page_info.cc             |  11 +
  components/page_info/page_info_delegate.h     |   6 +
- 40 files changed, 3444 insertions(+), 41 deletions(-)
+ 40 files changed, 3438 insertions(+), 40 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/site_controls.cc
  create mode 100644 chrome/browser/ui/stedding/site_controls.h
  create mode 100644 chrome/browser/ui/stedding/site_controls_unittest.cc
@@ -3119,7 +3119,7 @@ index 46ea0d23c092e..7590467c35da8 100644
      "//chrome/browser/ui/views/spaces",
      "//chrome/browser/ui/views/tabs:tab_strip",
 diff --git a/chrome/test/stedding/hidden_row_controls_browsertest.cc b/chrome/test/stedding/hidden_row_controls_browsertest.cc
-index 0a0fde1557f9a..6256f944d9b99 100644
+index 0a0fde1557f9a..0009176e7c088 100644
 --- a/chrome/test/stedding/hidden_row_controls_browsertest.cc
 +++ b/chrome/test/stedding/hidden_row_controls_browsertest.cc
 @@ -44,6 +44,7 @@
@@ -3130,15 +3130,18 @@ index 0a0fde1557f9a..6256f944d9b99 100644
  #include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
  #include "chrome/browser/ui/views/extensions/extensions_menu_view.h"
  #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
-@@ -52,6 +53,7 @@
+@@ -52,8 +53,10 @@
  #include "chrome/browser/ui/views/global_media_controls/media_dialog_view.h"
  #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button.h"
  #include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
 +#include "chrome/browser/ui/views/page_info/page_info_main_view.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
  #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
++#include "chrome/common/pref_names.h"
  #include "chrome/test/base/in_process_browser_test.h"
-@@ -83,12 +85,15 @@
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "chrome/test/stedding/sidebar_test_util.h"
+@@ -83,12 +86,15 @@
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/image/image_skia.h"
  #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -3154,27 +3157,19 @@ index 0a0fde1557f9a..6256f944d9b99 100644
  #include "ui/views/widget/widget.h"
  #include "ui/views/widget/widget_utils.h"
  #include "url/gurl.h"
-@@ -171,7 +176,18 @@ class HiddenRowControlsTest : public InProcessBrowserTest {
+@@ -170,6 +176,11 @@ class HiddenRowControlsTest : public InProcessBrowserTest {
+                     "chrome.action.onClicked.addListener(() => "
                      "chrome.tabs.create({url: 'about:blank#clicked'}));");
      }
++    // M157 pins an extension to the toolbar when it is installed, unless the
++    // user turned that off (BACKLOG S-241); these tests start from one the
++    // user has not pinned.
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        prefs::kExtensionsPinnedByDefault, false);
      extensions::ChromeTestExtensionLoader loader(browser()->GetProfile());
--    return loader.LoadExtension(dir.UnpackedPath());
-+    scoped_refptr<const extensions::Extension> extension =
-+        loader.LoadExtension(dir.UnpackedPath());
-+    // M157 pins an extension to the toolbar when it is installed (BACKLOG
-+    // S-241); these tests start from one the user has not pinned.
-+    if (extension) {
-+      ToolbarActionsModel* const model =
-+          ToolbarActionsModel::Get(browser()->GetProfile());
-+      if (model->IsActionPinned(extension->id())) {
-+        model->SetActionVisibility(extension->id(), false);
-+      }
-+    }
-+    return extension;
+     return loader.LoadExtension(dir.UnpackedPath());
    }
- 
-   ToolbarActionViewModel* ActionOf(const extensions::Extension& extension) {
-@@ -189,7 +205,7 @@ class HiddenRowControlsTest : public InProcessBrowserTest {
+@@ -189,7 +200,7 @@ class HiddenRowControlsTest : public InProcessBrowserTest {
      views::Widget* const popup =
          action->IsShowingPopup()
              ? views::Widget::GetTopLevelWidgetForNativeView(
@@ -3183,7 +3178,7 @@ index 0a0fde1557f9a..6256f944d9b99 100644
              : nullptr;
      return popup != widget() ? popup : nullptr;
    }
-@@ -644,7 +660,7 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinnedExtensionShowsAtOnce) {
+@@ -644,7 +655,7 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinnedExtensionShowsAtOnce) {
    ASSERT_TRUE(ui_test_utils::NavigateToURL(
        browser(), embedded_test_server()->GetURL("site.test", "/title1.html")));
    ToolbarView* const row = browser_view()->toolbar();
@@ -3192,7 +3187,7 @@ index 0a0fde1557f9a..6256f944d9b99 100644
    ASSERT_TRUE(container);
    ToolbarActionView* const button = container->GetViewForId(vault->id());
    ASSERT_TRUE(button);
-@@ -749,7 +765,7 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
+@@ -749,7 +760,7 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
        LoadAction("Stedding Vault Probe", /*popup=*/true, /*red_icon=*/true);
    ASSERT_TRUE(vault);
    ToolbarView* const row = browser_view()->toolbar();
@@ -3201,7 +3196,7 @@ index 0a0fde1557f9a..6256f944d9b99 100644
    ASSERT_TRUE(container);
    ToolbarActionView* const button = container->GetViewForId(vault->id());
    ASSERT_TRUE(button);
-@@ -817,4 +833,71 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
+@@ -817,4 +828,71 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
        << "the button went with the page";
  }
  
