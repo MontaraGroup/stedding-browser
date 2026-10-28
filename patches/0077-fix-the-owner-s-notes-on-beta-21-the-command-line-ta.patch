@@ -181,7 +181,7 @@ its own (patches/README.md).
  .../little_window_menu_mac_browsertest.mm     |  154 ++
  .../little_window_row_mac_browsertest.mm      |  480 ++++++
  .../test/stedding/local_tabs_browsertest.cc   |   17 +-
- .../stedding/motion_frames_browsertest.cc     | 1483 +++++++++++++++++
+ .../stedding/motion_frames_browsertest.cc     | 1485 +++++++++++++++++
  .../test/stedding/pinned_run_browsertest.cc   |  459 +++++
  .../popup_over_full_screen_browsertest.mm     |  163 ++
  chrome/test/stedding/scroll_events_mac.h      |   43 +
@@ -204,7 +204,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 133 files changed, 11448 insertions(+), 445 deletions(-)
+ 133 files changed, 11450 insertions(+), 445 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -10224,10 +10224,10 @@ index e21ca86924af3..ddf49ee4b67ae 100644
  // Lt9: a split is two rows under one. While it is on screen the local pane
 diff --git a/chrome/test/stedding/motion_frames_browsertest.cc b/chrome/test/stedding/motion_frames_browsertest.cc
 new file mode 100644
-index 0000000000000..c6db3e304944b
+index 0000000000000..c73f76ba96e2f
 --- /dev/null
 +++ b/chrome/test/stedding/motion_frames_browsertest.cc
-@@ -0,0 +1,1483 @@
+@@ -0,0 +1,1485 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -11061,12 +11061,14 @@ index 0000000000000..c6db3e304944b
 +    GTEST_SKIP() << "the machine asks for reduced motion";
 +  }
 +  ASSERT_NO_FATAL_FAILURE(OpenTitledTabs(4));
-+  const std::vector<views::Widget*> popups = OmniboxPopups(false);
-+  if (popups.empty()) {
-+    // M157 makes the popup's window at its first show (BACKLOG S-278): until
-+    // then there is no hidden window for a motion to move.
-+    GTEST_SKIP() << "the window keeps no hidden omnibox popup";
++  // M157 makes the popup's window at its first show and keeps it, hidden,
++  // after; one show and hide gives the window the hidden popup a motion moves.
++  if (OmniboxPopups(false).empty()) {
++    ASSERT_TRUE(OpenTheDropdown()) << "no dropdown";
++    ASSERT_TRUE(CloseTheDropdown());
 +  }
++  const std::vector<views::Widget*> popups = OmniboxPopups(false);
++  ASSERT_FALSE(popups.empty()) << "the window keeps no hidden omnibox popup";
 +  const auto all_aligned = [&]() {
 +    return std::ranges::all_of(
 +        popups, [&](views::Widget* popup) { return AlignedToTheField(popup); });

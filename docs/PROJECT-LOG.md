@@ -28,9 +28,14 @@ gap before the compiler did.
   pass. Windows: 1283 unit and 727 browser tests pass. The full runs found the two flags above
   and four tests whose assumptions M157 changed: it pins an extension when it is installed (the
   hidden-row tests now unpin what they load; whether Stedding should pin is `S-241`'s open
-  decision), and it makes the omnibox popup's window at its first show (the motion test skips
-  with that reason until it shows one first, `S-278`). The suites those fixes touch were run
+  decision), and it makes the omnibox popup's window at its first show (the motion test shows and
+  hides the dropdown once before it measures). The suites those fixes touch were run
   again on both machines; both checkouts hold the same series, tree for tree.
+- A last review of every fix made in the port re-enabled the long tab menu's focus rows test
+  (with Stedding's short menus off), set Chromium's test of the commands flag to Stedding's
+  default and listed the withdrawn toast id; left as they are: the flags page's App Menu
+  Glow Up, which would turn the action updater back on (none of Stedding's commands would
+  run), and Windows' install-dialog pin flag, which needs the new dialog.
 - Nine upstream tests of Chromium's own sidebar header and group focus mode, which Stedding's
   window hides, are disabled with the reason; `gn check` is `S-335`.
 

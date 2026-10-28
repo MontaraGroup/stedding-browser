@@ -41,6 +41,7 @@ move with tooling/field-trials), and drop this patch's hunks as they land.
 ---
  chrome/browser/browser_features.cc            |   9 +-
  chrome/browser/ssl/sct_reporting_service.cc   |  11 +-
+ .../ui/actions/chrome_actions_unittest.cc     |   6 +-
  chrome/browser/ui/ui_features.cc              |   6 +-
  chrome/common/chrome_features.cc              |   5 +-
  chrome/test/stedding/BUILD.gn                 |  25 ++
@@ -54,7 +55,7 @@ move with tooling/field-trials), and drop this patch's hunks as they land.
  pdf/pdf_features.cc                           |   4 +-
  services/network/public/cpp/features.cc       |  12 +-
  sql/database.cc                               |   2 +
- 15 files changed, 583 insertions(+), 28 deletions(-)
+ 16 files changed, 587 insertions(+), 30 deletions(-)
  create mode 100644 chrome/test/stedding/certificate_checks_browsertest.cc
 
 diff --git a/chrome/browser/browser_features.cc b/chrome/browser/browser_features.cc
@@ -102,6 +103,25 @@ index 790be3f7d5cf9..8d50dfa4e44c8 100644
    if (profile_->IsOffTheRecord() || !is_sct_auditing_enabled) {
      return network::mojom::SCTAuditingMode::kDisabled;
    }
+diff --git a/chrome/browser/ui/actions/chrome_actions_unittest.cc b/chrome/browser/ui/actions/chrome_actions_unittest.cc
+index a4edcbeaae555..db435343cfb1d 100644
+--- a/chrome/browser/ui/actions/chrome_actions_unittest.cc
++++ b/chrome/browser/ui/actions/chrome_actions_unittest.cc
+@@ -33,10 +33,12 @@ TEST_F(ChromeActionsTest, InitializeActionIdStringMappingTest) {
+   EXPECT_THAT(actual_action_id, testing::Optional(kActionSidePanelShowFeed));
+ }
+ 
++// Stedding: off by default (patch 0074), so the browser's commands keep
++// M156's updater, which also runs Stedding's own commands.
+ TEST_F(ChromeActionsTest, UseActionsForBrowserCommandsEnabledByDefault) {
+-  EXPECT_TRUE(
++  EXPECT_FALSE(
+       base::FeatureList::IsEnabled(features::kUseActionsForBrowserCommands));
+-  EXPECT_TRUE(features::ShouldUseActionsForBrowserCommands());
++  EXPECT_FALSE(features::ShouldUseActionsForBrowserCommands());
+ }
+ 
+ TEST_F(ChromeActionsTest, ShouldUseActionsForBrowserCommands) {
 diff --git a/chrome/browser/ui/ui_features.cc b/chrome/browser/ui/ui_features.cc
 index b8e3e76165a53..08a9025e3a8ae 100644
 --- a/chrome/browser/ui/ui_features.cc
