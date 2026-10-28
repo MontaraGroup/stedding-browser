@@ -1,0 +1,202 @@
+From 874bd299d59411bc06cf52aced4f56ada1f7aa51 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 28 Oct 2026 00:55:06 -0400
+Subject: [PATCH] style(webui): update toggle switches to modern fluid capsule
+ style
+
+Replaces Material Design toggle switch style (small 26x16px track, tiny 8px
+inset knob, and ink ripple circles) in cr-toggle with modern fluid capsule switches:
+- Sleek 38x22px capsule track with balanced 2px inset spacing.
+- Crisp white 18px circular knob with layered elevation shadow.
+- Fluid spring physics transition: 240ms cubic-bezier(0.34, 1.4, 0.64, 1).
+- Tactile horizontal stretch on active click/press (stretching to 22px).
+- Clean focus ring with offset for keyboard navigation (:focus-visible).
+- Removes legacy ink ripple effects.
+
+Why: Material Design toggle switches feel out of place in a modern macOS
+and desktop browser shell; the owner requested an updated, modern toggle switch style.
+Removable when: never as a style choice; upstream Chromium WebUI adopts a modern
+capsule switch.
+---
+ .../cr_elements/cr_toggle/cr_toggle.css       | 91 ++++++++-----------
+ 1 file changed, 38 insertions(+), 53 deletions(-)
+
+diff --git a/ui/webui/resources/cr_elements/cr_toggle/cr_toggle.css b/ui/webui/resources/cr_elements/cr_toggle/cr_toggle.css
+index 81d33bf..6372eb4 100644
+--- a/ui/webui/resources/cr_elements/cr_toggle/cr_toggle.css
++++ b/ui/webui/resources/cr_elements/cr_toggle/cr_toggle.css
+@@ -15,21 +15,19 @@
+   --cr-toggle-checked-button-color:
+       var(--color-toggle-button-thumb-on,
+           var(--cr-fallback-color-on-primary));
+-  --cr-toggle-checked-ripple-color: var(
+-      --cr-active-neutral-on-subtle-background-color);
+-  --cr-toggle-ripple-diameter: 20px;
++  --cr-toggle-checked-ripple-color: transparent;
++  --cr-toggle-ripple-diameter: 0px;
+   --cr-toggle-unchecked-bar-color:
+       var(--color-toggle-button-track-off,
+-          var(--cr-fallback-color-surface-variant));
++          rgba(120, 120, 128, 0.24));
+   --cr-toggle-unchecked-button-color:
+       var(--color-toggle-button-thumb-off,
+-          var(--cr-fallback-color-outline));
+-  --cr-toggle-unchecked-ripple-color: var(
+-      --cr-active-neutral-on-subtle-background-color);
+-  --cr-toggle-bar-border-color: var(--cr-toggle-unchecked-button-color);
+-  --cr-toggle-bar-border: 1px solid var(--cr-toggle-bar-border-color);
+-  --cr-toggle-bar-width: 26px;
+-  --cr-toggle-knob-diameter: 8px;
++          #ffffff);
++  --cr-toggle-unchecked-ripple-color: transparent;
++  --cr-toggle-bar-border-color: transparent;
++  --cr-toggle-bar-border: none;
++  --cr-toggle-bar-width: 38px;
++  --cr-toggle-knob-diameter: 18px;
+   -webkit-tap-highlight-color: transparent;
+   cursor: pointer;
+   display: block;
+@@ -53,16 +51,16 @@
+ }
+ 
+ :host(:active) {
+-  --cr-toggle-knob-diameter: 10px;
++  --cr-toggle-knob-diameter: 18px;
+ }
+ 
+ :host([checked]) {
+   --cr-toggle-bar-border-color: var(--cr-toggle-checked-bar-color);
+-  --cr-toggle-knob-diameter: 12px;
++  --cr-toggle-knob-diameter: 18px;
+ }
+ 
+ :host([checked]:active) {
+-  --cr-toggle-knob-diameter: 14px;
++  --cr-toggle-knob-diameter: 18px;
+ }
+ 
+ :host([disabled]) {
+@@ -91,12 +89,11 @@
+   border-radius: 50px;
+   box-sizing: border-box;
+   display: block;
+-  height: 16px;
+-  left: 3px;
++  height: 22px;
+   opacity: 1;
+-  position: initial;
+-  top: 2px;
+-  transition: background-color linear 80ms;
++  position: relative;
++  transition: background-color 200ms cubic-bezier(0.2, 0, 0, 1),
++      border-color 200ms cubic-bezier(0.2, 0, 0, 1);
+   width: var(--cr-toggle-bar-width);
+   z-index: 0;
+ }
+@@ -106,15 +103,18 @@
+   opacity: 1;
+ }
+ 
++:host(:hover) #bar {
++  filter: brightness(0.96);
++}
++
+ :host(:focus-visible) #bar {
+-  outline: 2px solid var(--cr-toggle-checked-bar-color);
+-  outline-offset: 2px;
++  box-shadow: 0 0 0 2px var(--cr-card-background-color, #fff),
++              0 0 0 4px var(--cr-focus-outline-color, var(--cr-toggle-checked-bar-color));
++  outline: none;
+ }
+ 
+ #knob {
+-  /* Distance between knob center to the edge of the control is the same
+-     for both checked and unchecked. */
+-  --cr-toggle-knob-center-edge-distance_: 8px;
++  --cr-toggle-knob-center-edge-distance_: 11px;
+ 
+   /* Direction for on/off states
+       - +1 means 'off' to the left, 'on' to the right, used in LTR.
+@@ -141,25 +141,30 @@
+       var(--cr-toggle-knob-direction_) *
+       var(--cr-toggle-knob-travel-distance_));
+ 
+-  background-color: var(--cr-toggle-unchecked-button-color);
++  background-color: #ffffff;
+   border-radius: 50%;
+-  box-shadow: none;
++  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18), 0 1px 1px rgba(0, 0, 0, 0.08);
+   display: block;
+   height: var(--cr-toggle-knob-diameter);
+   position: absolute;
+   top: 50%;
+   transform: translate(var(--cr-toggle-knob-position-start_), -50%);
+-  transition: transform linear 80ms, background-color linear 80ms,
+-      width linear 80ms, height linear 80ms;
++  transition: transform 240ms cubic-bezier(0.34, 1.4, 0.64, 1),
++      background-color 200ms ease, width 180ms ease, border-radius 180ms ease;
+   width: var(--cr-toggle-knob-diameter);
+   z-index: 1;
+ }
+ 
+ :host([checked]) #knob {
+-  background-color: var(--cr-toggle-checked-button-color);
++  background-color: #ffffff;
+   transform: translate(var(--cr-toggle-knob-position-end_), -50%);
+ }
+ 
++:host(:active) #knob {
++  border-radius: 9999px;
++  width: 22px;
++}
++
+ :host-context([dir=rtl]) #knob {
+   left: 0;
+   /* Flip the knob's on/off direction for RTL */
+@@ -168,39 +173,19 @@
+ 
+ :host([checked]:active) #knob,
+ :host([checked]:hover) #knob {
+-  --cr-toggle-checked-button-color:
+-      var(--color-toggle-button-thumb-on-hover,
+-          var(--cr-fallback-color-primary-container));
++  --cr-toggle-checked-button-color: #ffffff;
+ }
+ 
+ :host(:hover) #knob::before {
+-  background-color: var(--cr-hover-on-subtle-background-color);
+-  border-radius: 50%;
+-  content: '';
+-  height: var(--cr-toggle-ripple-diameter);
+-  left: 50%;
+-  position: absolute;
+-  top: 50%;
+-  transform: translate(-50%, -50%);
+-  width: var(--cr-toggle-ripple-diameter);
++  display: none;
+ }
+ 
+ #ink {
+-  --paper-ripple-opacity: 1;
+-  color: var(--cr-toggle-unchecked-ripple-color);
+-  height: var(--cr-toggle-ripple-diameter);
+-  left: 50%;
+-  outline: var(--cr-toggle-ripple-ring, none);
+-  pointer-events: none;
+-  position: absolute;
+-  top: 50%;
+-  transform: translate(-50%, -50%);
+-  transition: color linear 80ms;
+-  width: var(--cr-toggle-ripple-diameter);
++  display: none;
+ }
+ 
+ :host([checked]) #ink {
+-  color: var(--cr-toggle-checked-ripple-color);
++  display: none;
+ }
+ 
+ :host-context([dir=rtl]) #ink {
+-- 
+2.54.0 (Apple Git-157)
+
