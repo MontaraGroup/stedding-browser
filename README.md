@@ -123,7 +123,7 @@ Each feature has a specification naming the test behind every behaviour:
 
 From [stedding.dev](https://stedding.dev/#download) or the
 [Releases page](https://github.com/ysalitrynskyi/stedding-browser/releases). The newest release
-is **0.3.0 beta 21**, for macOS and Windows, on Chromium 156.0.8078.48.
+is **0.3.0 beta 22**, for macOS and Windows, on Chromium 156.0.8078.48.
 
 | Platform | File | |
 |---|---|---|

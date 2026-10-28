@@ -2,6 +2,67 @@
 
 Notes of earlier releases, newest first. Each release's page on GitHub carries the same notes and its downloads.
 
+## Stedding 0.3.0 beta 21
+
+Fixes for five reports. On Chromium 156.0.8078.48.
+
+### Fixed
+
+- Stedding quit when a page opened a sign-in window, such as **Sign in with Google**, from a
+  tab inside a folder (#44).
+- On the Mac, closing the last window with its close button and then clicking the Dock icon
+  opened an empty window, and the window's tabs and folders were only in Recently Closed. The
+  Dock now brings the window back (#43).
+- With the animations off (in Settings, or by Reduce Motion), Stedding quit when ⌘S (Ctrl+S)
+  closed the sidebar while History was open in it (#44).
+- Switching to a Space after a restart, or once its last-used tab had closed, showed the
+  Space's first tab, often a sleeping pinned tab. It now shows the tab you used most recently
+  there (#42).
+
+### Changed
+
+- **Block ads and trackers** says in Settings what it does not catch yet: ads a site serves
+  itself, such as promoted posts, still show (#46).
+
+### Install
+
+- **macOS** (Apple silicon, macOS 13 or later): `Stedding-0.3.0-beta.21-arm64.dmg`, signed and
+  notarized. Open it and drag Stedding to Applications.
+- **Windows** (10 and 11, x64): `Stedding-0.3.0-beta.21-win-x64.exe`, installs for you alone.
+  It is not signed yet: in SmartScreen click **More info**, then **Run anyway**, once.
+
+Installed copies update themselves (Mac from 0.2.0 beta 16, Windows from 0.2.0 beta 19).
+
+### Checksums (SHA-256)
+
+```
+392255bfa6ec769dc97aa10c54aec927404ad804880ce9fd592b1fc1443097d8  Stedding-0.3.0-beta.21-arm64.dmg
+346afc13b603c9184b461c81b61c41425a9d8195adc5e7f0ad2d889b91f8e6f3  Stedding-0.3.0-beta.21-win-x64.exe
+```
+
+### Known limits
+
+- The Windows installer is unsigned (`S-56`).
+- Netflix, Disney+ and Spotify's web player do not play yet (`S-270`).
+- Chromium 156's built-in list of sites that must load over HTTPS lapses on 13 December 2026;
+  a release on a newer base comes before then.
+
+### How it was checked
+
+Every unit and browser test on the Mac (1250 unit and 56 component tests; 608 browser tests,
+150 of them one at a time) and on Windows, in the release build and the build with DCHECKs (each
+1245 unit tests; 567 browser tests, 156 of them one at a time): all passed. Each fix has a test
+that failed without it. The Windows test machine runs with its animations off, which is how the
+⌘S crash was found; on the Mac the History panel and ⌘S were then tried by hand on the release
+build with the animations off, from an open, a closed and a hidden sidebar. One Mac browser test
+failed once in a full run and passed three times alone and in a second full run. The
+AddressSanitizer build was not run this round. Apple's distribution check passed the signed app,
+and Gatekeeper accepted it from the downloaded image. On Windows the installer went over an
+installed beta 20, after an uninstall that kept the profile, and the installed program is the one
+the tests ran. From the published feeds, a copy of beta 20 on the Mac offered this version 29
+seconds after launch, and an installed beta 20 on Windows had it 20 seconds after launch and was
+on it after a restart.
+
 ## Stedding 0.3.0 beta 20
 
 Settings that breathe. On Chromium 156.0.8078.48.
