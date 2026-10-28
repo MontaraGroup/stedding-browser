@@ -1,0 +1,169 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Tue, 27 Oct 2026 23:51:00 -0400
+Subject: feat: allow setting space icons with standard icons in addition to emojis
+
+Expands EditSpaceView to offer a curated palette of clean standard symbol
+icons (star, flag, heart, bolt, triangle, home, briefcase, gear, compass, mail,
+pen, command, terminal, search, chat, shield, music, coffee, globe, etc.) alongside
+emojis:
+- Adds StandardIconChoices() with 36 clean vector symbol glyphs.
+- Builds both "Icons" and "Emoji" selection palettes in EditSpaceView's icon tab.
+- Updates icon textfield placeholder from "Type or paste any emoji" to
+  "Type or paste an icon or emoji".
+- Highlights chosen standard icon in Refresh() and updates live previews.
+- Adds PressStandardIconForTesting and browser test coverage in edit_space_browsertest.cc.
+
+Why: the owner asked for Space icons to be selectable with normal icons,
+not just emojis.
+Removable when: never as a feature; only if Space icon customization is redesigned.
+---
+ .../ui/views/spaces/edit_space_view.cc        | 50 ++++++++++++++++++-
+ .../browser/ui/views/spaces/edit_space_view.h |  4 ++
+ .../test/stedding/edit_space_browsertest.cc   | 12 +++++
+ 3 files changed, 65 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/ui/views/spaces/edit_space_view.cc b/chrome/browser/ui/views/spaces/edit_space_view.cc
+index 2c95676..273efd9 100644
+--- a/chrome/browser/ui/views/spaces/edit_space_view.cc
++++ b/chrome/browser/ui/views/spaces/edit_space_view.cc
+@@ -476,6 +476,19 @@ class EditSpaceView::HueBar : public views::View {
+ BEGIN_METADATA(EditSpaceView, HueBar)
+ END_METADATA
+ 
++// static
++const std::vector<std::u16string>& EditSpaceView::StandardIconChoices() {
++  static const base::NoDestructor<std::vector<std::u16string>> kChoices({
++      u"★", u"⚑", u"♥", u"⚡", u"▲", u"✦",
++      u"⌂", u"💼", u"⚙", u"🧭", u"✉", u"✎",
++      u"⌘", u"⌥", u"⌨", u"⌕", u"💬", u"🛡",
++      u"♫", u"☕", u"✈", u"☁", u"☾", u"☀",
++      u"◉", u"▤", u"🛒", u"📁", u"🌐", u"✓",
++      u"◆", u"●", u"◈", u"✿", u"⚓", u"✕",
++  });
++  return *kChoices;
++}
++
+ // static
+ const std::vector<std::u16string>& EditSpaceView::EmojiChoices() {
+   static const base::NoDestructor<std::vector<std::u16string>> kChoices({
+@@ -552,7 +565,7 @@ void EditSpaceView::BuildIconSection(views::View* section) {
+   section->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(12, 0, 4, 0)));
+   views::View* const side = section->AddChildView(Column(6));
+   icon_field_ = side->AddChildView(std::make_unique<views::Textfield>());
+-  icon_field_->SetPlaceholderText(u"Type or paste any emoji");
++  icon_field_->SetPlaceholderText(u"Type or paste an icon or emoji");
+   icon_field_->GetViewAccessibility().SetName(u"Icon");
+   icon_field_->set_controller(this);
+   views::View* const buttons = side->AddChildView(Row(8));
+@@ -572,6 +585,29 @@ void EditSpaceView::BuildIconSection(views::View* section) {
+                           base::Unretained(this)),
+       u"No Icon"));
+ 
++  // Standard symbol icons
++  views::View* const icons_header = section->AddChildView(Row(0));
++  auto* const icons_label = icons_header->AddChildView(std::make_unique<views::Label>(u"Icons"));
++  icons_label->SetFontList(gfx::FontList().DeriveWithWeight(gfx::Font::Weight::BOLD));
++
++  views::View* const icon_grid = section->AddChildView(Column(2));
++  views::View* icon_row = nullptr;
++  const std::vector<std::u16string>& icon_choices = StandardIconChoices();
++  for (size_t i = 0; i < icon_choices.size(); ++i) {
++    if (i % kEmojisPerRow == 0) {
++      icon_row = icon_grid->AddChildView(Row(2));
++    }
++    icon_buttons_.push_back(icon_row->AddChildView(std::make_unique<EmojiButton>(
++        base::BindRepeating(&EditSpaceView::PressStandardIconForTesting,
++                            base::Unretained(this), i),
++        icon_choices[i])));
++  }
++
++  // Emoji section
++  views::View* const emoji_header = section->AddChildView(Row(0));
++  auto* const emoji_label = emoji_header->AddChildView(std::make_unique<views::Label>(u"Emoji"));
++  emoji_label->SetFontList(gfx::FontList().DeriveWithWeight(gfx::Font::Weight::BOLD));
++
+   views::View* const grid = section->AddChildView(Column(2));
+   views::View* row = nullptr;
+   const std::vector<std::u16string>& choices = EmojiChoices();
+@@ -679,6 +715,12 @@ void EditSpaceView::PressEmojiForTesting(size_t index) {
+   }
+ }
+ 
++void EditSpaceView::PressStandardIconForTesting(size_t index) {
++  if (index < StandardIconChoices().size()) {
++    SetIcon(base::UTF16ToUTF8(StandardIconChoices()[index]));
++  }
++}
++
+ void EditSpaceView::TypeIconForTesting(const std::u16string& text) {
+   icon_field_->SetText(text);
+   ContentsChanged(icon_field_, text);
+@@ -787,6 +829,12 @@ void EditSpaceView::Refresh() {
+   icon_preview_->SetEnabledColor(icon_.empty() ? light_ : ink);
+   icon_preview_->SetBackground(views::CreateRoundedRectBackground(
+       SkColorSetA(ink, 0x14), 12));
++  const std::vector<std::u16string>& icon_choices = StandardIconChoices();
++  for (size_t i = 0; i < icon_buttons_.size(); ++i) {
++    const bool chosen = base::UTF16ToUTF8(icon_choices[i]) == icon_;
++    static_cast<EmojiButton*>(icon_buttons_[i].get())->SetChosen(chosen);
++  }
++
+   const std::vector<std::u16string>& choices = EmojiChoices();
+   for (size_t i = 0; i < emoji_buttons_.size(); ++i) {
+     const bool chosen = base::UTF16ToUTF8(choices[i]) == icon_;
+diff --git a/chrome/browser/ui/views/spaces/edit_space_view.h b/chrome/browser/ui/views/spaces/edit_space_view.h
+index ad424b3..952556f 100644
+--- a/chrome/browser/ui/views/spaces/edit_space_view.h
++++ b/chrome/browser/ui/views/spaces/edit_space_view.h
+@@ -40,6 +40,8 @@ class EditSpaceView : public views::View, public views::TextfieldController {
+  public:
+   // The emoji the grid offers, in order (B42).
+   static const std::vector<std::u16string>& EmojiChoices();
++  // The standard icons the grid offers, in order.
++  static const std::vector<std::u16string>& StandardIconChoices();
+   // The palette, in rows of the twelve Space colours (B40): a deeper step,
+   // the colours themselves, a softer step (B43).
+   static std::vector<SkColor> PaletteColors();
+@@ -61,6 +63,7 @@ class EditSpaceView : public views::View, public views::TextfieldController {
+ 
+   // The controls, for tests: what a press or a typed text does.
+   views::Textfield* name_field() { return name_field_; }
++  void PressStandardIconForTesting(size_t index);
+   void PressEmojiForTesting(size_t index);
+   void TypeIconForTesting(const std::u16string& text);
+   void PressNoIconForTesting();
+@@ -110,6 +113,7 @@ class EditSpaceView : public views::View, public views::TextfieldController {
+   raw_ptr<views::Textfield> name_field_ = nullptr;
+   raw_ptr<views::Label> icon_preview_ = nullptr;
+   raw_ptr<views::Textfield> icon_field_ = nullptr;
++  std::vector<raw_ptr<views::Button>> icon_buttons_;
+   std::vector<raw_ptr<views::Button>> emoji_buttons_;
+   raw_ptr<views::RadioButton> one_colour_ = nullptr;
+   raw_ptr<views::RadioButton> two_colours_ = nullptr;
+diff --git a/chrome/test/stedding/edit_space_browsertest.cc b/chrome/test/stedding/edit_space_browsertest.cc
+index be8d107..52f788d 100644
+--- a/chrome/test/stedding/edit_space_browsertest.cc
++++ b/chrome/test/stedding/edit_space_browsertest.cc
+@@ -127,6 +127,18 @@ IN_PROC_BROWSER_TEST_F(EditSpaceTest, AnyEmojiBecomesTheIcon) {
+   EXPECT_EQ("", model.GetSpace(id)->icon());
+ }
+ 
++IN_PROC_BROWSER_TEST_F(EditSpaceTest, StandardIconBecomesTheIcon) {
++  spaces::SpaceModel& model = Model(browser());
++  const spaces::SpaceId id = model.active_id();
++  spaces::EditSpaceView* view = spaces::ShowEditSpaceDialog(browser(), id);
++  ASSERT_TRUE(view);
++  view->PressStandardIconForTesting(0);  // ★ (Star)
++  EXPECT_EQ("★", view->icon());
++  ASSERT_NO_FATAL_FAILURE(Close(view, /*done=*/true));
++  EXPECT_EQ("★", model.GetSpace(id)->icon());
++}
++
++
+ // spaces B43: a colour for each look. The window takes the light look's in
+ // the light look and the dark look's in the dark one, at once when the look
+ // changes; one colour again clears the pair.
+-- 
+2.54.0 (Apple Git-157)
+
