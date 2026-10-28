@@ -15,6 +15,9 @@ On main, and not in a release; the owner asked for all three.
   about this page" in the focused field (privacy Q17). Both in patch 0113.
 - Issue 43 needs no code: a ⌘Q is restored when On startup is Continue where you left off; the
   report fits the New Tab page setting (BACKLOG S-323).
+- Found by the owner: a tab dropped on a collapsed pinned folder joined it loose, and the
+  folder, of two kinds then, left the pinned run. A tab that joins a pinned folder now becomes
+  one of its pins, from a drop or New Tab in Folder (folders F38; patches 0083 and 0093).
 
 ## 2026-10-28 -- Every document reviewed
 

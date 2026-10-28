@@ -90,11 +90,13 @@ the hover card).
  .../page_action_properties_provider.cc        |  11 +
  .../ui/page_action/page_action_triggers.cc    |   1 +
  .../ui/page_action/page_action_triggers.h     |   7 +
+ chrome/browser/ui/spaces/folder_commands.cc   |   9 +-
+ .../ui/spaces/folder_commands_unittest.cc     |  30 +
  chrome/browser/ui/spaces/new_tab_space.cc     |  17 +-
  chrome/browser/ui/spaces/new_tab_space.h      |   3 +-
  .../spaces/space_jar_navigation_throttle.cc   |  10 +-
- chrome/browser/ui/spaces/space_model.cc       | 369 ++++++----
- chrome/browser/ui/spaces/space_model.h        |  70 +-
+ chrome/browser/ui/spaces/space_model.cc       | 396 +++++++----
+ chrome/browser/ui/spaces/space_model.h        |  79 ++-
  .../ui/spaces/space_model_window_unittest.cc  | 440 +++++++++---
  .../ui/spaces/space_storage_partition.cc      |  30 +-
  .../ui/spaces/tab_space_restore_data.cc       |  15 +-
@@ -125,7 +127,7 @@ the hover card).
  .../ui/views/spaces/space_switcher_view.h     |  27 +-
  .../spaces/space_tab_visibility_controller.cc |  45 ++
  .../spaces/space_tab_visibility_controller.h  |   4 +
- .../views/tabs/common/folder_drag_target.cc   |  96 ++-
+ .../views/tabs/common/folder_drag_target.cc   | 112 ++-
  .../ui/views/tabs/common/folder_drag_target.h |  19 +-
  .../ui/views/tabs/common/folder_view.cc       | 522 +++++++++++---
  .../ui/views/tabs/common/folder_view.h        |  98 ++-
@@ -170,7 +172,7 @@ the hover card).
  components/tabs/impl/tab_strip_collection.cc  |  98 +++
  .../tab_collection_observer_unittest.cc       | 161 +++++
  components/tabs/public/tab_strip_collection.h |  22 +
- 90 files changed, 6346 insertions(+), 751 deletions(-)
+ 92 files changed, 6436 insertions(+), 752 deletions(-)
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.cc
  create mode 100644 chrome/browser/ui/views/page_action/stedding_copy_link_page_action_controller.h
  create mode 100644 chrome/browser/ui/views/tabs/hovercard/tab_resource_line.cc
@@ -418,6 +420,69 @@ index 05947c94ab4e0..efd87ec5ff3f4 100644
  }  // namespace page_actions
  
  #endif  // CHROME_BROWSER_UI_PAGE_ACTION_PAGE_ACTION_TRIGGERS_H_
+diff --git a/chrome/browser/ui/spaces/folder_commands.cc b/chrome/browser/ui/spaces/folder_commands.cc
+index 1c99fa6cd162c..cc5e2b1044268 100644
+--- a/chrome/browser/ui/spaces/folder_commands.cc
++++ b/chrome/browser/ui/spaces/folder_commands.cc
+@@ -235,9 +235,16 @@ tabs::TabInterface* NewTabInFolder(TabStripModel& strip,
+     return nullptr;
+   }
+   // The folder's last row: MoveTabsToFolder appends after its last child,
+-  // so after a nested folder rather than inside it.
++  // so after a nested folder rather than inside it. In a pinned folder the
++  // new tab is one of its pins (pins H14, folders F38).
++  SpaceModel* const model = SpaceModel::From(tab->GetBrowserWindowInterface());
++  const bool was_pinned =
++      model && model->IsFolderSpacePinned(SpaceModel::TopLevelFolder(folder));
+   if (strip.MoveTabsToFolder({strip.GetIndexOfTab(tab)}, folder)) {
+     folder->SetCollapsed(false);
++    if (model) {
++      model->KeepFolderPinned(folder, was_pinned);
++    }
+   }
+   return tab;
+ }
+diff --git a/chrome/browser/ui/spaces/folder_commands_unittest.cc b/chrome/browser/ui/spaces/folder_commands_unittest.cc
+index dedc5dacd5399..0a9b27a3eab3f 100644
+--- a/chrome/browser/ui/spaces/folder_commands_unittest.cc
++++ b/chrome/browser/ui/spaces/folder_commands_unittest.cc
+@@ -148,6 +148,36 @@ TEST_F(FolderCommandsTest, AlphabetizeReadsTheNameTheUserGave) {
+   }
+ }
+ 
++// pins H14, folders F38 (the owner, 2026-10-28): a tab that joins a pinned
++// folder -- a row dropped on its collapsed header, or New Tab in Folder -- is
++// one of its pins, so the folder stays pinned. It had stayed loose, and the
++// folder read as unpinned and left the pinned run.
++TEST_F(FolderCommandsTest, APinnedFolderKeepsItsPinWhenATabJoins) {
++  tabs::TabInterface* const loose = OpenTab(GURL("https://loose.test/"));
++  OpenTab(GURL("https://q.test/"));
++  OpenTab(GURL("https://p.test/"));
++  // p, q, loose: F[p, q], pinned and collapsed, the active tab outside it.
++  tabs::FolderTabCollection* const folder = tabs().AddToNewFolder({0, 1});
++  ASSERT_NE(nullptr, folder);
++  ASSERT_TRUE(model().CanPinFolder(folder));
++  model().SetFolderSpacePinned(folder, true);
++  ASSERT_TRUE(model().IsFolderSpacePinned(folder));
++  folder->SetCollapsed(true);
++  Activate(loose);
++
++  // What a drop on the header does: the move, then the folder's pin kept.
++  const bool was_pinned = model().IsFolderSpacePinned(folder);
++  ASSERT_TRUE(tabs().MoveTabsToFolder({tabs().GetIndexOfTab(loose)}, folder));
++  model().KeepFolderPinned(folder, was_pinned);
++  EXPECT_TRUE(model().IsSpacePinned(loose)) << "the row dropped in stayed loose";
++  EXPECT_TRUE(model().IsFolderSpacePinned(folder)) << "the folder lost its pin";
++
++  tabs::TabInterface* const fresh = NewTabInFolder(tabs(), folder);
++  ASSERT_NE(nullptr, fresh);
++  EXPECT_TRUE(model().IsSpacePinned(fresh)) << "New Tab in Folder left it loose";
++  EXPECT_TRUE(model().IsFolderSpacePinned(folder));
++}
++
+ // folders F32: New Tab in Folder opens the New Tab page as the folder's last
+ // row -- after a nested folder, not inside it -- in the active Space, makes
+ // it the active tab and expands the folder. A folder that is not there takes
 diff --git a/chrome/browser/ui/spaces/new_tab_space.cc b/chrome/browser/ui/spaces/new_tab_space.cc
 index 90bff3f9f19a7..14b7adbe6d03e 100644
 --- a/chrome/browser/ui/spaces/new_tab_space.cc
@@ -507,7 +572,7 @@ index 9cb917131b6fe..dfcf9a3178c2b 100644
      return PROCEED;
    }
 diff --git a/chrome/browser/ui/spaces/space_model.cc b/chrome/browser/ui/spaces/space_model.cc
-index 8a55fde57239a..1c1749d92042a 100644
+index 8a55fde57239a..7f67370fc5976 100644
 --- a/chrome/browser/ui/spaces/space_model.cc
 +++ b/chrome/browser/ui/spaces/space_model.cc
 @@ -638,6 +638,11 @@ void SpaceModel::SyncWithRegistry(bool seed) {
@@ -1046,7 +1111,41 @@ index 8a55fde57239a..1c1749d92042a 100644
  bool SpaceModel::IsFolderSpacePinned(
      const tabs::FolderTabCollection* folder) const {
    if (!folder) {
-@@ -3252,6 +3290,27 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
+@@ -3145,6 +3183,33 @@ bool SpaceModel::IsFolderSpacePinned(
+          });
+ }
+ 
++// static
++tabs::FolderTabCollection* SpaceModel::TopLevelFolder(
++    tabs::FolderTabCollection* folder) {
++  tabs::FolderTabCollection* top = folder;
++  while (top) {
++    tabs::TabCollection* const parent = top->GetParentCollection();
++    if (!parent || parent->type() != tabs::TabCollection::Type::FOLDER) {
++      break;
++    }
++    top = static_cast<tabs::FolderTabCollection*>(parent);
++  }
++  return top;
++}
++
++void SpaceModel::KeepFolderPinned(tabs::FolderTabCollection* folder,
++                                  bool was_pinned) {
++  tabs::FolderTabCollection* const top = TopLevelFolder(folder);
++  if (!was_pinned || !top || IsFolderSpacePinned(top) || !CanPinFolder(top)) {
++    return;
++  }
++  tabs::TabCollection* const parent = top->GetParentCollection();
++  if (const std::optional<size_t> slot =
++          parent ? parent->GetIndexOfCollection(top) : std::nullopt) {
++    SetFolderSpacePinnedAt(top, /*pinned=*/true, *slot);
++  }
++}
++
+ bool SpaceModel::CanPinFolder(const tabs::FolderTabCollection* folder) const {
+   if (!tab_strip_model_ || !folder || folder->TabCountRecursive() == 0) {
+     return false;
+@@ -3252,6 +3317,27 @@ bool IsTopLevelRow(const tabs::TabInterface* tab) {
    }
    return parent && parent->type() == tabs::TabCollection::Type::UNPINNED;
  }
@@ -1074,7 +1173,7 @@ index 8a55fde57239a..1c1749d92042a 100644
  }  // namespace
  
  bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
-@@ -3262,14 +3321,12 @@ bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
+@@ -3262,14 +3348,12 @@ bool SpaceModel::IsLooseTabInSpacePinRun(const tabs::TabInterface* tab) const {
    // folders F38: a loose tab in a pinned folder -- a link opened from one of
    // its pins, which the folder takes in (F25) -- leaves it for the rows
    // under the line, as one opened from a pin does; the folder would else
@@ -1094,7 +1193,7 @@ index 8a55fde57239a..1c1749d92042a 100644
        if (each == tab) {
          continue;
        }
-@@ -3306,6 +3363,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
+@@ -3306,6 +3390,12 @@ void SpaceModel::MoveOutOfSpacePinRun(tabs::TabHandle handle) {
        !tab_strip_model_->delegate()->IsTabStripEditable()) {
      return;
    }
@@ -1108,7 +1207,7 @@ index 8a55fde57239a..1c1749d92042a 100644
  }
  
 diff --git a/chrome/browser/ui/spaces/space_model.h b/chrome/browser/ui/spaces/space_model.h
-index d7da9ae8c7b7f..e3540986041a2 100644
+index d7da9ae8c7b7f..a49a6392611d9 100644
 --- a/chrome/browser/ui/spaces/space_model.h
 +++ b/chrome/browser/ui/spaces/space_model.h
 @@ -120,12 +120,6 @@ class SpaceModel : public TabStripModelObserver,
@@ -1184,7 +1283,23 @@ index d7da9ae8c7b7f..e3540986041a2 100644
  
    // folders F38, pins H14 (the owner, 2026-10-20): a folder in the pinned
    // run, as in Arc. A top-level folder whose tabs are all Space-pinned is a
-@@ -615,6 +629,11 @@ class SpaceModel : public TabStripModelObserver,
+@@ -498,6 +512,15 @@ class SpaceModel : public TabStripModelObserver,
+                               size_t slot);
+   // Whether `folder` has a tab and every one of its tabs is Space-pinned.
+   bool IsFolderSpacePinned(const tabs::FolderTabCollection* folder) const;
++  // pins H14, folders F38 (the owner, 2026-10-28): tabs just moved into
++  // `folder`. When its top-level folder was a pinned folder before the move
++  // (`was_pinned`), it is pinned whole again, in its place, so the new tabs
++  // become its pins; a tab of another kind had left it reading as unpinned,
++  // and it fell out of the pinned run.
++  void KeepFolderPinned(tabs::FolderTabCollection* folder, bool was_pinned);
++  // The top-level folder `folder` is in, or `folder` itself.
++  static tabs::FolderTabCollection* TopLevelFolder(
++      tabs::FolderTabCollection* folder);
+ 
+   // The home URL of a pinned tab (either tier), or nothing for an unpinned
+   // tab or a pin that predates homes (pins H1).
+@@ -615,6 +638,11 @@ class SpaceModel : public TabStripModelObserver,
    std::string IsolatedJarOf(const SpaceId& id) const;
    // Moves every tab of `from` to `to`, saving and rebinding each.
    void RefileTabs(const SpaceId& from, const SpaceId& to);
@@ -1196,7 +1311,7 @@ index d7da9ae8c7b7f..e3540986041a2 100644
    // SetActiveSpace's tail once `active_id_` has changed from `previous`: the
    // visible tab, the observers, the session and the sleep timers.
    // `tell_registry` is false inside the registry's own notification.
-@@ -696,6 +715,8 @@ class SpaceModel : public TabStripModelObserver,
+@@ -696,6 +724,8 @@ class SpaceModel : public TabStripModelObserver,
    // during its first load -- so it is the address asked for, not the page it
    // lands on (PLAN.md TAB-26). The first commit settles each, once.
    std::set<tabs::TabHandle> homes_before_commit_;
@@ -1205,7 +1320,7 @@ index d7da9ae8c7b7f..e3540986041a2 100644
    // Records, or forgets, that `tab`'s home was just taken before a commit.
    void NoteHomeTakenBeforeCommit(const tabs::TabInterface* tab);
    // The tab the user last had active in each Space, so coming back to a Space
-@@ -708,6 +729,8 @@ class SpaceModel : public TabStripModelObserver,
+@@ -708,6 +738,8 @@ class SpaceModel : public TabStripModelObserver,
    void RecordActivation(tabs::TabInterface* tab);
    void AddToHistory(tabs::TabInterface* tab);
    std::map<SpaceId, std::vector<tabs::TabHandle>> history_;
@@ -1214,7 +1329,7 @@ index d7da9ae8c7b7f..e3540986041a2 100644
    // tabs R34: the restore is over; the tab on screen is the first the user
    // has.
    void OnSessionRestored(Profile* profile, int tabs_restored);
-@@ -776,29 +799,6 @@ class SpaceModel : public TabStripModelObserver,
+@@ -776,29 +808,6 @@ class SpaceModel : public TabStripModelObserver,
    std::optional<LastRoute> last_route_;
    int routing_paused_ = 0;
  
@@ -3664,10 +3779,10 @@ index de44c7ecf0774..0a804555f2e27 100644
    // this window, so the Clear line stays though no pin row may show.
    bool PinnedRunCollapsed() const;
 diff --git a/chrome/browser/ui/views/tabs/common/folder_drag_target.cc b/chrome/browser/ui/views/tabs/common/folder_drag_target.cc
-index c3abf46d7cfa3..14b10a879f53a 100644
+index c3abf46d7cfa3..1dc4e31b17a2e 100644
 --- a/chrome/browser/ui/views/tabs/common/folder_drag_target.cc
 +++ b/chrome/browser/ui/views/tabs/common/folder_drag_target.cc
-@@ -6,18 +6,36 @@
+@@ -6,18 +6,38 @@
  
  #include <algorithm>
  #include <memory>
@@ -3675,6 +3790,8 @@ index c3abf46d7cfa3..14b10a879f53a 100644
  #include <utility>
  #include <vector>
  
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/spaces/space_model.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/views/tabs/common/folder_view.h"
 +#include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
@@ -3704,7 +3821,7 @@ index c3abf46d7cfa3..14b10a879f53a 100644
  FolderDragTarget::FolderDragTarget(TabStripModel& tabs,
                                     views::View* tab_strip_root)
      : tabs_(tabs), tab_strip_root_(tab_strip_root) {}
-@@ -52,6 +70,25 @@ FolderView* FolderDragTarget::FolderViewAtScreenPoint(
+@@ -52,6 +72,25 @@ FolderView* FolderDragTarget::FolderViewAtScreenPoint(
                           : nullptr;
  }
  
@@ -3730,7 +3847,7 @@ index c3abf46d7cfa3..14b10a879f53a 100644
  void FolderDragTarget::SetHoveredFolder(const tabs::TabCollection* folder,
                                          FolderView* view) {
    FolderView* const was = views::AsViewClass<FolderView>(hovered_view_.view());
-@@ -94,6 +131,38 @@ TabDragContext* FolderDragTarget::OnTabDragUpdated(
+@@ -94,6 +133,38 @@ TabDragContext* FolderDragTarget::OnTabDragUpdated(
                         ? nullptr
                         : (view ? view->folder() : nullptr),
                     view);
@@ -3769,7 +3886,7 @@ index c3abf46d7cfa3..14b10a879f53a 100644
    // Keep the tab where it is. The header is inside the strip the tab is
    // already attached to; returning null here would pop it out into a window
    // of its own for as long as the header is hovered.
-@@ -102,18 +171,21 @@ TabDragContext* FolderDragTarget::OnTabDragUpdated(
+@@ -102,18 +173,21 @@ TabDragContext* FolderDragTarget::OnTabDragUpdated(
  
  void FolderDragTarget::OnTabDragExited(const gfx::Point& point_in_screen) {
    ClearHoveredFolder();
@@ -3793,7 +3910,7 @@ index c3abf46d7cfa3..14b10a879f53a 100644
  }
  
  void FolderDragTarget::HandleTabDrop(DragController& controller) {
-@@ -130,10 +202,17 @@ void FolderDragTarget::HandleTabDrop(DragController& controller) {
+@@ -130,10 +204,17 @@ void FolderDragTarget::HandleTabDrop(DragController& controller) {
  
  void FolderDragTarget::DropContents(
      const std::vector<content::WebContents*>& dragged) {
@@ -3813,19 +3930,33 @@ index c3abf46d7cfa3..14b10a879f53a 100644
    if (dragged_pinned_ || dragged_group_ || !collection ||
        collection->type() != tabs::TabCollection::Type::FOLDER) {
      return;
-@@ -153,8 +232,13 @@ void FolderDragTarget::DropContents(
+@@ -153,8 +234,27 @@ void FolderDragTarget::DropContents(
    // The drag already put the tabs in this strip; they join the folder as
    // they are. Detaching them, as this used to, re-filed each as a new tab:
    // its Space pin and home were dropped and routing could send it away.
 -  tabs_->MoveTabsToFolder(indices,
 -                          static_cast<tabs::FolderTabCollection*>(collection));
 +  auto* const folder = static_cast<tabs::FolderTabCollection*>(collection);
++  // pins H14, folders F38: a pinned folder stays pinned, and the tabs dropped
++  // into it become its pins, collapsed or not. Read before the move, which
++  // leaves the folder's tabs of two kinds; the folder had then read as
++  // unpinned and fallen out of the pinned run (the owner, 2026-10-28).
++  tabs::TabInterface* const first = tabs_->GetTabAtIndex(indices.front());
++  spaces::SpaceModel* const space_model =
++      first ? spaces::SpaceModel::From(first->GetBrowserWindowInterface())
++            : nullptr;
++  const bool was_pinned =
++      space_model && space_model->IsFolderSpacePinned(
++                         spaces::SpaceModel::TopLevelFolder(folder));
 +  if (!hovered && row_place) {
 +    // folders F40: at the place among the folder's rows the bar showed.
 +    tabs_->MoveTabsToFolderAt(indices, folder, slot);
-+    return;
++  } else {
++    tabs_->MoveTabsToFolder(indices, folder);
 +  }
-+  tabs_->MoveTabsToFolder(indices, folder);
++  if (space_model) {
++    space_model->KeepFolderPinned(folder, was_pinned);
++  }
  }
  
  base::CallbackListSubscription FolderDragTarget::RegisterWillDestroyCallback(

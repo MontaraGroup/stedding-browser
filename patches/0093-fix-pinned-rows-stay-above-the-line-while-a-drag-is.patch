@@ -26,8 +26,8 @@ Removable when: the sidebar list keeps its drag state while a folder target hold
 ---
  .../ui/views/tabs/common/tab_drag_handler.cc  |  12 +
  .../unpinned_tab_container_view_layout.cc     |  29 +-
- .../test/stedding/pinned_run_browsertest.cc   | 456 ++++++++++++++++++
- 3 files changed, 492 insertions(+), 5 deletions(-)
+ .../test/stedding/pinned_run_browsertest.cc   | 475 ++++++++++++++++++
+ 3 files changed, 511 insertions(+), 5 deletions(-)
 
 diff --git a/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc b/chrome/browser/ui/views/tabs/common/tab_drag_handler.cc
 index f4d5611dfbf0b..eb2560744836d 100644
@@ -115,7 +115,7 @@ index 63cce480a256a..d367073c636e3 100644
      }
      return pinned_in_model(child);
 diff --git a/chrome/test/stedding/pinned_run_browsertest.cc b/chrome/test/stedding/pinned_run_browsertest.cc
-index 6955e55d61ed4..ac7f228ac3541 100644
+index 6955e55d61ed4..e424a12d86589 100644
 --- a/chrome/test/stedding/pinned_run_browsertest.cc
 +++ b/chrome/test/stedding/pinned_run_browsertest.cc
 @@ -9,9 +9,11 @@
@@ -147,7 +147,7 @@ index 6955e55d61ed4..ac7f228ac3541 100644
  #include "ui/views/test/views_test_utils.h"
  #include "ui/views/view_utils.h"
  #include "ui/views/widget/widget.h"
-@@ -1329,6 +1334,457 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ARowDroppedOnTheFirstRowTakesTheTop) {
+@@ -1329,6 +1334,476 @@ IN_PROC_BROWSER_TEST_F(PinnedRunTest, ARowDroppedOnTheFirstRowTakesTheTop) {
    }
  }
  
@@ -400,6 +400,25 @@ index 6955e55d61ed4..ac7f228ac3541 100644
 +    EXPECT_TRUE(IsAboveTheLine(b));
 +    EXPECT_TRUE(HeaderAboveTheLine(g));
 +    EXPECT_TRUE(IsAboveTheLine(l1));
++    EXPECT_FALSE(IsAboveTheLine(l4));
++  }
++
++  {
++    // pins H14, folders F38 (the owner, 2026-10-28): a loose row dropped on
++    // a collapsed pinned folder's header joins the folder as one of its
++    // pins, and the folder stays pinned. The row had stayed loose, and the
++    // folder, of two kinds then, read as unpinned and left the pinned run.
++    SCOPED_TRACE("a loose row dropped on a collapsed pinned folder's header");
++    ASSERT_TRUE(g->collapsed());
++    ASSERT_NO_FATAL_FAILURE(press(l3));
++    move_to(header_middle(g));
++    release();
++    ASSERT_TRUE(base::test::RunUntil(
++        [&]() { return l3->GetParentCollection() == g; }))
++        << "the row dropped on the header is not in the folder";
++    EXPECT_TRUE(model().IsSpacePinned(l3)) << "the row joined the folder loose";
++    EXPECT_TRUE(model().IsFolderSpacePinned(g)) << "the folder lost its pin";
++    EXPECT_TRUE(HeaderAboveTheLine(g)) << "the folder left the pinned run";
 +    EXPECT_FALSE(IsAboveTheLine(l4));
 +  }
 +}
