@@ -41,6 +41,8 @@ move with tooling/field-trials), and drop this patch's hunks as they land.
 ---
  chrome/browser/browser_features.cc            |   9 +-
  chrome/browser/ssl/sct_reporting_service.cc   |  11 +-
+ chrome/browser/ui/ui_features.cc              |   6 +-
+ chrome/common/chrome_features.cc              |   5 +-
  chrome/test/stedding/BUILD.gn                 |  25 ++
  .../certificate_checks_browsertest.cc         | 410 ++++++++++++++++++
  chrome/test/stedding/defaults_browsertest.cc  |  87 +++-
@@ -52,7 +54,7 @@ move with tooling/field-trials), and drop this patch's hunks as they land.
  pdf/pdf_features.cc                           |   4 +-
  services/network/public/cpp/features.cc       |  12 +-
  sql/database.cc                               |   2 +
- 13 files changed, 574 insertions(+), 26 deletions(-)
+ 15 files changed, 583 insertions(+), 28 deletions(-)
  create mode 100644 chrome/test/stedding/certificate_checks_browsertest.cc
 
 diff --git a/chrome/browser/browser_features.cc b/chrome/browser/browser_features.cc
@@ -100,6 +102,39 @@ index 790be3f7d5cf9..8d50dfa4e44c8 100644
    if (profile_->IsOffTheRecord() || !is_sct_auditing_enabled) {
      return network::mojom::SCTAuditingMode::kDisabled;
    }
+diff --git a/chrome/browser/ui/ui_features.cc b/chrome/browser/ui/ui_features.cc
+index b8e3e76165a53..08a9025e3a8ae 100644
+--- a/chrome/browser/ui/ui_features.cc
++++ b/chrome/browser/ui/ui_features.cc
+@@ -20,7 +20,11 @@
+ namespace features {
+ 
+ // Enables the migration of browser commands to Action API.
+-BASE_FEATURE(kUseActionsForBrowserCommands, base::FEATURE_ENABLED_BY_DEFAULT);
++// Stedding: off. M157 turned it on; it gives the browser's commands to an
++// updater that knows only commands mapped to an action, so Stedding's own
++// commands (55100 to 55199) read as disabled and never ran. Off, the command
++// controller keeps M156's updater and still enables each command's action.
++BASE_FEATURE(kUseActionsForBrowserCommands, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ // Enables the use of WGC for the Eye Dropper screen capture.
+ BASE_FEATURE(kAllowEyeDropperWGCScreenCapture,
+diff --git a/chrome/common/chrome_features.cc b/chrome/common/chrome_features.cc
+index a86fd81401706..7d5e03042e7b2 100644
+--- a/chrome/common/chrome_features.cc
++++ b/chrome/common/chrome_features.cc
+@@ -1938,7 +1938,10 @@ BASE_FEATURE(kWebAppPeriodicPreinstallUpdate, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kWebAppMigratePreinstalledChat, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+-BASE_FEATURE(kWebAppInstallDialog, base::FEATURE_ENABLED_BY_DEFAULT);
++// Stedding: off, as in M156. M157 turned it on; Stedding's Add to Dock and
++// Install page as app (docs/features/web-apps.md Wa1 to Wa14) are built on
++// the dialog M156 shows, and its tests wait for that dialog's answer.
++BASE_FEATURE(kWebAppInstallDialog, base::FEATURE_DISABLED_BY_DEFAULT);
+ BASE_FEATURE(kWebAppInstallDialogWinPin, base::FEATURE_DISABLED_BY_DEFAULT);
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
 diff --git a/chrome/test/stedding/BUILD.gn b/chrome/test/stedding/BUILD.gn
 index e49355c5c4247..626e4bdd51f14 100644
 --- a/chrome/test/stedding/BUILD.gn

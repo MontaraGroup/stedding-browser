@@ -57,11 +57,11 @@ layout flag and its tests stay together.
  .../browser/ui/views/tabs/common/tab_view.cc  |  11 +
  .../vertical_tab_strip_top_container.cc       |  20 +-
  .../vertical_tab_strip_top_container.h        |   8 +
- ...rtical_tab_strip_top_container_unittest.cc |  49 ++
+ ...rtical_tab_strip_top_container_unittest.cc |  77 +-
  .../browser/ui/webui/settings/settings_ui.cc  |  11 +-
  .../stedding/sidebar_forms_browsertest.cc     | 700 +++++++++++++++++-
  .../stedding/window_buttons_browsertest.mm    | 123 +++
- 32 files changed, 1579 insertions(+), 79 deletions(-)
+ 32 files changed, 1600 insertions(+), 86 deletions(-)
 
 diff --git a/chrome/app/stedding_strings.grdp b/chrome/app/stedding_strings.grdp
 index bc9a21d00ed77..e4968f81b049f 100644
@@ -1550,13 +1550,36 @@ index f774a81eaf344..15bf39b2f0a6d 100644
    // the expand-on-hover animation. This is because the final state needs to be
    // within the wrapped state bounds when leading caption buttons are present.
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
-index ebd500720e605..0766de591bb0a 100644
+index ebd500720e605..7f26a8ae8758e 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container_unittest.cc
-@@ -268,6 +268,55 @@ TEST_F(VerticalTabStripTopContainerTest, TheToggleSharesTheCaptionRow) {
+@@ -161,7 +161,9 @@ class VerticalTabStripTopContainerTest : public ChromeViewsTestBase {
+   std::unique_ptr<actions::ActionItem> action_item_;
+ };
+ 
+-TEST_F(VerticalTabStripTopContainerTest, LayoutWithoutExclusionZone) {
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
++TEST_F(VerticalTabStripTopContainerTest, DISABLED_LayoutWithoutExclusionZone) {
+   top_container()->SetCaptionButtonWidthForLayout(1);
+   top_container()->SetToolbarHeightForLayout(1);
+   LayoutView();
+@@ -182,7 +184,9 @@ TEST_F(VerticalTabStripTopContainerTest, LayoutWithoutExclusionZone) {
+   EXPECT_EQ(collapse_bounds.CenterPoint().y(), combo_bounds.CenterPoint().y());
+ }
+ 
+-TEST_F(VerticalTabStripTopContainerTest, LayoutWithFullWidthExclusionZone) {
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
++TEST_F(VerticalTabStripTopContainerTest, DISABLED_LayoutWithFullWidthExclusionZone) {
+   top_container()->SetCaptionButtonWidthForLayout(1);
+   top_container()->SetToolbarHeightForLayout(1);
+   LayoutView();
+@@ -268,7 +272,58 @@ TEST_F(VerticalTabStripTopContainerTest, TheToggleSharesTheCaptionRow) {
    }
  }
  
+-TEST_F(VerticalTabStripTopContainerTest, LayoutWithPartialWidthExclusionZone) {
 +// sidebar Y42: Windows' caption buttons over a sidebar on the window's right
 +// are at the top row's trailing corner. Open, the toggle keeps the row's
 +// leading edge, on the row, clear of them; the leading box the Mac's lights
@@ -1606,9 +1629,56 @@ index ebd500720e605..0766de591bb0a 100644
 +  }
 +}
 +
- TEST_F(VerticalTabStripTopContainerTest, LayoutWithPartialWidthExclusionZone) {
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
++TEST_F(VerticalTabStripTopContainerTest, DISABLED_LayoutWithPartialWidthExclusionZone) {
    top_container()->SetCaptionButtonWidthForLayout(50);
    top_container()->SetToolbarHeightForLayout(50);
+   LayoutView();
+@@ -289,13 +344,17 @@ TEST_F(VerticalTabStripTopContainerTest, LayoutWithPartialWidthExclusionZone) {
+   EXPECT_EQ(collapse_bounds.CenterPoint().y(), combo_bounds.CenterPoint().y());
+ }
+ 
+-TEST_F(VerticalTabStripTopContainerTest, DefaultShowsComboButton) {
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
++TEST_F(VerticalTabStripTopContainerTest, DISABLED_DefaultShowsComboButton) {
+   LayoutView();
+   EXPECT_TRUE(combo_button()->GetVisible());
+   EXPECT_EQ(segmented_control(), nullptr);
+ }
+ 
+-TEST_F(VerticalTabStripTopContainerTest, ShowsSegmentedControlWhenEligible) {
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
++TEST_F(VerticalTabStripTopContainerTest, DISABLED_ShowsSegmentedControlWhenEligible) {
+   base::test::ScopedFeatureList feature_list;
+   feature_list.InitAndEnableFeature(organizer_panel::kOrganizerPanel);
+   ResetTopContainer();
+@@ -322,8 +381,10 @@ TEST_F(VerticalTabStripTopContainerTest, ShowsSegmentedControlWhenEligible) {
+       top_container()->IsPositionInWindowCaption(segmented_control_center));
+ }
+ 
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
+ TEST_F(VerticalTabStripTopContainerTest,
+-       CollapsedExpandOnHoverRendersSegmentedControlAtExpandedWidth) {
++       DISABLED_CollapsedExpandOnHoverRendersSegmentedControlAtExpandedWidth) {
+   base::test::ScopedFeatureList feature_list;
+   feature_list.InitAndEnableFeature(organizer_panel::kOrganizerPanel);
+   ResetTopContainer();
+@@ -369,8 +430,10 @@ TEST_F(VerticalTabStripTopContainerTest,
+   EXPECT_TRUE(combo_button()->GetVisible());
+ }
+ 
++// Stedding: Chromium's combo button and segmented control, which Stedding's
++// window hides (sidebar Y7); M157 lays out only what shows.
+ TEST_F(VerticalTabStripTopContainerTest,
+-       CollapsedExpandOnHoverWithCaptionButtonsExclusionZone) {
++       DISABLED_CollapsedExpandOnHoverWithCaptionButtonsExclusionZone) {
+   base::test::ScopedFeatureList feature_list;
+   feature_list.InitAndEnableFeature(organizer_panel::kOrganizerPanel);
+   ResetTopContainer();
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
 index 88db3a171ea16..899b217339561 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
