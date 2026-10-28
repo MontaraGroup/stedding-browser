@@ -14,7 +14,7 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 
 The owner asked for the move to Chromium 157 to be prepared and not released. Google's
 schedule puts M157 on the stable channel on 2026-11-03; the series sits on 157.0.8103.31, the
-stable cut, on the local branch `m157` (`tooling/chromium-version` and `patches/`, not pushed).
+stable cut, on the branch `m157` (`tooling/chromium-version` and `patches/`, pushed, not merged).
 The rebase changed 69 of the 110 patches and added 0111; what M157 changed under them is
 `docs/HANDOFF.md` trap 134. Reviews of the whole range-diff in four parts, each by two other
 reviewers, found lost braces, colliding toast ids, a dropped default and a Windows-only link
@@ -27,10 +27,10 @@ gap before the compiler did.
 - Mac: 1287 unit, 56 component, 610 browser and 116 of Chromium's tab tests (the rebase ring)
   pass. Windows: 1283 unit and 727 browser tests pass. The full runs found the two flags above
   and four tests whose assumptions M157 changed: it pins an extension when it is installed (the
-  hidden-row tests now unpin what they load; whether Stedding should pin is `S-241`'s open
-  decision), and it makes the omnibox popup's window at its first show (the motion test shows and
-  hides the dropdown once before it measures). The suites those fixes touch were run
-  again on both machines; both checkouts hold the same series, tree for tree.
+  hidden-row tests now turn that off before they load one; whether Stedding should pin is
+  `S-241`'s open decision), and it makes the omnibox popup's window at its first show (the
+  motion test shows and hides the dropdown once before it measures). The suites those fixes
+  touch were run again on both machines; both checkouts hold the same series, tree for tree.
 - A last review of every fix made in the port re-enabled the long tab menu's focus rows test
   (with Stedding's short menus off), set Chromium's test of the commands flag to Stedding's
   default and listed the withdrawn toast id; left as they are: the flags page's App Menu
@@ -38,6 +38,15 @@ gap before the compiler did.
   run), and Windows' install-dialog pin flag, which needs the new dialog.
 - Nine upstream tests of Chromium's own sidebar header and group focus mode, which Stedding's
   window hides, are disabled with the reason; `gn check` is `S-335`.
+- Release builds of it were then checked the way a user gets them. Updates: the published
+  beta 22 found the 157 build in a local feed, showed the pill (29 s on the Mac through Sparkle,
+  20 s on Windows), restarted into it in about two seconds and brought its tabs back, on both
+  machines. The core loop's script, with the real pointer and keys, passes every step on both.
+  On the Mac the same scripts and a sweep of two dozen other features ran on beta 22 and 157:
+  the captures match to the pixel but for live numbers, the About line, the order of equally
+  ranked history rows and the split's tab picker, which M157 opens with its first row
+  highlighted (`docs/features/acceptance.md`, Runs). The Windows test install was put back to
+  the published beta 22 afterwards.
 
 ## 2026-10-27 -- 0.3.0 beta 22: GitHub issues 50, 48 and 13, pull request 49
 
