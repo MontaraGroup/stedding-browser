@@ -22,12 +22,12 @@ rule.
 ---
  chrome/browser/ui/stedding/pin_lifecycle.cc   | 47 ++++++++++
  chrome/browser/ui/stedding/pin_lifecycle.h    | 16 ++++
- .../browser/ui/views/tabs/common/tab_view.cc  | 78 +++++++++++++++--
+ .../browser/ui/views/tabs/common/tab_view.cc  | 87 +++++++++++++++++--
  .../browser/ui/views/tabs/common/tab_view.h   | 11 +++
  .../ui/views/tabs/tab/tab_close_button.cc     | 14 ++-
  .../ui/views/tabs/tab/tab_close_button.h      |  8 ++
  .../stedding/sidebar_click_browsertest.cc     | 87 +++++++++++++++++--
- 7 files changed, 244 insertions(+), 17 deletions(-)
+ 7 files changed, 253 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/stedding/pin_lifecycle.cc b/chrome/browser/ui/stedding/pin_lifecycle.cc
 index 82fa940de9b92..a3998cfc5f928 100644
@@ -122,7 +122,7 @@ index 8a46207879611..a132f3599a10c 100644
  // the menu was opened on, or the selection that holds it): its row shows
  // Cmd-W's shortcut, and does what Cmd-W does (the owner, 2026-10-20). It
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index b64dc5355d2fa..fd85c36489137 100644
+index b64dc5355d2fa..d7701a0129b89 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -98,6 +98,7 @@
@@ -151,7 +151,18 @@ index b64dc5355d2fa..fd85c36489137 100644
  
  namespace {
  constexpr int kFocusRingInset = 0.0f;
-@@ -617,6 +622,7 @@ void TabView::UpdateHovered(bool hovered) {
+@@ -539,6 +544,10 @@ TabView::~TabView() {
+   if (press_drag_ && press_drag_->started) {
+     EndPressDrag();
+   }
++  // Stedding pins H29: the question about this row goes with it.
++  if (pin_remove_bubble_) {
++    pin_remove_bubble_->Close();
++  }
+ }
+ 
+ void TabView::LayoutManager::OnInstalled(views::View* host) {
+@@ -617,6 +626,7 @@ void TabView::UpdateHovered(bool hovered) {
  
    hovered_ = hovered;
    UpdateResetBadge();
@@ -159,7 +170,7 @@ index b64dc5355d2fa..fd85c36489137 100644
    if (hover_controller_ && !split_) {
      if (hovered_) {
        hover_controller_->SetSubtleOpacityScale(radial_highlight_opacity_);
-@@ -1530,6 +1536,7 @@ void TabView::OnTabStateChanged() {
+@@ -1530,6 +1540,7 @@ void TabView::OnTabStateChanged() {
  
    SetSelection(tab->IsSelected());
    UpdateTabData(tab_data_observer_->tab_data());
@@ -167,7 +178,7 @@ index b64dc5355d2fa..fd85c36489137 100644
  
    UpdateFocusFreezing();
  
-@@ -1885,15 +1892,24 @@ void TabView::UpdateContrastRatioValues() {
+@@ -1885,15 +1896,24 @@ void TabView::UpdateContrastRatioValues() {
  void TabView::CloseButtonPressed(const ui::Event& event) {
    CHECK(collection_node_);
  
@@ -200,7 +211,7 @@ index b64dc5355d2fa..fd85c36489137 100644
    }
  
    if (active_) {
-@@ -1929,6 +1945,52 @@ void TabView::CloseButtonPressed(const ui::Event& event) {
+@@ -1929,6 +1949,57 @@ void TabView::CloseButtonPressed(const ui::Event& event) {
        from_mouse ? CloseTabSource::kFromMouse : CloseTabSource::kFromTouch);
  }
  
@@ -230,10 +241,15 @@ index b64dc5355d2fa..fd85c36489137 100644
 +              u"back."))
 +          .AddOkButton(base::BindOnce(
 +                           [](tabs::TabHandle handle) {
-+                             if (tabs::TabInterface* const pin =
-+                                     handle.Get()) {
-+                               stedding::RemovePinnedRow(
-+                                   pin->GetBrowserWindowInterface(), pin);
++                             // Still a pin, by the same rule: one unpinned or
++                             // closed while the question was open is left.
++                             tabs::TabInterface* const pin = handle.Get();
++                             BrowserWindowInterface* const window =
++                                 pin ? pin->GetBrowserWindowInterface()
++                                     : nullptr;
++                             if (window && stedding::RowCloseFor(window, pin) !=
++                                               stedding::RowClose::kClose) {
++                               stedding::RemovePinnedRow(window, pin);
 +                             }
 +                           },
 +                           handle),
