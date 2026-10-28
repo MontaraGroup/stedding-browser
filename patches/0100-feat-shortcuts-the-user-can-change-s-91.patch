@@ -4,7 +4,7 @@ Date: Sun, 25 Oct 2026 09:39:35 -0400
 Subject: feat: shortcuts the user can change (S-91)
 
 The Shortcuts block on chrome://settings/stedding becomes editable
-(docs/features/shortcuts.md Z5, Z10-Z22). Every command a shipped chord
+(docs/features/shortcuts.md Z5, Z10-Z23). Every command a shipped chord
 reaches has a row: Add records a chord, x takes one off, a switch turns
 a command's keys off, Reset and Reset all put the defaults back, and a
 search field and a group menu narrow the rows (Z5, Z22). The chords live
@@ -16,7 +16,9 @@ recent-tabs and extensions chords and the toolbar tooltips all read
 (Z12); the shipped tables bind no chord twice (Z13); system,
 text-editing, macOS and extension shortcuts are refused (Z14, Z15);
 fixed rows are read-only (Z16); the row-number and Space chords switch
-off as one row (Z17); the recorder gets the browser's own keys (Z19); a
+off as one row (Z17), and a menu under the Space row lets the two
+sets trade keys or moves one to Ctrl-Cmd, Alt+Shift on Windows (Z23,
+GitHub issue 13); the recorder gets the browser's own keys (Z19); a
 user chord beats a later default (Z20); the divergences and notes keep
 describing the shipped binary (Z21).
 
@@ -30,12 +32,12 @@ ships its own desktop shortcut remapping that Stedding adopts.
  chrome/browser/BUILD.gn                       |   5 +
  chrome/browser/chrome_browser_main.cc         |  11 +
  .../browser/global_keyboard_shortcuts_mac.h   |  34 +-
- .../browser/global_keyboard_shortcuts_mac.mm  | 169 +++++-
+ .../browser/global_keyboard_shortcuts_mac.mm  | 169 ++++-
  chrome/browser/resources/settings/BUILD.gn    |   2 +
  .../stedding_page/stedding_page.html.ts       |  14 +-
  .../settings/stedding_page/stedding_page.ts   |   8 +-
- .../stedding_shortcuts_editor.html.ts         | 138 +++++
- .../stedding_shortcuts_editor.ts              | 500 ++++++++++++++++
+ .../stedding_shortcuts_editor.html.ts         | 152 ++++
+ .../stedding_shortcuts_editor.ts              | 522 ++++++++++++++
  chrome/browser/ui/BUILD.gn                    |   4 +
  chrome/browser/ui/accelerator_table.cc        |  25 +-
  chrome/browser/ui/accelerator_table.h         |   5 +
@@ -44,27 +46,27 @@ ships its own desktop shortcut remapping that Stedding adopts.
  chrome/browser/ui/cocoa/accelerators_cocoa.mm |  26 +
  .../chrome_command_dispatcher_delegate.mm     |  29 +
  chrome/browser/ui/stedding/BUILD.gn           |  93 +++
- .../browser/ui/stedding/shortcut_catalog.cc   | 436 ++++++++++++++
- chrome/browser/ui/stedding/shortcut_catalog.h | 115 ++++
- .../ui/stedding/shortcut_catalog_unittest.cc  | 229 +++++++
- chrome/browser/ui/stedding/shortcut_chord.cc  | 378 ++++++++++++
- chrome/browser/ui/stedding/shortcut_chord.h   |  68 +++
- .../ui/stedding/shortcut_chord_unittest.cc    | 144 +++++
- chrome/browser/ui/stedding/shortcut_editor.cc | 404 +++++++++++++
- chrome/browser/ui/stedding/shortcut_editor.h  | 134 +++++
+ .../browser/ui/stedding/shortcut_catalog.cc   | 436 ++++++++++++
+ chrome/browser/ui/stedding/shortcut_catalog.h | 115 +++
+ .../ui/stedding/shortcut_catalog_unittest.cc  | 229 ++++++
+ chrome/browser/ui/stedding/shortcut_chord.cc  | 378 ++++++++++
+ chrome/browser/ui/stedding/shortcut_chord.h   |  68 ++
+ .../ui/stedding/shortcut_chord_unittest.cc    | 144 ++++
+ chrome/browser/ui/stedding/shortcut_editor.cc | 550 +++++++++++++++
+ chrome/browser/ui/stedding/shortcut_editor.h  | 180 +++++
  .../ui/stedding/shortcut_hotkeys_mac.h        |  23 +
- .../ui/stedding/shortcut_hotkeys_mac.mm       |  74 +++
+ .../ui/stedding/shortcut_hotkeys_mac.mm       |  74 ++
  .../browser/ui/stedding/shortcut_menu_mac.h   |  29 +
  .../browser/ui/stedding/shortcut_menu_mac.mm  | 194 ++++++
- .../browser/ui/stedding/shortcut_overrides.cc | 200 +++++++
- .../browser/ui/stedding/shortcut_overrides.h  | 149 +++++
- .../stedding/shortcut_overrides_unittest.cc   | 374 ++++++++++++
+ .../browser/ui/stedding/shortcut_overrides.cc | 213 ++++++
+ .../browser/ui/stedding/shortcut_overrides.h  | 155 +++++
+ .../stedding/shortcut_overrides_unittest.cc   | 477 +++++++++++++
  .../browser/ui/stedding/shortcut_recording.cc |  54 ++
  .../browser/ui/stedding/shortcut_recording.h  |  52 ++
- .../browser/ui/stedding/shortcut_service.cc   | 151 +++++
- chrome/browser/ui/stedding/shortcut_service.h |  58 ++
- .../ui/stedding/shortcut_service_unittest.cc  | 101 ++++
- .../ui/stedding/shortcut_test_util_mac.h      |  35 ++
+ .../browser/ui/stedding/shortcut_service.cc   | 159 +++++
+ chrome/browser/ui/stedding/shortcut_service.h |  60 ++
+ .../ui/stedding/shortcut_service_unittest.cc  | 101 +++
+ .../ui/stedding/shortcut_test_util_mac.h      |  35 +
  .../ui/stedding/shortcut_test_util_mac.mm     |  98 +++
  chrome/browser/ui/stedding/stedding_prefs.cc  |   1 +
  chrome/browser/ui/stedding/stedding_prefs.h   |   6 +
@@ -73,26 +75,29 @@ ships its own desktop shortcut remapping that Stedding adopts.
  .../ui/views/commandbar/command_bar_view.cc   |  95 ++-
  chrome/browser/ui/views/frame/browser_view.cc |  16 +
  chrome/browser/ui/views/frame/browser_view.h  |   7 +
- .../frame/vertical_tab_strip_region_view.cc   |   6 +
+ .../frame/vertical_tab_strip_region_view.cc   |  17 +-
  chrome/browser/ui/views/page_action/BUILD.gn  |   2 +
  ...edding_copy_link_page_action_controller.cc |   9 +
  ...tedding_copy_link_page_action_controller.h |   4 +
+ .../ui/views/spaces/space_switcher_view.cc    |  32 +-
+ .../ui/views/spaces/space_switcher_view.h     |   6 +
  chrome/browser/ui/views/switcher/BUILD.gn     |   6 +
  .../switcher/recent_tabs_switcher_view.cc     |  35 +-
  .../switcher/recent_tabs_switcher_view.h      |  13 +-
- .../recent_tabs_switcher_view_unittest.cc     |  35 ++
+ .../recent_tabs_switcher_view_unittest.cc     |  35 +
  chrome/browser/ui/views/toolbar/BUILD.gn      |   2 +
  .../toolbar/stedding_dark_pages_button.cc     |   7 +
  .../toolbar/stedding_dark_pages_button.h      |   7 +
  .../toolbar/stedding_little_promote_button.cc |  12 +
  .../toolbar/stedding_little_promote_button.h  |  10 +
  chrome/browser/ui/webui/settings/BUILD.gn     |   4 +
- .../browser/ui/webui/settings/settings_ui.cc  |  37 +-
- .../settings/stedding_shortcuts_handler.h     |  62 +-
+ .../browser/ui/webui/settings/settings_ui.cc  |  40 +-
+ .../settings/stedding_shortcuts_handler.cc    | 113 ++-
+ .../settings/stedding_shortcuts_handler.h     |  63 +-
  .../stedding_shortcuts_handler_unittest.cc    | 195 ++++++
  chrome/test/stedding/BUILD.gn                 |   7 +
- .../stedding/shortcut_rebind_browsertest.cc   | 557 ++++++++++++++++++
- 65 files changed, 5626 insertions(+), 93 deletions(-)
+ .../stedding/shortcut_rebind_browsertest.cc   | 654 ++++++++++++++++++
+ 68 files changed, 6240 insertions(+), 102 deletions(-)
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts
  create mode 100644 chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts
  create mode 100644 chrome/browser/ui/stedding/shortcut_catalog.cc
@@ -525,10 +530,10 @@ index 59a6d7003aba9..949da42270154 100644
      });
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts b/chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts
 new file mode 100644
-index 0000000000000..175f065da7993
+index 0000000000000..1913ae5128bb3
 --- /dev/null
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.html.ts
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,152 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -618,6 +623,20 @@ index 0000000000000..175f065da7993
 +              @change="${this.onSwitchChange_}">
 +          </cr-toggle>` : ''}
 +      </div>
++      ${row.layouts ? html`
++        <div class="number-keys">
++          <span class="what">$i18n{steddingShortcutsNumberKeys}</span>
++          <select id="numberKeys" aria-label="$i18n{steddingShortcutsNumberKeys}"
++              @change="${this.onNumberKeysChange_}">
++            ${row.layouts.map(layout => html`
++              <option value="${layout.value}" ?selected="${layout.selected}">
++                ${layout.text}
++              </option>`)}
++          </select>
++          ${row.layoutNote ? html`
++            <span class="note number-keys-note">${row.layoutNote}</span>` :
++            ''}
++        </div>` : ''}
 +      ${this.pendingFor_(row) ? html`
 +        <div class="shortcut-conflict" role="alert" data-name="${row.name}">
 +          <span class="message">${this.pendingFor_(row)!.message}</span>
@@ -669,10 +688,10 @@ index 0000000000000..175f065da7993
 +}
 diff --git a/chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts b/chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts
 new file mode 100644
-index 0000000000000..caf9457c0f9df
+index 0000000000000..7eb3ae59a1c43
 --- /dev/null
 +++ b/chrome/browser/resources/settings/stedding_page/stedding_shortcuts_editor.ts
-@@ -0,0 +1,500 @@
+@@ -0,0 +1,522 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -680,7 +699,7 @@ index 0000000000000..caf9457c0f9df
 +/**
 + * @fileoverview
 + * 'settings-stedding-shortcuts-editor' is the editable Shortcuts block of
-+ * chrome://settings/stedding (docs/features/shortcuts.md Z5, Z10-Z22): every
++ * chrome://settings/stedding (docs/features/shortcuts.md Z5, Z10-Z23): every
 + * command a chord reaches, grouped, with its chords, a recorder, a switch and
 + * Reset; a search field and a group filter; Reset all; and below them the
 + * shipped divergences and notes. The chords are the machine's, kept in Local
@@ -723,6 +742,16 @@ index 0000000000000..caf9457c0f9df
 +  held: boolean;
 +  family: boolean;
 +  macos: boolean;
++  // Z23: on the Space row, where the layout can change.
++  layouts?: SteddingNumberKeysLayout[];
++  layoutNote?: string;
++}
++
++/** One layout of the number keys (Z23), as the menu lists it. */
++export interface SteddingNumberKeysLayout {
++  value: string;
++  text: string;
++  selected: boolean;
 +}
 +
 +export interface SteddingShortcutEditGroup {
@@ -797,7 +826,8 @@ index 0000000000000..caf9457c0f9df
 +      #shortcutSearch {
 +        flex: 1;
 +      }
-+      #shortcutGroup {
++      #shortcutGroup,
++      .number-keys select {
 +        background: transparent;
 +        border: 1px solid var(--cr-separator-color);
 +        border-radius: 6px;
@@ -818,6 +848,7 @@ index 0000000000000..caf9457c0f9df
 +        padding: 10px 0 4px;
 +      }
 +      .shortcut-row,
++      .number-keys,
 +      .shortcut-reference-row {
 +        align-items: center;
 +        display: flex;
@@ -870,6 +901,9 @@ index 0000000000000..caf9457c0f9df
 +      }
 +      .shortcut-conflict .message {
 +        flex: 1;
++      }
++      .number-keys {
++        padding-inline-start: 16px;
 +      }
 +      .add-button.recording {
 +        outline: 2px solid var(--cr-focus-outline-color);
@@ -1139,6 +1173,13 @@ index 0000000000000..caf9457c0f9df
 +  protected onResetClick_(e: Event) {
 +    sendWithPromise(
 +        'steddingResetShortcut', (e.currentTarget as HTMLElement).dataset['name'])
++        .then(() => this.refresh_());
++  }
++
++  // Z23: the two sets of numbered keys trade places, or one moves away.
++  protected onNumberKeysChange_(e: Event) {
++    sendWithPromise(
++        'steddingSetNumberKeys', (e.target as HTMLSelectElement).value)
 +        .then(() => this.refresh_());
 +  }
 +
@@ -2953,10 +2994,10 @@ index 0000000000000..d564dee8022dd
 +}  // namespace stedding::shortcuts
 diff --git a/chrome/browser/ui/stedding/shortcut_editor.cc b/chrome/browser/ui/stedding/shortcut_editor.cc
 new file mode 100644
-index 0000000000000..6ebe9483c0f81
+index 0000000000000..ba5c132be514a
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_editor.cc
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,550 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -2969,6 +3010,7 @@ index 0000000000000..6ebe9483c0f81
 +#include <utility>
 +#include <vector>
 +
++#include "base/notreached.h"
 +#include "base/strings/strcat.h"
 +#include "build/build_config.h"
 +#include "chrome/app/chrome_command_ids.h"
@@ -3044,13 +3086,127 @@ index 0000000000000..6ebe9483c0f81
 +
 +}  // namespace
 +
++bool CanChangeNumberKeys() {
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
++  return true;
++#else
++  return false;
++#endif
++}
++
++NumberKeys NumberKeysOf(const base::DictValue& stored) {
++  if (!CanChangeNumberKeys()) {
++    return NumberKeys::kRowsFirst;
++  }
++  const std::string* const name = stored.FindString(kNumberKeysKey);
++  return name ? NumberKeysNamed(*name).value_or(NumberKeys::kRowsFirst)
++              : NumberKeys::kRowsFirst;
++}
++
++// The names are what Local State keeps: once shipped, never changed.
++std::string NumberKeysName(NumberKeys layout) {
++  switch (layout) {
++    case NumberKeys::kRowsFirst:
++      return "rows-first";
++    case NumberKeys::kSpacesFirst:
++      return "spaces-first";
++    case NumberKeys::kRowsFirstSpacesThird:
++      return "rows-first-spaces-third";
++    case NumberKeys::kSpacesFirstRowsThird:
++      return "spaces-first-rows-third";
++  }
++  NOTREACHED();
++}
++
++std::optional<NumberKeys> NumberKeysNamed(std::string_view name) {
++  for (NumberKeys layout : kAllNumberKeys) {
++    if (name == NumberKeysName(layout)) {
++      return layout;
++    }
++  }
++  return std::nullopt;
++}
++
++int NumberKeysModifiers(const Entry& family, NumberKeys layout) {
++#if BUILDFLAG(IS_MAC)
++  constexpr int kFirst = ui::EF_COMMAND_DOWN;
++  constexpr int kSecond = ui::EF_CONTROL_DOWN;
++  constexpr int kThird = ui::EF_CONTROL_DOWN | ui::EF_COMMAND_DOWN;
++#else
++  // Ctrl+Alt is AltGr on many keyboards, which types with digits: the
++  // third key is Alt+Shift.
++  constexpr int kFirst = ui::EF_CONTROL_DOWN;
++  constexpr int kSecond = ui::EF_ALT_DOWN;
++  constexpr int kThird = ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN;
++#endif
++  const bool rows = family.command == IDC_SELECT_TAB_0;
++  switch (layout) {
++    case NumberKeys::kRowsFirst:
++      return rows ? kFirst : kSecond;
++    case NumberKeys::kSpacesFirst:
++      return rows ? kSecond : kFirst;
++    case NumberKeys::kRowsFirstSpacesThird:
++      return rows ? kFirst : kThird;
++    case NumberKeys::kSpacesFirstRowsThird:
++      return rows ? kThird : kFirst;
++  }
++  NOTREACHED();
++}
++
++std::vector<std::vector<Chord>> NumberKeysChords(
++    const Entry& family,
++    NumberKeys layout,
++    const std::vector<Binding>& defaults) {
++  const std::vector<int> members = MembersOf(family);
++  std::vector<std::vector<Chord>> chords;
++  chords.reserve(members.size());
++  const int modifiers = NumberKeysModifiers(family, layout);
++  for (size_t i = 0; i < members.size(); ++i) {
++    if (layout == NumberKeys::kRowsFirst) {
++      chords.push_back(DefaultChordsFor(members[i], defaults));
++      continue;
++    }
++    const int offset = static_cast<int>(i);
++    chords.push_back(
++        {Chord(static_cast<ui::KeyboardCode>(ui::VKEY_1 + offset), modifiers),
++         Chord(static_cast<ui::KeyboardCode>(ui::VKEY_NUMPAD1 + offset),
++               modifiers)});
++  }
++  return chords;
++}
++
 +UserShortcuts Resolve(const base::DictValue& stored) {
 +  UserShortcuts user;
 +  const base::DictValue* const commands = stored.FindDict(kCommandsKey);
++  std::set<Chord> claimed;
++  // Z23: another layout gives each family that is on its nine chords first;
++  // while on, no other row may hold them (Z17). The defaults are not needed
++  // here: the shipped layout changes nothing.
++  if (const NumberKeys layout = NumberKeysOf(stored);
++      layout != NumberKeys::kRowsFirst) {
++    for (const Entry& entry : Catalog()) {
++      if (!(entry.flags & kFamily)) {
++        continue;
++      }
++      const base::DictValue* const raw =
++          commands ? commands->FindDict(entry.name) : nullptr;
++      if (raw && raw->FindBool(kOffKey).value_or(false)) {
++        continue;
++      }
++      const std::vector<int> members = MembersOf(entry);
++      std::vector<std::vector<Chord>> chords =
++          NumberKeysChords(entry, layout, /*defaults=*/{});
++      for (size_t i = 0; i < members.size(); ++i) {
++        for (const Chord& chord : chords[i]) {
++          claimed.insert(chord);
++        }
++        user.chords[members[i]] = std::move(chords[i]);
++      }
++    }
++  }
 +  if (!commands) {
 +    return user;
 +  }
-+  std::set<Chord> claimed;
 +  for (const Entry& entry : Catalog()) {
 +    if (!CanTurnOff(entry)) {
 +      continue;
@@ -3138,6 +3294,18 @@ index 0000000000000..6ebe9483c0f81
 +    return state;
 +  }
 +  state.chords = state.defaults;
++  if (entry.flags & kFamily) {
++    // Z23: the layout's chords, which the row shows while off too.
++    state.chords.clear();
++    for (const std::vector<Chord>& member :
++         NumberKeysChords(entry, NumberKeysOf(*stored_), defaults_)) {
++      for (const Chord& chord : member) {
++        if (!Contains(state.chords, chord)) {
++          state.chords.push_back(chord);
++        }
++      }
++    }
++  }
 +  const base::DictValue* const commands = FindCommands();
 +  const base::DictValue* const raw =
 +      commands && CanTurnOff(entry) ? commands->FindDict(entry.name) : nullptr;
@@ -3146,7 +3314,10 @@ index 0000000000000..6ebe9483c0f81
 +    if (CanRebind(entry) && raw->FindList(kKeysKey)) {
 +      state.chords = ReadKeys(*raw);
 +    }
-+    state.changed = state.off || state.chords != state.defaults;
++    // A family's chords are the layout's, which has its own control (Z23):
++    // its Reset is for its switch.
++    state.changed = state.off || (!(entry.flags & kFamily) &&
++                                  state.chords != state.defaults);
 +  }
 +  if (!state.off && !(entry.flags & kFamily)) {
 +    // Z20: a chord the user gave another row is that row's.
@@ -3335,6 +3506,22 @@ index 0000000000000..6ebe9483c0f81
 +  for (const Entry& entry : Catalog()) {
 +    commands.Remove(entry.name);
 +  }
++  stored_->Remove(kNumberKeysKey);
++}
++
++bool ShortcutEditor::SetNumberKeys(NumberKeys layout) {
++  if (!CanChangeNumberKeys()) {
++    return false;
++  }
++  if (layout == NumberKeys::kRowsFirst) {
++    stored_->Remove(kNumberKeysKey);
++    return true;
++  }
++  if (!stored_->FindInt(kVersionKey)) {
++    stored_->Set(kVersionKey, kFormatVersion);
++  }
++  stored_->Set(kNumberKeysKey, NumberKeysName(layout));
++  return true;
 +}
 +
 +void ShortcutEditor::Write(const Entry& entry,
@@ -3363,10 +3550,10 @@ index 0000000000000..6ebe9483c0f81
 +}  // namespace stedding::shortcuts
 diff --git a/chrome/browser/ui/stedding/shortcut_editor.h b/chrome/browser/ui/stedding/shortcut_editor.h
 new file mode 100644
-index 0000000000000..15b9182aa760d
+index 0000000000000..1098cba843cd1
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_editor.h
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,180 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -3374,7 +3561,9 @@ index 0000000000000..15b9182aa760d
 +#ifndef CHROME_BROWSER_UI_STEDDING_SHORTCUT_EDITOR_H_
 +#define CHROME_BROWSER_UI_STEDDING_SHORTCUT_EDITOR_H_
 +
++#include <optional>
 +#include <string>
++#include <string_view>
 +#include <vector>
 +
 +#include "base/memory/raw_ptr.h"
@@ -3396,13 +3585,53 @@ index 0000000000000..15b9182aa760d
 +inline constexpr char kOffKey[] = "off";
 +inline constexpr int kFormatVersion = 1;
 +
++// Z23 (GitHub issue 13): which keys the two sets of nine numbered keys take
++// (Z17), stored by name under "number_keys"; the shipped layout stores
++// nothing, and a name it cannot read is the shipped layout. "First" is ⌘ on
++// the Mac and Ctrl elsewhere, "second" ⌃ and Alt, "third" ⌃⌘ and Alt+Shift,
++// for when the system has the second (macOS gives ⌃1 to ⌃9 to its
++// desktops). The Mac and Windows only: elsewhere the rows have both keys.
++inline constexpr char kNumberKeysKey[] = "number_keys";
++enum class NumberKeys {
++  // The shipped tables: the rows on the first key, the Spaces on the second.
++  kRowsFirst,
++  // The Spaces on the first key, the rows on the second.
++  kSpacesFirst,
++  // The rows on the first key, the Spaces on the third.
++  kRowsFirstSpacesThird,
++  // The Spaces on the first key, the rows on the third.
++  kSpacesFirstRowsThird,
++};
++inline constexpr NumberKeys kAllNumberKeys[] = {
++    NumberKeys::kRowsFirst,
++    NumberKeys::kSpacesFirst,
++    NumberKeys::kRowsFirstSpacesThird,
++    NumberKeys::kSpacesFirstRowsThird,
++};
++
++// Whether this platform lets the layout change.
++bool CanChangeNumberKeys();
++NumberKeys NumberKeysOf(const base::DictValue& stored);
++// The stored name of `layout`, and the layout of a stored name.
++std::string NumberKeysName(NumberKeys layout);
++std::optional<NumberKeys> NumberKeysNamed(std::string_view name);
++// The modifiers `family` (one of the two family rows) takes in `layout`.
++int NumberKeysModifiers(const Entry& family, NumberKeys layout);
++// The chords of `family` in `layout`, member by member: the digit and the
++// number pad's twin; for the shipped layout, the shipped tables' own.
++std::vector<std::vector<Chord>> NumberKeysChords(
++    const Entry& family,
++    NumberKeys layout,
++    const std::vector<Binding>& defaults);
++
 +// What the stored value says, applied to the catalog: every changed row's
 +// chords and every row turned off, for the commands each row stands for. An
 +// entry naming no row, an entry for a fixed row and a chord that cannot be
 +// read are ignored and left where they are (Z10). When two rows claim one
 +// chord, the first in the catalog's order keeps it (Z20). The follower of a
 +// held row (Previous of the recent tabs) takes its leader's chords with
-+// Shift (Z18).
++// Shift (Z18). A layout of the number keys other than the shipped one gives
++// each family that is on its chords before any other row (Z17, Z23).
 +UserShortcuts Resolve(const base::DictValue& stored);
 +
 +// One row as the block shows it.
@@ -3484,8 +3713,12 @@ index 0000000000000..15b9182aa760d
 +  // Puts the row's defaults back.
 +  bool Reset(const Entry& entry);
 +
-+  // Puts every row's defaults back. Entries naming no row stay.
++  // Puts every row's defaults back, and the shipped layout of the number
++  // keys. Entries naming no row stay.
 +  void ResetAll();
++
++  // Z23: the layout of the number keys. False where it cannot change.
++  bool SetNumberKeys(NumberKeys layout);
 +
 + private:
 +  base::DictValue& Commands();
@@ -3847,10 +4080,10 @@ index 0000000000000..8356e2eec2a53
 +}  // namespace stedding::shortcuts
 diff --git a/chrome/browser/ui/stedding/shortcut_overrides.cc b/chrome/browser/ui/stedding/shortcut_overrides.cc
 new file mode 100644
-index 0000000000000..89367d638d969
+index 0000000000000..4a924ad4eda7c
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_overrides.cc
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,213 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4008,6 +4241,19 @@ index 0000000000000..89367d638d969
 +  return Current().IsOff(command);
 +}
 +
++bool IsOnPlatformKey(int command, bool ships_on_it) {
++  const UserShortcuts& user = Current();
++  if (user.IsOff(command)) {
++    return false;
++  }
++  const auto it = user.chords.find(command);
++  if (it == user.chords.end()) {
++    return ships_on_it;
++  }
++  return !it->second.empty() &&
++         it->second.front().modifiers == ui::EF_PLATFORM_ACCELERATOR;
++}
++
 +void SetRecordingTarget(const void* target) {
 +  GetState().recording_target = reinterpret_cast<uintptr_t>(target);
 +}
@@ -4053,10 +4299,10 @@ index 0000000000000..89367d638d969
 +}  // namespace stedding::shortcuts
 diff --git a/chrome/browser/ui/stedding/shortcut_overrides.h b/chrome/browser/ui/stedding/shortcut_overrides.h
 new file mode 100644
-index 0000000000000..97bf6b7ae25dd
+index 0000000000000..6f94383eff8b2
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_overrides.h
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,155 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4181,6 +4427,12 @@ index 0000000000000..97bf6b7ae25dd
 +// holding Cmd shows no numbers).
 +bool IsOff(int command);
 +
++// Z17, Z23: whether `command` is on and its first chord holds the platform's
++// key (⌘ on the Mac, Ctrl elsewhere); unchanged, whether it `ships_on_it`. A
++// layout of the number keys may move the rows off that key and the Spaces
++// onto it: holding the key numbers what it reaches.
++bool IsOnPlatformKey(int command, bool ships_on_it);
++
 +// Recording (Z19). While a settings page records a chord, its window's keys
 +// go to the page: the views focus manager is suspended for that window, and
 +// the Mac's command dispatcher passes every key equivalent of that window to
@@ -4208,10 +4460,10 @@ index 0000000000000..97bf6b7ae25dd
 +#endif  // CHROME_BROWSER_UI_STEDDING_SHORTCUT_OVERRIDES_H_
 diff --git a/chrome/browser/ui/stedding/shortcut_overrides_unittest.cc b/chrome/browser/ui/stedding/shortcut_overrides_unittest.cc
 new file mode 100644
-index 0000000000000..79b17883a24fd
+index 0000000000000..9b02e22ea122f
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_overrides_unittest.cc
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,477 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4226,6 +4478,7 @@ index 0000000000000..79b17883a24fd
 +#include "base/functional/bind.h"
 +#include "base/strings/utf_string_conversions.h"
 +#include "base/values.h"
++#include "build/build_config.h"
 +#include "chrome/app/chrome_command_ids.h"
 +#include "chrome/browser/ui/stedding/shortcut_catalog.h"
 +#include "chrome/browser/ui/stedding/shortcut_chord.h"
@@ -4533,6 +4786,108 @@ index 0000000000000..79b17883a24fd
 +  EXPECT_TRUE(IsOff(IDC_SELECT_TAB_0)) << "holding the key shows no numbers";
 +}
 +
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
++// Z23 (GitHub issue 13): a layout of the number keys moves both sets of nine
++// at once, the digit and the number pad's twin; it takes a chord another row
++// was given, it gives none to a set that is off, and the Space row shows its
++// keys. A name it cannot read, and Reset all, are the shipped layout.
++TEST_F(ShortcutOverridesTest, TheNumberKeysMoveBothSets) {
++#if BUILDFLAG(IS_MAC)
++  constexpr int kFirst = ui::EF_COMMAND_DOWN;
++  constexpr int kSecond = ui::EF_CONTROL_DOWN;
++  constexpr int kThird = ui::EF_CONTROL_DOWN | ui::EF_COMMAND_DOWN;
++#else
++  constexpr int kFirst = kCtrl;
++  constexpr int kSecond = kAlt;
++  constexpr int kThird = kAlt | kShift;
++#endif
++  // A chord a set takes in the layouts with the third key, given to a row
++  // first.
++  ASSERT_EQ(CheckKind::kOk,
++            editor_.Add(Row("new-tab"), Chord(ui::VKEY_5, kThird),
++                        /*replace=*/false)
++                .kind);
++  ASSERT_FALSE(stored_.FindString(kNumberKeysKey));
++
++  struct Layout {
++    NumberKeys layout;
++    int rows;
++    int spaces;
++  };
++  for (const Layout& expected :
++       {Layout{NumberKeys::kSpacesFirst, kSecond, kFirst},
++        Layout{NumberKeys::kRowsFirstSpacesThird, kFirst, kThird},
++        Layout{NumberKeys::kSpacesFirstRowsThird, kThird, kFirst}}) {
++    SCOPED_TRACE(NumberKeysName(expected.layout));
++    ASSERT_TRUE(editor_.SetNumberKeys(expected.layout));
++    ASSERT_TRUE(stored_.FindString(kNumberKeysKey));
++    EXPECT_EQ(NumberKeysName(expected.layout),
++              *stored_.FindString(kNumberKeysKey));
++    const std::vector<Binding> table = Effective();
++    EXPECT_EQ((std::vector<Chord>{Chord(ui::VKEY_1, expected.rows),
++                                  Chord(ui::VKEY_NUMPAD1, expected.rows)}),
++              ChordsOf(table, IDC_SELECT_TAB_0));
++    EXPECT_EQ((std::vector<Chord>{Chord(ui::VKEY_9, expected.rows),
++                                  Chord(ui::VKEY_NUMPAD9, expected.rows)}),
++              ChordsOf(table, IDC_SELECT_LAST_TAB));
++    EXPECT_EQ((std::vector<Chord>{Chord(ui::VKEY_1, expected.spaces),
++                                  Chord(ui::VKEY_NUMPAD1, expected.spaces)}),
++              ChordsOf(table, IDC_STEDDING_SPACE_1));
++    EXPECT_EQ((std::vector<Chord>{Chord(ui::VKEY_9, expected.spaces),
++                                  Chord(ui::VKEY_NUMPAD9, expected.spaces)}),
++              ChordsOf(table, IDC_STEDDING_SPACE_9));
++    // The other row keeps the chord only while neither set wants it.
++    const bool third_taken =
++        expected.rows == kThird || expected.spaces == kThird;
++    EXPECT_EQ(third_taken ? std::vector<Chord>{CtrlAlt(ui::VKEY_T)}
++                           : (std::vector<Chord>{CtrlAlt(ui::VKEY_T),
++                                                 Chord(ui::VKEY_5, kThird)}),
++              ChordsOf(table, IDC_NEW_TAB));
++    // Z17: while the set is on, no other row may take one of its chords.
++    EXPECT_EQ(CheckKind::kRefused,
++              editor_
++                  .Check(Row("clear-space"), Chord(ui::VKEY_2, expected.spaces))
++                  .kind);
++    const RowState space_row = editor_.StateOf(Row("space-by-number"));
++    ASSERT_FALSE(space_row.chords.empty());
++    EXPECT_EQ(Chord(ui::VKEY_1, expected.spaces), space_row.chords.front());
++    EXPECT_FALSE(space_row.changed) << "the menu, not Reset, undoes a layout";
++  }
++
++  // A set that is off keeps no chord, and its keys are free.
++  ASSERT_TRUE(editor_.SetNumberKeys(NumberKeys::kSpacesFirst));
++  ASSERT_TRUE(editor_.SetOff(Row("space-by-number"), true));
++  EXPECT_TRUE(ChordsOf(Effective(), IDC_STEDDING_SPACE_1).empty());
++  EXPECT_EQ(CheckKind::kOk,
++            editor_.Check(Row("clear-space"), Chord(ui::VKEY_2, kFirst)).kind);
++  EXPECT_EQ(Chord(ui::VKEY_1, kFirst),
++            editor_.StateOf(Row("space-by-number")).chords.front())
++      << "the row still names the keys it has when turned on";
++
++  // Holding the platform's key numbers the rows only while they keep it.
++  SetCurrent(Resolve(stored_));
++  EXPECT_FALSE(IsOnPlatformKey(IDC_SELECT_TAB_0, /*ships_on_it=*/true));
++  EXPECT_FALSE(IsOnPlatformKey(IDC_STEDDING_SPACE_1, /*ships_on_it=*/false))
++      << "the Spaces are off";
++  ASSERT_TRUE(editor_.SetOff(Row("space-by-number"), false));
++  SetCurrent(Resolve(stored_));
++  EXPECT_TRUE(IsOnPlatformKey(IDC_STEDDING_SPACE_1, /*ships_on_it=*/false));
++
++  stored_.Set(kNumberKeysKey, "sideways");
++  EXPECT_EQ(NumberKeys::kRowsFirst, NumberKeysOf(stored_));
++  EXPECT_EQ(std::vector<Chord>{CtrlAlt(ui::VKEY_1)},
++            ChordsOf(Effective(), IDC_SELECT_TAB_0));
++
++  ASSERT_TRUE(editor_.SetNumberKeys(NumberKeys::kSpacesFirst));
++  editor_.ResetAll();
++  EXPECT_FALSE(stored_.FindString(kNumberKeysKey));
++  EXPECT_EQ(std::vector<Chord>{CtrlAlt(ui::VKEY_1)},
++            ChordsOf(Effective(), IDC_SELECT_TAB_0));
++  SetCurrent(Resolve(stored_));
++  EXPECT_TRUE(IsOnPlatformKey(IDC_SELECT_TAB_0, /*ships_on_it=*/true));
++}
++#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
++
 +// Z11: a change bumps the generation and runs the callbacks at once; the same
 +// set again does nothing.
 +TEST_F(ShortcutOverridesTest, AChangeRunsTheCallbacks) {
@@ -4706,10 +5061,10 @@ index 0000000000000..0fe21239740ef
 +#endif  // CHROME_BROWSER_UI_STEDDING_SHORTCUT_RECORDING_H_
 diff --git a/chrome/browser/ui/stedding/shortcut_service.cc b/chrome/browser/ui/stedding/shortcut_service.cc
 new file mode 100644
-index 0000000000000..3e1239070ec9c
+index 0000000000000..e9e9e29ac5114
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_service.cc
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,159 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4839,6 +5194,14 @@ index 0000000000000..3e1239070ec9c
 +  ShortcutEditor(update.Get(), DefaultBindings()).ResetAll();
 +}
 +
++bool SetNumberKeys(PrefService* local_state, NumberKeys layout) {
++  if (!CanChangeNumberKeys()) {
++    return false;
++  }
++  ScopedDictPrefUpdate update(local_state, prefs::kShortcutsUser);
++  return ShortcutEditor(update.Get(), DefaultBindings()).SetNumberKeys(layout);
++}
++
 +bool IsSystemHotKey(const Chord& chord) {
 +  if (const std::optional<std::vector<Chord>>& injected =
 +          SystemHotKeysForTesting()) {
@@ -4863,10 +5226,10 @@ index 0000000000000..3e1239070ec9c
 +}  // namespace stedding::shortcuts
 diff --git a/chrome/browser/ui/stedding/shortcut_service.h b/chrome/browser/ui/stedding/shortcut_service.h
 new file mode 100644
-index 0000000000000..32a5c2ce994cb
+index 0000000000000..33303f229b6c5
 --- /dev/null
 +++ b/chrome/browser/ui/stedding/shortcut_service.h
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,60 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -4912,6 +5275,8 @@ index 0000000000000..32a5c2ce994cb
 +bool SetShortcutOff(PrefService* local_state, const Entry& entry, bool off);
 +bool ResetShortcut(PrefService* local_state, const Entry& entry);
 +void ResetAllShortcuts(PrefService* local_state);
++// Z23: the layout of the number keys.
++bool SetNumberKeys(PrefService* local_state, NumberKeys layout);
 +
 +// Z15 on the Mac: whether macOS has `chord` enabled as one of its own
 +// shortcuts (System Settings, Keyboard, Keyboard Shortcuts), read from this
@@ -5451,7 +5816,7 @@ index fbcbee2380432..dfcacb7b3c6bb 100644
    // True if we have already been initialized.
    bool initialized_ = false;
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index e4348534c4ecc..ad59f9fe282ba 100644
+index e4348534c4ecc..544b0d18e922b 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -52,6 +52,7 @@
@@ -5462,18 +5827,34 @@ index e4348534c4ecc..ad59f9fe282ba 100644
  #include "chrome/browser/ui/stedding/sidebar_panels.h"
  #include "chrome/browser/ui/stedding/sidebar_panels_view.h"
  #include "chrome/browser/ui/stedding/stedding_prefs.h"
-@@ -1261,6 +1262,11 @@ void VerticalTabStripRegionView::ShowNumberBadges() {
+@@ -1261,12 +1262,26 @@ void VerticalTabStripRegionView::ShowNumberBadges() {
    if (prefs && !prefs->GetBoolean(stedding::prefs::kHoldCmdNumbers)) {
      return;
    }
-+  // shortcuts Z17: with the row chords turned off in Settings, holding the
-+  // key numbers nothing.
-+  if (stedding::shortcuts::IsOff(IDC_SELECT_TAB_0)) {
++  // shortcuts Z17, Z23: with the row chords turned off in Settings, or
++  // moved off this key by the layout of the number keys, holding the key
++  // numbers no row; the Space chips number themselves while the rows do, as
++  // they always have, or while the layout puts the Spaces on this key.
++  const bool number_rows = stedding::shortcuts::IsOnPlatformKey(
++      IDC_SELECT_TAB_0, /*ships_on_it=*/true);
++  const bool number_spaces =
++      number_rows || stedding::shortcuts::IsOnPlatformKey(
++                         IDC_STEDDING_SPACE_1, /*ships_on_it=*/false);
++  if (!number_spaces) {
 +    return;
 +  }
    // motion O1: with "Animate the sidebar and overlays" off the numbers
    // appear at once; the rows had asked the system alone.
    const bool animate = stedding::ShouldAnimate(prefs);
+   int number = 1;
+   for (tabs::TabInterface* tab :
+-       stedding::NumberedTabs(browser_view()->browser()->tab_strip_model())) {
++       number_rows ? stedding::NumberedTabs(
++                         browser_view()->browser()->tab_strip_model())
++                   : std::vector<tabs::TabInterface*>()) {
+     TabCollectionNode* const node =
+         root_node() ? root_node()->GetNodeForHandle(tab->GetHandle()) : nullptr;
+     if (auto* const view =
 diff --git a/chrome/browser/ui/views/page_action/BUILD.gn b/chrome/browser/ui/views/page_action/BUILD.gn
 index 3601e56694003..fe697271a169e 100644
 --- a/chrome/browser/ui/views/page_action/BUILD.gn
@@ -5536,6 +5917,88 @@ index 081bfa068dbcb..355d0dc77fd92 100644
  
    ui::ScopedUnownedUserData<CopyLinkPageActionController>
        scoped_unowned_user_data_;
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.cc b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+index 31cfe669e54e0..f47df39a9a93a 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.cc
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.cc
+@@ -19,7 +19,9 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "build/build_config.h"
+ #include "cc/paint/paint_flags.h"
++#include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/accelerator_table.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/spaces/isolation_mark.h"
+@@ -40,6 +42,7 @@
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/vector_icons/vector_icons.h"
+ #include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model.h"
+ #include "ui/color/color_id.h"
+@@ -723,12 +726,16 @@ void SpaceSwitcherView::ApplyOverflow() {
+     std::u16string text = dot ? std::u16string() : GlyphFor(space, model_index);
+     bool chord = false;
+ #if BUILDFLAG(IS_MAC)
+-    // While ⌘ is held a chip shows its Space's chord, ⌃1 to ⌃9, numbered by
+-    // the Space's place, not the chip's: with Focus on, the one chip is
+-    // the active Space whatever its number. A dot stays a dot.
+-    if (number_badges_ && !dot && model_index < 9) {
+-      text = base::StrCat({u"⌃", base::NumberToString16(model_index + 1)});
+-      chord = true;
++    // While ⌘ is held a chip shows its Space's chord, numbered by the
++    // Space's place, not the chip's: with Focus on, the one chip is the
++    // active Space whatever its number. A dot stays a dot.
++    if (number_badges_ && !dot) {
++      if (std::u16string space_chord =
++              ChordForSpace(static_cast<int>(model_index));
++          !space_chord.empty()) {
++        text = std::move(space_chord);
++        chord = true;
++      }
+     }
+ #endif
+     chip->SetText(text);
+@@ -1383,6 +1390,19 @@ void SpaceSwitcherView::OnThemeChanged() {
+   Rebuild();
+ }
+ 
++// static
++std::u16string SpaceSwitcherView::ChordForSpace(int model_index) {
++  // ⌃1 to ⌃9 as shipped; shortcuts Z23: a layout of the number keys gives
++  // the Spaces other keys, and the lookup the menus use names them.
++  ui::Accelerator accelerator;
++  if (model_index < 0 || model_index >= 9 ||
++      !::GetAcceleratorForCommandId(IDC_STEDDING_SPACE_1 + model_index,
++                                    &accelerator)) {
++    return std::u16string();
++  }
++  return accelerator.GetShortcutText();
++}
++
+ void SpaceSwitcherView::SetNumberBadges(bool showing) {
+ #if BUILDFLAG(IS_MAC)
+   // ApplyOverflow picks each chip's text by its Space. Set here by position
+diff --git a/chrome/browser/ui/views/spaces/space_switcher_view.h b/chrome/browser/ui/views/spaces/space_switcher_view.h
+index 7c8c1b7aa056b..7f297d17f1a6f 100644
+--- a/chrome/browser/ui/views/spaces/space_switcher_view.h
++++ b/chrome/browser/ui/views/spaces/space_switcher_view.h
+@@ -118,6 +118,12 @@ class SpaceSwitcherView : public views::View,
+   // glyph while Cmd is held.
+   void SetNumberBadges(bool showing);
+ 
++  // tabs R11, shortcuts Z23: the chord a chip shows for the Space at
++  // `model_index` while Cmd is held: Ctrl-N as shipped, or the keys a layout
++  // of the number keys gave the Spaces. Empty with no chord (the Spaces'
++  // keys off, or past the ninth).
++  static std::u16string ChordForSpace(int model_index);
++
+   // PLAN.md SPC-4, spaces B12: the chip a dragged tab would be dropped on is
+   // lit in its Space's colour, full size and at full strength, until the
+   // drag moves off it, drops or ends; at overflow (B24) the row's other dots
 diff --git a/chrome/browser/ui/views/switcher/BUILD.gn b/chrome/browser/ui/views/switcher/BUILD.gn
 index 9e855fb33ef21..8362c071ffae1 100644
 --- a/chrome/browser/ui/views/switcher/BUILD.gn
@@ -5917,14 +6380,14 @@ index c068f19780735..c25338211fd75 100644
        "//chrome/browser:global_features",
        "//chrome/browser/affiliations",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 9752fe1caabd4..4ae33936f1a17 100644
+index 9752fe1caabd4..3eb0ba2069108 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -1261,10 +1261,43 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -1261,10 +1261,46 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
        "then. On, the bar follows Show bookmarks bar again and the star "
        "bookmarks a page.");
    html_source->AddString("steddingShortcutsTitle", "Shortcuts");
-+  // docs/features/shortcuts.md Z5, Z10-Z22: the block is editable.
++  // docs/features/shortcuts.md Z5, Z10-Z23: the block is editable.
    html_source->AddString(
        "steddingShortcutsIntro",
 -      "Read from the same tables the menus use, so this list cannot drift "
@@ -5945,6 +6408,9 @@ index 9752fe1caabd4..4ae33936f1a17 100644
 +  html_source->AddString("steddingShortcutsSaved", "$1 now runs $2");
 +  html_source->AddString("steddingShortcutsRemove", "Remove $1");
 +  html_source->AddString("steddingShortcutsReset", "Reset");
++  // Z23: the menu under the Space row.
++  html_source->AddString("steddingShortcutsNumberKeys",
++                         "Number keys for the rows and the Spaces");
 +  html_source->AddString("steddingShortcutsResetAll", "Reset all shortcuts");
 +  html_source->AddString("steddingShortcutsResetAllTitle",
 +                         "Reset all shortcuts?");
@@ -5966,8 +6432,167 @@ index 9752fe1caabd4..4ae33936f1a17 100644
    // windows N5, N7: the reference reads the platform's own tables now and
    // its handler is registered on every platform (above). The page still
    // asks only where this says so: a WebUI message nobody handles is a
+diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+index cfd70efc1559a..3a2af939ab313 100644
+--- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
++++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
+ 
++#include <algorithm>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -408,7 +409,8 @@ base::DictValue RowAsValue(const shortcuts::Entry& entry,
+     base::ListValue chords;
+     base::DictValue chip;
+     chip.Set("value", std::string());
+-    chip.Set("text", FamilyText(state.defaults));
++    // Z23: the layout's chords, which may not be the shipped ones.
++    chip.Set("text", FamilyText(state.chords));
+     chords.Append(std::move(chip));
+     row.Set("chords", std::move(chords));
+   } else {
+@@ -436,6 +438,85 @@ base::DictValue RowAsValue(const shortcuts::Entry& entry,
+   return row;
+ }
+ 
++// Z23: `family`'s chords in `layout`, every member's, as one list.
++std::vector<shortcuts::Chord> LayoutChords(
++    const shortcuts::Entry& family,
++    shortcuts::NumberKeys layout,
++    const std::vector<shortcuts::Binding>& defaults) {
++  std::vector<shortcuts::Chord> chords;
++  for (const std::vector<shortcuts::Chord>& member :
++       shortcuts::NumberKeysChords(family, layout, defaults)) {
++    for (const shortcuts::Chord& chord : member) {
++      if (std::ranges::find(chords, chord) == chords.end()) {
++        chords.push_back(chord);
++      }
++    }
++  }
++  return chords;
++}
++
++// Z23: the layouts of the number keys as the menu under the Space row lists
++// them, each naming both sets' keys; the shipped one says so.
++base::ListValue NumberKeysAsValue(
++    shortcuts::NumberKeys current,
++    const std::vector<shortcuts::Binding>& defaults) {
++  const shortcuts::Entry* const rows =
++      shortcuts::EntryForCommand(IDC_SELECT_TAB_0);
++  const shortcuts::Entry* const spaces =
++      shortcuts::EntryForCommand(IDC_STEDDING_SPACE_1);
++  base::ListValue layouts;
++  if (!rows || !spaces) {
++    return layouts;
++  }
++  for (shortcuts::NumberKeys layout : shortcuts::kAllNumberKeys) {
++    const std::u16string rows_text =
++        FamilyText(LayoutChords(*rows, layout, defaults));
++    const std::u16string spaces_text =
++        FamilyText(LayoutChords(*spaces, layout, defaults));
++    const bool spaces_first = layout == shortcuts::NumberKeys::kSpacesFirst ||
++                              layout ==
++                                  shortcuts::NumberKeys::kSpacesFirstRowsThird;
++    std::u16string text =
++        spaces_first
++            ? base::StrCat({u"Spaces on ", spaces_text, u", rows on ",
++                            rows_text})
++            : base::StrCat({u"Rows on ", rows_text, u", Spaces on ",
++                            spaces_text});
++    if (layout == shortcuts::NumberKeys::kRowsFirst) {
++      text += u" (default)";
++    }
++    base::DictValue value;
++    value.Set("value", shortcuts::NumberKeysName(layout));
++    value.Set("text", text);
++    value.Set("selected", layout == current);
++    layouts.Append(std::move(value));
++  }
++  return layouts;
++}
++
++// Z15, Z23: what the menu says when macOS takes one of the two sets' keys
++// first (Mission Control's desktops take ⌃1 to ⌃9 while they are on); empty
++// when it takes neither, and off the Mac.
++std::u16string NumberKeysNote(shortcuts::NumberKeys current,
++                              const std::vector<shortcuts::Binding>& defaults) {
++  for (int command : {IDC_SELECT_TAB_0, IDC_STEDDING_SPACE_1}) {
++    const shortcuts::Entry* const family =
++        shortcuts::EntryForCommand(command);
++    if (!family) {
++      continue;
++    }
++    const std::vector<shortcuts::Chord> chords =
++        LayoutChords(*family, current, defaults);
++    if (!chords.empty() && shortcuts::IsSystemHotKey(chords.front())) {
++      return base::StrCat(
++          {u"macOS takes ", FamilyText(chords),
++           u" first: turn them off in System Settings, Keyboard, Keyboard "
++           u"Shortcuts, Mission Control, or choose other keys here."});
++    }
++  }
++  return std::u16string();
++}
++
+ std::string CheckKindName(shortcuts::CheckKind kind) {
+   switch (kind) {
+     case shortcuts::CheckKind::kOk:
+@@ -512,7 +593,15 @@ base::ListValue ShortcutRowsAsValue(PrefService* local_state) {
+       flush();
+       current_group = entry.group;
+     }
+-    rows.Append(RowAsValue(entry, state));
++    base::DictValue row = RowAsValue(entry, state);
++    if (entry.command == IDC_STEDDING_SPACE_1 &&
++        shortcuts::CanChangeNumberKeys()) {
++      // Z23: the menu of layouts sits under the Space row.
++      const shortcuts::NumberKeys layout = shortcuts::NumberKeysOf(stored);
++      row.Set("layouts", NumberKeysAsValue(layout, defaults));
++      row.Set("layoutNote", NumberKeysNote(layout, defaults));
++    }
++    rows.Append(std::move(row));
+   }
+   flush();
+   return groups;
+@@ -630,6 +719,10 @@ void SteddingShortcutsHandler::RegisterMessages() {
+       "steddingResetAllShortcuts",
+       base::BindRepeating(&SteddingShortcutsHandler::HandleResetAllShortcuts,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "steddingSetNumberKeys",
++      base::BindRepeating(&SteddingShortcutsHandler::HandleSetNumberKeys,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "steddingRecordShortcut",
+       base::BindRepeating(&SteddingShortcutsHandler::HandleRecordShortcut,
+@@ -785,6 +878,22 @@ void SteddingShortcutsHandler::HandleResetAllShortcuts(
+   ResolveJavascriptCallback(args[0], true);
+ }
+ 
++// [callback, layout name]: Z23.
++void SteddingShortcutsHandler::HandleSetNumberKeys(
++    const base::ListValue& args) {
++  if (args.size() != 2U) {
++    return;
++  }
++  AllowJavascript();
++  const std::optional<stedding::shortcuts::NumberKeys> layout =
++      args[1].is_string()
++          ? stedding::shortcuts::NumberKeysNamed(args[1].GetString())
++          : std::nullopt;
++  ResolveJavascriptCallback(
++      args[0], layout && local_state() &&
++                   stedding::shortcuts::SetNumberKeys(local_state(), *layout));
++}
++
+ // [recording]: Z19, a row starts or ends recording.
+ void SteddingShortcutsHandler::HandleRecordShortcut(
+     const base::ListValue& args) {
 diff --git a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h
-index 38b94e89e651a..465710c36401f 100644
+index 38b94e89e651a..54db282484389 100644
 --- a/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h
 +++ b/chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h
 @@ -5,12 +5,22 @@
@@ -5993,7 +6618,7 @@ index 38b94e89e651a..465710c36401f 100644
  namespace stedding {
  
  // One line of the shortcut reference (docs/features/shortcuts.md).
-@@ -28,35 +38,77 @@ struct ShortcutRow {
+@@ -28,35 +38,78 @@ struct ShortcutRow {
  struct ShortcutGroup {
    std::u16string title;
    std::vector<ShortcutRow> rows;
@@ -6063,6 +6688,7 @@ index 38b94e89e651a..465710c36401f 100644
 +  void HandleSetShortcutOff(const base::ListValue& args);
 +  void HandleResetShortcut(const base::ListValue& args);
 +  void HandleResetAllShortcuts(const base::ListValue& args);
++  void HandleSetNumberKeys(const base::ListValue& args);
 +  void HandleRecordShortcut(const base::ListValue& args);
 +
 +  void OnShortcutsChanged();
@@ -6337,15 +6963,15 @@ index e625659c38a03..af65b8f36a798 100644
        "//ui/gfx:test_support",
 diff --git a/chrome/test/stedding/shortcut_rebind_browsertest.cc b/chrome/test/stedding/shortcut_rebind_browsertest.cc
 new file mode 100644
-index 0000000000000..88bc1742a1752
+index 0000000000000..d73be0f23ab65
 --- /dev/null
 +++ b/chrome/test/stedding/shortcut_rebind_browsertest.cc
-@@ -0,0 +1,557 @@
+@@ -0,0 +1,654 @@
 +// Copyright 2026 The Stedding Authors
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
 +
-+// docs/features/shortcuts.md Z5, Z10-Z22: chords the user changes in
++// docs/features/shortcuts.md Z5, Z10-Z23: chords the user changes in
 +// chrome://settings/stedding. The change applies at once in every window, the
 +// old chord stops, the chord survives a restart, the recorder gets the
 +// browser's own keys, and the block edits, replaces and filters its rows.
@@ -6377,6 +7003,7 @@ index 0000000000000..88bc1742a1752
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/browser/ui/views/interaction/browser_elements_views.h"
++#include "chrome/browser/ui/views/spaces/space_switcher_view.h"
 +#include "chrome/browser/ui/views/toolbar/stedding_dark_pages_button.h"
 +#include "chrome/browser/ui/webui/settings/stedding_shortcuts_handler.h"
 +#include "chrome/test/base/in_process_browser_test.h"
@@ -6611,6 +7238,68 @@ index 0000000000000..88bc1742a1752
 +  }
 +}
 +
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
++// Z23 (GitHub issue 13): each layout of the number keys moves both sets of
++// nine at once, digits and number pad, in the window's own lookup and in
++// the chords its menus name; holding the platform's key numbers the rows
++// only while they keep it; Reset all puts the shipped layout back.
++IN_PROC_BROWSER_TEST_F(ShortcutRebindTest, TheNumberKeysMoveBothSets) {
++  const shortcuts::Entry& rows = Row("tab-by-number");
++  const shortcuts::Entry& spaces = Row("space-by-number");
++  const shortcuts::Chord shipped_row = shortcuts::DefaultChordsFor(
++      IDC_SELECT_TAB_0).front();
++  for (shortcuts::NumberKeys layout :
++       {shortcuts::NumberKeys::kSpacesFirst,
++        shortcuts::NumberKeys::kRowsFirstSpacesThird,
++        shortcuts::NumberKeys::kSpacesFirstRowsThird}) {
++    SCOPED_TRACE(shortcuts::NumberKeysName(layout));
++    ASSERT_TRUE(shortcuts::SetNumberKeys(LocalState(), layout));
++    const int row_keys = shortcuts::NumberKeysModifiers(rows, layout);
++    const int space_keys = shortcuts::NumberKeysModifiers(spaces, layout);
++    ASSERT_NE(row_keys, space_keys);
++    EXPECT_EQ(IDC_SELECT_TAB_0,
++              CommandOn(browser(), shortcuts::Chord(ui::VKEY_1, row_keys)));
++    EXPECT_EQ(IDC_SELECT_LAST_TAB,
++              CommandOn(browser(),
++                        shortcuts::Chord(ui::VKEY_NUMPAD9, row_keys)));
++    EXPECT_EQ(IDC_STEDDING_SPACE_1,
++              CommandOn(browser(), shortcuts::Chord(ui::VKEY_1, space_keys)));
++    EXPECT_EQ(IDC_STEDDING_SPACE_9,
++              CommandOn(browser(),
++                        shortcuts::Chord(ui::VKEY_NUMPAD9, space_keys)));
++    EXPECT_EQ(Accel(shortcuts::Chord(ui::VKEY_1, space_keys)).GetShortcutText(),
++              NamedChord(browser(), IDC_STEDDING_SPACE_1));
++#if BUILDFLAG(IS_MAC)
++    // tabs R11: while ⌘ is held, a Space chip names the Spaces' own keys.
++    EXPECT_EQ(Accel(shortcuts::Chord(ui::VKEY_1, space_keys)).GetShortcutText(),
++              spaces::SpaceSwitcherView::ChordForSpace(0));
++#endif
++    const bool rows_keep_the_key =
++        layout == shortcuts::NumberKeys::kRowsFirstSpacesThird;
++    EXPECT_EQ(rows_keep_the_key,
++              shortcuts::IsOnPlatformKey(IDC_SELECT_TAB_0,
++                                         /*ships_on_it=*/true));
++    EXPECT_EQ(!rows_keep_the_key,
++              shortcuts::IsOnPlatformKey(IDC_STEDDING_SPACE_1,
++                                         /*ships_on_it=*/false));
++    if (!rows_keep_the_key) {
++      EXPECT_EQ(IDC_STEDDING_SPACE_1, CommandOn(browser(), shipped_row))
++          << "the rows' shipped key goes to the Spaces";
++    }
++  }
++
++  shortcuts::ResetAllShortcuts(LocalState());
++  EXPECT_EQ(IDC_SELECT_TAB_0, CommandOn(browser(), shipped_row));
++#if BUILDFLAG(IS_MAC)
++  EXPECT_EQ(u"⌃1", spaces::SpaceSwitcherView::ChordForSpace(0));
++#endif
++  EXPECT_TRUE(
++      shortcuts::IsOnPlatformKey(IDC_SELECT_TAB_0, /*ships_on_it=*/true));
++  EXPECT_FALSE(shortcuts::IsOnPlatformKey(IDC_STEDDING_SPACE_1,
++                                          /*ships_on_it=*/false));
++}
++#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
++
 +// Z15: an extension's chord, in a profile open on this machine, is found
 +// with the extension's name, and the block refuses it.
 +IN_PROC_BROWSER_TEST_F(ShortcutRebindTest, AnExtensionsChordIsRefused) {
@@ -6806,6 +7495,40 @@ index 0000000000000..88bc1742a1752
 +    return String(rows('close-window').querySelectorAll(
 +        'cr-button.add-button, cr-toggle').length);)"));
 +}
++
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
++// Z23 (GitHub issue 13): the menu under the Space row lists the four
++// layouts with the shipped one chosen; choosing another moves the keys, and
++// the Space row's chip names its new ones.
++IN_PROC_BROWSER_TEST_F(ShortcutSettingsTest, TheMenuMovesTheNumberKeys) {
++  content::WebContents* const page = OpenSettings();
++  EXPECT_EQ("4 rows-first", Eval(page, R"(
++    const menu = editor.shadowRoot.querySelector('#numberKeys');
++    return menu ? menu.options.length + ' ' + menu.value : 'no menu';)"));
++  ASSERT_EQ("chosen", Eval(page, R"(
++    const menu = editor.shadowRoot.querySelector('#numberKeys');
++    menu.value = 'spaces-first';
++    menu.dispatchEvent(new Event('change'));
++    return 'chosen';)"));
++  EXPECT_TRUE(base::test::RunUntil([]() {
++    return shortcuts::IsOnPlatformKey(IDC_STEDDING_SPACE_1,
++                                      /*ships_on_it=*/false);
++  }));
++  const std::string first = base::UTF16ToUTF8(shortcuts::ChordText(
++      shortcuts::Chord(ui::VKEY_1,
++                       shortcuts::NumberKeysModifiers(
++                           Row("space-by-number"),
++                           shortcuts::NumberKeys::kSpacesFirst))));
++  EXPECT_TRUE(base::test::RunUntil([&]() {
++    return Eval(page, R"(
++      return rows('space-by-number').querySelector('.chord')
++          .textContent.trim();)")
++               .starts_with(first);
++  })) << "the Space row still names its shipped keys";
++  EXPECT_EQ("spaces-first", Eval(page, R"(
++    return editor.shadowRoot.querySelector('#numberKeys').value;)"));
++}
++#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 +
 +// Z12: a recorded chord another row has is named; Replace moves it.
 +IN_PROC_BROWSER_TEST_F(ShortcutSettingsTest, ReplaceMovesTheChord) {

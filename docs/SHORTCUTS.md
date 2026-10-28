@@ -16,6 +16,11 @@ command, with Add to record new keys, a switch to turn a command's keys off and 
 to put them back (from 0.3.0 beta 16, BACKLOG S-91; earlier builds show the list
 read-only). The tables below are the keys the browser ships with.
 
+The two sets of numbered keys, for Spaces and for rows, can trade keys: under the Space
+row, **Number keys for the rows and the Spaces** puts the Spaces on ⌘1–⌘9 (Ctrl+1–Ctrl+9)
+and the rows on ⌃1–⌃9 (Alt+1–Alt+9), or moves either set to ⌃⌘1–⌃⌘9 (Alt+Shift+1–Alt+Shift+9).
+This comes after 0.3.0 beta 21.
+
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
 ## Sidebar and Spaces
@@ -132,7 +137,8 @@ Session** row in the command bar (⇧⌘P). Off by default.
 
 - **macOS:** ⌃1–⌃9 are also Mission Control's "Switch to Desktop N" once a second
   desktop exists, and macOS takes them first. The Spaces menu in the menu bar keeps
-  the commands reachable.
+  the commands reachable, and **Number keys for the rows and the Spaces** can move the
+  Spaces to ⌘1–⌘9 or ⌃⌘1–⌃⌘9.
 - **macOS:** muting a tab is ⌃M, not ⌘M: ⌘M still minimizes the window.
 - **macOS:** a clipboard manager that owns ⇧⌘C system-wide (Maccy does by default)
   takes it before the browser does; the File menu row always works.
