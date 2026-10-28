@@ -10,17 +10,36 @@ that closed this file, are in [docs/history/archive.md](history/archive.md), und
 "Project log before 2026-10-15".
 
 
-## 2026-10-27 -- Pull request 49: ⌘T on a folder's last tab (S-324), not released
+## 2026-10-27 -- 0.3.0 beta 22: GitHub issues 50, 48 and 13, pull request 49
+
+The owner asked for issue 50 with a confirmation, issue 48, and a release. Issue 50 is patch
+0110 (pins H29): on a pinned tab that is not on screen the x asks *Remove this pinned tab?*
+before it unpins and closes it, with Cancel as the default; on the pin on screen it stays a
+minus that sleeps the tab. A review of the patch found that the answer could
+arrive after the row had changed, so Remove checks the row again first, and the question closes
+with its row. Released with issues 48 and 13 and pull request 49 as
+[v0.3.0-beta.22](release-notes/v0.3.0-beta.22.md), on both platforms, with both update feeds.
+
+- Mac: 1251 unit, 56 component and 610 browser tests, all green; signed, notarized, stapled,
+  Apple's distribution check passed; the downloaded image matches its checksum and the feed's
+  signature.
+- Windows: 1246 unit and 569 browser tests; one, `AddressBandTest.TheAddressKeepsItsPlaceWhenEdited`,
+  timed out twice beside three others and passed alone twice (`S-334`). The installer went over
+  beta 21, after an uninstall that kept the profile and on a clean install; each time the
+  installed `chrome.dll` was the tested one, and the installed build opened a window.
+- The site, the Homebrew cask and both feeds offer beta 22.
+
+## 2026-10-27 -- Pull request 49: ⌘T on a folder's last tab (S-324), released in beta 22
 
 An outside contributor's fix for `S-324`, checked for anything hidden or malicious first (none:
 its four files are docs and two patch files, no workflow, script or binary). As sent it did not
 compile (`add_types` is not in `InsertTabAtIndexImpl`) and would not have fixed the bug, since
-⌘T carries `ADD_INHERIT_OPENER` too; two other models' reviews, read only, found the same. The
+⌘T carries `ADD_INHERIT_OPENER` too; two independent read-only reviews found the same. The
 branch now marks Chromium's typed-at-end case where `AddWebContents` makes it, and the insert
 keeps that tab out of the opener's folder (folders F25). Its test step fails without the fix;
 the Mac's full unit and browser runs pass.
 
-## 2026-10-27 -- GitHub issues 48 and 13, not released
+## 2026-10-27 -- GitHub issues 48 and 13, released in beta 22
 
 The owner asked for both to be built next (BACKLOG S-325, S-321); built and checked on the
 Mac, not on Windows yet, and in no release.
