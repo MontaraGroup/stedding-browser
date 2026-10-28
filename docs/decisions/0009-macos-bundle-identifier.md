@@ -1,52 +1,26 @@
 # 0009 — macOS bundle identifier and product strings
 
-Status: Accepted
+Status: Accepted. Three upstream sites still hard-code `org.chromium.Chromium` (BACKLOG S-175).
 Date: 2026-08-30
 
 ## Context
 
-Branding replaces `chrome/app/theme/chromium/BRANDING`, whose `MAC_BUNDLE_ID` drives
-the app's `CFBundleIdentifier` and, through it, the helper bundles, keychain access
-groups, Mach service names, LaunchServices registration and the profile directory
-under `~/Library/Application Support`.
+`MAC_BUNDLE_ID` in `chrome/app/theme/chromium/BRANDING` sets `CFBundleIdentifier`, and through it the helper bundles, keychain access groups, Mach service names, LaunchServices registration and the profile directory under `~/Library/Application Support`. macOS keys the profile, saved passwords and the default-browser registration to that identifier. Changing it after release makes an installed copy look like a different app. The identifier is chosen once, before anything ships.
 
-That makes it hard to reverse in a specific, user-visible way. macOS keys a great deal
-off the bundle identifier: change it after release and the browser no longer finds its
-own profile, its saved passwords in the keychain, or its registration as a default
-browser. Users would appear to lose their data. So the identifier is chosen once,
-before anything ships, rather than discovered later.
-
-Chromium's default is `org.chromium.Chromium`. We own `stedding.dev`
-(ADR 0004), and Apple's convention is reverse-DNS of a domain the developer controls.
+Chromium's default is `org.chromium.Chromium`. The domain we own is stedding.dev ([ADR 0004](0004-domain-stedding-dev.md)). Apple's convention is reverse-DNS of a domain the developer controls.
 
 ## Decision
 
-- **Bundle identifier: `dev.stedding.Stedding`.** Reverse-DNS of the domain we own,
-  with the product name as the final component, which is the Apple convention and what
-  a signing certificate will expect.
-- **`PRODUCT_FULLNAME` and `PRODUCT_SHORTNAME`: `Stedding`.** One word, no suffix. The
-  app is `Stedding.app`.
-- **`COMPANY_FULLNAME` / `COMPANY_SHORTNAME`: `The Stedding Authors`**, mirroring
-  Chromium's own phrasing. There is no company; inventing one would be a lie in a
-  string users can read.
-- The identifier is **not** changed for pre-release channels. Shipping a beta under a
-  different identifier means beta users cannot upgrade into the stable app without
-  losing their profile, which is the exact failure this ADR exists to avoid.
-- Three upstream files hardcode `org.chromium.Chromium` and do not derive from
-  `MAC_BUNDLE_ID`; they are patched as part of the branding series and are enumerated
-  in `../ARCHITECTURE.md` under Branding.
+- Bundle identifier: `dev.stedding.Stedding`, the `MAC_BUNDLE_ID` in [`branding/BRANDING`](../../branding/BRANDING). Pre-release builds use this same identifier. There is no second id for betas.
+- `PRODUCT_FULLNAME` and `PRODUCT_SHORTNAME`: `Stedding`. The Mac app is `Stedding.app`.
+- `COMPANY_FULLNAME` and `COMPANY_SHORTNAME`: `The Stedding Authors`. There is no company.
+- If the domain in ADR 0004 changes, this identifier stays. Moving it would orphan every installed copy.
+- `org.chromium.extension`, `org.chromium.shortcut` and the clipboard pasteboard types stay. They are shared with other Chromium browsers ([ARCHITECTURE.md](../ARCHITECTURE.md#branding)).
 
 ## Consequences
 
-- The profile path becomes `~/Library/Application Support/Stedding`. Importing from other
-  browsers is a separate feature (M6), not a rename. (Amended: from beta 8 the first launch
-  copies a profile left in `~/Library/Application Support/Chromium` by the betas before the
-  rename, when Stedding's own folder has none; `docs/INSTALL.md`.)
-- A Developer ID certificate at M7 must be issued for this identifier. Changing it
-  afterwards would orphan every installed copy, so M7 signing is a downstream
-  consumer of this decision rather than an opportunity to revisit it.
-- Interoperability identifiers stay as they are: `org.chromium.extension`,
-  `org.chromium.shortcut` and the clipboard pasteboard types are shared with other
-  Chromium browsers and are not branding. Renaming them would break interchange.
-- If the domain in ADR 0004 ever changes, this identifier does not follow it. The
-  cost of moving is borne by users, and a domain change is not worth that.
+The profile is `~/Library/Application Support/Stedding`. Saved passwords use the keychain item "Stedding Safe Storage" ([INSTALL.md](../INSTALL.md)). A profile an earlier beta left in `~/Library/Application Support/Chromium`, with the key "Chromium Safe Storage", is copied across on the first launch that finds no Stedding folder, when that profile carries Stedding's own preferences. If another browser is using the old folder, Stedding asks first (patch 0050, [windows.md](../features/windows.md) N8).
+
+The signed Mac app uses this bundle id. The Mac image has been signed and notarized since 0.2.0 beta 10 ([ROADMAP.md](../ROADMAP.md) M7).
+
+Three upstream files still embed `org.chromium.Chromium` and do not follow `MAC_BUNDLE_ID`. [ARCHITECTURE.md](../ARCHITECTURE.md#branding) lists them: `build/apple/tweak_info_plist.py` (the direct-launch URL scheme), `net/device_bound_sessions/unexportable_key_service_factory.cc` (a keychain group) and `content/browser/media/capture/desktop_capture_util_mac.mm` (system audio capture; [web-apps.md](../features/web-apps.md)). No patch derives them from the bundle id. Patch 0068 changes `tweak_info_plist.py` only so `CFBundleVersion` carries Stedding's version. Fixing the three is [BACKLOG.md](../../BACKLOG.md) S-175 (SER-3 in the 2026-09-26 plan).

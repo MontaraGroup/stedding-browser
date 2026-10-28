@@ -1,6 +1,7 @@
-# Architecture Decision Records
+# Architecture decision records
 
-Every hard-to-reverse decision (name, license, base, platforms, money) gets one file here, written before or with the change it records.
-Template: `# NNNN — Title`, then Status / Date / Context / Decision / Consequences, 20–40 lines.
-Numbering: four digits, sequential, never reused; filename `NNNN-short-slug.md`.
-A superseded ADR is not edited — its Status points to the ADR that replaces it.
+A hard-to-reverse decision gets one file here, written before or with the change.
+
+The first line is `# NNNN — Title`, with an em dash. The header carries `Status:` and `Date: YYYY-MM-DD`. The body has the sections Context, Decision and Consequences. The filename is `NNNN-short-slug.md`: four digits, lowercase words separated by hyphens, contiguous from 0001, never reused. `tooling/check-repo` checks this.
+
+To change a decision, amend the file and date the amendment, or add a new ADR and name it in the old one's Status. A superseded decision stays in its file. It is not rewritten as though the later decision had always stood.

@@ -5,34 +5,21 @@ Date: 2026-08-30
 
 ## Context
 
-The project has no revenue model yet, but a browser is expensive to maintain
-indefinitely, and pretending money will never matter is how projects either die or
-surprise their users with a rug-pull. The sustainability question had to be answered
-in writing before the first user shows up, so the promise is on record and dated.
-The license (BSD-3-Clause, ADR 0002) was chosen to keep every option open.
+Keeping a browser current costs money. The license ([ADR 0002](0002-license-bsd-3-clause.md)) leaves room for a paid add-on, so the boundary had to be written down before anyone relied on the project. There is no paid product, and none is on the path to 1.0 ([Out of scope for this ladder](../ROADMAP.md#out-of-scope-for-this-ladder)).
 
 ## Decision
 
-Stedding is **open core**:
+Stedding is **open core**.
 
-- The browser — everything needed to build, install, and use the full product
-  described in `../PRODUCT.md` — is and stays **BSD-3-Clause, forever**. No feature
-  that exists in the core moves behind a paywall or a closed license later.
-- Closed-source or paid features are **permitted**, but only as separate add-ons or
-  services layered on top of the core (for example, a paid sync service or premium
-  extensions), clearly labeled, and never bundled in a way that degrades the core
-  for people who decline them.
-- Paid or closed features must never come at the cost of crippling the open core.
-  If a capability is table stakes for a browser, it belongs in the core.
+- The browser — everything needed to build, install, and use the product in [PRODUCT.md](../PRODUCT.md) — stays **BSD-3-Clause**. A feature that is in the core does not move behind a paywall or a closed license.
+- A closed or paid feature is allowed only as a separate add-on or service, clearly labeled, and not bundled so that refusing it makes the core worse.
+- If a capability is table stakes for a browser, it belongs in the core.
 
-No paid product exists today and none is planned for a specific date; this ADR
-records the boundary, not a roadmap.
+This is the boundary. It is not a product plan.
 
 ## Consequences
 
-- Users and contributors can rely on the core staying fully open; this promise is
-  citable and dated, and reversing it would be a public breach of trust.
-- A future revenue path exists without relicensing or a contributor CLA fight.
-- Every future feature must be classified: core (BSD, in-repo) or add-on (may be
-  closed/paid, separate). Ambiguity defaults to core, per the rule above.
-- Forks can ship the entire core commercially under BSD terms; we accept that.
+- The core staying open is a dated promise.
+- A later paid add-on does not need a new license for the core.
+- A feature is either core (BSD, in this repository) or an add-on (separate; it may be closed or paid). If it is unclear, it is core.
+- A fork may ship the core commercially. That is the license.

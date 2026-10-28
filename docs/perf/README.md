@@ -1,62 +1,39 @@
 # Performance measurements
 
-**There is no current measurement.** The budgets in `docs/ROADMAP.md#the-quality-bar` are overheads
-against vanilla Chromium at the same pin, configuration and hardware. The only
-comparison so far is from 2026-09-02, on the Mac, of the series of 8 patches as it was
-on 2026-08-31, on 153.0.8010.12. The pin has moved and the series has grown since
-(`tooling/dev status`), and nothing has been re-measured; the published images
-are also built in the `release` configuration, not the `official` one measured here.
-The numbers below are a record of that build, not of any release.
+**There is no current measurement.** The budgets in `docs/ROADMAP.md#the-quality-bar` are overhead against vanilla Chromium at the same pin, configuration and hardware. The only comparison on record is from 2026-09-02, below. The pin and the series have moved since (`tooling/dev status`), and nothing has been measured again. The release steps build `release` (`docs/HANDOFF.md`, "Release channel"). The record below is the official arguments, and it is a record of that build, not of a release.
 
 ## How to measure
 
-`tooling/measure/harness.py` on an otherwise idle Mac, never while a build runs. It
-takes a macOS app bundle, so Windows has no measurement yet (`docs/ROADMAP.md` M8).
+Run `tooling/measure/harness.py` on an otherwise idle Mac, and not while a build is running. It reads a macOS app bundle and stops on any other system. Windows budgets are still open (`docs/ROADMAP.md`, M8).
 
 ```bash
 tooling/measure/harness.py all --sites local --app <vanilla app> --out docs/perf/<date>-vanilla-<config>-local.json
 tooling/measure/harness.py all --sites local --app <Stedding app> --out docs/perf/<date>-<config>-local.json
 ```
 
-Measure the two builds back to back, at the same pin and in the same configuration.
-`tooling/args/vanilla.gn` is identical to `official.gn`; the vanilla app is built from
-the checkout detached at the pin, with the branding reverted (`tooling/apply-branding
---revert`), and `build-chromium` checks the tree. `--sites local` (ten
-deterministic pages under `tooling/measure/local-sites/`, no network) is the list for
-the overhead budgets; the live list (`--sites live`, `tooling/measure/sites.txt`) serves
-only the absolute budgets. Each new file names the build, the configuration and the pin
-it measured.
+Measure the two builds one after the other, at the same pin and in the same configuration. `tooling/args/vanilla.gn` has the same arguments as `tooling/args/official.gn`. Build the vanilla app from the checkout detached at the pin, after `tooling/apply-branding --revert`. `tooling/build-chromium` builds only a checkout that is at the pin, or a descendant of it.
 
-What it measures, before quoting anything it prints:
+`--sites local` loads the ten pages in `tooling/measure/local-sites/` (`sites-local.txt`) as `file:` URLs, with no network. That list is the one for the overhead budgets. `--sites live` loads the ten sites in `tooling/measure/sites.txt`, and it is only for the absolute budgets. Name each new file with the build, the configuration and the pin.
 
-- **Startup** is launch to the first painted frame of a trivial local page, the working
-  reading of "first accepted input". One warm-up launch is discarded: a binary's first run
-  also pays to fault it into the page cache, once per machine, not once per start.
-- **Memory** is physical footprint (what Activity Monitor shows, read with
-  `proc_pid_rusage`), summed over the launched process and its descendants. Summed RSS
-  counts every shared page once per process: it read 9599 MB for a session that cost
-  3104 MB.
-- **Processes** run to three figures with site isolation. The harness prints the count,
-  since a count that moves between two builds is itself a finding.
-- Measure `official`, not `release`, which skips PGO and LTO. A `--sites live` run takes
-  tens of minutes and needs the network; without it the memory and warm legs fail and the
-  harness says so. `--sites local` runs offline.
+What the harness records:
+
+- **Startup** is the time from launch to the first painted frame of a trivial local page. That is the working reading of "first accepted input". One warm-up launch is discarded. A binary's first run also pays to fault it into the page cache, once per machine, not once per start.
+- **Memory** is physical footprint, the figure Activity Monitor shows, read with `proc_pid_rusage` and summed over the launched process and its descendants. Summed RSS counts every shared page once per process. The harness records 9599 MB of RSS for a session whose footprint was 3104 MB.
+- **Processes.** The harness prints how many processes it summed. A count that differs between the two builds is itself a finding.
+- Take the numbers from a build with the official arguments. `release` leaves out PGO and LTO (`tooling/args/release.gn`). `--sites local` needs no network. `--sites live` does. Startup is ten runs of each mode. Each memory run waits 30 seconds for the pages to load and 60 seconds idle, five runs.
 
 ## The record of 2026-09-02
 
-Apple M1 Max, 64 GB; both apps built in `official` at 153.0.8010.12, Stedding with the
-series of 2026-08-31 (before Peek and the settings section). Both build directories
-were deleted afterwards for disk.
+Apple M1 Max, 64 GB, macOS 26.5.2. Both apps report `153.0.8010.12`. Stedding is the series of 8 patches as it was on 2026-08-31, before Peek and the settings section, built as `official`. Vanilla is the pin, built as `vanilla` with the same arguments.
 
 | File | What it is |
 |---|---|
-| `2026-09-02-official.json` | Stedding, live sites, the morning run |
-| `2026-09-02-official-rerun.json` | Stedding, live sites, back to back with vanilla |
-| `2026-09-02-vanilla-official.json` | Vanilla, live sites, the same afternoon |
-| `2026-09-02-official-local.json`, `2026-09-02-vanilla-official-local.json` | The same two apps with `--sites local` |
+| `2026-09-02-official.json` | Stedding, live sites, 04:39 UTC |
+| `2026-09-02-vanilla-official.json` | Vanilla, live sites, 14:16 UTC |
+| `2026-09-02-official-rerun.json` | Stedding, live sites, 14:27 UTC, after that vanilla run |
+| `2026-09-02-vanilla-official-local.json`, `2026-09-02-official-local.json` | The same two apps, `--sites local`, 17:05 UTC and 17:14 UTC |
 
-The deterministic pair (`--sites local`), medians and spreads, overhead =
-(Stedding − vanilla) / vanilla:
+The local pair. Medians, with the minimum and maximum. Overhead is (Stedding − vanilla) / vanilla, from the medians:
 
 | Measure | Vanilla | Stedding | Overhead | Budget |
 |---|---|---|---|---|
@@ -64,17 +41,16 @@ The deterministic pair (`--sites local`), medians and spreads, overhead =
 | Warm startup, ten local pages restored | 0.79 s (0.77–0.93) | 0.78 s (0.70–0.96) | −2.0% | within 10% |
 | Physical footprint, ten local pages after 60 s idle | 823 MB (821–825) | 823 MB (819–824) | +0.0% | within 10% |
 
-The live pair, back to back:
+Both used 17 processes.
+
+The live pair (14:16 UTC and 14:27 UTC):
 
 | Measure | Vanilla | Stedding | Overhead | Budget |
 |---|---|---|---|---|
-| Cold startup to first paint | 0.67 s | 0.76 s | +12.2% | over 10% |
-| Warm startup, ten tabs restored | 0.78 s | 0.77 s | −0.6% | within 10% |
-| Physical footprint, ten tabs after 60 s idle | 1.26 GB | 1.71 GB | +35.9% | over 10% (20 and 35 processes) |
+| Cold startup to first paint | 0.67 s (0.62–0.75) | 0.76 s (0.71–0.82) | +12.2% | over 10% |
+| Warm startup, ten tabs restored | 0.78 s (0.75–0.96) | 0.77 s (0.74–0.97) | −0.6% | within 10% |
+| Physical footprint, ten tabs after 60 s idle | 1.26 GB (1.13–2.13) | 1.71 GB (1.27–1.96) | +35.9% | over 10% (20 and 35 processes) |
 
-The live pair's two misses were put down to third-party frames and machine state, since
-the deterministic pair shows none, and `S-37` was closed on that reading. The live
-memory swings widely with the sites: the morning run of the same Stedding build summed
-5.7 GB over about 107 processes. The difference in process count between the pair was
-not explained. Of the six budgets, three were measured; sidebar tab switching and the
-command bar have no measurement in the harness.
+The local rows are within 10%, and `S-37` was closed on them. The live cold start and footprint are over 10%. Those two were put down to third-party frames and machine state, because the local pair shows none. The same Stedding build at 04:39 UTC, on the live list, measured 5697 MB across 107 processes. The live pair's process counts, 20 and 35, were not explained.
+
+Of the six budgets, three were measured. Sidebar tab switching and the command bar have no measurement in the harness.

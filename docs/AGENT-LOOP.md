@@ -1,148 +1,139 @@
 # The agent loop — how a change gets made here
 
-This is the working procedure for any agent (or human) changing Stedding. It has two
-halves. The first, below, is how to spend a session: what to ask, what to run first, how
-to wait. The second, from "The loop", is how one change is made.
+This is the working procedure for a change to Stedding, for a person or an agent.
+`tooling/dev` runs the routine steps. A command that exists only in prose is a bug:
+the command lives in the script.
 
-The first half exists because of 2026-09-29 to 30, the longest unattended run this
-project has had: a checkout moved to a new Chromium, built from nothing, three test
-configurations built and run, and the product used for real. The slow parts were mostly
-not the builds. Hours went to a build that could never finish three of its steps, to
-polling, to fixing one failure per rebuild, to search commands that timed out, and to
-questions asked after the work that needed their answers. The fixes are rules below, each
-with the number that earned it. The second half exists because the loop before it — build,
-screenshot, look — shipped a Spaces feature whose core semantics were missing while every
-capture looked right (`docs/features/spaces.md`, B1–B5, 2026-09-01). Screenshots prove
-pixels. Tests prove behaviours. Neither proves the product works for a person, and on
-2026-09-30 the only thing that found five visible faults in a build that passed everything
-was using it.
+The sections through "Cheap checks" are how to spend a session and how one change is
+made. "Evidence" is what Arc switchers asked for on 2026-08-31, and where the product
+stands on it.
 
-One entry point runs the routine steps: `tooling/dev`. Prose that tells you to type a
-command is a bug; the command lives in the script.
+Screenshots prove pixels. Tests prove behaviours. Using the product is what shows that
+it works for a person (trap 2, trap 58).
 
 ## Ask once, up front
 
-Before the first long job, one message to the operator with every decision you would
-otherwise meet later:
+Before the first long job, one message to the operator, with every decision the job
+will need:
 
-- May I drive the screen and keyboard (real input, guarded, `tooling\win\drive.ps1`)? On
-  2026-09-30 the answer was yes, given hours in; until then the product was tested only
-  through posted messages and captures.
-- May I push, and release when everything is done? Neither happens without a yes in chat.
-- Which output directories may I delete? (Yours, from this session: yes. Anything else: ask.)
-- Is the machine mine overnight, and does a reboot need a reason?
-- Is there a setting I need you to flip (Windows clipboard history, for the Win+V check)?
+- May I drive the screen and keyboard? On Windows, `tooling\win\drive.ps1`. On the Mac,
+  `tooling/drive`. Real input only with a yes, and only into the window under test.
+- May I push, and release when the work is done? Neither happens without a yes in chat.
+- Which output directories may I delete? This session's own build output: yes. Anything
+  else: ask.
+- Is the machine mine overnight, and does a reboot need a reason? A Windows build can
+  grow the page file, and that space stays until a restart (trap 54).
+- Is there a setting only you can flip? Windows clipboard history, for the Win+V check.
   System settings are not yours to change.
-- Will you close your own Stedding when I tell you the installer test is next? A release
-  on the same Chromium number as the one installed installs as a repair and cannot replace
-  a running browser (trap 62); your installed build is your daily browser and is never
-  mine to close. Waiting for it cost 2.5 hours on 2026-09-30, with a watcher on "no
-  Stedding process" so that nothing else waited.
-- Will you quit Arc and any clipboard manager before the keyboard checks? While they run,
-  Arc takes ⌥⌘N and a clipboard manager such as Maccy takes ⇧⌘C from every app, so the
-  chord never reaches the browser and its check fails (traps 64, 94).
-
-One message at the start costs a minute. On 2026-09-30 six of these answers, found out one
-by one, cost the session most of a night.
+- Will you close your own Stedding for the installer test?
+  `tooling\win\test-installer.ps1` refuses to upgrade, install or uninstall while one is
+  running. A later release installs beside a running copy. An installer of the version
+  already installed still repairs (trap 62). The installed build is the operator's
+  daily browser, and it is never yours to close.
+- Will you quit Arc and any clipboard manager before the keyboard checks? While Arc
+  runs it takes ⌥⌘N (trap 64). A clipboard manager such as Maccy takes ⇧⌘C from every
+  app (trap 94).
 
 ## Order of evidence
 
-Cheapest and most revealing first. Measured on this project, Windows, 2026-09-29 to 30:
+Cheapest and most revealing first. Use the product before any suite.
 
-| Step | Cost | What it found |
+| Step | What to run | What it is for |
 |---|---|---|
-| Use the product: launch, click, drag, type, look, light and dark, a fresh profile | 30 min | five faults no test had asked about: Mac wording on Windows (welcome flow, a tooltip, three command-bar rows), inactive rows' text unreadable in light mode, a command bar clipped at the window's edge, an infobar left in full screen, doubled hover names |
-| Suites on the shipping configuration (`tooling/dev test all`) | unit 12 s, browser 2.5 min | regressions; none of the above |
-| A build with DCHECKs and the dangling-pointer detector (`win-checks`) | 3 h 20 min from nothing, 3 min to rebuild after an edit; both suites 5 min | twelve defects, eight in the product: a contrast recipe reading a transparent fill as black, permission defaults that contradicted each other, pointers left dangling when the window switched to horizontal tabs, two views with no accessible name, text drawn on a transparent ground |
-| ASan (`win-asan`) | 5 h from nothing, 15 min to rebuild; browser suite 12 min | one use-after-free, in a test, and a hazard in `RemoveSpace` |
-| A debug build | hours | nothing the DCHECK build had not; built only if a check names it |
+| Use the product | Launch a fresh profile. Click, drag, type. Light and dark | Faults no test asked about: wrong platform wording, contrast, clipping, a control left up |
+| Shipping suites | `tooling/dev test all` | Regressions in the tests that exist |
+| Checks build | `win-checks` or `mac-checks`, via `STEDDING_TEST_OUT` | DCHECKs and dangling pointers. The first sanitizer to run |
+| ASan | `win-asan`, via `STEDDING_TEST_OUT` | Memory errors, before a release when the change touches lifetimes |
+| Debug | `tooling/args/debug.gn` or `win-debug.gn` | Only when a check names that build |
 
-The order follows yield per hour. The DCHECK build is the cheapest sanitizer and the first
-to run; ASan went first this time because the plan listed it first, and cost five hours
-before it found one thing. Use the product before any of them.
+A change to who owns or frees a tab, its contents or a view — an unload that puts new
+contents in a tab, a strip torn down while it animates, a view rebuilt under an
+observer — runs its suites on `win-checks` or `mac-checks`, and under ASan (`win-asan`)
+before a release (`PLAN.md`, "When an item is done", rule 4).
 
-A change to lifetimes -- who owns or frees a tab, its contents or a view: an unload that
-puts new contents in a tab, a strip torn down while it animates, a view rebuilt under an
-observer -- runs its suites with DCHECKs and the dangling-pointer detector, and under ASan
-before it ships, whatever its yield (`PLAN.md`, "When an item is done", rule 4).
+## Long jobs
 
-## Long jobs: supervise, do not poll
-
-- **One detached job, one status file, one finish line.** `tooling\win\build-until-done.ps1`
-  runs `build.ps1` chunk after chunk with no gap between them, writes
-  `out\<config>\supervisor.log`, and ends it with `SUPERVISOR_EXIT=<code>`. Start it
-  detached (the tool that started it must not be able to take it down, trap 54) and wait
-  for that line in a background call, not with a clock. Polling by hand every fifteen
-  minutes left the machine idle between a chunk's end and the next poll, forty times.
-- **The budget is a dead-man's switch, not a schedule.** It kills the steps in flight, so each
-  stop costs their minutes; a long chunk wastes less than a short one. Chunks of 45 minutes.
-- **Watch for a step that never finishes.** The same steps "failed" at the end of three
-  chunks in a row were killed before they could finish, every time. The supervisor stops with
-  exit 4 and names them. On 2026-09-30 three assembler steps of an ASan build did this for five
-  chunks, about two and a half hours, because the failures at each stop were assumed to be
-  in-flight kills (they were, of the same steps). Time one by hand (trap 57).
+- **One detached job, one status file, one finish line.**
+  `tooling\win\build-until-done.ps1` runs `tooling\win\build.ps1` chunk after chunk,
+  writes `out\<config>\supervisor.log`, and ends it with `SUPERVISOR_EXIT=<code>`.
+  Start it detached, so the tool that started it cannot take it down (trap 54), and
+  wait for that line. The script's header lists the exit codes. Exit 4 means the same
+  steps were killed at the end of three chunks in a row: time one of them by hand
+  before building on (trap 57).
+- **The budget is a dead-man's switch.** It kills the steps in flight, so each stop
+  costs their minutes. The supervisor's default is 12 jobs and chunks of 45 minutes.
+  Cap the jobs: a full Windows build at siso's default parallelism runs out of memory
+  (trap 54). `build.ps1` prints a progress line every minute.
 - **A status line before any wait over ten minutes,** with a number in it (steps done,
-  tests run, minutes to go). The operator asked twice in one evening whether it was stuck.
-- **Waits that are not builds** (a test suite, a sync) follow the same shape: start detached
-  with `run_in_background` or `Start-Process`, get a notification or wait on the finish line.
-  `sleep` in the foreground is refused by the tool and a tool call ends at ten minutes.
+  tests run, minutes to go).
+- **A wait that is not a build** (a suite, a sync) has the same shape: start it
+  detached, and wait on its finish line.
+
+On Windows, `tooling/dev` runs each test binary under `timeout` for
+`STEDDING_TEST_BUDGET_S` seconds (900 by default). That parent is also what lets the
+tests that need a real active window pass (trap 56). A browser suite on `win-asan`
+needs a longer budget (`docs/HANDOFF.md`, "The Windows build").
 
 ## One pass should find everything
 
-- A check that aborts on its first failure (a DCHECK, a dangling pointer, ASan) hides the
-  rest. Fixing one site per rebuild cost a dozen rebuild-and-run cycles on 2026-09-30, most
-  of an hour; the failures were all there on the first run.
-- Get every distinct failure per run: `--test-launcher-print-test-stdio=always` (output of
-  passing tests too), or make the check log instead of abort in a local edit you then revert
-  (keep the original beside it, and check `git status` is clean for the file before folding).
-  Crash identity goes through `tooling/digest-sanitizer <log>`: each distinct DCHECK once with
-  the first frames that are this project's, each dangling pointer as a pair (who freed it, who
-  still held it), each ASan report's head. A fixture member is told from a product bug by the
-  pair: freed in the window's teardown, released in the fixture's destructor, is the fixture.
-- Fix in batches, then rerun once. Fold each fix into its owning patch (`tooling/fold-fix`;
-  the last patch takes what has no other owner, and a conflict in the owner means use the last).
+A check that stops at its first failure hides the rest. Take every distinct failure
+from the run, fix them together, and rerun once.
+
+`tooling/dev` prints `tooling/digest-sanitizer` when the log contains a DCHECK, a
+dangling pointer or AddressSanitizer. The digest gives each distinct DCHECK once, with
+the first frames that are this project's; each dangling pointer as the pair of who
+freed the memory and who still held it; each ASan report's head. Set
+`STEDDING_TEST_LOG` to keep the raw log, one file per binary. To see past the first
+abort, make the check log instead of abort in a local edit, keep the original beside
+it, and revert that edit before folding. `git status` on the file is clean of that
+edit first.
+
+Fold each fix into the patch that owns the code (`tooling/fold-fix`). The script stops
+on a conflict and moves nothing. A correction a later patch's context blocks goes into
+the last patch that touches the file (trap 50).
 
 ## Real use, safely
 
-The product is used for real with `tooling\win\drive.ps1` (the pointer and keyboard) when the
-operator has said yes, and with `capture.ps1`, `cdp.ps1`, `hit-test.ps1` (no input) when not;
-on the Mac with `tooling/drive`, and `tooling/capture-state` when input is not allowed. Before
-a release, and for the core-loop gate, the script in `docs/features/acceptance.md` is run
-with its kit (`tooling/acceptance/mac/run-mac.sh`, `tooling/acceptance/win/s173-live.ps1`)
-and each run is recorded in that file. What to do and what to look for:
+Use the product with `tooling\win\drive.ps1` when the operator has said yes, and with
+`tooling\win\capture.ps1`, `cdp.ps1` and `hit-test.ps1` when input is not allowed. On
+the Mac, `tooling/drive` when input is allowed, and `tooling/capture-state` when it is
+not. `tooling/drive` moves the real pointer and runs only with nobody at the machine
+(trap 27). It does not watch the operator's last input the way `drive.ps1` does.
 
-- A fresh profile, no seed, no start URL: the first launch is what a user has. Click through
-  the welcome flow. Then the same in light and dark (`browser.theme.color_scheme2` in the
-  profile's Preferences, 1 is light).
-- Every gesture the specs name, with the real pointer: click each kind of row open and in the
-  rail, drag a row onto a folder, onto a Space chip and onto the page, switch Spaces by chip,
-  by key and by the wheel (`tooling/drive`'s `wheel` step on the Mac), copy the link, take the
-  screenshot, go full screen on a video, resize. Prove state with DevTools (`Drive-Visible`)
-  or UI Automation, not with a picture.
+Before a release, and for the core-loop gate (`S-173`), run the scripts in
+`docs/features/acceptance.md` (`tooling/acceptance/mac/run-mac.sh`,
+`tooling/acceptance/win/s173-live.ps1`) and record each run in that file.
+
+- A fresh profile, no seed, no start URL. Click through the welcome flow. Then the
+  same in light and dark. `browser.theme.color_scheme2` in the profile's Preferences
+  is 1 for light and 2 for dark. `tooling/capture-state --seed light` and `--seed dark`
+  write those values.
+- Every gesture the specs name, with the real pointer: open each kind of row, in the
+  sidebar and in the rail; drag a row onto a folder, onto a Space chip and onto the
+  page; switch Spaces by chip, by key and by the wheel (`tooling/drive`'s `wheel` step
+  on the Mac); copy the link; take the screenshot; go full screen on a video; resize.
+- Read the state from the browser, not from a picture. On Windows, `Drive-Visible`
+  (the page DevTools says is on screen) and `Drive-Rows` (UI Automation). On the Mac,
+  `shot` and `capture-state`.
 - Read the strings. Wording written on one platform reads wrong on the other.
-- Ask for the owner's own pass on a release build before a release. On 2026-10-21 it found
-  four faults no test had asked about: a pin closed while it played kept its speaker mark
-  (`docs/features/pins.md` H24), a double click renamed the row the list had moved under
-  the pointer (`tabs.md` R14), the chords on the Space chips read 2.5:1 on the light ground
-  (R11), and Close on a pin showed no chord in the Mac's menu (`menus.md` M1).
-- Two browsers from one executable with the same `--remote-debugging-port` leave the second
-  with a window and no UI (black). Stop the first, or give each a port.
+- Two browsers from one executable with the same `--remote-debugging-port` leave the
+  second with a window and no UI. Stop the first, or give each a port (trap 61).
 
-Guards in `drive.ps1` are not optional: input goes only while the window under test is in
-front, and only while the operator's own last input is old. A screenshot is of the window,
-only while it is in front (the operator's other windows were in the first picture, once).
+`drive.ps1` sends input only while the window it launched is in front, and only while
+the operator's own last input is at least six seconds old. Its screenshot is that
+window's rectangle, taken only while the window is in front. On the Mac, `shot` and
+`capture-state` photograph the launched pid's windows by id. `capture-state` fails if
+that app becomes the frontmost app.
 
 ## Search and read cheaply
 
-- `git grep -n <pattern> -- <dir>` in the Chromium checkout: 7 s for `chrome/`, 32 s for the
-  whole tree. `grep -r` and `find` over the tree timed out at two minutes four times on
-  2026-09-30, each a wasted call and a retry.
-- Cap the output of any command you have not run before (`| head -40`, `Select-Object -First`).
-  A UI Automation listing once printed the same six rows a hundred and thirty times.
-- A script longer than three lines is a file (the Write tool), not a heredoc: backslashes in
-  Windows paths and regexes broke inline Python and sed seven times.
-- Screenshots cost about the same as two thousand words each. Crop to the window, look only
-  after a state change, and read text from UI Automation or DevTools where it can be had.
+- In the Chromium checkout, `git grep -n <pattern> -- <dir>`. `grep -r` and `find`
+  over that tree time out.
+- Cap the output of a command you have not run before.
+- A script longer than three lines is a file, not a heredoc. Backslashes in Windows
+  paths and in regexes break inline Python and sed.
+- Crop a screenshot to the window. Read text from UI Automation or DevTools where
+  either can give it.
 
 ## The loop
 
@@ -150,94 +141,102 @@ only while it is in front (the operator's other windows were in the first pictur
 research  →  spec  →  failing test  →  implement  →  build  →  test  →  use it  →  patch  →  commit
 ```
 
-1. **Research the seam, read-only.** Find the upstream machinery to reuse before writing
-   anything, and name the files the change edits and their churn. Measure churn before
-   touching a file:
+1. **Research the seam, read-only.** Find the upstream machinery to reuse, and name
+   the files the change edits. Measure churn before touching a file:
    `git log --oneline --since=1.year -- <file> | wc -l`. Anything over ~150 is a file
-   we avoid; put the code in a new file under a Stedding directory and call it from one
-   hunk.
+   to avoid: put the code in a new file under a Stedding directory and call it from
+   one hunk.
 2. **Spec the behaviour.** Add or update `docs/features/<feature>.md`: one numbered
-   behaviour per row (B1, B2, …), each phrased so a test can decide it without a human.
-   The spec is the definition of done. If you cannot write the behaviour as a sentence a
-   test can check, you do not yet know what you are building.
-3. **Write the failing test.** Model logic → `space_model_unittest.cc` style (no window).
-   Anything about the active tab, visibility, or what the user sees →
-   `BrowserWithTestWindowTest` (`space_model_window_unittest.cc` is the template), or a
-   browser test for a click or a drag (`chrome/test/stedding/`). Put the behaviour id in a
-   comment above the test. Run it; watch it fail for the right reason.
-4. **Implement.** Smallest change that turns the test green. New files in our
-   directories; upstream hunks only where the seam is (`docs/ARCHITECTURE.md`, "Where
-   patches are allowed to live").
-5. **Build and test.** On the Mac `tooling/dev test <feature>` builds `unit_tests` and
-   runs the feature's filter; on Windows build with `tooling\win\build-until-done.ps1
-   -Targets unit_tests,stedding_browser_tests` and pass `--no-build`. `tooling/dev test
-   all` before a commit. On a sanitizer output
-   directory (`STEDDING_TEST_OUT=win-checks`, `mac-checks` or `win-asan`) the same command
-   runs with the detector on and prints the digest.
-6. **Use it, and capture if it is visual.** Launch the build and do the thing (above). For
-   pixels on the Mac, `tooling/dev capture --assert tooling/probes/window.json` checks every
-   probe in the spec, and `tooling/capture-state` photographs any state a feature param can
-   recreate without input; on Windows `tooling\win\capture.ps1` and `drive.ps1`'s
-   window-only shot (`docs/HANDOFF.md`, "The Windows build"). Measure, do not eyeball. A spec
-   row that says "live" names its steps.
-7. **Patch.** Commit in the checkout with the `Why:` / `Removable when:` footers. A fix to an
-   existing feature is folded into that feature's commit (`tooling/fold-fix <commit> <files>`
-   with the fix in the tree: no other file's modification time changes, so nothing else
-   rebuilds; `git commit --fixup` + `rebase --autosquash` touches every file the later
-   commits touch). The series is organised by feature, not by date (`patches/README.md`).
-   Then `tooling/dev patch` regenerates `patches/` and runs `check-repo`.
-8. **Commit this repo.** Docs, spec status, backlog item closed, in the same commit as the
-   regenerated patches.
+   behaviour per row (the spec's ids, such as B1), each a sentence a test can decide.
+   The spec is the definition of done.
+3. **Write the failing test.** Model logic follows `space_model_unittest.cc` (no
+   window). The active tab, visibility, or what the user sees follows
+   `BrowserWithTestWindowTest` (`space_model_window_unittest.cc` is the template).
+   A click or a drag is a browser test in `chrome/test/stedding/`. Put the behaviour
+   id in a comment above the test. Run it, and watch it fail for the right reason.
+4. **Implement.** The smallest change that turns the test green. New files in
+   Stedding's directories. An upstream hunk only where the seam is
+   (`docs/ARCHITECTURE.md`, "Where patches are allowed to live").
+5. **Build and test.** `tooling/dev test <feature>` runs that feature's `unit_tests`
+   filter, and its `components_unittests` filter when `tooling/dev` has one. On the
+   Mac the command builds those binaries. On Windows, `tooling/dev build` refuses:
+   build with `tooling\win\build-until-done.ps1 -Targets unit_tests,stedding_browser_tests`
+   (or one chunk of `build.ps1`) and pass `--no-build`. Browser tests are
+   `tooling/dev test browser` or `tooling/dev test all`. Run `tooling/dev test all`
+   before a commit. On a sanitizer directory
+   (`STEDDING_TEST_OUT=win-checks`, `mac-checks` or `win-asan`) the same command
+   points at that output and prints the digest when the run reports a finding.
+6. **Use it.** Launch the build and do the thing (above). For pixels on the Mac,
+   `tooling/dev capture --assert tooling/probes/window.json` checks the probes in
+   the spec, and `tooling/capture-state` photographs a state a feature param can
+   recreate without input. On Windows, `tooling\win\capture.ps1`, and `drive.ps1`'s
+   window-only shot (`docs/HANDOFF.md`, "The Windows build"). Measure. A spec row
+   that says "live" names its steps.
+7. **Patch.** Commit in the checkout with the `Why:` and `Removable when:` footers.
+   A fix to an existing feature is folded into that feature's commit
+   (`tooling/fold-fix <commit> <files>`, with the fix in the tree). The script
+   rewrites no other file, so nothing else rebuilds. `git commit --fixup` and
+   `rebase --autosquash` touch every file the later commits touch (trap 44). The
+   series is organised by feature (`patches/README.md`). Then `tooling/dev patch`
+   regenerates `patches/` and runs `check-repo`.
+8. **Commit this repo.** The docs, the spec, and the backlog row, in the same commit
+   as the regenerated patches.
 
 ## How the tests are shaped
 
-The suites were cut by merging and deleting what repeated itself; keep them that way.
+The suites were cut by merging and deleting what repeated itself. Keep them that way.
 
-- **A unit test names one behaviour and fails for one reason.** Near-copies with different
-  inputs are one table-driven test (a struct array, a loop, `SCOPED_TRACE` per row). A unit
-  test is cheap to run (the whole sweep takes seconds), so do not merge different behaviours
-  into one to save time.
-- **A browser test is a scenario.** Each one starts a browser (half a second to a few), so
-  steps that share a setup are one test, each step under `SCOPED_TRACE("<what it proves>")`
-  with its own expectations, the state put back between steps. Keep a body near 150 lines;
-  past that, split along its steps. A `PRE_` chain is one test however many restarts it has.
-- **Before adding a test, look for the one it extends.** A new step in an existing scenario,
-  or a new row in an existing table, is the default; a new test needs a setup no other has.
-- **Which leg runs it.** `tooling/dev` runs the browser suite four at a time on Windows and,
-  after it, the fixtures in `SERIAL_BROWSER_TESTS` one at a time: those that need the real
-  pointer over their window, the active window, the clipboard or picture-in-picture (trap 88).
-  It defaults to one job, and four only on Windows, until `S-178`. A new fixture
-  of that kind goes on that list, or it fails the parallel leg now and then. Chromium's own
-  suites over the code the series changes are the `upstream` line; the wider ring runs with
-  `tooling/dev test rebase` after a pin bump.
+- **A unit test names one behaviour and fails for one reason.** Near-copies with
+  different inputs are one table-driven test (a struct array, a loop, `SCOPED_TRACE`
+  per row). A unit test is cheap to run, so different behaviours stay in different
+  tests.
+- **A browser test is a scenario.** Each one starts a browser, so steps that share a
+  setup are one test. Each step has its own `SCOPED_TRACE` and its own expectations,
+  and the state is put back between steps. Keep a body near 150 lines; past that,
+  split along the steps. A `PRE_` chain is one test however many restarts it has.
+- **Before adding a test, look for the one it extends.** A new step in an existing
+  scenario, or a new row in an existing table, is the default. A new test needs a
+  setup no other test has.
+- **Which leg runs it.** `tooling/dev` runs the browser suite four at a time on
+  Windows and on the Mac (`STEDDING_BROWSER_JOBS`, default 4; trap 88), then the
+  fixtures in `SERIAL_BROWSER_TESTS` one at a time: the real pointer, the active
+  window, the clipboard, picture-in-picture, a page that must paint, a command bar
+  held open, frames counted on a window that is on screen, and full screen. A new
+  fixture of that kind goes on that list. `S-178` is the Mac's remaining
+  consolidation of that shape (`BACKLOG.md`). The `upstream` line is Chromium's own
+  suites over the code the series changes, and `tooling/dev test all` includes it.
+  `tooling/dev test rebase` is the wider ring, after a pin bump (trap 31).
 
 ## Rules that are not optional
 
-- **No behaviour ships without a test id in its feature spec.** A row whose Test column
-  says "none yet" is a `gap` and gets a backlog item.
-- **Nothing runs unattended without a number moving.** Every build and test command prints
-  a metric at least every minute (objects built, tests run), and has a budget that stops it
-  when nothing has moved; the budget is a safety, and the supervisor restarts what it
-  stops (above). A job with no metric moving is stuck: kill it and say so.
-- **Never edit the checkout while a build runs.** siso samples sources at build start; a
-  mid-build edit silently misses the binary. `tooling/dev build` refuses to start while
-  another build is running.
-- **Every pin move reads Chrome's field trials.** After `tooling/update-pin --apply`, run
-  `tooling/field-trials --save <dir>`: it lists what Chrome Stable turns on or off by field
-  trial at the new pin where Stedding's code defaults differ. Stedding receives no trials, so
-  a launch Chrome makes that way reaches it only when upstream flips the default (`S-236` was
-  missed that way). Each row at 100% that needs no Google service is flipped in the series or
-  gets a backlog row saying why not (`S-240`).
-- **Numbers in docs come from `tooling/dev status`.** Do not hand-type test counts, patch
-  counts, or the pin. `tooling/check-repo truth` fails on known stale phrases.
-- **One backlog.** `BACKLOG.md`, by S- id, is the order of work. Ids of the 2026-09-26 audit
-  (TAB-1, PLT-3) are cited as they are and resolve in `docs/history/plan-2026-09-26.md`. `AGENTS.md`,
-  `HANDOFF.md` and feature specs cite ids (`S-12`); they do not carry their own lists.
-- **Anything that owns a tab needs a test, not a screenshot** (trap 2 in
-  `docs/HANDOFF.md`; the folder close-crash was invisible to every capture), and **anything a
-  person clicks needs to have been clicked** (trap 58).
+- **No behaviour ships without a test id in its feature spec.** A row whose Test
+  column says "none yet" is a `gap` and gets a backlog item.
+- **Nothing runs unattended without a number moving.** A build or a test prints a
+  metric at least every minute, and a budget stops it when nothing has moved. The
+  supervisor restarts what the budget stops. A job whose metric is still is stuck:
+  kill it and say so.
+- **Never edit the checkout while a build runs.** siso samples sources at the start;
+  a mid-build edit misses the binary (trap 1). `tooling/dev build` refuses to start
+  while another build is running.
+- **Every pin move reads Chrome's field trials.** After `tooling/update-pin --apply`,
+  run `tooling/field-trials --save <dir>`. Stedding receives no trials
+  (`docs/PRIVACY.md`), so a launch Chrome makes that way reaches it only when
+  upstream flips the default. That is how `S-236` was missed. `tooling/field-trials
+  --min 100` lists what Chrome sets for every client. A row at 100% that needs no
+  Google service is taken in the series, or a backlog row says why it is not. The
+  standing step is `S-240`.
+- **Numbers in docs come from `tooling/dev status`.** Do not hand-type test counts,
+  patch counts, or the pin. `tooling/check-repo truth` fails on known stale phrases.
+- **One backlog.** `BACKLOG.md`, by S- id, is the order of work. Ids of the 2026-09-26
+  audit (TAB-1, PLT-3) are cited as they are and resolve in
+  `docs/history/plan-2026-09-26.md`. `AGENTS.md`, `docs/HANDOFF.md` and the feature
+  specs cite ids. They do not carry their own lists.
+- **Anything that owns a tab needs a test** (trap 2). **Anything a person clicks
+  needs to have been clicked** (trap 58).
 
-## Roles, when more than one agent is working
+## Roles
+
+When more than one agent is working:
 
 | Role | Does | Does not |
 |---|---|---|
@@ -245,53 +244,47 @@ The suites were cut by merging and deleting what repeated itself; keep them that
 | builder | Steps 2–8 for one feature spec row or backlog id | Widen scope, touch unrelated files |
 | reviewer | Reads the diff against the spec; runs `tooling/dev test all`; checks upstream hunks are minimal | Fix things silently — it reports |
 
-A builder's handoff is: the backlog id, the behaviour ids now green, the test command,
-and the patch numbers. Nothing else needs to be in anyone's head. Independent work is worth
-a subagent; the critical path is not (a subagent needs the context you already have).
+A builder's handoff is the backlog id, the behaviour ids now green, the test command,
+and the patch numbers. A subagent is for a separate question. The critical path stays
+in the session that already has the context.
 
 Several agents on one machine share one checkout and one screen:
 
-- **One lock for builds and test runs.** A build needs the checkout to stand still, and the
-  Mac's browser tests run one at a time; every build and run takes the same lock first (a
-  directory made with `mkdir`, which fails when it exists, holding its owner's name).
-- **One lock for the screen.** Real input and the browser tests, which open windows, take a
-  second lock, so no agent's pointer lands in another's test window.
-- **Drive a copy beside the owner's own Stedding.** An APFS clone of
-  `out/release/Stedding.app` (`cp -c`) given a bundle id of its own (`PlistBuddy`, then an
-  ad-hoc `codesign`), put at `<dir>/out/release/Stedding.app` and run with
-  `CHROMIUM_SRC=<dir>`, lets `tooling/drive` and `tooling/capture-state` drive it without
-  sharing the owner's bundle id. Make it again after each build.
-- **Seen red, with the fix taken out.** Under the build lock, put the fix's files back to
-  the checkout's `HEAD` (after checking that a saved copy of each still matches), build,
-  run the new tests, and restore the files before the lock is let go.
+- **One build at a time.** On the Mac, `tooling/build-chromium` holds
+  `out/<config>/.stedding-build.lock.d` (a directory made with `mkdir`, with the
+  build's pid inside) and `tooling/dev build` refuses while a build is running. Do
+  not edit the checkout during a build (trap 1).
+- **One user of the screen at a time.** Browser tests open windows. `tooling/drive`
+  and `drive.ps1` move the pointer. The scripts do not take a screen lock: take turns,
+  so one agent's pointer does not land in another's window.
+- **Drive a copy beside the owner's own Stedding.** An APFS clone (`cp -c`) of
+  `out/release/Stedding.app`, given a bundle id of its own (`PlistBuddy`), then an
+  ad-hoc `codesign`, placed at `<dir>/out/release/Stedding.app` and run with
+  `CHROMIUM_SRC=<dir>`. `tooling/drive` and `tooling/capture-state` then drive it
+  without the owner's bundle id. Make the copy again after each build.
+- **See the new test fail.** Save a copy of the fixed files, put those paths back to
+  the checkout's `HEAD`, build, and run the new tests. Restore the files and rebuild
+  before any run that counts: the negative check leaves its objects behind (trap 52).
 
-## Cheap checks before you claim done
+## Cheap checks
 
 ```bash
-tooling/dev test all        # every Stedding test (--no-build on Windows)
+tooling/dev test all        # the release sweep (--no-build on Windows)
 tooling/dev check           # check-repo, check-shell
 tooling/dev status          # what the repo actually contains, for docs
-tooling/check-repo          # every hygiene check, in seconds
+tooling/check-repo          # every hygiene check
 ```
 
 ## Evidence
 
-What Arc switchers actually ask for.
+What Arc switchers asked for, gathered 2026-08-31 from the issues and discussions of
+`github.com/zen-browser/desktop` and from Zen's own documentation. Numbers are reaction
+and upvote counts on that date. No Zen source was read or reused. Zen is MPL-2.0;
+Stedding is BSD-3-Clause (`CONTRIBUTING.md`).
 
-Product decisions here should be answerable with something better than taste. Zen
-Browser is an Arc-style browser on Firefox with a large public issue tracker, and it has
-been walking this road for about two years. Its tracker is the closest thing to a
-controlled experiment we have: the same users, wanting the same things, voting.
-
-Gathered 2026-08-31 from `github.com/zen-browser/desktop` issues and discussions, and
-from Zen's own documentation. Numbers are reaction/upvote counts at that date. **No Zen
-source code was read or reused** — Zen is MPL-2.0 and we are BSD-3-Clause; see
-`../CONTRIBUTING.md`.
-
-This is a dated snapshot. Where a decision came after it, a note marked *Since* says
-so. Counts are a demand signal, not a specification. A feature nobody upvoted can still be
-essential, and a popular request can still be wrong for this product. Where we go
-against the numbers below, we say so.
+The table is that snapshot. Counts are a demand signal, not a specification. A feature
+nobody upvoted can still be essential, and a popular request can still be wrong for
+this product. The sections after the table are the product as it stands.
 
 ### The ranking
 
@@ -303,65 +296,55 @@ against the numbers below, we say so.
 | 4 | Peek | Shipped by Zen and used; users insist it is **not** Little Arc |
 | 5 | Cross-device sync of Spaces and pinned tabs | **475** upvotes, still open after ~two years — the largest single number found |
 
-### What this changes for us
+Workspace-adjacent requests are the top cluster. Folders were the highest Arc-named
+request, and users said they would not leave Arc without collapsible pinned folders.
 
-**Folders are the gate, not a nicety.** They were the highest Arc-named request Zen
-actually closed, and users said plainly they would not leave Arc without collapsible
-*pinned* folders. `PRODUCT.md` has them at 1.0; this says they are not deferrable.
+### Where it stands
 
-**Session restore is part of the tab model, not a follow-up.** Zen's largest bug cluster
-is tab identity across windows, spaces and favorites — restore duplicating favorites,
-moving a favorite to a new window silently un-favoriting it. The lesson is sequencing:
-build the persistence model *with* the sidebar, not after it. An Arc-style information
-architecture without reliable restore loses switchers on day two.
+**Folders ship**, including a folder in the pinned run (`docs/features/folders.md` F38).
+`PRODUCT.md` marks them [1.0] and not deferrable.
 
-**Independent windows must stay possible.** Zen shipped window syncing without an off
-switch and took **155** upvotes asking to disable it by default. Stedding's Blank Window
-(⌥⇧⌘N, a window with Spaces of its own) covers this; the evidence says it is not
-optional.
+**Session restore ships with the sidebar** (`docs/features/spaces.md` B2, B9). The
+snapshot's largest bug cluster was tabs lost across windows, spaces and favorites.
 
-**Peek and Little Arc are different products.** Users called them "fundamentally
-different workflows" (**87** and **74** upvotes on the related requests). Peek is the
-in-window overlay; Little Arc is an independent OS window with a global hotkey for links
-from other applications. Building one does not satisfy the other. `PRODUCT.md` specifies
-both, which the evidence supports. *Since:* both were built, and Peek was rebuilt on the
-little window (`BACKLOG.md` S-93, released in 0.3.0 beta 16); both run on the Mac and Windows.
+**A Blank Window has Spaces of its own** (`docs/features/windows.md` G4): ⌥⇧⌘N on the
+Mac, Ctrl+Alt+Shift+N on Windows (`docs/SHORTCUTS.md`). The snapshot had **155** upvotes
+asking to turn synced windows off by default.
 
-**Sync is the largest unmet demand in this space — and we have it out of scope.**
-`ROADMAP.md` excludes sync services and `PRIVACY.md` commits to running no accounts.
-That is a deliberate position, not an oversight, and this section does not overturn it.
-But **475** upvotes on a request nobody has closed in two years is the strongest signal
-in this research, and it deserves a real answer rather than silence: end-to-end
-encrypted, self-hostable, or file-based export/import are all positions we could take
-without running an account system. Flagged in `PRODUCT.md` as needing a decision.
-*Since:* a Space exports to a file and imports on another machine, and the sidebar syncs
-through a folder the user's own sync tool keeps (ADR 0029, released in 0.3.0 beta 16).
+**Peek and a little window are different, and both ship** on macOS and Windows. The
+related requests had **87** and **74** upvotes. Peek is a little window over the pinned
+tab's window, on by default (`PLAN.md` decision 2), released in 0.3.0 beta 16
+(`docs/features/peek.md`, `S-93`). A little window is its own window for a link from
+another application: on the Mac from the start, on Windows since 0.3.0 beta 7
+(`docs/features/little.md`).
 
-### What this confirms we were right to cut
+**Sync has no Stedding account and no Stedding server** (`docs/ROADMAP.md`,
+`docs/PRIVACY.md`). The answer to the **475** is a folder the user's own sync tool
+keeps: the sidebar syncs through it, off by default
+(`docs/decisions/0029-sidebar-sync-through-a-folder.md`, released in 0.3.0 beta 16; the
+ADR is still Proposed). A Space also exports and imports as a file. What is still owed
+is `S-282`.
 
-`decisions/0012-defer-boosts-and-easels.md` deferred Boosts and Easels on the reasoning
-that extensions already answer them. The numbers agree, and more strongly than expected:
+### Deferred
+
+Boosts and Easels stay deferred (`docs/decisions/0012-defer-boosts-and-easels.md`,
+`docs/ROADMAP.md`). Extensions already answer them.
 
 - **Boosts: 4 upvotes.** Zen shipped this. Almost nobody asked.
 - **Easels: 41 upvotes**, with the community calling it extension-shaped and expensive.
 
-Compare 412 for folders and 475 for sync. The two features we cut are, by this evidence,
-the two least wanted things on the list.
+The same snapshot has 412 for folders and 475 for sync.
 
-### What we are deliberately ignoring
+### Decisions around the ranking
 
-**Horizontal tabs: 253 upvotes, and Zen said no.** A large number attached to a request
-that would undo the product. If someone wants horizontal tabs there are excellent
-browsers for that, and carrying both layouts is a permanent tax — the same reasoning as
-`decisions/0010-ride-upstream-vertical-tabs.md`, where the cost of fighting upstream's
-layout is measured in commits per year. *Since:* the owner kept Chromium's own switch to
-horizontal tabs, with Spaces, pins and folders working there (`PLAN.md` decision 1);
-Stedding builds no horizontal layout of its own.
+**Horizontal tabs: 253 upvotes, and Zen declined.** Chromium's own switch stays
+(`PLAN.md` decision 1). Spaces, pins and folders work in horizontal mode. Stedding
+builds no horizontal layout of its own
+(`docs/decisions/0010-ride-upstream-vertical-tabs.md`).
 
-**Tree-style tabs: 280 upvotes.** Real demand, different product. Folders first.
-*Since:* folders are built, and child tabs nested under their opener are planned
-(`BACKLOG.md` S-92, `ROADMAP.md` M10).
+**Tree-style tabs: 280 upvotes.** Folders shipped. A link opened in a new tab nests
+under its opener (`docs/features/tabs.md` R56–R59, `S-92`). Back at a child's first
+page, which closes the child, is still open (R60).
 
-**AI features: ~20 upvotes**, with pushback. Not a switch-blocker for anyone, which was
-worth knowing while `PRODUCT.md` listed the whole Arc Max bundle as needing a decision.
-*Since:* ADR 0020 closed it: no bundled model.
+**A bundled model: ~20 upvotes**, with pushback. ADR 0020: Stedding ships no bundled
+model.

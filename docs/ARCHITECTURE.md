@@ -1,698 +1,619 @@
 # Architecture
 
-Engineering strategy for Stedding Browser. Companion docs: `PRODUCT.md` (what we
-build), `PRIVACY.md` (defaults and de-Googling policy), `ROADMAP.md` (when),
-`decisions/` (ADRs for anything hard to reverse).
+Engineering strategy for Stedding Browser. What the product does is
+[PRODUCT.md](PRODUCT.md). Privacy defaults are [PRIVACY.md](PRIVACY.md). When
+things ship is [ROADMAP.md](ROADMAP.md). Anything hard to reverse is an ADR in
+[decisions/](decisions/).
 
 ## Fork strategy: minimal patch series on Chromium stable
 
-We are not a hard fork. We track the Chromium **stable channel** and carry a small,
-ordered, documented patch series on top of it — the Brave/Helium model. The measure of
-success is boring rebases: when upstream ships a new stable, our patches apply with
-little or no manual work.
+Stedding tracks Chromium's stable channel and carries an ordered, documented
+patch series on a pinned version: the Brave/Helium model
+([ADR 0003](decisions/0003-chromium-minimal-patch-fork.md)). A new stable
+should be a boring rebase. The pin moves, the series applies, and the build
+machines build.
+
+The pin lives only in [`tooling/chromium-version`](../tooling/chromium-version)
+([ADR 0007](decisions/0007-chromium-version-pin.md)). On 2026-10-28 it is
+`157.0.8103.31`, M157's stable cut, merged before Google's stable rollout on
+2026-11-03. `tooling/check-pin` reports that pin ahead until Mac stable serves
+M157. The latest release is Stedding 0.3.0 beta 22 (`v0.3.0-beta.22`), built
+on Chromium `156.0.8078.48`, for macOS and Windows. The series on `main` is
+this pin, and it is not what that release shipped. The product version a build
+stamps is the `VERSION` file in this repository.
 
 ### Repository layout
 
 ```
-tooling/          Scripts: sync, build, patch series, checks, measurement   exists
-docs/             This documentation                                        exists
-patches/          Ordered patch series: NNNN-short-slug.patch               exists
-branding/         Icons, names, strings, installer assets replacing Chromium's   exists
+tooling/     Scripts: sync, build, the patch series, checks
+docs/        These documents
+patches/     Ordered series: NNNN-short-slug.patch
+branding/    Icons, names, strings and installer assets that replace Chromium's
 ```
 
-`tooling/apply-patches` puts the series on the checkout, `tooling/apply-branding` copies
-`branding/` over it before `gn gen`, and `tooling/dev status` counts the patches.
-
-The Chromium source tree itself is never committed here. A pinned upstream version
-(exact commit and tag, recorded in `tooling/chromium-version`) is fetched at build
-time. The pin is updated deliberately, never implicitly — see
-`decisions/0007-chromium-version-pin.md`.
+The Chromium tree is never committed here. `tooling/apply-patches` puts the
+series on the checkout. `tooling/apply-branding` copies `branding/` over it
+before `gn gen`. `tooling/dev status` counts the patches. The working branch
+in the checkout is `stedding-work` ([patches/README.md](../patches/README.md)).
 
 ### Patch discipline
 
-- **One logical change per patch.** A patch does one thing: adds one flag, reroutes one
-  service, brands one surface. Never a grab-bag; the one exception, a round of operator
-  feedback that touches many features at once, is described in `patches/README.md`.
-- **Every patch carries a header**: what it does, why it exists, and what would let
-  us delete it (e.g. an upstream flag landing) — as `Why:` and `Removable when:` in
-  the commit message, which `tooling/update-patches` refuses to export without. Which
-  upstream files a patch touches is answered by the diffstat `git format-patch` writes
-  under the message, so it is not restated by hand where it could drift.
-- **Script-driven, not manual.** `tooling/apply-patches` applies the series onto a
-  clean checkout at the pinned version; `tooling/update-patches` regenerates the series
-  from a working branch after a rebase. Applying patches by hand is a bug in the tooling.
-- **Ordered and numbered.** Renumbering is allowed; silent reordering is not. The
-  series must always apply cleanly from 0001 upward on the pinned version.
+- **One logical change per patch.** A patch does one thing. A round of feedback
+  that touches many features at once is the exception, and
+  [patches/README.md](../patches/README.md) lists those patches.
+- **Every patch carries a header.** `Subject:`, `Why:` and `Removable when:`
+  are required. `tooling/update-patches` will not export without the last two,
+  and `tooling/check-repo patches` checks the same. The diffstat under the
+  message is the list of files. It is not copied into the header, where it
+  would drift.
+- **The scripts apply and export the series.** `tooling/apply-patches` applies
+  it onto a clean checkout at the pin. `tooling/update-patches` regenerates it
+  from the working branch. Applying a patch by hand is a bug in the tooling.
+  `apply-patches` also refuses a branch that holds commits the series does not
+  account for.
+- **Numbered from 0001, with no gaps.** Renumbering is allowed. Silent
+  reordering is not. The series must apply from 0001 upward on the pin.
 
 ### Where patches are allowed to live
 
 Preferred layers, in order:
 
-1. **New files** — new features go in new directories/files wherever possible; new
-   files never conflict on rebase.
-2. **`chrome/browser/ui` and top chrome** (Views, browser frame, tab strip area) —
-   this is where the sidebar, split view, and command bar live.
-3. **WebUI** (settings pages, internal pages) — HTML/TS surfaces are cheap to extend.
-4. **Feature flags and build-time gn args** — prefer flipping an existing switch over
-   patching the code behind it.
-5. **`chrome/browser` service wiring** — for disabling or rerouting Google services.
+1. **New files.** New code goes in new files wherever it can. New files do not
+   conflict on rebase.
+2. **`chrome/browser/ui` and top chrome** (Views, the browser frame, the tab
+   strip). The sidebar, split view and command bar live here.
+3. **WebUI** for settings and other internal pages.
+4. **Feature flags and gn args,** ahead of a patch to the code behind a switch
+   that already exists.
+5. **`chrome/browser` service wiring,** for disabling or rerouting a Google
+   service.
 
-Avoid patching if at all possible: `content/`, `third_party/blink/`, `net/`, `v8/`,
-and anything else deep in the engine. These are security-critical, churn constantly,
-and conflicts there are expensive. A product feature that seems to require an engine
-patch should first be redesigned to not require one; if it truly does, that is an ADR.
+Avoid `content/`, `third_party/blink/`, `net/`, `v8/`, and the rest of the
+engine. Those trees are security-critical and they churn. A feature that seems
+to need a patch there is redesigned first. One that truly needs it is an ADR.
 
-In the network stack (`net/`, `services/`) the series changes three things, each named in
-its patch's header: the root store's version rules compare Chromium's version, not
-Stedding's own number on Windows (patch 0073, `S-72`); Chrome's launched defaults, its key
-pins and Certificate Transparency are on (patch 0074, `S-236`, `S-237`); and the certificate
-verifier service passes a change of its setup on to the network context only once it has
-verified a certificate, so the updates of a launch's first second no longer drop the
-connections opened ahead for the tabs given on the command line (patch 0077, `S-251`).
-`docs/decisions/0027-changes-to-the-network-stack.md` records the three and the rule for the
-next one.
+The series does touch the engine in these places.
+
+**The network stack** (`net/`, `services/`), three changes, each named in its
+patch header. [ADR 0027](decisions/0027-changes-to-the-network-stack.md) records
+them and the rule for the next one.
+
+1. **Patch 0073, S-72.** On Windows, `chrome/VERSION` carries Stedding's product
+   version so two releases on one Chromium pin install in order.
+   `version_info::GetChromiumVersionNumber()` still returns Chromium's version,
+   and that is what the user agent, client hints, and Google's services see,
+   including the root store's version rules. On the Mac the two versions are
+   the same.
+2. **Patch 0074, S-236, S-237.** Features Chrome has launched for every Stable
+   user by field trial, Google's static key pins, and Certificate Transparency.
+   The certificate audit reports Chrome sends stay off in code. Stedding
+   receives no trials, so `tooling/field-trials` compares Chrome Stable's seed
+   with the pin's defaults at every pin move (S-240).
+3. **Patch 0077, S-251.** The certificate verifier tells the network context of
+   a setup change only after it has verified a certificate. Two changes arrive
+   in the first second of a launch, and they were dropping the connections
+   opened ahead for tabs given on the command line.
+
+The next change under `net/` or `services/network/` follows ADR 0027: a fault a
+user can see, or a promise in [PRIVACY.md](PRIVACY.md), with a test that fails
+without it and a line in that ADR.
+
+**`content/`.** Patch 0058 (import I26) sends a negative document sequence
+number to the renderer as 0, so a tab the Arc import created unloaded does not
+come back from a restart as a crashed page. Patch 0067 keeps `sessionStorage`
+and notifications for a Space with its own cookies in that Space's partition
+(sessions S28, S30): `content/browser/dom_storage/stedding_session_storage.cc`
+and `content/browser/notifications/stedding_notification_partition.cc`.
+
+**Blink.** Patch 0089 (S-89, clean-links Cl12) adds
+`URLLoaderThrottle::WillRestartWithURLReset`, so a throttle that rewrote the
+URL in `WillStartRequest` keeps that URL when the loader restarts.
+
+No patch in the series touches `v8/`.
 
 ## Build system
 
-Chromium builds with Google's standard toolchain: `depot_tools` (which supplies
-`gclient`, `gn`, `autoninja`, and a pinned Python), a `gclient sync` to materialise the
-source and its dependencies, `gn gen` with our args, and `autoninja` to build. Google's
-remote execution backends (RBE/reclient) are not available to us, so every build is
-local; `use_remoteexec = false` is set in all of our gn args files.
+Chromium builds with `depot_tools` (`gclient`, `gn`, `autoninja`, and a pinned
+Python), a `gclient sync`, `gn gen`, and `autoninja`. Google's remote execution
+is not available. Every file in `tooling/args/` sets `use_remoteexec = false`.
+Every build is local.
 
-Everything below is driven by scripts in `tooling/`, so that the documented procedure
-and the executed procedure cannot drift apart. The scripts are also the reference for
-what the underlying `gclient` and `gn` invocations are: they are short, commented, and
-meant to be read. There is no separate list of hand-run commands, because a second
-copy of the procedure is a second copy to go stale.
+Scripts in `tooling/` are the procedure. A second list of hand-run commands
+would go stale.
 
 ### Layout
 
-The Chromium tree lives **outside** this repository and is never committed here.
+The Chromium tree lives outside this repository.
 
 | Path | Default | Override |
 |---|---|---|
-| This repository | wherever you cloned it | `$STEDDING_ROOT` |
+| This repository | the clone | `$STEDDING_ROOT` |
 | depot_tools | `~/depot_tools` | `$DEPOT_TOOLS_DIR` |
 | gclient checkout root | `~/chromium` | `$CHROMIUM_ROOT` |
 | Chromium source | `~/chromium/src` | `$CHROMIUM_SRC` |
 | depot_tools git cache | `~/chromium/.git-cache` | `$GIT_CACHE_PATH` |
 
-The defaults are the Mac's. On Windows nothing is defaulted: `STEDDING_CHROMIUM_SRC` names
-the checkout's `src`, the bash tooling takes `CHROMIUM_ROOT` as a POSIX path (`/c/...`), and
-there is no git cache (`docs/HANDOFF.md`, "The Windows build").
+Those defaults are what `tooling/lib.sh` uses. Set `CHROMIUM_ROOT` on the first
+sync and it records the location in `.stedding-local`. Later commands read that
+file. `.stedding-local` is local state and is never committed.
+
+On Windows the PowerShell build has no default path.
+`STEDDING_CHROMIUM_SRC` is the checkout's `src`, `STEDDING_DEPOT_TOOLS` if
+depot_tools is not on `PATH`, and `STEDDING_VPYTHON_ROOT` a short directory for
+vpython ([HANDOFF.md](HANDOFF.md#the-windows-build), trap 34). The bash scripts
+take `CHROMIUM_ROOT` as a POSIX path (`/c/...`). There is no git cache:
+`tooling/sync-chromium` unsets `GIT_CACHE_PATH`, fetches one commit of the
+pinned tag, and syncs dependencies with `--no-history`.
 
 ### The pinned version
 
-`tooling/chromium-version` is the single source of truth for what upstream version we
-build. It is read by every script. A version number written anywhere else is a bug.
-Policy for moving the pin: `decisions/0007-chromium-version-pin.md`.
+`tooling/chromium-version` is the only pin. Every script reads it.
+`tooling/check-repo version` fails if a non-documentation file hard-codes a
+Chromium version. Policy for moving the pin is ADR 0007.
 
 ### Prerequisites (macOS arm64)
 
-- **Full Xcode** — not just the Command Line Tools. Install it from the App Store (or
-  from Apple's developer downloads), launch it once so it installs its additional
-  components, and accept the licence:
+`tooling/bootstrap-depot-tools` checks the host, then clones or updates
+depot_tools from upstream `main`. That revision is observed, not pinned.
+
+- **Full Xcode**, not only the Command Line Tools. `xcode-select -p` must be a
+  path inside an Xcode bundle. Accept the licence if it has not been accepted:
 
   ```bash
   sudo xcodebuild -license accept
   sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
   ```
 
-  That last line matters: installing the Command Line Tools points `xcode-select` at
-  `/Library/Developer/CommandLineTools`, and Chromium will not build against that.
-  `xcode-select -p` must print a path inside `Xcode.app`.
-- **Python 3** and **git** on `PATH` (depot_tools brings its own copies of both for the
-  build itself, but the bootstrap needs a system pair).
-- **Disk:** `tooling/sync-chromium` refuses to start below 150 GB free on the volume
-  holding `$CHROMIUM_ROOT`, and `tooling/build-chromium` wants 60 GB of its own before
-  it starts. Measured: the checkout is 65 GB and a release build adds 9.3 GB — see
-  "Measured results". Both floors can be lowered for a run that has done the
-  arithmetic: `STEDDING_SYNC_MIN_FREE_GB` (never under 100) and `STEDDING_MIN_FREE_GB`
-  (never under 20, for incremental chunks). The checkout was deleted for disk once and
-  re-synced from 109 GB free (`docs/HANDOFF.md`, trap 44). A point release on the
-  milestone the checkout already holds is not a re-sync: `tooling/sync-chromium
-  --point-release` (what `tooling/update-pin --apply` passes for a same-milestone
-  bump) fetches the delta and the release's PGO profile and asks for 25 GB
-  (`STEDDING_SYNC_POINT_RELEASE_MIN_FREE_GB`, never under 20; trap 45).
-  On Windows there is no git cache and the tree is shallow: about 26 GB of source when it
-  is cloned, 46 GB after a `gclient sync` has updated it (trap 53), and 17 GB for
-  `out\win-release` with `chrome`, `mini_installer`, `unit_tests` and
-  `stedding_browser_tests` in it (measured 2026-09-29, 155.0.8059.12). The same 150 GB
-  floor applies to the sync there, the page file can take another 32 GB on a failed
-  build (trap 54). The sanitizer builds are two more output directories beside it: `out\win-asan`
-  (36 GB) and `out\win-checks`, DCHECKs and the dangling-pointer detector (30 GB), measured
-  2026-09-30 (`tooling/args/win-asan.gn`, `win-checks.gn`; traps 57 and 60). Remove them when the
-  runs are done; the release directory is the only one that has to stay.
-- **No `node_modules` in any directory above the checkout.** Chromium's TypeScript
-  build resolves modules the way node does — by walking up parent directories — so a
-  stray `node_modules` in your home directory leaks its `@types` into the build. The
-  tooling checks for this before it does anything expensive; see "Known failure
-  modes".
-- **RAM:** 16 GB is the practical floor. Compilation parallelism is what consumes it,
-  and the failure is not a clean error — the machine swaps and the build slows by an
-  order of magnitude, or the OOM killer takes a compiler process and ninja reports a
-  confusing failure. If you have less, cap parallelism rather than hoping:
-  `autoninja -j4`. Not checked by any script; a recommendation, not a gate.
+  The Command Line Tools leave `xcode-select` at
+  `/Library/Developer/CommandLineTools`, and Chromium does not build against
+  that.
+- **Python 3 and git** on `PATH` for the bootstrap. The build itself uses the
+  copies depot_tools brings.
 
-These are checked in two places, and each fails with the exact remedy rather than
-letting a build die hours later:
+### Disk
+
+`tooling/sync-chromium` refuses to start below 150 GB free on the volume that
+holds `$CHROMIUM_ROOT`. `STEDDING_SYNC_MIN_FREE_GB` can lower that, and never
+under 100. The script's working set, which the floor still uses, was measured
+at `153.0.8010.12`: 65 GB for the checkout, 9.3 GB for a release build, and
+about 10 GB for `unit_tests`, about 85 GB together. Those sizes have not been
+re-measured on the current pin ([docs/perf/README.md](perf/README.md)).
+
+A point release on the milestone the checkout already holds is
+`tooling/sync-chromium --point-release`, which `tooling/update-pin --apply`
+passes for a same-milestone bump. The floor is then 25 GB
+(`STEDDING_SYNC_POINT_RELEASE_MIN_FREE_GB`, never under 20; trap 45). A missing
+checkout, or one on another milestone, is a full sync and keeps the 150 GB
+floor. Trap 44 is the re-sync that was done once the checkout had been deleted
+for disk.
+
+`tooling/build-chromium` wants 60 GB free before it starts.
+`STEDDING_MIN_FREE_GB` lowers that, never under 20.
+
+On Windows the same 150 GB sync floor applies. The script's figure for the
+shallow tree is about 26 GB of source, against the Mac's 65. What a Windows
+build costs in memory and disk is in [HANDOFF.md](HANDOFF.md) (traps 53, 54,
+57 and 60). The sanitizer and checks directories are removed when the run is
+done. The release directory is the one that stays (`BACKLOG.md` S-58).
+
+**No `node_modules` above the checkout.** Chromium's TypeScript build walks
+parent directories the way node does, so a `node_modules` in a parent
+contributes its `@types`. `tooling/lib.sh` fails the preflight when it finds
+one.
+
+**RAM.** 16 GB is the practical floor. Nothing checks it. With less, cap
+parallelism (`autoninja -j4`) rather than swapping through the build.
 
 | Check | Where |
 |---|---|
 | Full Xcode, accepted licence, `git`, `python3`, arm64 macOS | `tooling/bootstrap-depot-tools` |
-| 150 GB free disk (`STEDDING_SYNC_MIN_FREE_GB` lowers it, never under 100), no ancestor `node_modules` | `tooling/sync-chromium` |
-| Tree is on the pin, no ancestor `node_modules` | `tooling/build-chromium` |
-
-### Reference hardware
-
-The machine every measured number in this document was taken on. Nothing here is
-normative — it is the answer to "compared to what?":
-
-| | |
-|---|---|
-| Machine | Apple M1 Max, 10 cores, 64 GB RAM |
-| OS | macOS 26.5.2, arm64 |
-| Xcode | 26.6 (17F113) |
-| Command Line Tools | 26.6.0.0.1781586589 |
-| depot_tools | `08f3e8c0eb66d6de3a048a757d0ff708dbc8ea34` (2026-09-09) — observed, **not a pin**: `bootstrap-depot-tools` tracks upstream `main` |
-| Chromium | `153.0.8010.12` (M153 stable), the pin these numbers were measured at; today's pin is in `tooling/chromium-version` |
+| Free disk at the sync floor, no ancestor `node_modules` | `tooling/sync-chromium` |
+| Tree is the pin or a descendant of it, no ancestor `node_modules`, free disk at the build floor | `tooling/build-chromium` |
 
 ### The build, end to end
 
-Every command is run **from the root of this repository**, not from the Chromium tree.
+Run these from the root of this repository.
 
 ```bash
-# 1. Install depot_tools and verify the host toolchain. Idempotent. Seconds.
+# Install depot_tools and check the host toolchain. Idempotent.
 tooling/bootstrap-depot-tools
 
-# 2. Check out Chromium at the pinned version and resolve its dependencies.
-#    Long: downloads tens of GB. Safe to re-run; moves an existing tree to the pin.
-#    Measured on the reference machine, from nothing: ~25 min to bootstrap the git
-#    cache, then ~19 min for the dependencies and hooks. It prints little during the
-#    cache download — that is normal, see "Known failure modes".
+# Check out Chromium at the pin and resolve its dependencies.
+# Safe to re-run; an existing tree is moved to the pin.
 tooling/sync-chromium
 
-# 3. Put Stedding's patch series and branding on the checkout, in that order.
+# Series first, then branding. Branding dirties tracked files on purpose,
+# and apply-patches refuses a dirty tree. Branding must be in place before gn gen.
 tooling/apply-patches
 tooling/apply-branding
 
-# 4. Build. The config names a file in tooling/args/ (release by default; see
-#    "Build configurations").
+# The name is a file in tooling/args/. release is the default.
 tooling/build-chromium release
 
-# 5. Check that what you built actually works. This is M0's acceptance criterion,
-#    not step 6's eyeball test.
+# Launch, a page, WebGL, a royalty-free video frame, and H.264 with AAC.
 tooling/verify-build --app ~/chromium/src/out/release/Stedding.app
 
-# 6. Run it.
 open ~/chromium/src/out/release/Stedding.app
 ```
 
-On Windows the same series builds with Visual Studio 2022 and the Windows SDK, through
-`tooling\win\build.ps1` (one chunk) or `tooling\win\build-until-done.ps1` (the whole
-build, supervised); `docs/HANDOFF.md`, "The Windows build", has the steps.
+On Windows the same series builds with Visual Studio's toolchain
+(`DEPOT_TOOLS_WIN_TOOLCHAIN=0`) and the Windows SDK, through
+`tooling\win\build.ps1` (one chunk) or `tooling\win\build-until-done.ps1` (the
+whole build). The steps are in [HANDOFF.md](HANDOFF.md#the-windows-build).
 
-To put the checkout somewhere other than `~/chromium`, set `CHROMIUM_ROOT` on the
-sync — you only need it once, because sync records the location in `.stedding-local`
-and every later command reads it back:
+To put the checkout somewhere other than `~/chromium`, set `CHROMIUM_ROOT`
+once. Sync records it:
 
 ```bash
 CHROMIUM_ROOT=/Users/Shared/chromium tooling/sync-chromium
 ```
 
-### Why everything goes through the git cache
+### Why the Mac sync goes through the git cache
 
-`tooling/sync-chromium` does not clone `chromium/src` from the server. It populates
-depot_tools' **git cache** and clones from that instead. This is not a speed
-optimisation; on the reference machine it is the difference between working and not
-working. A direct `git clone` of `chromium/src` — plain, shallow, or partial alike —
-stalls in the server-side ref advertisement, because the repository carries on the
-order of a hundred thousand tags and advertising them dominates the exchange. The
-cache bootstraps from a prepackaged bundle on Google Storage over ordinary HTTP, which
-saturates the link.
+On the Mac, `tooling/sync-chromium` does not clone `chromium/src` from the
+server. It fills depot_tools' git cache and clones from that. A direct clone
+stalls in the server-side ref advertisement, because the repository carries on
+the order of a hundred thousand tags. The cache bootstraps from a bundle on
+Google Storage over HTTP.
 
-Two consequences worth knowing:
+The sync fetches the one tag it builds (`--no-fetch-tags --ref refs/tags/<pin>`).
+`tooling/sync-chromium --all-tags` fetches every tag. On Windows `--all-tags`
+is refused, because that checkout has no cache.
 
-- We fetch the one tag we build (`--no-fetch-tags --ref refs/tags/<pin>`) rather than
-  all of them. `tooling/sync-chromium --all-tags` overrides this when tag archaeology
-  is genuinely needed.
-- `gclient` reads `GIT_CACHE_PATH` from the environment, so every dependency is routed
-  through the same cache. The cache survives pin changes, which is what makes moving
-  the pin cheap — and moving the pin often is the entire premise of ADR 0003.
+`gclient` reads `GIT_CACHE_PATH`, so dependencies use the same cache. The cache
+survives a pin move, which is what makes moving the pin cheap
+([ADR 0003](decisions/0003-chromium-minimal-patch-fork.md)).
 
-`tooling/build-chromium` copies `tooling/args/<config>.gn` verbatim into the output
-directory as `args.gn`, so the configuration of any build is recoverable from the build
-itself. It also refuses to build a tree whose provenance is unclear: the checkout must
-be either vanilla at the pin or a descendant of it — that is, the pin with our patch
-series applied, which is what `apply-patches` produces. It reports which of the two it
-found, and how many patches are applied. Anything else — a stray branch, a different
-pin, upstream commits mixed in — is refused.
+`tooling/build-chromium` copies `tooling/args/<config>.gn` into the output
+directory as `args.gn`. It builds a tree that is vanilla at the pin, or a
+descendant of the pin. A stray branch, a different pin, or upstream commits
+mixed in are refused.
 
 ### Build configurations
 
+Every file in `tooling/args/` sets `disable_fieldtrial_testing_config`, so
+Chromium's field-trial testing config is not applied (privacy Q10). The full
+args, and the reason for each, are in those files.
+
 | Config | Purpose | Notes |
 |---|---|---|
-| `release` | Day-to-day development, and every published image so far | Optimised, no symbols, single binary, no PGO or LTO. **Never quote performance numbers from this config.** |
-| `debug` | Debugging Chromium and our patches | Component build: one target relinks a small library, not the browser. |
-| `official` | Performance baselines | `is_official_build` — PGO with upstream's profile for the pin, plus ThinLTO. Slow, memory-hungry link. No published image has been built with it yet: every image so far is `release` on the Mac or `win-release` on Windows. Which configuration should ship is TBD (`BACKLOG.md` S-168). |
-| `vanilla` | The vanilla half of a performance comparison | Identical to `official`, built from the checkout detached at the pin with the branding reverted, so the patch series is the only difference (`docs/perf/README.md`). |
-| `win-release` | The Windows build and its installer | The Mac's `release` on the other platform: non-component, no symbols, no PGO (ADR 0018). |
-| `win-asan` | AddressSanitizer runs of the lifetime tests (docs/history/plan-2026-09-26.md TAB-7, TAB-8, TAB-9, SPC-1 to SPC-3, WIN-1, WEB-2) | `is_asan`, line-table symbols so a report names functions. Test targets only; the Mac has no counterpart. |
-| `win-checks` | The dangling-pointer detector with DCHECKs on (the same items, and WIN-2) | Release code with `dcheck_always_on` and BackupRefPtr; needs `--enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr` at run time. Test targets only. |
-| `mac-checks` | The same checks on the Mac, whose own code paths `win-checks` never compiles (since 2026-10-12) | `win-checks` for arm64 Mac, with no line tables (they would not fit beside `out/release` above the build's disk floor); the same run-time flag, which `STEDDING_TEST_OUT=mac-checks tooling/dev test` adds. Test targets only. |
-| `win-debug` | A debug build for the checks the 2026-09-26 audit asked of one (WIN-2) and for debugging on Windows | `debug` for the other platform: a component build. Test target only; the largest output this project asks a disk for. |
+| `release` | Day-to-day work on the Mac, and the published Mac images | Optimised, no symbols, a single binary, no PGO or LTO. Performance numbers are not quoted from this config. |
+| `debug` | Debugging on the Mac | A component build: one target relinks a small library. |
+| `official` | Performance baselines on the Mac | `is_official_build`: PGO with upstream's profile for the pin, and ThinLTO. Which configuration should ship is open (`BACKLOG.md` S-168). Published images so far are `release` and `win-release` ([HANDOFF.md](HANDOFF.md#release-channel)). |
+| `vanilla` | The vanilla half of a performance comparison | The same args as `official`, built from the checkout detached at the pin with branding reverted ([docs/perf/README.md](perf/README.md)). |
+| `win-release` | The Windows build and its installer | The Mac's `release` on Windows: non-component, no symbols, no PGO ([ADR 0018](decisions/0018-windows-installer.md)). |
+| `win-asan` | AddressSanitizer on Windows | `is_asan`, line-table symbols. `tooling/args/win-asan.gn` names the lifetime tests it is for (TAB-7, TAB-8, SPC-1, SPC-2, SPC-3, WIN-1, WIN-2, WEB-2). Test targets only. The Mac has no ASan configuration. |
+| `win-checks` | Dangling-pointer detector and DCHECKs on Windows | Release code with `dcheck_always_on` and BackupRefPtr. Run with `--enable-features=PartitionAllocBackupRefPtr,PartitionAllocDanglingPtr`. `win-checks.gn` names TAB-7, TAB-8, TAB-9 and WIN-2. Test targets only. |
+| `mac-checks` | The same checks on the Mac | The Mac's own code paths, which `win-checks` never compiles. No line tables, so the output fits beside `out/release`. `STEDDING_TEST_OUT=mac-checks tooling/dev test` adds the same run-time flag. Test targets only. |
+| `win-debug` | A Windows debug build | A component build, for WIN-2 and for debugging. Test targets only. The largest output this project asks a disk for. |
 
-The full args, with the reasoning for each, are in `tooling/args/`. The four sanitizer
-and check configurations are throwaway: build the test targets, run the tests, delete
-the output directory (trap 54 has the memory and disk costs of a build on this machine).
+`win-asan`, `win-checks`, `mac-checks` and `win-debug` are throwaway: build the
+test targets, run them, and delete the output directory.
 
-In every configuration without DCHECKs, `release` and `win-release` among them, a soft
-`CHECK` (`CHECK(..., base::NotFatalUntil::M<n>)`, `DUMP_WILL_BE_CHECK`,
-`DUMP_WILL_BE_NOTREACHED`) logs and writes a dump without crashing, as in an official build;
-the checks configurations still stop on one, and one whose milestone has passed is fatal
-everywhere, as upstream (ADR 0024, since 2026-10-18).
+In every configuration without DCHECKs, including `release` and `win-release`,
+a soft check (`CHECK(..., base::NotFatalUntil::M<n>)`, `DUMP_WILL_BE_CHECK`,
+`DUMP_WILL_BE_NOTREACHED`) logs and writes a dump without crashing, as in an
+official build. The checks configurations still stop on one. A soft check whose
+milestone has passed is fatal everywhere, as upstream (patch 0069,
+[ADR 0024](decisions/0024-soft-checks-report-in-releases.md)).
 
-`autoninja` selects Chromium's build executor, which at this pin is siso on both platforms
-(`docs/HANDOFF.md`, traps 1 and 54). Whether `cc_wrapper=ccache` measurably helps on macOS
-has not been measured (TBD).
+`autoninja` selects Chromium's build executor. At this pin that executor is
+siso, on both platforms (`tooling/build-chromium`; [HANDOFF.md](HANDOFF.md)
+traps 1 and 54).
 
 ### Codecs
 
-The M0 build was vanilla: upstream defaults, which means `ffmpeg_branding = "Chromium"`
-and no proprietary codecs. Every Stedding configuration has built them since (ADR 0008);
-what follows is why. Video plays via VP8/VP9/AV1/Opus, so WebM and YouTube work,
-but H.264 and AAC do not. Shipping a browser without H.264 is not viable for a real
-product, and enabling it carries patent-licensing consequences rather than merely
-technical ones. ADR 0008 decides it for Stedding's builds.
+Every file in `tooling/args/` sets `proprietary_codecs = true` and
+`ffmpeg_branding = "Chrome"`
+([ADR 0008](decisions/0008-proprietary-codecs.md)). Upstream's default,
+`ffmpeg_branding = "Chromium"`, plays VP8, VP9, AV1 and Opus, and does not
+play H.264 or AAC. `tooling/verify-build` requires an H.264 and AAC frame.
+
+Distributing binaries that decode H.264 and AAC carries patent obligations,
+administered by Via LA. Terms and cost are TBD. ADR 0008 says they are recorded
+before the 1.0 checklist in [ROADMAP.md](ROADMAP.md#the-quality-bar).
 
 ### Measured results
 
-Measured on the reference hardware above, at `153.0.8010.12`, from an empty directory.
-Nothing here is an estimate; anything not yet measured says so.
+The disk floors above are the current gates. The checkout and release sizes
+they cite were measured at `153.0.8010.12` and are what
+`tooling/sync-chromium` still names. Wall-clock times from that pin are not
+repeated here. Nothing has been re-measured on the current pin
+([docs/perf/README.md](perf/README.md)).
 
-| | |
-|---|---|
-| git cache bootstrap (first sync only) | ~25 min |
-| Re-sync from nothing (2026-09-10, `docs/HANDOFF.md` trap 44) | **43 min**: the cache bundle 7 min, the tag fetch 19 min, `gclient sync` with hooks 17 min; src 43 GB, cache 26 GB, 53 GB together on disk |
-| `gclient sync` after the cache exists | ~19 min |
-| git cache size | 25 GB |
-| Chromium source incl. dependencies | 55 GB |
-| Checkout total (cache + source) | 65 GB |
-| `gn gen` wall time | 6–12 s (32,499 targets from 4,955 files) |
-| First `release` build, cold | **3 h 29 min** (13:57 → 17:26) |
-| `release` object files | 46,555 |
-| `out/release` size | 9.3 GB |
-| `Chromium.app` size | 530 MB |
-| Incremental build, one `.cc` touched | TBD |
-| First `official` build wall time | **4 h 5 min** |
-| `official` `Chromium.app` size | 334 MB (against 530 MB for `release` — official is stripped) |
-| `official` output size | 13 GB |
+PGO profiles are downloaded by `gclient runhooks` only when the solution asks
+for them. See `checkout_pgo_profiles` under Known failure modes.
 
-The 150 GB floor `sync-chromium` enforces is not arbitrary: the checkout alone is
-65 GB, a release build adds 9.3 GB, and an official build adds more on top of that,
-before leaving any room to work in.
+## Known failure modes
 
-PGO profiles are two ~300 MB files (x86-64 and arm64) that `gclient runhooks`
-downloads only when the solution requests them — see the note on
-`checkout_pgo_profiles` under "Known failure modes".
+These are the failures the scripts still guard, or that a build will hit again.
+The longer record is [HANDOFF.md](HANDOFF.md).
 
-### Known failure modes
+- **A `node_modules` above the checkout breaks the TypeScript build.** The
+  error names leaked packages (`undici-types`, `@types/node`) and not the
+  parent directory. `tooling/lib.sh` checks every ancestor and stops with the
+  remedy. The checkout has to sit where no ancestor has a `node_modules`.
 
-Recorded as they were actually hit on the reference machine, not imagined.
+- **A direct `git clone` of `chromium/src` stalls.** The connection comes up,
+  a few megabytes arrive, and the ref advertisement then sits there. Plain,
+  shallow and partial clones do this. The Mac sync uses the git cache, above.
 
-- **`Undeclared dependencies to definition files` from `ts_library.py`,** naming
-  packages nobody asked for (`undici-types`, `buffer`, `@types/node`). Chromium's
-  TypeScript build walks up parent directories looking for `node_modules`, exactly as
-  node does, so any `node_modules` *above* the checkout contributes its `@types` to
-  every TypeScript target. On the reference machine a 1 GB `~/node_modules` — left by
-  some past `npm install` in the home directory — broke the build about ninety seconds
-  in, after the whole checkout had been made. The message names the leaked packages
-  rather than the cause, so `tooling/lib.sh` checks every ancestor directory during
-  preflight and fails immediately with the remedy. Put the checkout somewhere with no
-  `node_modules` above it:
+- **The first `gclient` run is quiet for minutes.** It is fetching `cipd` and
+  `vpython` before any Chromium code. It does finish.
 
-  ```bash
-  CHROMIUM_ROOT=/Users/Shared/chromium tooling/sync-chromium
-  ```
-
-  Note that *every* ancestor counts, so no path under a contaminated home directory
-  will do.
-
-- **`git clone` of `chromium/src` hangs with no output.** The connection is
-  established and a few megabytes arrive, then nothing, indefinitely. This is the
-  ref advertisement, not a network fault: the repository has an enormous number of
-  tags. Observed identically with a plain clone, `--depth 1 --branch <tag>`, and
-  `--filter=blob:none`. The fix is not to clone from the server at all — see "Why
-  everything goes through the git cache" above. Any instructions elsewhere on the
-  internet that begin with `git clone https://chromium.googlesource.com/chromium/src`
-  will appear to hang for the same reason.
-
-- **`gclient` appears to hang for minutes on a fresh machine.** It is bootstrapping
-  `cipd` and `vpython`, which download a Python distribution and wheels before any
-  Chromium code is fetched. First run only, and it does finish.
-
-- **`cipd` retries with `dial tcp [2607:f8b0:...]:443: connect: bad file descriptor`
-  or `i/o timeout`.** Google's infrastructure advertises AAAA records; on a host with
-  degraded IPv6 reachability the client works through a 1s→2s→4s→8s→16s backoff before
-  falling back to IPv4. It does succeed, but the first sync is noticeably slower and
-  it looks exactly like a hang. To tell "backing off, wait" from "the network is
-  down, stop", time a real download of a real file — note the `200`, which is the
-  point, since a 404 returns an error page in milliseconds and reports a transfer
-  rate that means nothing:
-
-  ```bash
-  curl -s -o /dev/null -w 'http=%{http_code} speed=%{speed_download} B/s\n' \
-    --max-time 20 https://dl.google.com/go/go1.22.0.darwin-arm64.tar.gz
-  ```
-
-  Several MB/s with `http=200` means the host is fine and cipd will get there. Near
-  zero means it will not.
-
-- **Moving a checkout breaks it quietly.** gclient clones every dependency from the
-  git cache and records the cache location as an *absolute* path, in each
-  dependency's `.git/objects/info/alternates` and `.git/config` — 298 files on the
-  reference checkout. Move or rename the tree and all of them go stale at once. Git
-  then reports `unable to normalize alternate object path` and `fatal: bad object
-  HEAD`, but the build largely carries on, because the working trees still hold real
-  files. That is the dangerous part: version stamping gets it wrong rather than
-  stopping. `tooling/repair-checkout` rewrites the paths (`--check` reports without
-  writing), and it verifies the repair by making real dependencies resolve their own
-  HEAD rather than assuming.
+- **Moving a checkout breaks it quietly.** gclient records the git cache as an
+  absolute path in each dependency's `.git/objects/info/alternates` and
+  `.git/config`. After a move, git reports `unable to normalize alternate
+  object path` while the working trees still hold files, so version stamping
+  can go wrong without the build stopping. `tooling/repair-checkout` rewrites
+  the paths. `--check` reports and does not write.
 
 - **`mapfile: command not found`.** macOS ships bash 3.2, and `#!/usr/bin/env bash`
-  resolves to it. Anything needing bash 4 works on a machine with Homebrew bash and
-  fails on a stock one — which is the machine a new contributor has. `tooling/check-repo
-  shell` rejects bash-4-only constructs so this cannot come back.
+  resolves to it. `tooling/check-repo shell` rejects bash-4-only constructs.
 
-- **`gn gen` fails on an official build with a missing PGO profile**, telling you to
-  run `gclient runhooks`. Running it changes nothing on its own: the profile hook is
-  gated on the gclient solution asking for it, and a solution created without
-  `checkout_pgo_profiles` never will. Add it to `.gclient` and re-run hooks — which
-  `tooling/sync-chromium` now does for new checkouts and repairs in existing ones.
-  The cost of getting this wrong is that the failure appears at `gn gen` for a
-  configuration you may not build until much later.
+- **`gn gen` of an official build fails for a missing PGO profile.** Running
+  `gclient runhooks` does nothing if `.gclient` never asked for
+  `checkout_pgo_profiles`. `tooling/sync-chromium` sets that for a new Mac
+  checkout and repairs an existing one. Windows checkouts do not request the
+  profiles: the Windows configurations are not official builds.
 
-- **Editing a `tooling/` script while it is running corrupts the running shell.**
-  bash reads a script incrementally, by byte offset, as it executes. Editing the file
-  shifts those offsets, so a long-running script resumes mid-statement and dies with a
-  syntax error — after the work is done but before it reports. This cost us a completed
-  three-and-a-half-hour Chromium build whose success went unnoticed, because the script
-  died on the line that would have announced it. `build-chromium` and `sync-chromium`
-  now wrap their bodies in a `main()` called on the last line, so bash parses the whole
-  file before running any of it. Prefer that shape for any script that runs for hours.
+- **Editing a long-running script corrupts the running shell.** bash reads a
+  script by byte offset. `build-chromium` and `sync-chromium` wrap the body in
+  `main()` and call it on the last line, so the file is parsed before it runs.
+  A script that runs for hours should do the same.
 
-- **The build crawls while something else runs, even on an idle-looking machine.**
-  `autoninja` deliberately runs the compile at **nice 5**, so anything at normal
-  priority outcompetes it — a code-search tool, an indexer, another agent. Observed
-  here: two `ripgrep` processes scanning the Chromium tree took roughly 3.6 cores and
-  dropped total `clang` CPU from about 588% to 130%, with the object count nearly
-  flat for half an hour. Nothing was broken and no error appeared; the build simply
-  starved. Check with:
+- **An unsigned Mac build can hang on its first Keychain access.** Cookie
+  encryption goes through OSCrypt. A new unsigned binary is a stranger to the
+  Keychain, macOS raises a prompt, and a headless run waits with no crash and
+  no pages loading. Incognito does not touch that store. `--use-mock-keychain`
+  is the flag for an unattended test. It is not a setting for a build a person
+  uses: cookies are then not encrypted at rest. Released Mac builds are signed,
+  which removes the prompt for them. Any unattended test of a freshly built
+  browser needs the mock keychain, a person to authorise the binary once, or
+  signing.
 
-  ```bash
-  ps -Ao %cpu,ni,command | sort -rn | head
-  ```
-
-  Anything above the compilers at a lower `ni` value is the problem. `renice +20 -p
-  <pid>` on the offender restores it without killing anything — total `clang` CPU went
-  back to 380% immediately. Worth knowing before concluding a build has hung.
-
-- **An unsigned build hangs on its first macOS Keychain access, and headlessly that
-  looks like a broken browser.** This cost most of a day at M0 and produced two wrong
-  diagnoses before the right one, so it is written out in full.
-
-  Symptom: the browser starts, every child process comes up, `chrome://` pages render,
-  a tab is created with the correct URL — and then nothing loads, with no crash, no
-  error and no `net_error`. `Default/Network/Cookies` is never created and
-  `Default/History` exists with no tables.
-
-  Cause: cookie encryption goes through OSCrypt, which on macOS reads a
-  "Chromium Safe Storage" Keychain item. Keychain ACLs are **per binary**, so a newly
-  built, unsigned binary is a stranger to the Keychain and macOS raises an
-  authorisation prompt. Driven headlessly there is nobody to click it, and the browser
-  waits — forever, silently, because `official` builds compile out the `DLOG(ERROR)`
-  that would have said so.
-
-  Why it looked like a compiler bug: the `release` build was built and run first, so it
-  had already been authorised. `official`, being a different binary, had not. Same
-  source, same machine, one worked and one did not — which points at the build
-  configuration and is exactly the wrong conclusion.
-
-  How to tell it apart from a real failure:
-
-  ```bash
-  # If --incognito works and a normal profile does not, suspect the Keychain,
-  # not the build. Incognito never touches the encrypted store.
-  "$APP/Contents/MacOS/Chromium" --user-data-dir=/tmp/p --incognito https://example.com/
-  security find-generic-password -s "Chromium Safe Storage"   # does an item exist?
-  ```
-
-  `--use-mock-keychain` bypasses it entirely and is the right flag for automated
-  testing. Do not treat it as a fix for a user-facing build: it means cookies are not
-  encrypted at rest.
-
-  The lesson for CI: any unattended test of a freshly built browser needs
-  `--use-mock-keychain`, or a human to authorise the binary once, or signing. Released
-  Mac builds are signed since beta 10, which makes this go away for them.
-
-- **`gsutil` warns that `~/.boto` authentication is deprecated.** Harmless; the
-  bootstrap download proceeds anyway.
-
-- **`gn` warns that a build argument "has no effect".** The argument no longer exists
-  upstream. Hit at M0 with `enable_nacl`, which is inert now that Native Client has
-  been removed from Chromium. Delete the argument rather than silencing the warning:
-  a gn arg that does nothing is a comment pretending to be configuration.
+- **`gn` says a build argument "has no effect".** Upstream removed the
+  argument. Delete it. A gn arg that does nothing is not configuration.
 
 ## De-Googling stance
 
-Policy lives in `PRIVACY.md`; this section covers the mechanics and the honest
-tradeoffs. The principle: **no request leaves the machine to Google (or anyone) unless
-the user asked for something that requires it** — but we do not sacrifice safety
-features that users expect from a real product just to make a purity claim.
+The policy is [PRIVACY.md](PRIVACY.md). This section is the mechanics.
 
-- **Google API keys: not shipped.** Consequence: Google account sign-in, Chrome Sync,
-  and Google geolocation are absent. Chrome Sync against Google servers is not our
-  product anyway; a future sync story is its own project.
-- **Telemetry, crash reporting to Google, field trials (Finch), RLZ, promo/brand
-  pings: removed or disabled.** Features are controlled by build flags and our own
-  defaults, never by server-side experiments. Opt-in crash reporting to *our*
-  infrastructure may come later (per `PRIVACY.md`).
-- **Certificate Transparency and Google's static key pins: on, as in Google Chrome**
-  (patch 0074, `S-236`, `S-237`); the certificate audit reports Chrome sends with them
-  are off in code.
-- **Features Chrome launches by field trial: their code defaults turned on.** Stedding
-  receives no trials, so `tooling/field-trials` compares Chrome Stable's seed with the
-  pin's defaults at every pin move, and patch 0074 flips the launches that need no
-  Google service (`S-236`, `S-240`).
-- **Safe Browsing: meant to be kept, hash-prefix variant -- not working.**
-  Dropping it silently makes users less safe; keeping Google's real-time endpoints
-  leaks browsing signals. The intent is recorded in `PRIVACY.md`: standard
-  hash-prefix Safe Browsing on by default, real-time "Enhanced" never turned on.
-  Today the builds carry no Google API key, which list updates need: on a
-  running build the first update was refused with HTTP 400 and the lists stay
-  empty (docs/history/plan-2026-09-26.md WEB-5, 2026-09-28; `PRIVACY.md`, the recorded run).
-- **Component updater: kept, to be pointed at infrastructure we control where feasible.**
-  Some components matter for security and site compatibility (certificate revocation
-  lists among them). Today every component Stedding registers comes from Google, as in
-  stock Chromium; which ones to mirror, proxy or remove is decided before 1.0 (`BACKLOG.md`
-  `S-241`).
-- **Widevine (DRM playback): not built.** `third_party/widevine/cdm/widevine.gni` turns
-  `enable_widevine` on for Google Chrome builds only, and no `tooling/args/*.gn` sets it, so
-  Stedding has neither the CDM nor its component: Netflix, Disney+ and Spotify's web player
-  do not play. Shipping it needs a licence agreement with Google, and for some services a
-  signing step through Google or castlabs. The owner wants it; the steps are `S-270`.
-- **Default search, suggestions, spellcheck, translate, DNS/preconnect defaults:**
-  privacy-preserving defaults per `PRIVACY.md`. Up to beta 14 a fresh profile also
-  checked Google's account list and registered with Google's push service unasked; beta 15
-  stopped both (`PRIVACY.md`, the recorded runs; privacy Q11, Q12).
+No request leaves the machine for Google, or for anyone else, unless the user
+asked for something that requires it. Safety features a browser is expected to
+have stay, and the tradeoff is written down.
 
-Ungoogled-Chromium is prior art we learn from, but our bar is different: it optimizes
-for maximal removal and accepts breakage; we optimize for a polished product with
-honest, documented network behavior.
+- **Google API keys are not shipped.** Google account sign-in and Chrome Sync
+  are absent. Sync of the sidebar is a folder the user picks (patch 0101,
+  [ADR 0029](decisions/0029-sidebar-sync-through-a-folder.md)), not Chrome Sync.
+- **Telemetry, crash reports to Google, field trials (Finch), RLZ and promo
+  pings are off.** Features follow build flags and Stedding's defaults. Opt-in
+  crash reporting to infrastructure of ours may come later
+  ([PRIVACY.md](PRIVACY.md)). A crash dump stays on the machine.
+- **Certificate Transparency and Google's static key pins are on,** as in
+  Google Chrome (patch 0074, S-236, S-237). The certificate audit reports that
+  go with them are off in code.
+- **Features Chrome launches by field trial have their code defaults turned
+  on** where the launch needs no Google service (patch 0074). `tooling/field-trials`
+  is re-run at every pin move (S-240).
+- **Safe Browsing is the hash-prefix variant, and it does not update in these
+  builds.** The lists need a Google API key. On a running build the first
+  update was refused with HTTP 400, and the lists stay empty
+  ([PRIVACY.md](PRIVACY.md), Safe Browsing;
+  [docs/history/plan-2026-09-26.md](history/plan-2026-09-26.md) WEB-5). Local
+  warnings for dangerous file types remain. Enhanced Safe Browsing, which sends
+  full URLs, is never the default. The intent, once a working list source
+  exists, is hash-prefix Safe Browsing on by default.
+- **The component updater stays.** Every component Stedding registers still
+  comes from Google. Which ones to mirror, proxy or remove is `BACKLOG.md`
+  S-241, before 1.0.
+- **Widevine is not built.** No file in `tooling/args/` sets `enable_widevine`.
+  Nothing protected by Widevine plays, including Netflix, Disney+, Prime Video
+  and Spotify's web player (`BACKLOG.md` S-270). Shipping it needs a licence
+  from Google.
+- **Search, suggestions, spellcheck, translate, and DNS and preconnect
+  defaults** are in [PRIVACY.md](PRIVACY.md). A fresh profile does not check
+  Google's account list and does not register with Google's push service
+  (privacy Q11, Q12).
+
+Ungoogled-Chromium removes more, and it accepts the breakage. Stedding's bar
+is a polished browser whose network behaviour is the list in PRIVACY.md.
 
 ## Branding
 
-Chromium branding is scattered but well-known: `chrome/app/theme/` (icons, logos),
-grit/grd string resources (product name strings), `chrome/installer/` and macOS bundle
-metadata (bundle id, app name), plus the user agent and version strings. We build with
-Chromium (not Chrome) branding, then apply ours on top.
+The build is Chromium branding (`is_chrome_branded` off), then Stedding's
+assets on top. First `tooling/apply-branding` copies `branding/` over the
+checkout before `gn gen`. Then gn args, where upstream has a branding knob.
+A patch is last, for a name baked into code. Renaming every internal
+"Chromium" is not a goal. The user-visible surfaces are the bar: the app name,
+menus, About, the installer and settings.
 
-Approach, patch-light in this order: build-time **asset replacement** from `branding/`
-(a script copies our icons/strings over the checkout before `gn gen` — zero patches),
-then **gn args** where upstream exposes branding knobs, and only last actual patches
-for names baked into code. Renaming every internal occurrence of "Chromium" is
-explicitly a non-goal; user-visible surfaces (app name, menus, About, installer,
-settings) are the bar. The user agent stays Chrome-compatible per site-compat norms —
-we do not advertise a novel UA token by default.
+The user agent stays a Chrome-compatible `Chrome/<version>` token. There is no
+gn arg for a different one, and a new product token would be a patch and a
+site-compatibility regression. On Windows that version is Chromium's, not
+Stedding's product version (patch 0073).
 
-### Surfaces, as they actually are at the pin
+### Surfaces
 
-Surveyed against the checkout at M0, before the branding landed at M1, and
-spot-verified file by file. Paths are relative to the Chromium source root.
+Paths are relative to the Chromium source root.
 
 | Surface | Where | How |
 |---|---|---|
 | Product name, company, bundle id, copyright | `chrome/app/theme/chromium/BRANDING` | asset replacement |
-| macOS app icon | `chrome/app/theme/chromium/mac/` — `app.icns`, `AppIcon.icon`, `Assets.car`, `Assets.xcassets` | asset replacement |
-| Product name in UI strings | `IDS_PRODUCT_NAME` in `chrome/app/chromium_strings.grd`, its siblings, and every locale's `.xtb` | asset rewrite (`tooling/brand/product_name.py`) |
-| Windows app, document and PDF icons; the tiles | `chrome/app/theme/chromium/win/` | asset replacement |
-| Windows install mode: paths, app id, ProgIDs, GUIDs, sandbox prefix | `chrome/install_static/chromium_install_modes.h` | patch 0041 (ADR 0018) |
-| Version | `chrome/VERSION` | set by the pin; never edited by hand |
-| About page | `chrome://settings/help` (macOS has no separate About panel) | grd/png replacement |
-| User agent | — | **leave alone** |
+| macOS app icon | `chrome/app/theme/chromium/mac/` (`app.icns`, `AppIcon.icon`, `Assets.car`) | asset replacement |
+| Product name in UI strings | `IDS_PRODUCT_NAME` in `chrome/app/chromium_strings.grd`, its siblings, and each locale's `.xtb` | `tooling/brand/product_name.py`, from `tooling/apply-branding` |
+| Windows app, document and PDF icons, and the tiles | `chrome/app/theme/chromium/win/` | asset replacement |
+| Windows install mode: paths, app id, ProgIDs, GUIDs, sandbox prefix | `chrome/install_static/chromium_install_modes.h` | patch 0041 ([ADR 0018](decisions/0018-windows-installer.md)) |
+| Version | `chrome/VERSION` | The pin, on the Mac. On Windows, `tooling/win/build.ps1` writes Stedding's product version before the build and keeps Chromium's on `CHROMIUM_VERSION` (patch 0073, S-72). Not edited by hand. |
+| About | The About menu opens `chrome://settings/help` | grd and icon replacement |
+| User agent | — | Left as Chromium emits it |
 
-`BRANDING` is a ten-line key/value file — `PRODUCT_FULLNAME`, `PRODUCT_SHORTNAME`,
-`COMPANY_FULLNAME`, `MAC_BUNDLE_ID`, `COPYRIGHT` and a few more — and it drives most of
-the macOS bundle. Replacing it is the single highest-leverage branding change available,
-and it costs no patches.
+`BRANDING` is a short key/value file. `PRODUCT_FULLNAME` and
+`PRODUCT_SHORTNAME` are `Stedding`. `MAC_BUNDLE_ID` is `dev.stedding.Stedding`.
+`COMPANY_FULLNAME` is `The Stedding Authors`
+([ADR 0009](decisions/0009-macos-bundle-identifier.md)). Replacing that file
+drives most of the macOS bundle and costs no patch.
 
-Three findings that shaped the branding:
+**There is no third brand directory.** Upstream's switch is
+`is_chrome_branded`, choosing `chrome/app/theme/chromium/` or
+`chrome/app/theme/google_chrome/`. Grit includes hard-code `chromium/`.
+Stedding's assets overwrite the `chromium/` tree in place, which is what
+`tooling/apply-branding` does, and why it runs before `gn gen`.
 
-- **There is no third-brand path.** Upstream's branding switch is boolean
-  (`is_chrome_branded`), selecting `chrome/app/theme/chromium/` or
-  `chrome/app/theme/google_chrome/`. Adding a *third* directory is not supported: grit
-  includes hardcode `chromium/`. So our assets overwrite the `chromium/` tree in place
-  rather than sitting beside it — which is exactly what the `branding/` copy step does,
-  and why it must run before `gn gen`.
-- **Three identifiers do not follow `MAC_BUNDLE_ID`.** Most do: the main app, every
-  helper, the framework, PWA and app-shim ids, Mach and mojo rendezvous names, the
-  keychain groups under `chrome/`, and the Crashpad filename all derive from it, and
-  cost nothing. Three do not, and each was verified in the tree at the pin:
+### Three identifiers do not follow `MAC_BUNDLE_ID`
 
-  | Where | What | Why it matters |
-  |---|---|---|
-  | `build/apple/tweak_info_plist.py:299` | matches the literal `org.chromium.Chromium` to decide the direct-launch URL scheme | change the bundle id and the scheme silently vanishes from `Info.plist`, while `chrome/browser/shell_integration_mac.mm` still returns `"chromium"` — the plist and the code disagree |
-  | `net/device_bound_sessions/unexportable_key_service_factory.cc:30` | hardcodes `.org.chromium.Chromium` for the keychain group | its own comment says it cannot depend on `//chrome`, so it cannot derive the value |
-  | `content/browser/media/capture/desktop_capture_util_mac.mm:78` | lists `org.chromium.Chromium` among known browser prefixes | our own helpers and PWAs stop being recognised as this browser for audio capture |
+Most ids derive from `MAC_BUNDLE_ID`: the app, the helpers, the framework, PWA
+and app-shim ids, Mach and Mojo rendezvous names, the keychain groups under
+`chrome/`, and the Crashpad filename.
 
-  Two more surfaces hardcode ids — `chrome/updater/branding.gni` and
-  `chrome/enterprise_companion/branding.gni` — but neither ships for us:
-  `enable_updater = is_chrome_branded && …` (`chrome/browser/buildflags.gni:16`), and we
-  build unbranded. They become relevant only if the Chromium updater is adopted, which neither ADR 0014
-  nor ADR 0023 chose (Sparkle on the Mac, the browser's own updater planned for Windows).
+Three files still hard-code `org.chromium.Chromium` (`BACKLOG.md` S-175;
+SER-3 in [docs/history/plan-2026-09-26.md](history/plan-2026-09-26.md)). No
+patch in the series changes those comparisons. ADR 0009 says they are patched.
+They are not.
 
-  Some hardcoded `org.chromium.*` strings should deliberately **stay**: the
-  `org.chromium.extension` and `org.chromium.shortcut` UTIs and the clipboard pasteboard
-  types are interoperability identifiers shared with other Chromium browsers, not
-  branding. Renaming them would break interchange for no user-visible gain.
-- **Icons are copied, not compiled** — the build takes prebuilt `app.icns` and
-  `Assets.car`. The newer vector `.icon` sources *are* compiled at build time, but
-  overwriting the sources is still asset replacement, not a patch.
+| Where | What |
+|---|---|
+| `build/apple/tweak_info_plist.py` | Matches the literal `org.chromium.Chromium` when it decides the direct-launch URL scheme. Patch 0068 edits this file only to set `CFBundleVersion`. Change the bundle id and the scheme can drop out of `Info.plist` while `chrome/browser/shell_integration_mac.mm` still returns `"chromium"`. |
+| `net/device_bound_sessions/unexportable_key_service_factory.cc` | Hard-codes `.org.chromium.Chromium` for the keychain group. It cannot depend on `//chrome`, so it cannot read `MAC_BUNDLE_ID`. |
+| `content/browser/media/capture/desktop_capture_util_mac.mm` | Lists `org.chromium.Chromium` among known browser prefixes, so Stedding's helpers and apps made from pages are not recognised for system audio capture ([docs/features/web-apps.md](features/web-apps.md)). |
 
-On the user agent: stock Chromium already emits a Chrome-compatible `Chrome/<version>`
-token. There is no gn arg to change it, and adding a novel product token would be both
-a patch and a site-compatibility regression. Leaving it alone is the decision.
+Chromium's own updater is not what Stedding ships. No file in `tooling/args/`
+enables it. The Mac uses Sparkle
+([ADR 0022](decisions/0022-sparkle-updates-the-mac.md)). Windows uses Stedding's
+updater (patch 0073, [ADR 0023](decisions/0023-updates-on-windows-and-linux.md)).
+The updater and enterprise-companion branding files upstream keeps for a
+Chrome-branded build are unused here.
+
+Some hard-coded `org.chromium.*` strings stay on purpose. The
+`org.chromium.extension` and `org.chromium.shortcut` UTIs, and the clipboard
+pasteboard types, are shared with other Chromium browsers (ADR 0009). Renaming
+them would break interchange.
+
+**Icons are copied, not compiled.** `tooling/apply-branding` overwrites the
+prebuilt `app.icns` and `Assets.car`, and the `.icon` sources. Overwriting a
+source the build compiles is still asset replacement, not a patch.
 
 ## Updates and distribution
 
-macOS distribution for real users requires an Apple Developer ID, **code signing, and
-notarization** — without them, Gatekeeper blocks the app. Signing landed for the Mac
-with beta 10 (2026-10-01): every macOS image since is signed with the Developer ID,
-notarized and stapled, then put through `tooling/package-dmg` and
-`tooling/publish-release`. From 0.3.0 beta 16 the disk image itself is signed, notarized and
-stapled too (`package-dmg`, with the same two variables `sign-release` takes); the app inside
-was always what Gatekeeper checks, and the image's own signature is for whatever inspects the
-download before it is opened. The macOS images of betas 1 to 8 shipped unsigned, with the
-Gatekeeper bypass in their notes (beta 9 had no macOS image). Windows is not code-signed yet
-(`BACKLOG.md` S-56).
+macOS builds that ship are signed with a Developer ID, notarized and stapled.
+That has been true since beta 10 (2026-10-01). `tooling/sign-release` runs
+Chromium's signer (`chrome/installer/mac/signing`). After stapling, `spctl`
+must answer `accepted, source=Notarized Developer ID`, or the script fails.
+The identity and the notary profile are `STEDDING_SIGN_IDENTITY` and
+`STEDDING_NOTARY_ARGS`, from the operator's environment, never from this
+repository (`BACKLOG.md` S-17).
 
-**Signing** runs Chromium's own signer (`chrome/installer/mac/signing`, built into
-`out/<config>/Stedding Packaging` by `chrome/installer/mac:mac`) through
-`tooling/sign-release`: every helper with its entitlements, the hardened runtime, a
-notarytool submission, the ticket stapled, then `spctl` must answer "accepted,
-source=Notarized Developer ID" or the script fails. The identity and the notary
-profile come from the operator's environment and keychain, never from this
-repository (`BACKLOG.md` `S-17`). Patch 0051 is what makes the signer work with a
-Developer ID on current macOS: upstream assessed the app with Gatekeeper before
-notarizing it, which rejects every unnotarized Developer ID app, and dropped the
-notarization level from the per-distribution config (`docs/HANDOFF.md`, trap 49).
-The signer waits two hours for Apple at most; a team's first submission can take
-longer, and a timed-out run loses its signed copy with the signer's work directory,
-so the rerun signs again.
+Patch 0051 is what makes that signer work with a Developer ID on current
+macOS. Upstream assessed the app with Gatekeeper before notarizing it, which
+rejects every unnotarized Developer ID app, and it dropped the notarization
+level from the per-distribution config
+([HANDOFF.md](HANDOFF.md) trap 49). The signer waits two hours for Apple at
+most. A team's first submission can take longer, and a timed-out run loses its
+signed copy with the signer's work directory, so the rerun signs again.
 
-**Update checks go to GitHub, never to a server of ours** —
-`decisions/0014-github-releases-as-update-channel.md`, partly superseded by
-`decisions/0022-sparkle-updates-the-mac.md`. On the Mac the browser reads a signed feed kept
-in this repository, `updates/appcast.xml`, at launch when the last check is more than an
-hour old and every six hours (the owner, 2026-10-21), and downloads the release's own image;
-it is on by default, with a switch in Settings › Stedding › Updates. No account, no
-identifier, no telemetry; GitHub sees an IP and a timing pattern, and `PRIVACY.md` names
-both endpoints rather than glossing them.
+From 0.3.0 beta 16 the disk image is signed, notarized and stapled as well
+(`tooling/package-dmg`), with the same two variables. Gatekeeper checks the
+app inside. The image's own signature is for whatever inspects the download
+before it is opened.
 
-That decision removes the update *server* from the project: the feed is a file in this
-repository and the image is the release's own, so there is nothing extra to run, secure or
-pay for. The Mac updates itself from beta 16 on (ADR 0022, `docs/features/updates.md`):
-Sparkle reads the signed feed on that schedule, checks the image's EdDSA signature and the app's
-Developer ID, and installs at the quit or at a click on the sidebar's pill. Windows has
-updated itself since beta 19, with an updater, a feed and a key of its own (ADR 0023,
-ADR 0026, `docs/features/updates.md`); Linux is planned (`BACKLOG.md` S-216). Full-size
-updates before deltas; correctness and signature verification before either.
+Windows code signing is still open (`BACKLOG.md` S-56).
 
-**stedding.dev is a website, not infrastructure.** Separate repository (`ysalitrynskyi/stedding.dev`, live since 2026-09-16), Astro, static, Cloudflare Pages.
-Download link, release notes, security policy, source link. Deliberately not on the path
-of an update check: if the site is down, updates still work.
+**Update checks go to GitHub.** There is no update server of ours
+([ADR 0014](decisions/0014-github-releases-as-update-channel.md), partly
+superseded by [ADR 0022](decisions/0022-sparkle-updates-the-mac.md) and
+[ADR 0023](decisions/0023-updates-on-windows-and-linux.md)). The feeds are
+files in this repository, served from GitHub:
+`updates/appcast.xml` on the Mac and `updates/appcast-windows.xml` on Windows,
+both from `raw.githubusercontent.com`. No account, no identifier, no telemetry.
+GitHub sees an IP and a timing pattern, and [PRIVACY.md](PRIVACY.md) names the
+endpoints.
+
+On the Mac, Sparkle reads the signed feed. Updates are on by default, with a
+switch in Settings › Stedding › Updates. The browser checks at a launch when
+the last check is more than an hour old, and every six hours while it runs
+(patch 0078; the owner, 2026-10-21). Sparkle checks the image's EdDSA signature
+and the app's Developer ID. A downloaded update installs at quit, or from the
+sidebar's pill ([docs/features/updates.md](features/updates.md), ADR 0022). An
+unsigned local build does not start Sparkle, so a development copy does not
+replace itself.
+
+On Windows, Stedding's own updater has done this since beta 19 (patch 0073,
+ADR 0023, [ADR 0026](decisions/0026-a-windows-update-key.md) for its key). It
+uses the same schedule (patch 0078), checks the feed's Ed25519 signature
+against the key every Windows build carries, checks the installer's length and
+signature, and runs the installer while the browser is open. The sidebar's
+pill offers the restart.
+
+Linux has no build yet. Packages and their updates are planned (`BACKLOG.md`
+S-216, ADR 0023).
+
+Updates are full-size. A delta format waits on that path being correct, and on
+the signature check.
+
+**stedding.dev is a website.** Its repository is `ysalitrynskyi/stedding.dev`:
+Astro, static, Cloudflare Pages. It carries the download link, release notes,
+the security policy and the source link. It is not on the update path
+(ADR 0014). If the site is down, updates still work.
 
 ## Upstream tracking
 
-- **Policy: follow Chromium stable.** Every upstream stable release, including
-  security point releases, gets evaluated the day it ships.
-- **Security bumps are meant to be rebased, rebuilt, and shipped within days**, not weeks. This is
-  the strongest argument for the minimal-patch-series design: a browser that lags
-  upstream security fixes is worse than no browser.
-- **A minor rebase must usually be zero-touch.** The pin moves, `apply-patches` runs
-  clean, the build machine builds, release ships. If a routine point release regularly causes manual
-  conflict resolution, the offending patches are in the wrong layer — fix the patch,
-  not the process.
-- Major-version rebases (new stable milestone) are scheduled, budgeted work with a
-  checklist, performed on a branch and merged only when the full series applies and
-  the browser passes the release checklist in `ROADMAP.md` ("The quality bar").
+The pin follows the newest Chromium stable for these platforms, once that
+build is on more than 1% of a platform's stable users (ADR 0007). Extended
+stable is not the channel. A security point release is rebased, rebuilt and
+shipped on the timetable in [ROADMAP.md](ROADMAP.md#the-quality-bar): 7 days
+for an in-the-wild fix, 14 days otherwise. `tooling/check-pin` and the
+`upstream` workflow are the clock.
+
+A point release on the same milestone should apply with no manual conflict. A
+conflict that shows up on a routine point release means the patch is in the
+wrong layer.
+
+A new milestone is scheduled work, done on a branch and merged when the series
+applies and the browser passes the release checklist in ROADMAP.md ("The
+quality bar"). Merging M157 on 2026-10-28, before its stable rollout, is the
+exception ADR 0007 records.
 
 ## CI reality
 
-GitHub-hosted runners cannot practically build Chromium: default runners have tens of
-GB of disk and modest CPU against a checkout+build that needs roughly an order of
-magnitude more disk and hours of compute. Even a bare source checkout exceeds the
-default runner disk. Pretending otherwise produces a CI that is always red or always
-skipped.
+A GitHub-hosted runner cannot build Chromium. The checkout and a build need
+more disk, and more hours, than a default runner has. A self-hosted or cloud
+builder, macOS for the Mac image and Windows for the Windows image, is
+`BACKLOG.md` S-49. It costs money, so it is the owner's decision. It was
+written here as an ADR due before M1. M1 is past, and that ADR does not exist.
 
-Plan: **self-hosted or cloud builders** for real builds (own hardware or a cloud provider;
-macOS for the Mac's image, and Windows since the port) — provider and topology are an open
-decision. It was written here as "ADR before M1"; M1 is long past and the ADR does not
-exist, so it is tracked as `BACKLOG.md` `S-49` rather than left as a deadline that has
-already gone by. It costs money, which makes it the owner's call. Until it lands, every
-build, test run and release is made by hand on the two machines (the Windows PC and the
-Mac), nothing automated verifies the product, and hosted CI earns its keep with what it
-*can* do (`.github/workflows/`):
+Until it lands, builds, test runs and releases are made on the two machines.
+The Windows build is made on a Windows PC. The Mac build is made on a Mac. No
+workflow builds or tests the browser. Hosted CI does what a small runner can
+do (`.github/workflows/`):
 
-- `checks`: `tooling/check-shell` (shellcheck at the pinned version, bash syntax),
-  `tooling/check-repo` (links, ADR format, the patch series' numbering and headers, no
-  machine paths, the traps, the tests specs cite, line endings), and `tooling/check-pin
-  --self-test`.
-- `series`: the series applies to the pin, by `tooling/apply-patches --check` against the
-  pinned tree fetched at depth 1 and cached under the pin, with no build
-  (`docs/HANDOFF.md`, "What needs which machine").
-- `upstream`: a scheduled `tooling/check-pin` that opens a tracking issue while the pin is
-  behind stable and closes it when it is current again.
+- **`checks`**, on push and pull request: `tooling/check-shell` (shellcheck at
+  the version in `tooling/shellcheck-version`, and bash syntax),
+  `tooling/check-repo` (links, ADR format, patch numbering and headers, no
+  machine paths, the traps, the tests the specs cite, line endings),
+  `tooling/check-pin --self-test`, and `tooling/check-disclosure --self-test`.
+- **`disclosure`**, on a pull request: `tooling/check-disclosure`, the rule in
+  [CONTRIBUTING.md](../CONTRIBUTING.md).
+- **`series`**: `tooling/apply-patches --check` against the pinned tree, fetched
+  at depth 1 and cached under the pin. No build
+  ([HANDOFF.md](HANDOFF.md#what-needs-which-machine)).
+- **`upstream`**: a daily `tooling/check-pin`. One tracking issue stays open
+  while the pin is not current, and is closed when it is.
 
 ## Rejected alternatives
 
-**Electron/CEF wrapper.** A browser-shaped app on Electron or CEF cannot deliver full
-Chrome extension compatibility — extension APIs are implemented in Chrome's browser
-layer, not in the embedding APIs — and it inherits a permanent performance and
-memory penalty plus a second-class multi-process model. Our hard requirement (real
-extension support) rules this out on its own; the rest just makes it worse.
+**Electron or CEF.** A shell on either one cannot offer full Chrome extension
+compatibility. Those APIs live in Chrome's browser layer, not in the embedding
+APIs. The extra runtime also costs memory and process behaviour. Extension
+compatibility is a hard requirement of this project, which rules the wrapper
+out on its own.
 
-**Firefox base.** Gecko is a credible engine, but Chrome extension compatibility
-would mean WebExtensions-only with real gaps, and the users we target live in the
-Chrome extension ecosystem. Zen Browser already executes the Arc-style-UI-on-Firefox
-idea well; competing there means fighting for the smaller lane against an incumbent.
-Our differentiation depends on Chromium compatibility with none of Chrome's strings
-attached.
+**Firefox.** Gecko is a real engine. Chrome extension compatibility there means
+WebExtensions, with gaps, and the people this browser is for live in the Chrome
+extension ecosystem. Zen Browser already does an Arc-style interface on
+Firefox. The lane Stedding is in is Chromium compatibility without Chrome's
+services attached.
 
-**Hard fork of Chromium.** Diverging from upstream (own engine changes, own release
-cadence) means absorbing Chromium's full security-response burden with a team of
-approximately one. Chromium ships security fixes continuously; a hard fork falls
-behind within months and becomes dangerous to recommend. The minimal patch series
-keeps upstream doing the engine work while we do the product work — that asymmetry is
-the entire strategy.
+**A hard fork of Chromium.** An engine of our own, on our own release clock,
+means carrying Chromium's security response with a very small team. Chromium
+ships security fixes continuously. A hard fork falls behind. The patch series
+leaves the engine work with upstream and keeps the product work here.

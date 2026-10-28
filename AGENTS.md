@@ -9,109 +9,106 @@ procedure is `docs/AGENT-LOOP.md`; the traps are `docs/HANDOFF.md`.
 
 ## What this project is
 
-**Stedding Browser** — a fully open-source, Chromium-based desktop browser with an
-Arc-style interface: sidebar with vertical tabs, workspaces, split view, and a command
-bar. Built for technical users who want privacy, control, and a modern, productive UI —
-without trusting a VC-funded company's roadmap or telemetry.
+**Stedding Browser** is an open-source, Chromium-based desktop browser: a sidebar of
+vertical tabs, Spaces, pinned tabs, folders, split view and a command bar. It is the
+interface Arc's users are used to. macOS (Apple silicon) and Windows.
 
-- Site: **https://stedding.dev** — live, from its own private repository
-  (`ysalitrynskyi/stedding.dev`: Astro, static, Cloudflare Pages; it reads the latest
-  release from the GitHub Releases API at build time and is not on the update path,
-  ADR 0014). The website's own rules and deployment steps are in that repository
-  (`AGENTS.md`, `docs/DEPLOYMENT.md`); DNS on Cloudflare.
+- Site: **https://stedding.dev** — its own private repository
+  (`ysalitrynskyi/stedding.dev`: Astro, static, Cloudflare Pages; DNS on Cloudflare,
+  ADR 0004). It reads the latest release from the GitHub Releases API at build time
+  and is not on the update path (ADR 0014). That repository's `AGENTS.md` and
+  `docs/DEPLOYMENT.md` are its own rules.
 - Repo: `ysalitrynskyi/stedding-browser` on GitHub
-- License: **BSD-3-Clause** (permissive; closed-source or paid add-ons may exist later,
-  the core stays BSD — see `docs/decisions/0005-open-core.md`)
+- License: **BSD-3-Clause** (ADR 0002). The core stays BSD; closed-source or paid
+  add-ons may exist only beside it (ADR 0005).
 - Started: 2026-08-30
 
-The name: *Stedding* means a haven, a settled, kept place. It is shaped on the English
-word "steading" (a farmstead or homestead), which comes from "stead", an old word for a
-place. The meaning: a place to use the web where surveillance and vendor control cannot
-reach. Say it STED-ding, rhyming with "wedding". The name was chosen after vetting
-candidate names against browser, software, trademark, SEO, and pronunciation criteria —
-full record in `docs/VISION.md` ("The name"). Only the word "Stedding" is used, as this browser's
-name. No artwork, names, quotations or other material from any book, film, game or other
-brand, and no claimed affiliation with anyone (`docs/VISION.md`, "Brand and voice").
+Say it STED-ding, rhyming with "wedding": a haven, a settled place, from the English
+word "steading". Only the word "Stedding" is used. No artwork, names, quotations or
+other material from any book, film, game or other brand, and no claimed affiliation
+with anyone. The record is `docs/VISION.md` ("The name", "Brand and voice") and ADR 0001.
 
-## The mandate — read this twice
+## The mandate
 
-We are building a **ready-to-use product**, not a tech demo, not a proof of concept,
-not a config for enthusiasts. The bar is: a technical user downloads an installer,
-opens it, imports their profile, and prefers it to Chrome/Arc within a day. Every
-milestone must end in something installable and usable. When choosing between
-"interesting" and "shippable and polished", choose shippable and polished.
+A technical user downloads an installer, opens it, imports their profile, and prefers
+it within a day. Every milestone ends in something installable and usable. Shippable
+and polished wins over interesting.
 
-Concretely (full detail in `docs/ROADMAP.md`, "The quality bar"):
+Concretely (`docs/ROADMAP.md`, "The quality bar"):
 
 - Every merged change keeps the browser buildable and runnable.
 - Features ship complete: keyboard shortcuts, settings entry, edge cases, polish —
   or they don't ship.
-- No telemetry by default. Privacy defaults are product features, not afterthoughts
-  (`docs/PRIVACY.md`).
-- Full Chrome extension compatibility is a hard requirement — it is a top reason to
-  base on Chromium at all.
+- No telemetry by default. Privacy defaults are product features (`docs/PRIVACY.md`).
+- Full Chrome extension compatibility is a hard requirement, and a reason for the
+  Chromium base (ADR 0003).
 
-## Technical direction (summary — details in docs/ARCHITECTURE.md)
+## Technical direction
 
-- Base: **Chromium, stable channel, minimal patch-set fork** (the Brave/Helium model,
-  not a hard fork). UI work lives as high in the stack as possible (views/WebUI/top
-  chrome) to keep rebases cheap.
-- Patches are maintained as an ordered, documented series; tracking upstream stable is
-  a recurring scheduled task, not an emergency.
-- Considered and rejected: Electron/CEF wrapper (no real extension support, worse
-  performance), Firefox base (extension ecosystem, and Zen already owns that lane).
-- Target platforms in order: **macOS first, then Windows, then Linux.**
+Details are in `docs/ARCHITECTURE.md`.
+
+- Base: **Chromium stable, minimal patch-set** (ADR 0003, ADR 0007), the Brave/Helium
+  model. UI work lives as high in the stack as possible (views, WebUI, top chrome)
+  so rebases stay cheap. A hard fork, an Electron or CEF wrapper, and a Firefox base
+  were rejected (ADR 0003).
+- Patches are an ordered, documented series. Tracking upstream stable is a scheduled
+  task. The pin lives in `tooling/chromium-version`. A stable cut may be merged before
+  that milestone is on stable for users; `tooling/check-pin` says whether the pin is
+  current, behind or ahead (ADR 0007).
+- Platforms, in order: **macOS, then Windows, then Linux** (ADR 0006). macOS and
+  Windows ship. Linux does not (`docs/ROADMAP.md` M9). Each shipped platform is built
+  on its own machine.
+- Updates: both shipped platforms update themselves from feeds in `updates/`, served
+  from GitHub. Sparkle on the Mac (`updates/appcast.xml`, ADR 0022); Stedding's own
+  updater on Windows (`updates/appcast-windows.xml`, ADR 0023). The site is not on
+  that path (ADR 0014).
 
 ## Your first fifteen minutes
 
-1. `tooling/dev status`: the pin, the patch count, whether the checkout and the test
-   binaries exist. Every number in a doc comes from here or from a command, never from prose.
-2. `PLAN.md` (short: the owner's decisions, when an item is done), then `BACKLOG.md`, the
-   order of work.
-3. `docs/HANDOFF.md`: the "Fast path" and the trap index at its top. Read a trap when its
-   topic comes up.
-4. Ask the operator **once**, in one message, for what you would otherwise find out hours in
-   (the list under "How to work", rule 2).
+1. `tooling/dev status`: the pin, the patch count, the checkout, and whether the test
+   binaries exist. Every number in a doc comes from this, or from a command, never from
+   prose. The pin on main may not be the pin of the latest release: `gh release list`
+   is what users have. `VERSION` is the name of the release being prepared.
+2. `PLAN.md` (the owner's decisions, and when an item is done), then `BACKLOG.md`.
+3. `docs/HANDOFF.md`: the "Fast path" and the trap index at its top. Read a trap when
+   its topic comes up.
+4. Ask the operator **once**, in one message, for what you would otherwise find out
+   hours in (the list under "How to work", rule 2).
 5. Use the product before any long job: launch it, click it, look at it.
 
 ## How to work here
 
-The short form. `docs/AGENT-LOOP.md` has the detail and the numbers behind each rule; they
-come from a long run in which the slowest parts were not the builds.
+The short form. `docs/AGENT-LOOP.md` has the detail.
 
-1. **Cheapest evidence first.** Launch the build and use it, with the real pointer and
-   keyboard: that found faults (Mac wording on Windows, unreadable light-mode text, a clipped
-   command bar, an infobar left in full screen, doubled hover names) that every passing test
-   run had missed, because the tests asked other questions. Then the suites on the shipping
-   configuration; then a build with DCHECKs and the dangling-pointer detector (release speed,
-   and the most defects found, most of them in the product); then ASan (slow, and the fewest
-   findings per hour); a debug build only if a check needs one.
-2. **Ask once, up front.** May you drive the screen and keyboard. May you push, and release
-   when done (neither happens without a yes in chat, ever). Which output directories may you
-   delete. Is the machine yours for the night. Is there a setting only the operator may flip
-   (Windows clipboard history, for the Win+V check). Will they close their own Stedding for
-   the installer test (a release on the same Chromium number installs as a repair, trap 62),
-   and quit Arc and any clipboard manager for the keyboard checks (each takes a chord from
-   every app while it runs, trap 94).
-   A list asked at the start costs one message; asked when blocked it cost hours.
+1. **Cheapest evidence first.** Use the build, with the real pointer and keyboard,
+   light and dark. Then the suites on the shipping configuration (`release` on the
+   Mac, `win-release` on Windows). Then a build with DCHECKs and the dangling-pointer
+   detector (`win-checks`, or `mac-checks` on the Mac). Then ASan (`win-asan`). A
+   debug build only if a check needs one.
+2. **Ask once, up front.** May you drive the screen and keyboard. May you push, and
+   release when done (neither happens without a yes in chat). Which output directories
+   may you delete. Is the machine yours for the night. Is there a setting only the
+   operator may flip (Windows clipboard history, for the Win+V check). Will they close
+   their own Stedding for the installer test: only an installer of the version already
+   installed still repairs, and it cannot replace a running browser (trap 62). Will
+   they quit Arc and any clipboard manager before the keyboard checks: Arc takes ⌥⌘N
+   (trap 64) and a clipboard manager takes ⇧⌘C (trap 94) from every app while it runs.
 3. **Supervise long jobs; do not poll them.** A build or run past a few minutes is one
    detached job that writes a status file and a last line (`tooling\win\build-until-done.ps1`,
-   `tooling/dev`), waited for by that line and never by the clock. Post one status line, with a
-   number in it, before any wait over ten minutes. The same steps killed at the end of three
-   chunks in a row are stuck, not slow: time one by hand (trap 57).
-4. **One pass should find everything.** A check that aborts at its first failure hides the
-   rest; every fix then costs a rebuild and a rerun to find the next. Collect every distinct
-   failure per run, read them through `tooling/digest-sanitizer` (a few lines where the raw
-   output is pages of frames for every test), fix in batches.
+   `tooling/dev`). Wait for that line. Post one status line, with a number in it, before
+   any wait over ten minutes. A step killed at the end of three chunks in a row is
+   stuck: the supervisor stops with exit 4 and names it (trap 57). Time that step by hand.
+4. **One pass should find everything.** A check that aborts at its first failure hides
+   the rest. Collect every distinct failure per run, read them through
+   `tooling/digest-sanitizer`, and fix in batches.
 5. **Every finding gets a test, and its fix goes into the patch that owns the code**
-   (`tooling/fold-fix`). Then use the product again: a fix is done when the thing you saw
-   has stopped happening on the real build.
-6. **Read and search cheaply.** `git grep` in the checkout (seconds, where `grep -r` timed
-   out); cap the output of any command you have not run before; a script of more than three
-   lines goes in a file, not a heredoc (backslash quoting cost round trips); crop screenshots
-   to the window and look at text, not pictures, where UI Automation or DevTools can give it.
-7. **Say what was and was not verified,** result first, in plain sentences, in the register
-   the operator's own agent instructions set (their "Response contract").
+   (`tooling/fold-fix`). Then use the product again: a fix is done when the thing you
+   saw has stopped happening on the real build.
+6. **Read and search cheaply.** `git grep` in the checkout. Cap the output of any
+   command you have not run before. A script of more than three lines goes in a file.
+   Captures are of the window (trap 133). Read text from UI Automation or DevTools
+   when they can give it.
+7. **Say what was and was not verified,** result first, in plain sentences.
 
 ## Red lines
 
@@ -123,46 +120,52 @@ come from a long run in which the slowest parts were not the builds.
 | Attribution | Release notes, docs and code comments name no tool. No commit names a tool as a co-author or carries a "generated by" footer. A pull request from outside the project made with an AI tool's help says so the one way `CONTRIBUTING.md` ("AI tools") sets out, and `tooling/check-disclosure` fails one that does not |
 | Secrets, machine paths, personal data | Never committed: this repo is public |
 | What lives in this repository | The product, its tooling, its specs and its user docs, kept concise. Anything else stays outside it |
-| Screen captures and recordings | The window under test only, taken by its window id: `tooling/capture-windows` (stills, through `tooling/capture-state` and `tooling/drive`'s `shot`) and `tooling/record-window` (video). Never the screen, never another app's window, never a recording of the whole display cropped afterwards: a crop still leaves the operator's screen in the file, and another window can cover the one under test (`docs/HANDOFF.md` trap 133) |
-| Real input (pointer, keyboard) | Only with the operator's yes, and guarded: only into the window under test, only while the operator's hands are off. `tooling\win\drive.ps1` does both |
+| Screen captures and recordings | The window under test only, taken by its window id: `tooling/capture-windows` (stills, through `tooling/capture-state` and `tooling/drive`'s `shot`) and `tooling/record-window` (video). Never the screen, never another app's window, never a recording of the whole display cropped afterwards (trap 133) |
+| Real input (pointer, keyboard) | Only with the operator's yes, and only into the window under test. `tooling\win\drive.ps1` also waits until the operator's hands are off. `tooling/drive` on the Mac does not watch for that, and it runs only when nobody is at the machine (trap 27) |
 | Deleting | Your own build output and scratch only. Ask before anything else |
 | System settings | Not yours to change, including the default browser and clipboard history: ask the operator to flip them |
 | A number or a claim you did not measure | `TBD`, never a guess (and never typed into a doc that `tooling/dev status` can derive) |
 
 ## Where things stand
 
-Kept short on purpose: a paragraph that restates the state goes stale within a day, and
-`docs/PROJECT-LOG.md` exists for the record.
+No counts here: they go stale, and `docs/PROJECT-LOG.md` is the record. Read the
+commands.
 
-- The pin and the series: `tooling/dev status`. The Windows PC is the development machine;
-  the Mac holds the Mac-only checks (`BACKLOG.md` rows say which wait on it).
-- The work order: `BACKLOG.md`, in priority order; its first "Checks still owed" row is the
-  core-loop gate that new features wait for (`PLAN.md`).
-- What is released: `docs/release-notes/` has the current release's notes and `archive.md`
-  with every earlier one; `gh release list` is the truth. The site (`stedding.dev`) and the
-  Homebrew tap (`ysalitrynskyi/homebrew-stedding`) read the same list; `docs/HANDOFF.md`
-  ("After a release") lists every place a release must reach.
-- What is open: `BACKLOG.md`, by id.
+- The pin and the series: `tooling/dev status`. What users have: `gh release list`.
+  The two can differ (ADR 0007).
+- Windows is built and tested on a Windows PC. The Mac builds the macOS image and
+  holds the Mac-only checks, signing and notarization (`BACKLOG.md` names which rows
+  wait on it). Linux is not shipped.
+- The work order: `BACKLOG.md`, in priority order. New features wait for the
+  core-loop gate, S-173, under "Checks still owed", unless the operator asks
+  (`PLAN.md`).
+- What is released: `docs/release-notes/` has the current release's notes. Every
+  release's notes are on
+  [GitHub Releases](https://github.com/ysalitrynskyi/stedding-browser/releases).
+  The site and the Homebrew tap (`ysalitrynskyi/homebrew-stedding`) follow that list.
+  `docs/HANDOFF.md` ("After a release") lists every place a release must reach.
+- What is open: `BACKLOG.md`, by id. Closed items are in `docs/history/archive.md`.
 
 ## Map of the docs
 
 | File | What's in it |
 |---|---|
 | `docs/README.md` | The index of everything under `docs/`, grouped by who it is for |
-| `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | The user-facing pages the README links: installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
-| `docs/AGENT-LOOP.md` | **The working procedure**: order of evidence, ask once, supervise long jobs, one pass finds everything, then research → spec → test → implement → patch; the evidence of what Arc switchers ask for |
-| `docs/features/` | One spec per feature; numbered behaviours, each with its test id; `acceptance.md` holds the scripts run on a real build before a release, with every run |
-| `PLAN.md` | The owner's standing decisions and when an item counts as done |
-| `docs/history/` | The 2026-09-26 audit (TAB-1, SPC-4, ...), which the code cites by path, and `archive.md`: closed backlog items, the project log before 2026-10-15, round 6, the operator's rounds 2 to 11, a code review (S-179 to S-210) |
+| `docs/INSTALL.md`, `docs/SHORTCUTS.md`, `docs/FAQ.md` | Installing and verifying, every shortcut on both platforms, questions and answers. Plain language; keep them true when behaviour changes |
+| `docs/AGENT-LOOP.md` | The working procedure: order of evidence, ask once, supervise long jobs, one pass finds everything, then research, spec, test, implement, patch; and what Arc switchers ask for |
+| `docs/features/` | One spec per feature: numbered behaviours, each with its test. `acceptance.md` holds the scripts run on a real build before a release, and the record of each run |
+| `PLAN.md` | The owner's standing decisions, and when an item counts as done |
+| `docs/history/` | `plan-2026-09-26.md`, the 2026-09-26 audit (TAB-1, SPC-4, ...), which the code cites by that path; and `archive.md`: closed backlog items, the project log before 2026-10-15, round 6, the operator's rounds 2 to 11, and the code review (S-179 to S-210) |
 | `BACKLOG.md` | The one list of open work, by id, in priority order. Other docs cite ids; closed items move to `docs/history/archive.md` |
 | `docs/HANDOFF.md` | Where things live, the fast path, dev parameters, the traps already paid for (with an index) |
 | `docs/PROJECT-LOG.md` | What was built since 2026-10-15, round by round, with the evidence. History, not instructions |
-| `docs/VISION.md` | Why this exists, values, non-goals; the name (the naming record), the brand and voice, the competitors |
-| `docs/PRODUCT.md` | Full feature spec: sidebar, workspaces, split view, command bar, settings, import; the UI spec |
+| `docs/VISION.md` | Why this exists, values, non-goals; the name, the brand and voice, the competitors |
+| `docs/PRODUCT.md` | The feature spec: sidebar, Spaces, split view, command bar, settings, import; the UI spec |
 | `docs/ARCHITECTURE.md` | Fork strategy, build system, patch management, updater, signing |
-| `docs/ROADMAP.md` | Milestones M0→1.0 with acceptance criteria; the quality bar: performance budgets, release checklist |
+| `docs/ROADMAP.md` | Milestones M0 through 1.0, with acceptance criteria; the quality bar |
 | `docs/PRIVACY.md` | Privacy principles and concrete defaults |
-| `docs/decisions/` | ADRs — every irreversible decision gets one |
+| `docs/perf/` | How to measure the performance budgets. No current measurement |
+| `docs/decisions/` | ADRs. Every irreversible decision gets one |
 | `CONTRIBUTING.md` | How to contribute, and the rules for pull requests made with an AI tool's help |
 | `SECURITY.md` | How to report vulnerabilities |
 
@@ -179,10 +182,11 @@ Kept short on purpose: a paragraph that restates the state goes stale within a d
   license), update AGENTS.md and the relevant ADR in the same commit. Put history in
   `docs/PROJECT-LOG.md`, open work in `BACKLOG.md`, and nothing dated or counted here.
 - Commit messages: conventional, imperative, explain why when it isn't obvious.
-- **A pull request made with an AI tool's help** follows `CONTRIBUTING.md`, "AI tools": the
-  form's AI assistance box ticked, with the tool, the model and what it did; every commit
-  ending with `Assisted-by: AGENT_NAME:MODEL_VERSION`, never `Co-authored-by:`; a person who
-  has read and tested all of it and answers the review; nothing posted by an agent on its
+- **A pull request from outside, made with an AI tool's help,** follows
+  `CONTRIBUTING.md` ("AI tools"): the form's AI assistance box ticked, with the tool,
+  the model and what it did; every such commit ending with
+  `Assisted-by: AGENT_NAME:MODEL_VERSION`, never `Co-authored-by:`; a person who has
+  read and tested all of it and answers the review; nothing posted by an agent on its
   own.
 - When a task is ambiguous, the tiebreaker is the mandate above: what gets a polished,
-  installable browser into users' hands sooner?
+  installable browser into users' hands sooner.

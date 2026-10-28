@@ -5,33 +5,18 @@ Date: 2026-09-16
 
 ## Context
 
-PRODUCT §8 listed Arc Max as [needs decision]: hover previews, tidy titles, tidy
-downloads, tidy tabs, Ask on Page, Instant Links, and ChatGPT in the command bar.
-ADR 0011's full Arc parity collides with ROADMAP (built-in AI is not on the path
-to 1.0) and with VISION: no AI gimmicks bolted on; nothing sends page content or
-browsing data to a model without an explicit user action; Dia exists for people
-who want an AI browser.
-
-A persistent agent that holds a Space's cookies was proposed as "the intern in
-every Space". Cookies are the user's identity on the site. ADR 0019's partitions
-exist so credentials do not leak across Spaces; handing the jar to an agent is
-the leak, to a model. Persistence means it acts without a click.
+[PRODUCT.md](../PRODUCT.md) §8 listed Arc Max as needing a decision: hover previews, tidy titles, tidy downloads, tidy tabs, Ask on Page, Instant Links, and chat in the command bar. Built-in AI is not on the path to 1.0 ([ROADMAP.md](../ROADMAP.md)). Nothing sends page content or browsing data to a model without an explicit user action ([VISION.md](../VISION.md)). An agent that held a Space's cookies would undo [ADR 0019](0019-space-sessions-are-storage-partitions.md): those partitions exist so credentials stay in the Space.
 
 ## Decision
 
-**Stedding ships no bundled model.** Not in the app, not as a default key, not as
-a Stedding-operated API. Chrome's own AI surfaces stay hidden.
+Stedding ships no bundled model. Not in the app, not as a default key, and not as an API Stedding operates. Chrome's Lens, Gemini and AI Mode rows stay hidden (patches 0024 and 0061).
 
-- **Tidy downloads** stay [1.0], no model.
-- **Hover preview** is a screenshot of the tab. No model. Hover is not a click.
-- **Tidy titles** may ship later as an optional local heuristic. No model.
-- **Ask on Page**, command-bar chat, Instant Links "Folder of …", and a
-  persistent intern with or without Space cookies are **never**.
-- Extensions remain the answer for people who want a chatbot.
+Tidy downloads use no model. The hover preview is a picture of the tab, with no model (pins H19). Tidy titles, if they ship, are an optional local heuristic, with no model. There is no spec row for them yet.
+
+Ask on Page, command-bar chat, Instant Links' "Folder of …", and a persistent agent, with or without a Space's cookies, are never. A chatbot is an extension.
 
 ## Consequences
 
-- PRODUCT §8 is no longer [needs decision].
-- A later ADR is required before any opt-in local or BYOK feature that sends
-  page content, and cookies / other Spaces / the storage partition never leave.
-- Reopening any Never row requires superseding this ADR in public.
+An opt-in local model, or a feature that sends page content with a key the user supplies, needs a later ADR. Cookies, other Spaces and the storage partition stay on the machine.
+
+Reopening any of those never rows means superseding this ADR.

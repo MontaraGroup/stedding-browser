@@ -2,58 +2,68 @@
 
 The order of work is [BACKLOG.md](BACKLOG.md). This file holds what does not change from item
 to item: the owner's standing decisions, and when an item counts as done. The audit of
-2026-09-26 that used to fill this file, with every item it raised (TAB-1, SPC-4, WIN-29, ...)
-and their status notes, is [docs/history/plan-2026-09-26.md](docs/history/plan-2026-09-26.md);
-its items still open on 2026-10-14 are BACKLOG rows that name their ids.
+2026-09-26, with every item it raised (TAB-1, SPC-4, WIN-29, ...), is
+[docs/history/plan-2026-09-26.md](docs/history/plan-2026-09-26.md). An item from it that is
+still open is a BACKLOG row that names its id.
 
 ## The owner's decisions (2026-09-26)
 
 1. Horizontal tab mode stays. Do not remove or hide the toggle. Switching either way must not
    crash, Stedding's views are torn down and rebuilt with the strip, menu ids are
-   range-checked, and Spaces, pins and folders keep working in horizontal mode.
-2. Peek is on by default, since its rebuild on the little window (the owner, 2026-10-25; `S-93`).
-3. The Space sleep timer defaults to Never until sleep is gated.
-4. Every cut the audit listed is approved (the list is in the history file, section 2; patch
-   0055 applied them, `S-61`).
-5. ⌘9 selects the last row.
-6. Collapsing the folder that holds the active tab keeps that tab showing under the header. No
-   tab switch.
-7. Deleting the active Space switches to its neighbour first. Only the last Space cannot be
-   deleted.
-8. The docs claim no import from Chrome, Brave or Edge until it exists; the importer is
-   built later (`S-101`).
-9. Little windows get no Space commands. "Open in main window" is enough (built as the
-   window's "Open in Stedding", `docs/features/little.md` E7).
+   range-checked, and Spaces, pins and folders keep working in horizontal mode
+   (`docs/features/spaces.md` B34, `docs/features/menus.md` M9).
+2. Peek is on by default (the owner, 2026-10-25; `S-93`). `stedding.peek.enabled` registers
+   true (`patches/0106-feat-peek-explains-itself-and-sync-says-what-folder.patch`).
+3. The Space sleep timer defaults to Never. `stedding.spaces.sleep_minutes` registers as 0.
+   A tab sleeps only when `MaySleep` in `sleep_tabs.cc` allows it (`docs/features/tabs.md` R6).
+4. The cuts listed in the history file, section 2, are approved. Patch 0055 applied them
+   (`S-61`). The sidebar folder in that list stays withdrawn as specified
+   (`docs/features/sidebar-file.md` Sf3). Sync through a folder, decision 18, is what
+   replaced it.
+5. ⌘9 selects the last visible row (`docs/features/tabs.md` R10, R11).
+6. Collapsing the folder that holds the active tab keeps that tab showing under the header.
+   No tab switch (`docs/features/folders.md` F3).
+7. Deleting a Space asks first. Deleting the active Space then shows its neighbour. Only the
+   last Space cannot be deleted (`docs/features/spaces.md` B5).
+8. Do not document an import from Chrome, Brave or Edge until that importer exists. It is
+   `S-101` (the history file's WEB-15).
+9. Little windows get no Space commands. "Open in Stedding" is the way into the main window
+   (`docs/features/little.md` E2, E7).
 10. Tests that pin a bug are decided from the spec row and Arc's behaviour. Ask the owner only
     where those two disagree.
 
 ## Later decisions
 
-11. Closing a pinned tab works the Arc way (2026-10-20): ⌘W, its close button, a middle click
-    and the tab menu's Close unload a Space pin or an essential and send it back to its home,
-    in its place, whatever it is doing, after the page's own "Leave site?" if it asks. The
-    setting off makes ⌘W, the close button and a middle click close it (`docs/features/pins.md`
-    H3, H9, H16).
+11. ⌘W, a middle click and the tab menu's Close unload a Space pin or an essential and send
+    it back to its home, in its place, whatever it is doing, after the page's own "Leave
+    site?" if it asks (2026-10-20; `docs/features/pins.md` H3, H16). The close button on a
+    Space pin is a minus while the pin is awake, and that minus does the same. Once the pin
+    is asleep at its home the button is an x that asks "Remove this pinned tab?" before it
+    removes the pin (2026-10-28; pins H29, GitHub issue 50). With the setting off, ⌘W, the
+    close button and a middle click close the pin (H9).
 12. A top-level folder can join a Space's pinned run, and its tabs are then pins
     (2026-10-20; `docs/features/folders.md` F38). Essentials take no folder.
 13. On Windows the extension chord is Ctrl+Alt+E (2026-10-20; `docs/features/toolbar.md` T39).
-14. Essentials stay shared by every Space, as in Arc (2026-10-21), except in a Space with an
-    Independent session, which has essentials of its own and shows only those (2026-10-22,
-    ADR 0028; `S-254`, GitHub issue 8). There is no setting for them.
+14. Essentials stay shared by every Space, as in Arc (2026-10-21). A Space with an
+    Independent session has essentials of its own and shows those instead of the shared ones
+    (2026-10-22, ADR 0028; `S-254`, GitHub issue 8). When every Space has its own session,
+    the shared essentials show in each, so they can still be reached. There is no setting
+    for them.
 15. Spaces switch with a sideways scroll over the sidebar, as in Arc (2026-10-21, GitHub
     issue 10): a tilt wheel and Shift with the wheel, on Windows also a touchpad's sideways
-    scroll and Ctrl with the wheel; no Control with the wheel on the Mac, and a vertical
+    scroll and Ctrl with the wheel. No Control with the wheel on the Mac, and a vertical
     scroll never switches (`docs/features/spaces.md` B39).
-16. An issue a user files on GitHub is a suggestion unless it reports a bug (2026-10-21):
-    bugs are fixed, a requested feature is built only once the owner has said yes, and
-    nothing is said or closed on GitHub (`AGENTS.md`, red lines). Labels are kept to the
-    owner's replies when the owner asks (2026-10-23): an area, a platform, and a status
+16. An issue a user files on GitHub is a suggestion unless it reports a bug (2026-10-21).
+    Bugs are fixed. A requested feature is built only once the owner has said yes. Nothing
+    is said or closed on GitHub (`AGENTS.md`, red lines). Labels are kept to the owner's
+    replies when the owner asks (2026-10-23): an area, a platform, and a status
     (`status: needs decision`, `status: planned`, `done`).
-17. The address must not jump when the field takes focus: the owner calls it a bug, and the
-    field stays the row's full width for now (2026-10-23, GitHub issue 14; `S-275`).
-18. Sync with no server, through a folder the user picks, is wanted, "in the next few days"
-    (2026-10-23, GitHub issue 20; `S-282`): the sidebar folder withdrawn on 2026-09-26
-    (`docs/features/sidebar-file.md` Sf3) is taken up again.
+17. The address does not jump when the field takes focus (2026-10-23, GitHub issue 14;
+    `S-275`; `docs/features/toolbar.md` T18). The field is the whole row in every state
+    (the owner, 2026-10-24; toolbar T34).
+18. Sync has no account and no Stedding server. It goes through a folder the user picks,
+    and it is off by default (2026-10-23, GitHub issue 20; `S-282`; ADR 0029;
+    `docs/features/sidebar-file.md` Sf7–Sf41).
 
 The operator's own request in chat comes before any of this and before BACKLOG's order.
 
@@ -71,17 +81,18 @@ A green unit test does not close anything. An item is closed when all of these h
 3. The spec row cites that test, and the spec and the code's comments say what the code now
    does.
 4. Suites that touch lifetimes ran clean with DCHECKs and the dangling-pointer detector on
-   (`win-checks`, `mac-checks`), and under ASan before a release (`docs/ROADMAP.md#the-quality-bar`).
+   (`win-checks`, `mac-checks`), and under ASan before a release
+   (`docs/ROADMAP.md#the-quality-bar`).
 
 ## How items are taken
 
-- **One root cause is one change.** Items that share a cause are fixed together; finish one
+- **One root cause is one change.** Items that share a cause are fixed together. Finish one
   change's check before starting the next. A fix goes into the patch that introduced the code
   (`tooling/fold-fix`, `patches/README.md`).
 - **Confirm before fixing.** A finding that was read in the code but not seen happening is
   reproduced first: a failing test, or the failure on a real build. If an honest attempt does
   not reproduce it, record the attempt and close it as not reproduced. Nothing is fixed blind.
-- **Defects before features.** New features wait until the core-loop gate in `BACKLOG.md`
-  ("Checks still owed", its first row, `S-173`) passes, unless the operator asks for one in
-  chat; its script and the record of each run are `docs/features/acceptance.md`. A
-  crash, data loss or a broken privacy promise is built at once.
+- **Defects before features.** New features wait until the core-loop gate passes (`S-173`;
+  its script and the record of each run are `docs/features/acceptance.md`), unless the
+  operator asks for one in chat. A crash, data loss or a broken privacy promise is built at
+  once.

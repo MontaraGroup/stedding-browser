@@ -1,54 +1,22 @@
 # 0011 — The product target is full functional parity with Arc
 
-Status: Accepted
+Status: Accepted. Boosts and Easels are deferred (ADR 0012). No bundled model (ADR 0020). Ideas past Arc are ADR 0021.
 Date: 2026-08-30
 
 ## Context
 
-ADR 0010 established that Chromium now ships vertical tabs by default, and left an
-open question: if the sidebar alone no longer differentiates, what is this project for?
+[ADR 0010](0010-ride-upstream-vertical-tabs.md) left a product question. Chromium now has vertical tabs, so a sidebar alone does not define the project.
 
-The answer, from the operator, is that the target is **full functional parity with
-Arc** — not the subset of Arc ideas that `PRODUCT.md` currently specifies.
-
-That reframes the project. Stedding is not "a browser with some Arc-like ideas". It is
-Arc's workflow, rebuilt on ground the user controls. The differentiation was never
-going to be any single feature; it is the whole workflow *plus* the things Arc could
-not offer: open source under BSD, no telemetry, no vendor able to discontinue it.
-
-One fact makes this tractable. **Arc is frozen.** Its maker put it in maintenance mode
-in May 2025 and moved to Dia (`../VISION.md` ("Competitors")). Parity with a live product is a
-race you cannot finish; parity with a product that has stopped moving is a finite
-amount of work. The target will not run away.
+The owner set the target as full functional parity with Arc, the workflow as Arc shipped it, plus what Arc could not offer: open source under BSD, no telemetry by default, and no vendor that can discontinue it. Arc's maker put it in maintenance mode in May 2025 and moved to Dia ([VISION.md](../VISION.md#competitors)). The target does not keep moving.
 
 ## Decision
 
-Stedding targets **full functional parity with Arc as it actually shipped**, using
-Arc's own terminology for its concepts.
+Stedding targets full functional parity with Arc as it shipped. [PRODUCT.md](../PRODUCT.md) is that inventory, taken from Arc's own documentation. It keeps Arc's names for Arc's concepts and states Stedding's beside them: Favorites are essentials, Air Traffic Control is routing, Little Arc is the little window. Trademarked branding is not reused ([VISION.md](../VISION.md#brand-and-voice)).
 
-- `PRODUCT.md` is rewritten from a verified inventory of Arc's shipped features, taken
-  from Arc's own documentation rather than from recollection.
-- Where a feature depends on Arc's hosted services — anything requiring their account,
-  sync, or servers — parity means the local capability, not the service. Those are
-  called out individually rather than quietly dropped.
-- Arc's terminology is kept where it names a real concept (Spaces, Split View, Little
-  Arc, Boosts, Easels). Inventing our own names for the same ideas would make the spec
-  harder to check against the thing it is copying. Trademarked branding is not reused
-  — see `../VISION.md` ("Brand and voice").
-- Parity is the floor, not the ceiling. It does not preclude doing better, but "better"
-  never justifies shipping less.
+Where a feature needs Arc's account, sync or servers, parity is the local capability, named as such. Parity is the floor. Doing better does not justify shipping less.
 
 ## Consequences
 
-- The roadmap grows substantially. M2–M6 as written cover a fraction of Arc; the
-  milestone ladder needs restructuring against the inventory, and it is dishonest to
-  leave a roadmap in place that implies parity is close.
-- 1.0 acquires a concrete definition it did not have: parity with a fixed target, at
-  the quality bar in `../ROADMAP.md` ("The quality bar"). That is a harder gate than "no open blockers",
-  and a more meaningful one.
-- Features that were open questions become requirements — Boosts, Easels, Little Arc,
-  the archive model — several of which are substantial products in themselves.
-- Some Arc behaviour is hosted, and honest parity means saying so where a local
-  equivalent is not possible, rather than claiming a checkbox.
-- ADR 0010 stands unchanged: riding upstream's vertical tabs is still correct, and is
-  now more clearly a means rather than the point.
+1.0 in [ROADMAP.md](../ROADMAP.md) is that parity, at the quality bar, minus what later decisions defer or refuse. What is built, partial or still open is the feature spec under `docs/features/` and [BACKLOG.md](../../BACKLOG.md).
+
+ADR 0010 stands. Upstream's vertical tabs are how the sidebar is built.

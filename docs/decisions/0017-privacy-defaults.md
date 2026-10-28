@@ -5,46 +5,28 @@ Date: 2026-09-05
 
 ## Context
 
-`docs/PRIVACY.md` promises defaults Chromium does not ship with: third-party cookies
-blocked, HTTPS-First on, no web service asked about navigation errors, Global Privacy
-Control sent, quiet permission prompts, the Privacy Sandbox off, search suggestions
-off. Until now these were a to-do table. Round 6 (`docs/history/archive.md#round-6-plan` R6-26) ships
-them.
+[PRIVACY.md](../PRIVACY.md) promises defaults Chromium does not ship with. Two ways to ship one: change the value where Chromium registers the preference, or write the value into every new profile. A written value is user-set, so Chromium’s settings no longer show it as the default, and profiles that already exist need a migration. A new registered default leaves a choice the user already made.
 
-Two ways to ship a default: flip the value where Chromium registers the preference,
-or leave Chromium's registration alone and write the value into every new profile.
-Writing the value makes the preference "user-set", which changes what Chromium's own
-UI shows (a user-set value shows no "default" state, and some rows show a managed or
-changed badge), and it needs a migration for profiles that exist. Flipping the
-registered default changes nothing for a user who chose otherwise and needs no
-migration.
-
-Third-party cookies are the one flip with a breakage cost: some sign-in flows and
-embedded widgets need a third-party cookie.
+Blocking third-party cookies breaks some sign-in flows and embedded widgets.
 
 ## Decision
 
-- Each promised default is made by changing the registered default of Chromium's own
-  preference, in the patch that owns the feature (`docs/features/privacy.md`). Global
-  Privacy Control, which has no Chromium preference, gets one Stedding preference,
-  `stedding.privacy.gpc`, on by default.
-- Every default is one row in a Privacy block of chrome://settings/stedding, bound to
-  exactly one preference, the protective side on. The rows that bind Chromium
-  preferences are exempt from the Stedding section's rule that a `stedding.*` toggle
-  starts on: they are not Stedding preferences, and their wording makes the protective
-  side the default.
-- Third-party cookies are blocked in normal windows. The site-breakage answer is
-  Chromium's: the eye icon in the address row when a site's cookies were blocked, and a
-  per-site allowance from it or from chrome://settings/cookies. The block's row says
-  so.
-- Search suggestions off is the `docs/PRIVACY.md` line-209 to-do, closed here.
+These are registered defaults of Chromium’s own preferences, in patch 0030 ([privacy.md](../features/privacy.md)):
+
+- Third-party cookies are blocked in normal windows. `profile.cookie_controls_mode` is Block third-party. Chromium blocks them in Incognito only. Q1.
+- HTTPS-First balanced mode is on (`https_first_balanced_mode`). Q2.
+- “Ask a web service about navigation errors” is off (`alternate_error_pages.enabled`). Q3.
+- Quiet notification and geolocation prompts are on, and the adaptive (CPSS) choice of those settings is off. The settings page treats the two as one control and checks they are never both on. Q5.
+- Search suggestions are off (`search.suggest_enabled`). Q7.
+
+Global Privacy Control has no Chromium preference. It is the local-state preference `stedding.privacy.gpc`, on by default, and it turns on Chromium’s `GlobalPrivacyControlForce` at startup. A change applies after a restart. Q4.
+
+Topics, Protected Audience and Attribution already default off in Chromium. Stedding does not turn them on. Q6.
+
+Q1–Q7 are one row each in the Privacy block of chrome://settings/stedding, bound to one preference, the protective side on. A row that binds a Chromium preference is not a `stedding.*` preference, so it sits outside the rule that a Stedding toggle starts on (settings T2). The third-party-cookie row says that when a site breaks, the eye in the address row allows cookies for that site (patch 0030, and the same string as of patch 0109).
 
 ## Consequences
 
-- A profile created by Stedding gets the protective defaults with no migration; a
-  profile that already set any of these preferences keeps its choice.
-- `docs/PRIVACY.md`'s table of defaults stays the reference; `docs/features/privacy.md`
-  carries the test per row. Rebases re-apply seven one-line default changes; the ADR is
-  the record of why each exists.
-- Some sites break under blocked third-party cookies; the answer is per-site, in
-  Chromium's UI, never a global flip back.
+A profile Stedding creates gets these defaults with no migration. A profile that already set one of them keeps that choice.
+
+[PRIVACY.md](../PRIVACY.md) is the list of defaults. [privacy.md](../features/privacy.md) is the test per row. Rows from Q9 on are later cuts, not more registered-default flips of this decision.

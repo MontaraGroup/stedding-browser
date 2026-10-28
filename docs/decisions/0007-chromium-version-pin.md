@@ -5,53 +5,20 @@ Date: 2026-08-30
 
 ## Context
 
-ADR 0003 chose Chromium stable as the base. That settles the *channel*, not the
-*pin*: at any moment several stable versions exist at once. On 2026-08-30 the Mac
-stable channel carried three live milestones — M153 (`153.0.8010.12`, rolling out),
-M152 (`152.0.7977.65`), and M151 (`151.0.7922.176`, extended stable). A fork has to
-say which one it builds, where that answer is written down, and when it moves.
-
-Getting this wrong is expensive in a specific way: the patch series is rebased
-against the pin, so a pin that lags means every rebase carries more upstream drift,
-and — per the security gate in `../ROADMAP.md` ("The quality bar") — a lagging pin means shipping known
-vulnerabilities.
+[ADR 0003](0003-chromium-minimal-patch-fork.md) chose Chromium stable as the base. The pin is which build the patch series sits on. A pin that lags means a larger rebase, and it means shipping known vulnerabilities ([ROADMAP.md](../ROADMAP.md#the-quality-bar), security).
 
 ## Decision
 
-**Pin to the newest version on the Chromium stable channel for our platforms**, held
-in exactly one place: `tooling/chromium-version`. Every script and build reads the pin
-from that file, and `tooling/check-repo version` fails if any non-documentation file
-hard-codes a version. Prose may quote the current pin where it aids the reader; code
-and configuration may not, because those are what silently go stale.
+Pin to the newest build on Chromium's stable channel for the platforms we ship. The only copy is [`tooling/chromium-version`](../../tooling/chromium-version). [`tooling/lib.sh`](../../tooling/lib.sh) reads it. [`tooling/check-repo`](../../tooling/check-repo) `version` fails if any file that is not documentation hard-codes the version. Documentation may quote the pin.
 
-- The initial pin is `153.0.8010.12` (M153).
-- Security point releases move the pin on the timetable in `../ROADMAP.md` ("The quality bar") (7 days
-  for in-the-wild exploits, 14 otherwise).
-- **Early stable waits for the rollout.** Google ships the next milestone to a small
-  share of stable users about a week before the full rollout. The pin moves to a build
-  once it reaches more than 1% of a platform's stable users; until then
-  `tooling/check-pin` names it as a partial rollout with its share and reports the pin
-  current. The same holds for a respin on our own milestone. (Amended 2026-09-24, the
-  owner: "always latest one", and the pin went from M153 straight to the M155
-  early-stable build. Amended again 2026-10-23, the owner: a milestone almost nobody
-  runs yet is not worth a six-hour rebuild of both machines; M157 waits for its
-  rollout, about a week after early stable. On 2026-10-28 the owner had M157's stable
-  cut, 157.0.8103.31, prepared and merged before the rollout, so `tooling/check-pin`
-  reports the pin `ahead` until Mac stable serves M157.)
-- **Extended stable is not our channel.** It trades feature currency for enterprise
-  change-management we do not need, and it eventually stops receiving fixes.
-- Moving the pin is always its own commit, recording the version, the upstream
-  commit, and the result of applying the patch series.
-- The pin may be held back only for a named, fixed blocker, recorded in the commit
-  that holds it. "Not got to it yet" is not a blocker.
+At or below 1% of a platform's stable users, a build is a partial rollout (early stable, or a respin being tried). [`tooling/check-pin`](../../tooling/check-pin) names it and leaves the pin. The pin follows that build once it reaches more than 1% of users. The verdict follows Mac stable, the first platform we ship ([ADR 0006](0006-platform-order-macos-first.md)). Windows uses the same pin. Linux is consulted so a point release on our milestone is seen when a Mac rollout is pulled. Extended stable is out.
+
+Moving the pin is its own commit. The file records the tag, the milestone, the upstream commit, the channel and the date. The pin stays back only for a named, fixed blocker, written in that commit.
+
+On 2026-10-28 the owner merged M157's stable cut, 157.0.8103.31, into main before Mac stable served it. The file records the channel as beta. `tooling/check-pin` reports `ahead` until Mac stable serves M157. Google's schedule puts M157 on stable on 2026-11-03. The published release, 0.3.0 beta 22, was built on Chromium 156.0.8078.48. The pin still moves to the build Mac stable serves once that build is past 1% ([BACKLOG.md](../../BACKLOG.md) S-278).
+
+A security update on stable is a rebased release within 7 days when the fix is in the wild, and within 14 days otherwise ([ROADMAP.md](../ROADMAP.md#the-quality-bar)). `tooling/check-pin` runs daily. The `upstream` workflow opens one issue while the pin is behind, and closes it when the pin is current.
 
 ## Consequences
 
-- One grep answers "what are we built on"; provenance is checkable from any build.
-- Adopting a milestone during its rollout means occasionally hitting bugs the wider
-  population has not — acceptable pre-1.0, and the alternative is a permanent lag.
-- Rebases are frequent and small rather than rare and large, which is the whole
-  premise of the minimal patch series in ADR 0003.
-- We inherit upstream's deprecation timing rather than deferring it, so patches that
-  depend on soon-to-be-removed upstream surfaces break early, when they are cheap
-  to fix.
+One file answers which Chromium a checkout is on. Rebases stay small, which is the point of the series in ADR 0003. A pin ahead of Mac stable is work in the tree. Shipping it is a separate step.

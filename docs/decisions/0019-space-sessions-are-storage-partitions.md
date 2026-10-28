@@ -1,75 +1,32 @@
 # 0019 — Independent Space sessions are StoragePartitions, not Chrome profiles
 
-Status: Accepted
+Status: Accepted. Amended by [ADR 0028](0028-a-spaces-own-essentials.md) (a Space with its own session has its own essentials) and [ADR 0025](0025-apps-keep-their-spaces-session.md) (an app keeps that Space's jar).
 Date: 2026-09-16
 
 ## Context
 
-PRODUCT §2's "Per-Space Profiles" and ADR 0016's empty `profile_id` on a
-registry Space exist so a Space can eventually own its own logins. The operator
-asked for the behaviour users actually want: optional, per-Space isolation of
-cookies, HTTP cache, localStorage, IndexedDB and service workers, so the same
-site can be signed into with different credentials in different Spaces of one
-window. Extensions, settings, history, saved passwords and the rest of the
-profile stay shared.
+A Space can keep its own cookies, HTTP cache, localStorage, IndexedDB and service workers, so one site can be signed in with different credentials in different Spaces of one window. Extensions, settings, history and saved passwords stay on the profile.
 
-Three designs were weighed.
-
-- **A full Chromium Profile per Space.** Chrome's `Browser` is 1:1 with a
-  Profile. Tabs cannot move between Profiles without destroying the
-  `WebContents`. Extensions, prefs and history would split. That is more than
-  was asked, and it fights ADR 0016 (one sidebar per profile).
-- **Cookie-store swapping** (SessionBox and similar extensions). The Web Store
-  copies were removed; MV3 cannot keep inactive tabs on a different jar.
-  Background requests leak. Rejected.
-- **A `content::StoragePartition` per isolated Space**, the same primitive
-  Chromium uses for `<webview>` guests and Isolated Web Apps, and the one
-  Brave's Containers (`brave-core` `components/containers`, targeting 1.92)
-  and Helium's container-tabs request (`imputnet/helium#199`) sit on.
-  `SiteInstance::CreateForFixedStoragePartition` keeps the partition across
-  navigations in that tab. Firefox Multi-Account Containers are the UX
-  precedent (`userContextId`); Ghost Browser identities are the paid-browser
-  precedent (persistent cookie jars, shared browser chrome).
+A full Chromium profile per Space would split extensions, preferences and history, and a tab cannot move between profiles without destroying its `WebContents`. Swapping only the cookie jar leaks on background requests. Chromium already shards this data by `StoragePartition`.
 
 ## Decision
 
-- An isolated Space is still one Profile. Its tabs are created with
-  `SiteInstance::CreateForFixedStoragePartition` against
-  `StoragePartitionConfig::Create(context, "spaces", profile_id, false)`.
-- `RegistryEntry::profile_id` is that partition name. Empty means the Space
-  has never been isolated. Non-empty is a random `base::Token` written the
-  first time isolation is turned on and kept from then on; whether the Space
-  is isolated right now is the `isolated` flag beside it, so turning it off
-  and on again reattaches the same jar with its logins. A registry written
-  before the flag existed (beta 7) reads a token as on. It is not a Chrome
-  profile path and not the Space's runtime id.
-- Isolation is **opt-in per Space**. Essentials stay on the default partition
-  (they are in every Space, B6); amended 2026-10-22 by ADR 0028: an essential pinned in a
-  Space with its own session is that Space's own, in its partition. Private windows have no Spaces. A Blank
-  Window has no Space registry, so its Spaces cannot be isolated (amended
-  2026-09-28: the in-memory partitions this bullet described were cut in patch
-  0055, and the isolation toggle still shows there, docs/history/plan-2026-09-26.md SPC-32).
-- New files under `chrome/browser/ui/spaces/` own the helper. The one
-  upstream hunk is `CreateTargetContents` in `browser_navigator.cc`, which
-  already chooses the `SiteInstance`. No `content/`, `blink/` or `net/`
-  patch in this cut. `window.open` already inherits the opener's
-  `SiteInstance`, so it keeps the jar without a content/ hook.
-- Saved passwords, history, extensions and prefs stay on the Profile. The
-  password manager can fill an isolated tab; `chrome.cookies` without a
-  partition still sees the default jar.
+An isolated Space is still one profile. Its web tabs are created with `SiteInstance::CreateForFixedStoragePartition` against `StoragePartitionConfig::Create(context, "spaces", profile_id, /*in_memory=*/false)` (patch 0046; the domain string is `kSpacePartitionDomain`).
+
+`RegistryEntry::profile_id` is that partition name. Empty means the Space has never been isolated. A non-empty value is a random `base::Token`, written the first time isolation is turned on and kept afterwards. The `isolated` flag beside it says whether the Space is isolated now, so turning it off and on again reattaches the same jar (patch 0049). A registry written before the flag existed reads a token as on (`SpaceRegistryTest.OldRegistryTokenMeansIsolated`). The value is the partition name only.
+
+Isolation is off until it is turned on for that Space. `stedding.spaces.own_session`, off by default, starts each new Space isolated (patch 0084). The browser's own pages stay on the profile's jar (`SpaceStoragePartitionTest.OnlyTheWebLivesInASpacesJar`). A private window has no Spaces. A Blank Window has no Space registry, so it offers no Independent session (`SpaceMenuJarTest.ABlankWindowOffersNoIndependentSession`, patch 0071).
+
+Shared essentials stay on the default partition. An essential pinned in a Space with its own session is that Space's, in its partition (`stedding.own_essential`, patch 0083, [ADR 0028](0028-a-spaces-own-essentials.md)). An app made from a page keeps the jar of the Space it was made in while that session is on (patch 0072, [ADR 0025](0025-apps-keep-their-spaces-session.md)).
+
+`window.open` with an opener keeps the opener's `SiteInstance`. A page opened with no opener is put back in the Space's jar before it loads. No patch edits `web_contents_impl.cc`. Patch 0067 teaches `content/` a Space's sessionStorage and its notifications. Patch 0071 keeps a Space's session cookies across a restart, in `chrome/browser/net/profile_network_context_service.cc`, as the profile's jar does.
+
+Saved passwords, history, extensions and preferences stay on the profile. No patch points the extension cookie API at a Space's jar.
 
 ## Consequences
 
-- Two isolated Spaces can be signed into the same site at once. A shared
-  Space still sees every other shared Space's cookies.
-- Rebases pick up one helper directory and one navigator hunk. Brave's
-  Containers also patch `content/browser/web_contents/web_contents_impl.cc`
-  so every navigation inherits; we do not, until a test shows a leak this
-  cut cannot close at chrome/.
-- PRODUCT §2's "profile" wording is this ADR: a storage partition, not a
-  Chromium profile. Binding two Spaces to one jar, or giving a Space its
-  own extension set, is a later ADR.
-- Deleting an isolated Space wipes its partition once its tabs have moved
-  (sessions S17); Clear Independent Session on the chip menu wipes it in
-  place (S13). Turning isolation off keeps the jar for the next time it is
-  turned on, so the data on disk is bounded by the Spaces that exist.
+Two isolated Spaces can be signed into the same site at once. Spaces that are not isolated share the profile's jar.
+
+Deleting an isolated Space wipes its partition once its tabs have moved (sessions S17). Clear Independent Session on the chip menu wipes the jar in place and keeps the Space and its `profile_id` (sessions S13). Turning isolation off keeps the jar.
+
+Binding two Spaces to one jar, or giving a Space its own extension set, needs a later ADR. In [PRODUCT.md](../PRODUCT.md) §2, a Space's "profile" means this partition.

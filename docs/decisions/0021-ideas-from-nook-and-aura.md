@@ -1,62 +1,33 @@
 # 0021 — Ideas from Nook and Aura: rebuilt, never copied
 
-Status: Accepted
+Status: Accepted. Ad blocking's rule is [ADR 0030](0030-ad-and-tracker-blocking.md). A Space's own essentials are [ADR 0028](0028-a-spaces-own-essentials.md).
 Date: 2026-10-11
 
 ## Context
 
-Two open-source Arc-style browsers were read on 2026-10-11 for what they have that
-Stedding lacks. Nook (`nook-browser/Nook`) is active, a WebKit browser for macOS 26 in
-Swift and SwiftUI, GPL-3.0 with its name and icon reserved. Aura
-(`doorhinge-apps/Aura-Browser`) is an archived iPad-first WebKit app in Swift, MPL-2.0 since
-2025-06-06 (GPL-3.0 before; its rewrite has no license at all). Neither shares a line of code
-with a Chromium patch series in C++, and both licenses are copyleft: GPL-3.0 would make every
-Stedding binary GPL-3.0, and an MPL-2.0 file keeps its license and its source obligation, so
-the core would no longer be all BSD-3-Clause (ADR 0002, ADR 0005). The owner liked a dozen of
-their ideas and asked for them on the roadmap.
+Nook (`nook-browser/Nook`) is a WebKit browser for macOS, in Swift, GPL-3.0, with its name and icon reserved. Aura (`doorhinge-apps/Aura-Browser`) is an archived iPad-first WebKit app in Swift, MPL-2.0 since 2025-06-06 (GPL-3.0 before that; the rewrite has no license). Neither shares code with this Chromium series. GPL-3.0 would make every Stedding binary GPL-3.0. An MPL-2.0 file keeps its own license and its source obligation, so the core would no longer be all BSD-3-Clause ([ADR 0002](0002-license-bsd-3-clause.md), [ADR 0005](0005-open-core.md)).
 
 ## Decision
 
-**Their behaviours are rebuilt from scratch, from written descriptions; nothing of theirs is
-copied.** No code, scripts, data files, shortcut tables, icons or layout constants from either
-repository, nor a translation of them. Facts are taken from their primary sources instead (a
-web app's own shortcut list from its own documentation).
+Their behaviours are rebuilt from written descriptions. Nothing of theirs is copied: no code, scripts, data files, shortcut tables, icons or layout constants, and no translation of those.
 
-- **Third-party pieces they use come from their original projects, each under its own
-  license and with its own ADR first.** The first is the ad blocker: Brave's adblock-rust
-  (MPL-2.0) as a separate component, or the blocking left to extensions, with the filter
-  lists fetched at run time rather than built in (EasyList and uBlock's lists are GPL-3.0 or
-  CC BY-SA). Nothing is built until that ADR is accepted.
-- **AI stays out (ADR 0020):** Nook's sidebar chat, tab organizer and agent-control server
-  and Aura's "Browse for Me" are not taken.
-- **Boosts stay deferred (ADR 0012).** Aura's editor -- a live preview while typing, a switch
-  per site in the page menu -- is the model when the threat model lets them return, with the
-  CSS applied as the page starts loading rather than after it.
-- **Placement:** `docs/ROADMAP.md` M10 ("Beyond parity") lists them and their acceptance
-  criteria; `BACKLOG.md` S-88 to S-101 carry one item each, in priority order after automatic
-  updates and the open defects. M10 runs alongside M8 and M9: each item is independent, lands behind its own spec
-  row and the quality bar, and none is a condition of 1.0 except shortcut customisation,
-  which `docs/PRODUCT.md` §12 already put there.
-- **A second, closer read of Nook's code the same day** added S-118 to S-125 to M10 (the
-  smaller things), detail to S-74 and S-88 to S-101, and items for Arc behaviour that
-  `docs/PRODUCT.md` already put at 1.0 with no item yet (S-107 to S-117, S-126). It also
-  read these and left them out:
-  - YouTube and social-site tweaks (hiding Shorts and sponsored posts, SponsorBlock): a
-    script host per site, the reason Boosts are deferred, and extensions already do it.
-  - The cookie and cache inspector and its "high-risk" score: Chromium's site data pages
-    cover it, and its logic is wrong.
-  - The address field in the sidebar: the address row stays on the page card (toolbar T1
-    to T5).
-  - Daily sidebar backups: cut by the owner on 2026-09-26 (import I17, I19).
-  - Essentials and history of their own per Space: essentials are shared across Spaces
-    (spaces B6, ADRs 0015 and 0019).
-  - Drag previews that change shape, and trackpad haptics: little value for the work.
+A third-party piece comes from its own project, under its own license, and gets an ADR first. Ad and tracker blocking is [ADR 0030](0030-ad-and-tracker-blocking.md): Chromium's subresource filter, lists fetched at run time, nothing from a list built in. Phase 1 is patch 0098, off by default. ADR 0030 is still Proposed.
+
+AI stays out ([ADR 0020](0020-no-bundled-model.md)). Boosts stay deferred ([ADR 0012](0012-defer-boosts-and-easels.md)). If they return, the shape is a live preview while typing and a switch per site in the page menu, with the CSS applied as the page starts loading.
+
+The behaviours are on [ROADMAP.md](../ROADMAP.md) M10. Each one stands on its own spec rows. Shortcut customisation is the one [PRODUCT.md](../PRODUCT.md) §12 counts toward 1.0.
+
+Read, and left out:
+
+- YouTube and social-site tweaks, including hiding Shorts and sponsored posts, and SponsorBlock. That is a script host per site, the reason Boosts are deferred, and extensions already do it.
+- A cookie and cache inspector, and a score of how risky a site is. Chromium's site-data pages cover the data.
+- An address field in the sidebar. The address row stays on the page card (toolbar T1 to T5).
+- Daily sidebar backups, cut on 2026-09-26 (import I17, I19).
+- A history of its own per Space. Essentials of a Space with its own session were later taken ([ADR 0028](0028-a-spaces-own-essentials.md)).
+- Drag previews that change shape, and trackpad haptics.
 
 ## Consequences
 
-- Each item gets its feature spec rows (`docs/features/`) when its work starts, with tests
-  that fail first, as every feature does.
-- Whoever builds one does not open the other project's files; the descriptions in
-  `BACKLOG.md` and `docs/VISION.md#competitors` are enough, and keep the work clean of both
-  licenses.
-- The ad blocker changes `docs/PRIVACY.md`'s defaults and the network list; its ADR says how.
+Whoever builds one of these works from the descriptions in [BACKLOG.md](../../BACKLOG.md) and [VISION.md](../VISION.md#competitors), and does not open the other project's files.
+
+What blocking changes in the privacy defaults is [ADR 0030](0030-ad-and-tracker-blocking.md).

@@ -1,25 +1,10 @@
 # Keyboard shortcuts
 
-Every shortcut Stedding adds or changes, on both platforms. The same list is inside
-the browser at **Settings → Stedding → Shortcuts**, generated from the keyboard tables
-the browser itself uses, so its keys are those of the version you run.
+The shortcuts Stedding adds or changes, on macOS and Windows. The tables are the keys the browser ships with.
 
-Four keys are new since 0.2.0 beta 14: muting a tab (⌃M / Ctrl+M), all folders at once
-(⇧⌘E / Ctrl+Shift+E), clearing a site's cookies (⌥⇧⌘R / Ctrl+Alt+Shift+R) and picture in
-picture (⌥⇧⌘P / Ctrl+Alt+Shift+P). An earlier build does nothing with them. On the Mac,
-splitting the current tab with a new one is ⌃⌘N from 0.2.0 beta 20;
-0.2.0 beta 17 and earlier have only ⌥⌘N for it, which still splits after that, except while
-Arc runs.
+**Settings → Stedding → Shortcuts** lists every command, read from the keyboard tables, so the keys match the version you are running. Add records a new chord, the switch turns a command's keys off, and Reset puts one command back. Reset all puts every command back. What you set applies to every window on this computer. A row marked Fixed cannot be changed.
 
-You can change these keys: **Settings → Stedding → Shortcuts** has a row for every
-command, with Add to record new keys, a switch to turn a command's keys off and Reset
-to put them back (from 0.3.0 beta 16, BACKLOG S-91; earlier builds show the list
-read-only). The tables below are the keys the browser ships with.
-
-The two sets of numbered keys, for Spaces and for rows, can trade keys: under the Space
-row, **Number keys for the rows and the Spaces** puts the Spaces on ⌘1–⌘9 (Ctrl+1–Ctrl+9)
-and the rows on ⌃1–⌃9 (Alt+1–Alt+9), or moves either set to ⌃⌘1–⌃⌘9 (Alt+Shift+1–Alt+Shift+9).
-This comes after 0.3.0 beta 21.
+On the Jump to Space row, **Number keys for the rows and the Spaces** chooses the keys for the two sets of 1–9. By default the rows are ⌘1–⌘9 and the Spaces are ⌃1–⌃9 (Ctrl+1–Ctrl+9 and Alt+1–Alt+9 on Windows). The menu can swap the two sets, or move either set to ⌃⌘1–⌃⌘9 (Alt+Shift+1–Alt+Shift+9 on Windows).
 
 Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
@@ -27,55 +12,51 @@ Keys: ⌘ Command, ⌥ Option, ⇧ Shift, ⌃ Control, ⇥ Tab.
 
 | Action | macOS | Windows |
 |---|---|---|
-| Close the sidebar, to icons or hidden completely (Settings → Stedding → Sidebar), or bring it back | ⌘S | Ctrl+S |
+| Close the sidebar, or bring it back. Settings → Stedding → Sidebar → When the sidebar closes chooses icons or hidden completely | ⌘S | Ctrl+S |
 | Show or hide the address row on its own | ⇧⌘D | Ctrl+Shift+D |
-| History in the sidebar, or the History page with Settings → Stedding → Sidebar → "Open History and Downloads in the sidebar" off; again to close | ⌘Y | Ctrl+H |
-| Downloads in the sidebar, or the Downloads page with that setting off; again to close | ⇧⌘J or ⌥⌘L | Ctrl+J |
+| History in the sidebar. Press again to close it. With Settings → Stedding → Sidebar → Open History and Downloads in the sidebar off, the History page opens | ⌘Y | Ctrl+H |
+| Downloads in the sidebar, or the Downloads page with that setting off. In the sidebar, press again to close it | ⇧⌘J or ⌥⌘L | Ctrl+J |
 | Jump to Space 1 to 9 | ⌃1 – ⌃9 | Alt+1 – Alt+9 |
 | Next Space / previous Space | ⌥⌘→ / ⌥⌘← | Ctrl+Alt+→ / Ctrl+Alt+← |
 | Move the tab to the next / previous Space | ⌥⇧⌘→ / ⌥⇧⌘← | Ctrl+Alt+Shift+→ / ← |
 | Pin the tab in its Space, or unpin it | ⌘D | Ctrl+D |
 | Clear: close the Space's unpinned tabs | ⇧⌘K | Ctrl+Shift+K |
 | New Blank Window: a window with Spaces of its own | ⌥⇧⌘N | Ctrl+Alt+Shift+N |
-| In a little window or a peek: move the page into your window as a tab, as its Open in Stedding or Open as Tab button does (a new window opens when none is) | ⌘O | Ctrl+O |
+| In a little window or a peek: move the page into your window as a tab, as Open in Stedding or Open as Tab does. A new window opens when none is open | ⌘O | Ctrl+O |
 | In a little window or a peek: send the page into a split of your window (File menu and the page's menu: Open in Split View) | ⇧⌘O | Ctrl+Shift+O |
-| In a little window: close it (the bare key may not reach the window yet, `docs/history/plan-2026-09-26.md` CMD-15) | Esc | Esc |
+| In a little window or a peek: close it. The page gets Escape first when it uses that key | Esc | Esc |
 
 ### Switching Spaces with the mouse
 
-Over the sidebar or its icons, scroll sideways: to the right for the next Space, to the
-left for the one before. Scrolling up and down still scrolls your tabs.
+Over the sidebar, or over its icons, scroll sideways: to the right for the next Space, to the left for the one before. Scrolling up and down still scrolls the tabs. After each change the wheel waits a moment, so a fast spin does not run through every Space.
 
 | How | macOS | Windows |
 |---|---|---|
-| Two fingers on the touchpad, sideways | the list follows your fingers and changes Space when you let go | one Space for each swipe |
+| Two fingers on the touchpad, sideways | the list follows your fingers; it changes Space when you let go past a short distance, and springs back when you do not | one Space for each sideways swipe |
 | A mouse that tilts its wheel, or has a second wheel for sideways | one Space for each notch | one Space for each notch |
 | Shift with the wheel (down is to the right) | one Space for each notch | one Space for each notch |
-| Ctrl with the wheel (down for the next Space) | — | one Space for each notch; over the page it still zooms |
-
-A quick spin of the wheel does not race through all your Spaces: after each change it waits
-a moment before the next.
+| Ctrl with the wheel (down for the next Space) | — | one Space for each notch. Over the page, Ctrl with the wheel still zooms |
 
 ## Tabs and the bar
 
 | Action | macOS | Windows |
 |---|---|---|
 | Open the bar: search, a URL, or any open tab | ⌘T | Ctrl+T |
-| Open the bar in actions mode (⇥ in an empty bar does the same; ⇥ after the start of a search engine's name makes a search chip for that site instead) | ⇧⌘P | Ctrl+Shift+P |
+| Open the bar in actions mode. ⇥ switches to actions mode and keeps what you typed as the filter; ⇥ at the end of the start of a search engine's name makes a search chip for that site instead | ⇧⌘P | Ctrl+Shift+P |
 | Open the bar with the page's address in it, selected | ⌘L | Ctrl+L |
-| Run an extension: the bar lists your extensions; keep the keys down and press E again (or ↓ ↑) to choose, let go to run it; Esc (on the Mac also ⌘.) runs none | ⌘E | Ctrl+Alt+E |
-| Jump to one of the first eight rows you can see, or to the last one with 9 (hold ⌘ / Ctrl a moment to see the numbers) | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
+| Run an extension. The bar lists your extensions. Keep the keys down and press the chord again, or ↓ ↑, to choose. Let go to run it. Esc runs none; on the Mac ⌘. does too | ⌘E | Ctrl+Alt+E |
+| Jump to one of the first eight rows you can see, or to the last one with 9. Hold ⌘ / Ctrl a moment to see the numbers | ⌘1 – ⌘9 | Ctrl+1 – Ctrl+9 |
 | Next tab / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+PgDn / Ctrl+PgUp |
 | Next tab down the sidebar / previous tab up the sidebar | ⌥⌘↓ / ⌥⌘↑ | Ctrl+Alt+↓ / Ctrl+Alt+↑ |
-| Most recent tab of the Space (hold ⌃ / Ctrl to see the five most recent) | ⌃⇥ | Ctrl+Tab |
+| Most recent tab of the Space. Hold ⌃ / Ctrl to see the five most recent | ⌃⇥ | Ctrl+Tab |
 | Most recent tabs, the other way round | ⌃⇧⇥ | Ctrl+Shift+Tab |
-| Move the row down / up (a folder beside it is one row) | ⌥⇧⌘↓ / ⌥⇧⌘↑ | Ctrl+Alt+Shift+↓ / ↑ |
+| Move the row down / up. A folder beside it is one row | ⌥⇧⌘↓ / ⌥⇧⌘↑ | Ctrl+Alt+Shift+↓ / ↑ |
 | Collapse the Space's folders, or expand them all when none is open | ⇧⌘E | Ctrl+Shift+E |
-| Split the current tab with a new one | ⌃⌘N (⌥⌘N too, except while Arc runs) | Alt+Shift+N |
-| Split with the page on screen: drag a tab onto the page's left or right half, and let go when it lights | drag | drag |
-| Mute the tab or unmute it (a split's two panes go together) | ⌃M | Ctrl+M |
-| Reopen closed tabs, one at a time, each in its Space and folder (with Settings › Stedding › Tabs › Offer Undo after closing tabs on, the toast's Undo brings back a whole close) | ⇧⌘T | Ctrl+Shift+T |
-| Close a pinned tab: it unloads and goes back to its pinned page, keeping its place (the − on its row, a middle click and its menu's Close do the same; once it is asleep, its ✕ asks to remove it) | ⌘W | Ctrl+W |
+| Split the current tab with a new one. ⌥⌘N does it too, unless Arc is running | ⌃⌘N | Alt+Shift+N |
+| Split with the page on screen: drag a tab onto the page's left or right half, and let go when that half lights | drag | drag |
+| Mute the tab or unmute it. A split's two panes go together | ⌃M | Ctrl+M |
+| Reopen closed tabs, one at a time, each in its Space and folder. With Settings → Stedding → Tabs → Offer Undo after closing tabs on, the toast's Undo brings back a whole close | ⇧⌘T | Ctrl+Shift+T |
+| On a pinned tab, while Settings → Stedding → Tabs → "⌘W / Ctrl+W on a pinned tab puts it to sleep" is on (it is at first): unload it and send it back to its pinned page, keeping its place. The minus on an awake pin, a middle click, and the menu's Close do the same. A pin already asleep at that page shows an x that asks before removing it | ⌘W | Ctrl+W |
 
 ## Page
 
@@ -83,24 +64,19 @@ a moment before the next.
 |---|---|---|
 | Copy the link, without its tracking parameters | ⇧⌘C | Ctrl+Shift+C |
 | Copy the link as Markdown | ⌥⇧⌘C | Ctrl+Alt+Shift+C |
-| Copy the link with the mouse: the Copy Link button at the address field's right end; Option-click (Alt-click) for Markdown | click | click |
-| Clear the site's cookies and reload the page (only cookies; in a Space with its own session, only that Space's) | ⌥⇧⌘R | Ctrl+Alt+Shift+R |
+| Copy the link with the mouse: the Copy Link button at the right end of the address field, before the star. Option-click (Alt-click) copies Markdown | click | click |
+| Clear the site's cookies and reload. Site storage, cache, history and passwords stay. In a Space with its own session, only that Space's cookies go | ⌥⇧⌘R | Ctrl+Alt+Shift+R |
 | Screenshot the page as shown | ⇧⌘2 | Ctrl+Shift+2 |
 | Screenshot a region you drag out | ⌥⇧⌘2 | Ctrl+Alt+Shift+2 |
 | Screenshot the whole document | ⇧⌘1 | Ctrl+Shift+1 |
-| Play the page's video in picture in picture, or bring it back (once the video has played with sound) | ⌥⇧⌘P | Ctrl+Alt+Shift+P |
-| Turn dark pages on or off: every website drawn dark, in every window | ⌥⇧⌘D | Ctrl+Alt+Shift+D |
+| Play the page's video in picture in picture, or bring it back, once the video has played with sound | ⌥⇧⌘P | Ctrl+Alt+Shift+P |
+| Turn dark pages on or off: websites drawn dark, in every window | ⌥⇧⌘D | Ctrl+Alt+Shift+D |
 
-Screenshots go to Downloads as PNG and to the clipboard. Dark pages is also the moon
-button at the right end of the address row, the **Dark Pages** row of the command bar
-and, on the Mac, of the View menu (with its chord beside it), and a switch in Settings →
-Stedding → Pages and menus. ⌥⇧⌘D takes no key of Chromium's
-or Stedding's: ⇧⌘D stays the address row's, and ⌥⌘D the Dock's.
+Screenshots go to Downloads as PNG and to the clipboard. Dark pages is also the moon at the right end of the address row, the **Dark Pages** row of the command bar, the View menu on the Mac (with its chord beside it), and a switch in Settings → Stedding → Pages and menus. ⇧⌘D stays the address row's. On the Mac, ⌥⌘D is the Dock's.
 
 ## Where Stedding differs from Chromium
 
-Stedding takes a few chords Chromium uses for other commands. The old command keeps
-its menu item; only the key moves.
+Stedding takes a few chords Chromium uses for other commands. The old command keeps its menu item. The key moves.
 
 | Chord | Stedding | Chromium had |
 |---|---|---|
@@ -119,47 +95,21 @@ its menu item; only the key moves.
 | ⇧⌘K / Ctrl+Shift+K | Clear the Space | unbound |
 | ⌘E | Run an extension | Use Selection for Find (keeps its Edit › Find menu row) |
 
-The four keys added in 0.2.0 beta 14 (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E,
-Ctrl+Alt+Shift+P and Ctrl+Alt+Shift+R) were free in Chromium on both platforms, so they move
-none of its keys.
+Muting a tab, collapsing every folder, picture in picture and clearing a site's cookies (⌃M, ⇧⌘E, ⌥⇧⌘P and ⌥⇧⌘R; Ctrl+M, Ctrl+Shift+E, Ctrl+Alt+Shift+P and Ctrl+Alt+Shift+R) take no Chromium chord on either platform.
 
-Running an extension is ⌘E on the Mac, as in Arc, and Ctrl+Alt+E on Windows, where Ctrl+E
-stays the search key and Ctrl+Alt+E was free. With the address row hidden, the command bar's
-actions mode (⇧⌘P / Ctrl+Shift+P) also lists each extension, **Show Media Controls** while
-something plays, and **View Site Information**; on a keyboard with AltGr, press Ctrl+Alt+E
-with the left Alt.
+Running an extension is ⌘E on the Mac, as in Arc, and Ctrl+Alt+E on Windows, where Ctrl+E stays the search key. Actions mode also lists each extension, **Show Media Controls** while something plays, and **View Site Information**.
 
-Independent session is not a shortcut: it is a check item on the Space chip
-menu, a toggle on each Space in Settings → Stedding → Spaces, and an **Independent
-Session** row in the command bar (⇧⌘P). Off by default.
+Independent session is not a shortcut. It is a check item on the Space chip menu, a toggle on each Space in Settings → Stedding → Spaces, and an **Independent Session** row in the command bar's actions mode. It is off at first.
+
+The tab-group chords are not bound. Those rows are absent from the short tab menus, which are on at first. Settings → Stedding → Pages and menus → Short context menus brings Chromium's menu back, still without those chords.
 
 ## Notes
 
-- **macOS:** ⌃1–⌃9 are also Mission Control's "Switch to Desktop N" once a second
-  desktop exists, and macOS takes them first. The Spaces menu in the menu bar keeps
-  the commands reachable, and **Number keys for the rows and the Spaces** can move the
-  Spaces to ⌘1–⌘9 or ⌃⌘1–⌃⌘9.
-- **macOS:** muting a tab is ⌃M, not ⌘M: ⌘M still minimizes the window.
-- **macOS:** a clipboard manager that owns ⇧⌘C system-wide (Maccy does by default)
-  takes it before the browser does; the File menu row always works.
-- **macOS:** while Arc is running it takes ⌥⌘N from every app for its Little Arc window,
-  so ⌥⌘N, Chromium's chord for the split, opens Arc instead of a split here. Quit Arc, or
-  use **New Split View with Current Tab** on a tab's right-click menu. From 0.2.0 beta 20,
-  ⌃⌘N, the menu's chord, splits whether Arc runs or not.
-- **Windows:** a tap of Alt on its own still focuses the app menu, as in Chromium; the
-  digit goes with the key held.
-- **Windows:** Ctrl+Alt with an arrow is also the display-rotation hotkey some Intel
-  graphics drivers install; turn that off in the driver if the two collide.
-- **Windows:** Ctrl+Esc opens the Start menu, and Windows takes it before any app sees
-  it, so Escape does not cancel a Ctrl+Tab walk on Windows: the Start menu opens and the
-  walk stops on the tab it had reached. To back out of a walk, keep Ctrl held and press
-  Shift+Tab until the tab you started from is highlighted again, then let go: you are back
-  where you began, and the order of recent tabs is as it was. Or let go and press Ctrl+Tab
-  once: that takes you back too, but the tab you had reached moves up the recent tabs, right
-  behind the one you are on. After Ctrl+Esc, close the Start menu with Escape first.
-- **Windows:** on a keyboard with AltGr, Windows treats Ctrl+Alt as AltGr. Where AltGr
-  types a character with one of the Ctrl+Alt chords (Polish (Programmers) gives Ctrl+Alt+Shift+C
-  as Ć and Ctrl+Alt+Shift+N as Ń), press the chord with Ctrl and the **left** Alt: that runs
-  the command, and AltGr (the right Alt) still types the character. With a digit, the right
-  Alt on such a keyboard is AltGr too, so it types; Space 1–9 are the left Alt's.
-- Chromium's tab-group chords are removed, with the tab-group rows of the menus.
+- **macOS:** Once a second desktop exists, ⌃1–⌃9 are Mission Control's Switch to Desktop, and macOS takes them first. Turn them off under System Settings → Keyboard → Keyboard Shortcuts → Mission Control, or choose other number keys under Jump to Space. The Spaces menu in the menu bar keeps the commands reachable.
+- **macOS:** Muting a tab is ⌃M. ⌘M still minimizes the window.
+- **macOS:** A clipboard manager that owns ⇧⌘C system-wide (Maccy does by default) takes it before the browser does. The File menu row still copies the link.
+- **macOS:** While Arc is running it takes ⌥⌘N from every app for its Little Arc window, so that chord opens Arc. ⌃⌘N, the menu's chord, still splits. **New Split View with Current Tab** on a tab's right-click menu does too.
+- **Windows:** A tap of Alt on its own still focuses the app menu, as in Chromium. The digit goes with the key held.
+- **Windows:** Ctrl+Alt with an arrow is also the display-rotation hotkey some Intel graphics drivers install. Turn that off in the driver if the two collide.
+- **Windows:** Ctrl+Esc opens the Start menu, and Windows takes it before any app sees it, so Escape does not cancel a Ctrl+Tab walk: the Start menu opens and the walk stops on the tab it had reached. To go back without changing the order of recent tabs, keep Ctrl held and press Shift+Tab until the tab you started from is highlighted, then let go. Letting go and pressing Ctrl+Tab once also returns, and the tab you had reached moves up the recent tabs, just behind the one you are on. After Ctrl+Esc, close the Start menu with Escape first.
+- **Windows:** On a keyboard with AltGr, Windows treats Ctrl+Alt as AltGr. Where AltGr types a character on one of these chords (Polish (Programmers) gives Ctrl+Alt+Shift+C as Ć and Ctrl+Alt+Shift+N as Ń), press the chord with Ctrl and the left Alt. That runs the command, and AltGr (the right Alt) still types the character. With a digit the right Alt is AltGr too, so it types. Space 1–9 are the left Alt's.

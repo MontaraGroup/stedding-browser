@@ -2,83 +2,98 @@
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities through **GitHub private vulnerability reporting** on
-this repository: go to the **Security** tab and click **Report a vulnerability**.
-This creates a private advisory visible only to you and the maintainers.
+Report a vulnerability through GitHub private vulnerability reporting on this
+repository. Open the **Security** tab and choose **Report a vulnerability**.
+That opens a private advisory visible only to you and the maintainer.
 
-Please do not open public issues for security problems, and do not report them by
-email or social media — the Security tab is the only monitored channel.
+Do not open a public issue for a security problem, and do not send it by email
+or on social media. The Security tab is the only channel that is watched.
 
-A good report includes:
+Include:
 
-- What is affected (file, document, or component and version).
+- What is affected: the component and the version, and a file or document when you know it.
 - Steps to reproduce, or a clear explanation of the flaw.
-- Impact as you understand it.
-- Whether an AI tool found the issue or wrote the report. Reproduce it on a released
-  build before you send it; a report nobody has reproduced is closed
-  (`CONTRIBUTING.md`, "AI tools").
+- The impact, as you understand it.
+- Whether an AI tool found the issue or wrote the report. Reproduce it on a
+  released build before you send it. A report that nobody has reproduced is
+  closed ([CONTRIBUTING.md](CONTRIBUTING.md#ai-tools)).
 
 ## Response expectations
 
-This is a small open-source project with one maintainer and no security team. Reports are
-welcome and read, and handled as a best effort, without a set response time:
+This is a small project with one maintainer and no security team. Reports are
+read and handled as a best effort. There is no set response time.
 
 - We try to acknowledge a report soon.
-- Whether and when a fix follows depends on its severity and on the maintainer's time.
-- We try to keep you informed inside the private advisory, and credit you when a fix ships
-  (unless you prefer otherwise).
+- Whether a fix is made, and when it ships, depends on its severity and on the
+  maintainer's time.
+- We try to keep you informed in the private advisory, and to credit you when a
+  fix ships, unless you prefer not to be named.
 
-As the [BSD-3-Clause licence](LICENSE) says, Stedding comes as is, without warranty, and that
-covers security problems as it covers any other defect.
+The [BSD-3-Clause licence](LICENSE) provides Stedding as is, without warranty.
+That covers a security defect as it covers any other defect.
 
 ## Scope
 
-Stedding ships beta binaries on
-[Releases](https://github.com/ysalitrynskyi/stedding-browser/releases): a macOS image
-(Apple silicon), signed and notarized, and an unsigned Windows x64 preview.
-Anything in one of those builds is in scope:
+Stedding publishes beta binaries on
+[Releases](https://github.com/ysalitrynskyi/stedding-browser/releases).
+The macOS file is an Apple silicon disk image, signed with the project's
+Developer ID and notarized by Apple. The Windows file is an x64 installer.
+Linux is not shipped.
 
-- The Stedding patch series on top of Chromium (`patches/`) and the branding applied to
-  the build — our code, our bugs.
-- The release and supply-chain setup: CI, the release scripts in `tooling/`, the
-  checksums published beside each image, and the update mechanism (the signed feeds,
-  `updates/appcast.xml` for the Mac and `updates/appcast-windows.xml` for Windows, and the
-  scripts that write them, `tooling/publish-appcast` and `tooling/win/publish-appcast.ps1`).
-- The contents of this repository, including documentation that would lead a user into
-  an unsafe configuration.
+In scope:
 
-Two things about the current builds that are not vulnerabilities, because they are
-documented properties of a beta:
+- The patch series in `patches/`, and the branding applied to a release build.
+- Release and supply chain: the workflows in `.github/workflows/`, the scripts
+  in `tooling/`, and the SHA-256 checksum published with each file.
+- The updaters and their feeds. The Mac uses Sparkle. Its feed is
+  `updates/appcast.xml`, written by `tooling/publish-appcast` and fetched from
+  `https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast.xml`
+  ([ADR 0022](docs/decisions/0022-sparkle-updates-the-mac.md)). Windows uses
+  Stedding's own updater. Its feed is `updates/appcast-windows.xml`, written by
+  `tooling/win/publish-appcast.ps1` and fetched from
+  `https://raw.githubusercontent.com/ysalitrynskyi/stedding-browser/main/updates/appcast-windows.xml`
+  ([ADR 0023](docs/decisions/0023-updates-on-windows-and-linux.md),
+  [ADR 0026](docs/decisions/0026-a-windows-update-key.md)).
+  Each platform trusts its own key. A changed feed or download is not applied
+  unless that key's signature verifies. The Windows updater runs an installer
+  only when the Windows key's Ed25519 signature on that file verifies.
+  stedding.dev is a website and is not on this path
+  ([ADR 0014](docs/decisions/0014-github-releases-as-update-channel.md)).
+- Text in this repository that would lead someone into an unsafe configuration.
 
-- **The Windows installer is not code-signed** (`BACKLOG.md` S-56). SmartScreen asks
-  once, and the release notes give the step: **More info → Run anyway**. The macOS
-  image is signed with the project's Developer ID and notarized from 0.2.0 beta 10 on.
-- **Safe Browsing is not active yet.** The builds carry no Google API key, so the list
-  updates are refused and no site gets a warning page (`docs/PRIVACY.md`, `BACKLOG.md`
-  S-75).
+Two properties of the current betas are not vulnerabilities:
 
-Both platforms update themselves from a signed feed: the Mac from 0.2.0 beta 16 on and
-Windows from 0.2.0 beta 19 on (ADR 0022, ADR 0023, ADR 0026). The Chromium pin is watched
-daily (`.github/workflows/upstream.yml`, `tooling/check-pin`) and the rebase timetable is in
-`docs/ROADMAP.md#the-quality-bar`.
+- **The Windows installer is not code-signed** ([BACKLOG.md](BACKLOG.md) S-56).
+  SmartScreen asks once. The release notes say to click **More info**, then
+  **Run anyway**.
+- **Safe Browsing is not active.** These builds carry no Google API key, so the
+  list update is refused and pages are not checked against the lists
+  ([docs/PRIVACY.md](docs/PRIVACY.md), [BACKLOG.md](BACKLOG.md) S-75).
 
-Vulnerabilities in upstream Chromium should be reported to the
-[Chromium security team](https://www.chromium.org/Home/chromium-security/reporting-security-bugs/),
-not here — unless the Stedding patch series changes the behaviour, in which case it is
-ours.
+The Chromium pin is checked daily
+([`.github/workflows/upstream.yml`](.github/workflows/upstream.yml),
+`tooling/check-pin`). When a rebased release is due is in
+[docs/ROADMAP.md](docs/ROADMAP.md#the-quality-bar).
+
+Report a vulnerability in upstream Chromium to the
+[Chromium security team](https://www.chromium.org/Home/chromium-security/reporting-security-bugs/).
+Report it here when a Stedding patch changes the behaviour.
 
 ## Supported versions
 
-Only the newest pre-release for each platform is supported, which here means only that a
-fix, when there is one, goes into a newer release, not that any help or fix is promised.
-Some releases carry one platform's image only, so the newest macOS image and the newest Windows installer can
-come from different betas. Older betas are superseded on the day a newer one for their
-platform is published and receive no fixes; there is no long-term support line, and
-there will not be one before 1.0.
+Only the newest pre-release for a platform is supported. Support means a fix,
+when there is one, goes into a newer release. It is not a promise of help or
+of a fix.
+
+Not every release includes both platforms, so the newest macOS image and the
+newest Windows installer can come from different betas. An older beta is
+superseded on the day a newer one for that platform is published, and it
+receives no fixes. There is no long-term support line, and there will not be
+one before 1.0.
 
 | Version | Supported |
 |---|---|
-| The newest pre-release on [Releases](https://github.com/ysalitrynskyi/stedding-browser/releases) with an image for your platform | Yes |
-| Any earlier pre-release | No — install the newest |
+| The newest pre-release on [Releases](https://github.com/ysalitrynskyi/stedding-browser/releases) with a file for your platform | Yes |
+| Any earlier pre-release | No. Install the newest. |
 
 `VERSION` at the repository root is the version this tree builds.

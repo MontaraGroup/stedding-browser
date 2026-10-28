@@ -5,61 +5,26 @@ Date: 2026-08-31
 
 ## Context
 
-ADR 0011 set full functional parity with Arc as the product target. Working through the
-inventory in `../PRODUCT.md`, two of Arc's features stand out as expensive and weakly
-connected to browsing:
+[ADR 0011](0011-full-arc-parity.md) set full functional parity with Arc as the target. Two of Arc's features are large, and neither is browsing itself.
 
-- **Boosts** — per-site restyling with colour and font controls, full custom CSS and
-  JavaScript editors, and **Zap**, which hides a clicked page element permanently across
-  that site.
-- **Easels** — freeform whiteboards holding drawings, text and page captures, living as
-  pinned tabs and archived to the Library.
+- **Boosts** restyle a site: colour and type, custom CSS and JavaScript, and **Zap**, which hides a clicked element on that site.
+- **Easels** are whiteboards of drawings, text and captures, kept as pinned tabs.
 
-Both are substantial. Easels is a drawing application inside a browser. Boosts is a
-styling engine plus a script host, and a script host is a security surface: user
-JavaScript injected per site needs a threat model, a permission story, and a way to
-stop a shared Boost from being an attack.
-
-Both also already have answers in the ecosystem we are required to support. Chrome
-extension compatibility is a hard requirement of this project (`../../AGENTS.md`), and
-Stylus covers per-site CSS, Violentmonkey covers per-site JavaScript, and uBlock
-Origin's element picker covers Zap. A user who wants these can have them on day one
-without us building or securing them.
+Boosts is a script host. User JavaScript per site needs a threat model before any code. Chrome extension compatibility is a hard requirement ([AGENTS.md](../../AGENTS.md)). Stylus covers per-site CSS, Violentmonkey covers per-site JavaScript, and uBlock Origin's element picker covers Zap.
 
 ## Decision
 
-**Boosts and Easels are deferred past the first releases.** They are not cancelled and
-not removed from `../PRODUCT.md`; they are marked as deferred with this ADR as the
-reason.
+Boosts and Easels are deferred past the first releases. They stay in [PRODUCT.md](../PRODUCT.md), marked deferred, with this ADR as the reason. They are not cancelled.
 
-Everything else in the parity inventory stands. Specifically kept: Spaces, Peek, the
-command bar, Air Traffic Control, Split View, the archive model, and the whole
-sidebar and tab model.
+The rest of the parity inventory stands, including Spaces, Peek, the command bar, Air Traffic Control, split view, the archive, and the sidebar and tab model.
 
-They return when either condition holds:
+They return when either of these is true:
 
-1. The features people actually stay in Arc for are shipped and meet the quality bar —
-   Peek, Spaces, the command bar — and there is capacity to spend on this; or
-2. Users tell us the extension answer is not good enough. That is evidence, not
-   speculation, and it is the kind of thing a public issue tracker produces.
+1. The features people stay in Arc for meet the quality bar, and there is capacity to spend. Spaces, the command bar and Peek have since shipped ([ROADMAP.md](../ROADMAP.md); Peek in 0.3.0 beta 16, [BACKLOG.md](../../BACKLOG.md) S-93). This condition is the quality bar and the capacity.
+2. Users show that the extension answer is not enough.
 
-Evidence gathered after this ADR was written supports it more strongly than the
-reasoning did. On Zen Browser's tracker — the closest comparable project — Boosts drew
-**4 upvotes** and Easels **41**, against **412** for folders and **475** for sync. Zen
-shipped Boosts; almost nobody had asked. See `../AGENT-LOOP.md` ("Evidence").
-
-For Boosts specifically, the threat model comes **before** any implementation, not
-alongside it.
+For Boosts, the threat model comes before any implementation. When they return, the editor is a live preview while typing and a switch per site in the page menu ([ADR 0021](0021-ideas-from-nook-and-aura.md)).
 
 ## Consequences
 
-- The near-term roadmap loses its two largest single items, which is most of the reason
-  parity looked out of reach.
-- Parity with Arc is, until this is revisited, **parity minus Boosts and Easels**, and
-  the documents say exactly that rather than implying completeness.
-- Users wanting per-site styling or scripting are pointed at extensions. That is a real
-  answer, not a deflection, because extension support is a hard requirement we are
-  keeping regardless.
-- Deferring Boosts also defers the security work it implies. That is a saving now and a
-  debt later; whoever picks it up inherits the threat-model requirement above rather
-  than a blank sheet.
+Until this is revisited, parity with Arc is parity minus Boosts and Easels. Per-site styling and scripting are extensions. Page capture is its own feature and is not part of this deferral ([ROADMAP.md](../ROADMAP.md#deferred-with-the-intent-to-return)).

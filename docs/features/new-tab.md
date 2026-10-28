@@ -1,22 +1,19 @@
 # Feature: New tab page
 
-Status: **N1–N5 built**; **N6–N8 planned** (BACKLOG S-61).
-Owner docs: `docs/PRIVACY.md` (no request on a new tab), `docs/PRODUCT.md#ui-spec`. Patches: `0003`
-(the de-Google patch: default search, choice screen, local new tab page), `0044` (N1 with Google).
+Status: **N1–N5 built; N6–N8 planned** (BACKLOG S-61).
+Owner: `docs/PRIVACY.md`, `docs/PRODUCT.md`. Patches: 0003, 0044.
 
-The new tab page is Chromium's local "third-party" page, always, whatever the default
-search engine offers: nothing on it leaves the machine. It is a calm place to press the
-command-bar shortcut, not a feed.
+A new tab opens Chromium's local third-party page, whichever search engine is the default. Nothing on that page leaves the machine. It is a place to press the command-bar shortcut.
 
 ## Behaviours
 
 | Id | Behaviour | Test | State |
 |---|---|---|---|
-| N1 | A new tab opens the local page, never a search engine's remote new tab page, whichever engine is the default, Google included (`S-45`). | `search.cc` hunk (`kUseProviderNewTabPage`, the third-party page for every provider); live: `tooling/drive` on a fresh profile with DuckDuckGo shows the local page; `w10_ntp_google` (Google chosen, Windows, 2026-09-10) | built |
-| N2 | A fresh profile has no Chrome Web Store shortcut; the shortcut row shows only sites the user visited. | live: capture of a fresh profile shows no tile | built |
-| N3 | The page says how to open the command bar, using the platform's own shortcut glyphs (⌘T on macOS, Ctrl+T elsewhere); the "Stedding" settings section can turn the line off. | live: capture; `tooling/probes/ntp.json`; settings T4 | built |
-| N4 | The page's background follows the theme (slate in light, the gradient's ground in dark), with no hard-coded Google colours. | `tooling/probes/ntp.json` | built |
-| N5 | A setting hides the shortcut row entirely, for users who want Arc's empty page. | settings T5 (live) | built |
-| N6 | Space home: a new tab in Space S lists that Space's pins, recents and yesterday's archive. No feed, no network (N1). | `MorningDigestTest.CardIsForTheTabsSpace` (not written yet) | planned · BACKLOG S-61 |
-| N7 | Morning card: after local midnight, one card of local facts (archived, slept with a recorded reason, downloads started in S). Counts and titles, never a generated paragraph. Off-able. | `MorningDigestTest.EmptySpaceHasNoCard` (not written yet) | planned · BACKLOG S-61 |
-| N8 | Isolated visits do not rank in ⌘T of another Space unless a modifier is held (command bar K19). | its own test is not written yet; `SpaceQueryTest.AtSpacePrefixFiltersOpenAndArchived` proves only commandbar K19's `@Space` prefix | planned · BACKLOG S-61 |
+| N1 | A new tab opens the local page (`chrome://new-tab-page-third-party`), never a search engine's remote new-tab page, Google included. `NewTabURLDetails::ForProfile` returns that URL for every provider. | `search.cc` (`kUseProviderNewTabPage` false); live: `tooling/probes/ntp.json` | built |
+| N2 | The shortcut row is most-visited sites, so a fresh profile has no tile and there is no built-in Chrome Web Store shortcut. | live: `tooling/probes/ntp.json` | built |
+| N3 | The page says how to open the command bar: "Press ⌘T to search, open a URL, or find a tab" on the Mac, and Ctrl+T elsewhere (the platform accelerator for T). "Show the command-bar hint on the new tab page" (`stedding.new_tab.show_hint`, on by default) turns the line off (settings T4). | live: `tooling/probes/ntp.json`; settings T4 | built |
+| N4 | The page background is Stedding's new-tab colour: white (`#FFFFFF`) in a light window and `#36383F` in a dark one, not the Space's tint and not Google's new-tab colours (`kNewTabLight`, `kNewTabDark` in `stedding_color_mixer.cc`; spaces B11). | `tooling/probes/ntp.json` (a dark window) | built |
+| N5 | "Show most-visited shortcuts on the new tab page" (`stedding.new_tab.show_shortcuts`, on by default) hides the shortcut row (settings T5). | settings T5 | built |
+| N6 | A new tab in a Space lists that Space's pins, recents and yesterday's archive. No feed, no network (N1). | `MorningDigestTest.CardIsForTheTabsSpace` (not written yet) | planned · BACKLOG S-61 |
+| N7 | After local midnight, one card of local facts: archived, slept with a recorded reason, downloads started in that Space. Counts and titles, never a generated paragraph. It can be turned off. | `MorningDigestTest.EmptySpaceHasNoCard` (not written yet) | planned · BACKLOG S-61 |
+| N8 | Visits in an Independent session do not rank in ⌘T of another Space unless a modifier is held. `@Space` in the command bar is commandbar K19, which is built and is not this. | its own test is not written yet | planned · BACKLOG S-61 |

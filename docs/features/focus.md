@@ -1,13 +1,13 @@
 # Feature: Focus this Space
 
-Status: **Fc1–Fc2 built**; **Fc3 planned** (BACKLOG S-61). Owner: spaces. Patch: 0048.
+Status: **Fc1–Fc2 built. Fc3 planned** (BACKLOG S-61).
 
-One Space, one world, user-started. Not a therapist. No model.
+One Space, started by the user. No model.
 
 ## Behaviours
 
 | Id | Behaviour | Test | State |
 |---|---|---|---|
-| Fc1 | Focus hides every other Space chip and the "+" (the switcher rebuilds with the active chip alone and chip drag is off while it lasts). ⌃1–9 do nothing while it lasts. Essentials stay. The command bar's **Focus This Space** / **Leave Focus** row is the verb. | `SpaceModelTest.FocusHidesOtherSpaces`; browser: `SpaceSwitchTest.FocusAndTheCoatLeaveTheActiveChipAlone` (the bar's Focus This Space and Leave Focus rows, run with the keys: the drawn switcher keeps the active chip alone, with no "+", and gets every chip back); live: the bar's row | built |
-| Fc2 | Any Space switch leaves Focus -- choosing a tab in another Space from ⌘T among them -- and so does the bar's row, the only toggle. A routing hit leaves Focus and follows the rule. So does a tab of another Space made active from outside the sidebar (an extension's `chrome.tabs.update`, a page's `window.focus()`, a notification's click), which brings its Space on screen (spaces B3). That was decided on 2026-10-18 over Focus refusing the activation, which would leave a page on screen that the sidebar hides (BACKLOG S-145). | `SpaceModelTest.FocusHidesOtherSpaces`; the outside activation's switch: browser `SpaceSwitchTest.AnOutsideActivationShowsTheTabsSpace` (Focus is not asserted there) | built |
-| Fc3 | Focus is per-window session extra data; it does not start on. Private and popup windows have no Focus. | `SessionRebuildTest.FocusSurvivesRebuild` (not written yet; Focus is not saved today) | planned · BACKLOG S-61 |
+| Fc1 | Focus hides every other Space chip and the "+" (the switcher rebuilds with the active chip alone, and a chip drag does nothing while it lasts). The Space number keys do nothing: ⌃1–9 on the Mac, Alt+1–9 on Windows (`SetActiveSpaceByIndex` returns at once). Essentials stay. The command bar’s **Focus This Space** / **Leave Focus** row is the only toggle, and it has no chord. | `SpaceModelTest.FocusHidesOtherSpaces`; browser: `SpaceSwitchTest.FocusAndTheCoatLeaveTheActiveChipAlone` | built |
+| Fc2 | Any Space switch leaves Focus, including choosing a tab in another Space from ⌘T, and so does the bar’s row. A foreground route to another Space leaves Focus, because it switches Space; a background route does not. A tab of another Space made active from outside the sidebar (an extension’s `chrome.tabs.update`, a page’s `window.focus()`, a notification’s click) brings its Space on screen (spaces B3) and leaves Focus. A Space deleted in another window does the same for a window that was showing it. Decided 2026-10-18: refusing the outside activation would leave a page on screen that the sidebar hides (BACKLOG S-145). | `SpaceModelTest.FocusHidesOtherSpaces`; `SpaceWindowTest.ASpaceDeletedElsewhereMovesThisWindowToItsNeighbour`; browser: `SpaceSwitchTest.AnOutsideActivationShowsTheTabsSpace` (the switch; Focus is not asserted there) | built |
+| Fc3 | Focus would be per-window session data, and it would not start on. Private and popup windows have no Focus. Today `in_focus_` starts false, the session record does not store it (`SpaceModel::Serialize`), and the command bar lists the row only in a normal window that has Spaces. | `SessionRebuildTest.FocusSurvivesRebuild` (not written) | planned · BACKLOG S-61 |
