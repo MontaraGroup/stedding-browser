@@ -153,7 +153,7 @@ its own (patches/README.md).
  ...tab_collection_animating_layout_manager.cc |   28 +
  .../ui/views/tabs/common/tab_drag_handler.cc  |   10 +-
  .../tabs/common/tab_group_view_layout.cc      |    8 +-
- .../common/tab_strip_collection_controller.cc |   48 +
+ .../common/tab_strip_collection_controller.cc |   49 +
  .../common/tab_strip_collection_controller.h  |   11 +
  .../ui/views/tabs/common/tab_strip_view.cc    |    8 +-
  .../tabs/common/tab_strip_view_layout.cc      |   10 +-
@@ -204,7 +204,7 @@ its own (patches/README.md).
  .../cert_verifier/cert_verifier_service.h     |    4 +
  .../cert_verifier_service_factory_unittest.cc |    7 +
  .../cert_verifier_service_unittest.cc         |   10 +-
- 133 files changed, 11443 insertions(+), 445 deletions(-)
+ 133 files changed, 11444 insertions(+), 445 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/little_mark.cc
  create mode 100644 chrome/browser/ui/stedding/little_mark.h
  create mode 100644 chrome/browser/ui/stedding/pin_unload_request.cc
@@ -6148,7 +6148,7 @@ index 25a26ed2bd700..86fdf06b7ef2c 100644
        tabs::VerticalTabStripCollapseState::kExpanded) {
      group_line_bounds.set_x(rail ? 0 : kGroupLineCollapsedLeadingPadding);
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
-index e189a7fdc7b16..c83df1783debb 100644
+index e189a7fdc7b16..db3d84eedada7 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
 @@ -23,6 +23,7 @@
@@ -6159,7 +6159,15 @@ index e189a7fdc7b16..c83df1783debb 100644
  #include "chrome/browser/ui/stedding/tab_menu_verbs.h"
  #include "chrome/browser/ui/stedding_ui_metrics.h"
  #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
-@@ -593,6 +594,45 @@ void TabStripCollectionController::AlphabetizeFolder(
+@@ -36,6 +37,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+@@ -593,6 +595,45 @@ void TabStripCollectionController::AlphabetizeFolder(
    spaces::AlphabetizeFolder(*model_, folder);
  }
  
@@ -6205,7 +6213,7 @@ index e189a7fdc7b16..c83df1783debb 100644
  void TabStripCollectionController::NewTabInFolder(
      tabs::FolderTabCollection* folder) {
    if (!spaces::NewTabInFolder(*model_, folder) || !browser_view_) {
-@@ -619,6 +659,14 @@ void TabStripCollectionController::ExecuteContextMenuCommand(
+@@ -619,6 +660,14 @@ void TabStripCollectionController::ExecuteContextMenuCommand(
      }
      return;
    }

@@ -1,0 +1,326 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 28 Oct 2026 02:57:56 -0400
+Subject: tests: BrowserWithTestWindowTest keeps its browser for Stedding's
+ unit tests
+
+Chromium 157 removed the browser, its test window and their helpers
+(browser(), window(), AddTab(), CreateBrowser(), NavigateAndCommitActiveTab()
+and the rest) from BrowserWithTestWindowTest once no upstream test used them
+(crrev.com/c/8530766). About thirty of Stedding's unit tests build on them.
+This puts them back as they were in 156, with the test window's header the
+fixture used to include.
+
+Why: Stedding's unit tests for Spaces, pins, folders, the archive, the
+command bar and the sidebar run against a real browser and window.
+Removable when: those tests create their own browser and window.
+---
+ .../base/browser_with_test_window_test.cc     | 95 ++++++++++++++++++-
+ .../test/base/browser_with_test_window_test.h | 56 +++++++++++
+ 2 files changed, 150 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/test/base/browser_with_test_window_test.cc b/chrome/test/base/browser_with_test_window_test.cc
+index 82d2ac04ecbd0..dec31d0d1e2b7 100644
+--- a/chrome/test/base/browser_with_test_window_test.cc
++++ b/chrome/test/base/browser_with_test_window_test.cc
+@@ -13,6 +13,10 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/net/system_network_context_manager.h"
+ #include "chrome/browser/profiles/profile_destroyer.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/browser_window/public/create_browser_window.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/test/base/testing_browser_process.h"
+@@ -25,10 +29,14 @@
+ #include "content/public/test/navigation_simulator.h"
+ #include "content/public/test/test_renderer_host.h"
+ #include "content/public/test/test_utils.h"
++#include "ui/base/page_transition_types.h"
++#include "ui/base/window_open_disposition.h"
+ 
+ #if defined(TOOLKIT_VIEWS)
+ #include "chrome/browser/ui/views/chrome_constrained_window_views_client.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "components/constrained_window/constrained_window_views.h"
++#include "ui/views/test/views_test_utils.h"
+ #endif
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+@@ -126,6 +134,12 @@ void BrowserWithTestWindowTest::SetUp() {
+ #if BUILDFLAG(IS_CHROMEOS)
+     SwitchActiveUser(*profile_name);
+ #endif
++
++    auto window = CreateBrowserWindow();
++    window_ = window.get();
++
++    browser_ =
++        CreateBrowser(profile(), browser_type_, hosted_app_, window.release());
+   }
+ }
+ 
+@@ -134,6 +148,14 @@ void BrowserWithTestWindowTest::TearDown() {
+   // before the profile can be destroyed and the test safely shut down.
+   base::RunLoop().RunUntilIdle();
+ 
++  // Close the browser tabs and destroy the browser and window instances.
++  window_ = nullptr;
++  if (browser_) {
++    browser_->tab_strip_model()->CloseAllTabs();
++    browser_->GetFeatures().TearDownPreBrowserWindowDestruction();
++    browser_.reset();
++  }
++
+ #if defined(TOOLKIT_VIEWS)
+   constrained_window::SetConstrainedWindowViewsClient(nullptr);
+ #endif
+@@ -196,6 +218,12 @@ void BrowserWithTestWindowTest::SetUpProfileManager(
+       profile_manager_->SetUp(profiles_path, std::move(profile_manager)));
+ }
+ 
++std::unique_ptr<BrowserWindowInterface>
++BrowserWithTestWindowTest::release_browser() {
++  window_ = nullptr;
++  return std::move(browser_);
++}
++
+ gfx::NativeWindow BrowserWithTestWindowTest::GetContext() {
+ #if BUILDFLAG(IS_CHROMEOS)
+   return ash_test_helper_->GetContext();
+@@ -206,6 +234,21 @@ gfx::NativeWindow BrowserWithTestWindowTest::GetContext() {
+ #endif
+ }
+ 
++void BrowserWithTestWindowTest::AddTab(BrowserWindowInterface* browser,
++                                       const GURL& url) {
++  NavigateParams params(browser, url, ui::PAGE_TRANSITION_TYPED);
++  params.tabstrip_index = 0;
++  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  Navigate(&params);
++  CommitPendingLoad(&params.navigated_or_inserted_contents->GetController());
++#if defined(TOOLKIT_VIEWS)
++  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
++  if (browser_view) {
++    views::test::RunScheduledLayout(browser_view);
++  }
++#endif
++}
++
+ void BrowserWithTestWindowTest::CommitPendingLoad(
+     NavigationController* controller) {
+   if (!controller->GetPendingEntry()) {
+@@ -220,6 +263,10 @@ void BrowserWithTestWindowTest::NavigateAndCommit(WebContents* web_contents,
+   content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents, url);
+ }
+ 
++void BrowserWithTestWindowTest::NavigateAndCommitActiveTab(const GURL& url) {
++  NavigateAndCommit(browser()->GetTabStripModel()->GetActiveWebContents(), url);
++}
++
+ void BrowserWithTestWindowTest::NavigateAndCommitActiveTabWithTitle(
+     BrowserWindowInterface* navigating_browser,
+     const GURL& url,
+@@ -231,6 +278,11 @@ void BrowserWithTestWindowTest::NavigateAndCommitActiveTabWithTitle(
+                                 title);
+ }
+ 
++void BrowserWithTestWindowTest::FocusMainFrameOfActiveWebContents() {
++  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
++  content::FocusWebContentsOnFrame(contents, contents->GetPrimaryMainFrame());
++}
++
+ std::optional<std::string> BrowserWithTestWindowTest::GetDefaultProfileName() {
+   return TestingProfile::kDefaultProfileUserName;
+ }
+@@ -245,6 +297,10 @@ TestingProfile* BrowserWithTestWindowTest::CreateProfile(
+ 
+ void BrowserWithTestWindowTest::DeleteProfile(const std::string& profile_name) {
+   if (profile_name == GetDefaultProfileName()) {
++    if (browser_) {
++      browser_->tab_strip_model()->CloseAllTabs();
++      browser_.reset();
++    }
+     profile_ = nullptr;
+   }
+   profile_manager_->DeleteTestingProfile(profile_name);
+@@ -255,6 +311,41 @@ BrowserWithTestWindowTest::GetTestingFactories() {
+   return {};
+ }
+ 
++std::unique_ptr<BrowserWindow>
++BrowserWithTestWindowTest::CreateBrowserWindow() {
++  return std::make_unique<TestBrowserWindow>();
++}
++
++std::unique_ptr<BrowserWindowInterface>
++BrowserWithTestWindowTest::CreateBrowser(
++    Profile* profile,
++    BrowserWindowInterface::Type browser_type,
++    bool hosted_app,
++    BrowserWindow* browser_window) {
++  BrowserWindowCreateParams params(profile, true);
++  if (hosted_app) {
++    params = BrowserWindowCreateParams::CreateForApp(
++        "Test", /*trusted_source=*/true, /*window_bounds=*/gfx::Rect(), profile,
++        /*user_gesture=*/true);
++  } else if (browser_type == BrowserWindowInterface::Type::TYPE_DEVTOOLS) {
++    params = BrowserWindowCreateParams::CreateForDevTools(profile);
++  } else {
++    params.type = browser_type;
++  }
++  params.window = browser_window;
++  return DeprecatedCreateOwnedBrowserWindowForTesting(std::move(params));
++}
++
++std::unique_ptr<BrowserWindowInterface>
++BrowserWithTestWindowTest::CreateBrowser(
++    Profile* profile,
++    BrowserWindowInterface::Type browser_type,
++    bool hosted_app) {
++  auto browser_window = CreateBrowserWindow();
++  return CreateBrowser(profile, browser_type, hosted_app,
++                       browser_window.release());
++}
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ void BrowserWithTestWindowTest::OnAshTestHelperCreated() {}
+ 
+@@ -350,4 +441,6 @@ BrowserWithTestWindowTest::BrowserWithTestWindowTest(
+     std::unique_ptr<content::BrowserTaskEnvironment> task_environment,
+     BrowserWindowInterface::Type browser_type,
+     bool hosted_app)
+-    : task_environment_(std::move(task_environment)) {}
++    : task_environment_(std::move(task_environment)),
++      browser_type_(browser_type),
++      hosted_app_(hosted_app) {}
+diff --git a/chrome/test/base/browser_with_test_window_test.h b/chrome/test/base/browser_with_test_window_test.h
+index fac56ee852e01..4adfcb82f9992 100644
+--- a/chrome/test/base/browser_with_test_window_test.h
++++ b/chrome/test/base/browser_with_test_window_test.h
+@@ -23,6 +23,7 @@
+ #include "content/public/test/test_renderer_host.h"
+ #include "services/network/test/test_url_loader_factory.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "chrome/test/base/test_browser_window.h"
+ #include "ui/gfx/native_ui_types.h"
+ 
+ #if defined(TOOLKIT_VIEWS)
+@@ -101,6 +102,9 @@ class TestingProfileManager;
+ //
+ // Subclasses must invoke BrowserWithTestWindowTest::SetUp as it is responsible
+ // for creating the various objects of this class.
++// Stedding: the browser, its window and their helpers, which M157 removed once
++// no upstream test used them (crrev.com/c/8530766), are kept for Stedding's
++// unit tests, which build on them.
+ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+  public:
+   // Trait which requests construction of a hosted app.
+@@ -147,6 +151,12 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+       std::unique_ptr<ProfileManager> profile_manager = nullptr);
+ 
+  protected:
++  BrowserWindow* window() const { return window_.get(); }
++
++  BrowserWindowInterface* browser() const { return browser_.get(); }
++
++  std::unique_ptr<BrowserWindowInterface> release_browser();
++
+   TestingProfile* profile() const { return profile_.get(); }
+ 
+   TestingProfile* GetProfile() { return profile_.get(); }
+@@ -175,6 +185,12 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+   // The context to help determine desktop type when creating new Widgets.
+   gfx::NativeWindow GetContext();
+ 
++  // Adds a tab to |browser| with the given URL and commits the load.
++  // This is a convenience function. The new tab will be added at index 0.
++  // WARNING: this creates a real WebContents. If you want to add a test
++  // WebContents create it directly and insert it into the TabStripModel.
++  void AddTab(BrowserWindowInterface* browser, const GURL& url);
++
+   // Commits the pending load on the given controller. It will keep the
+   // URL of the pending load. If there is no pending load, this does nothing.
+   void CommitPendingLoad(content::NavigationController* controller);
+@@ -184,11 +200,18 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+   // than any seen. This emulates what happens on a new navigation.
+   void NavigateAndCommit(content::WebContents* web_contents, const GURL& url);
+ 
++  // Navigates the current tab. This is a wrapper around NavigateAndCommit.
++  void NavigateAndCommitActiveTab(const GURL& url);
++
+   // Set the |title| of the current tab.
+   void NavigateAndCommitActiveTabWithTitle(BrowserWindowInterface* browser,
+                                            const GURL& url,
+                                            const std::u16string& title);
+ 
++  // Sets the focused frame to the main frame of the active WebContents, for
++  // tests that rely on the focused frame not being null.
++  void FocusMainFrameOfActiveWebContents();
++
+   // Returns the profile name used for the profile created in SetUp() by
+   // default.  Subclasses can override to change the profile name. If it returns
+   // std::nullopt, this will skip creating profile and browser window.
+@@ -199,6 +222,9 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+   virtual TestingProfile* CreateProfile(const std::string& profile_name);
+ 
+   // Deletes the specified profile.
++  // If `profile_name` is the one returned from GetDefaultProfileName(),
++  // because this instance creates Browser for the profile in SetUp() and keeps
++  // it in a member, the Browser instance will also be destroyed to avoid leak.
+   virtual void DeleteProfile(const std::string& profile_name);
+ 
+   // Returns a vector of testing factories to be used when creating the profile.
+@@ -206,6 +232,27 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+   // method is overridden.
+   virtual TestingProfile::TestingFactories GetTestingFactories();
+ 
++  // Creates the BrowserWindow used by this test. Subclasses can provide their
++  // own test BrowserWindow. If the provided BrowserWindow is null then Browser
++  // will create a production BrowserWindow and the subclass is responsible for
++  // cleaning it up (usually by NativeWidget destruction).
++  virtual std::unique_ptr<BrowserWindow> CreateBrowserWindow();
++
++  // Creates the browser given |profile|, |browser_type|, |hosted_app|, and
++  // |browser_window|.
++  virtual std::unique_ptr<BrowserWindowInterface> CreateBrowser(
++      Profile* profile,
++      BrowserWindowInterface::Type browser_type,
++      bool hosted_app,
++      BrowserWindow* browser_window);
++
++  // Creates the browser given `profile`, `browser_type` and `hosted_app` and
++  // a window created via `CreateBrowserWindow()`.
++  virtual std::unique_ptr<BrowserWindowInterface> CreateBrowser(
++      Profile* profile,
++      BrowserWindowInterface::Type browser_type,
++      bool hosted_app);
++
+ #if defined(TOOLKIT_VIEWS)
+   views::TestViewsDelegate* test_views_delegate() {
+ #if BUILDFLAG(IS_CHROMEOS)
+@@ -274,6 +321,9 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+   network::TestURLLoaderFactory test_url_loader_factory_;
+ 
+   std::unique_ptr<TestingProfileManager> profile_manager_;
++  // Usually a TestBrowserWindow, owned by Browser.
++  raw_ptr<BrowserWindow> window_;
++  std::unique_ptr<BrowserWindowInterface> browser_;
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   std::optional<ash::AshTestHelper> ash_test_helper_;
+@@ -292,6 +342,12 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
+   ui::ScopedOleInitializer ole_initializer_;
+ #endif
+ 
++  // The type of browser to create (tabbed or popup).
++  const BrowserWindowInterface::Type browser_type_;
++
++  // Whether the browser is part of a hosted app.
++  const bool hosted_app_;
++
+   // Initialize the variations provider.
+   variations::test::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+       variations::VariationsIdsProvider::Mode::kUseSignedInState};

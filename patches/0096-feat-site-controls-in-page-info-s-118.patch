@@ -42,7 +42,7 @@ Chromium's page info gains the same controls.
  .../ui/stedding/site_cookies_unittest.cc      |  65 ++
  chrome/browser/ui/toasts/api/toast_id.cc      |   4 +
  chrome/browser/ui/toasts/api/toast_id.h       |   7 +-
- chrome/browser/ui/toasts/toast_service.cc     |  20 +
+ chrome/browser/ui/toasts/toast_service.cc     |  29 +-
  .../views/commandbar/address_row_controls.cc  |  23 +
  .../views/commandbar/address_row_controls.h   |   9 +
  .../extensions/extensions_toolbar_button.cc   |  15 +-
@@ -60,13 +60,13 @@ Chromium's page info gains the same controls.
  .../page_info/stedding_site_controls_view.h   | 235 +++++
  .../stedding_site_controls_view_unittest.cc   | 274 ++++++
  chrome/test/stedding/BUILD.gn                 |  11 +
- .../hidden_row_controls_browsertest.cc        |  72 ++
+ .../hidden_row_controls_browsertest.cc        |  78 +-
  .../stedding/isolation_mark_browsertest.cc    |  98 ++
  .../stedding/site_controls_browsertest.cc     | 656 +++++++++++++
  chrome/test/stedding/space_jar_browsertest.cc | 211 +++++
  components/page_info/page_info.cc             |  11 +
  components/page_info/page_info_delegate.h     |   6 +
- 39 files changed, 3423 insertions(+), 30 deletions(-)
+ 39 files changed, 3429 insertions(+), 39 deletions(-)
  create mode 100644 chrome/browser/ui/stedding/site_controls.cc
  create mode 100644 chrome/browser/ui/stedding/site_controls.h
  create mode 100644 chrome/browser/ui/stedding/site_controls_unittest.cc
@@ -1116,10 +1116,30 @@ index 03dd31d14195e..5e3a1f7c321ff 100644
  };
  // LINT.ThenChange(/tools/metrics/histograms/metadata/toasts/enums.xml:ToastId)
 diff --git a/chrome/browser/ui/toasts/toast_service.cc b/chrome/browser/ui/toasts/toast_service.cc
-index 658b3cfc0ce85..869ce28eb5e4e 100644
+index 658b3cfc0ce85..8404060632f2d 100644
 --- a/chrome/browser/ui/toasts/toast_service.cc
 +++ b/chrome/browser/ui/toasts/toast_service.cc
-@@ -456,6 +456,26 @@ void ToastService::RegisterToasts() {
+@@ -411,8 +411,7 @@ void ToastService::RegisterToasts() {
+                       platform_util::ShowItemInFolder(window->GetProfile(),
+                                                       *path);
+                     }
+-                  },
+-                  base::Unretained(browser_window_interface)))
++                  }))
+           .Build());
+   // Stedding: a screenshot that was not taken, or taken and not saved
+   // (screenshot C10). The close button makes it a toast the user can act
+@@ -440,8 +439,7 @@ void ToastService::RegisterToasts() {
+                                          spaces::SpaceModel::From(window)) {
+                                    model->UndoLastRoute();
+                                  }
+-                               },
+-                               base::Unretained(browser_window_interface)))
++                               }))
+           .Build());
+ 
+   // Stedding: the site's cookies cleared and the page reloaded (commandbar
+@@ -456,6 +454,26 @@ void ToastService::RegisterToasts() {
            .SetPersistOnNavigation()
            .Build());
  
@@ -1146,6 +1166,16 @@ index 658b3cfc0ce85..869ce28eb5e4e 100644
    // Undo after closing tabs (docs/features/tabs.md R25, R27). Window-wide:
    // the close itself changes the tab on screen, and the Undo must outlive a
    // click on another row or a Space switch.
+@@ -473,8 +491,7 @@ void ToastService::RegisterToasts() {
+                                              window)) {
+                                    undo->Undo();
+                                  }
+-                               },
+-                               base::Unretained(browser_window_interface)))
++                               }))
+           .AddGlobalScoped()
+           .Build());
+ 
 diff --git a/chrome/browser/ui/views/commandbar/address_row_controls.cc b/chrome/browser/ui/views/commandbar/address_row_controls.cc
 index c624df1eda84d..000e1e97602c7 100644
 --- a/chrome/browser/ui/views/commandbar/address_row_controls.cc
@@ -3073,7 +3103,7 @@ index 46ea0d23c092e..7590467c35da8 100644
      "//chrome/browser/ui/views/spaces",
      "//chrome/browser/ui/views/tabs:tab_strip",
 diff --git a/chrome/test/stedding/hidden_row_controls_browsertest.cc b/chrome/test/stedding/hidden_row_controls_browsertest.cc
-index 0a0fde1557f9a..14664cadb6d59 100644
+index 0a0fde1557f9a..f9013dfcde107 100644
 --- a/chrome/test/stedding/hidden_row_controls_browsertest.cc
 +++ b/chrome/test/stedding/hidden_row_controls_browsertest.cc
 @@ -44,6 +44,7 @@
@@ -3108,6 +3138,33 @@ index 0a0fde1557f9a..14664cadb6d59 100644
  #include "ui/views/widget/widget.h"
  #include "ui/views/widget/widget_utils.h"
  #include "url/gurl.h"
+@@ -189,7 +194,7 @@ class HiddenRowControlsTest : public InProcessBrowserTest {
+     views::Widget* const popup =
+         action->IsShowingPopup()
+             ? views::Widget::GetTopLevelWidgetForNativeView(
+-                  action->GetPopupNativeView())
++                  action->GetPopupNativeViewForTesting())
+             : nullptr;
+     return popup != widget() ? popup : nullptr;
+   }
+@@ -644,7 +649,7 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinnedExtensionShowsAtOnce) {
+   ASSERT_TRUE(ui_test_utils::NavigateToURL(
+       browser(), embedded_test_server()->GetURL("site.test", "/title1.html")));
+   ToolbarView* const row = browser_view()->toolbar();
+-  ExtensionsToolbarDesktop* const container = row->extensions_container();
++  ExtensionsToolbarDesktop* const container = row->extensions_container_for_testing();
+   ASSERT_TRUE(container);
+   ToolbarActionView* const button = container->GetViewForId(vault->id());
+   ASSERT_TRUE(button);
+@@ -749,7 +754,7 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
+       LoadAction("Stedding Vault Probe", /*popup=*/true, /*red_icon=*/true);
+   ASSERT_TRUE(vault);
+   ToolbarView* const row = browser_view()->toolbar();
+-  ExtensionsToolbarDesktop* const container = row->extensions_container();
++  ExtensionsToolbarDesktop* const container = row->extensions_container_for_testing();
+   ASSERT_TRUE(container);
+   ToolbarActionView* const button = container->GetViewForId(vault->id());
+   ASSERT_TRUE(button);
 @@ -817,4 +822,71 @@ IN_PROC_BROWSER_TEST_F(HiddenRowControlsTest, APinFromTheMenuShowsAtOnce) {
        << "the button went with the page";
  }
@@ -3123,7 +3180,7 @@ index 0a0fde1557f9a..14664cadb6d59 100644
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(
 +      browser(), embedded_test_server()->GetURL("site.test", "/title1.html")));
 +  ExtensionsToolbarDesktop* const container =
-+      browser_view()->toolbar()->extensions_container();
++      browser_view()->toolbar()->extensions_container_for_testing();
 +  ASSERT_TRUE(container);
 +  ASSERT_NO_FATAL_FAILURE(HideTheRow());
 +

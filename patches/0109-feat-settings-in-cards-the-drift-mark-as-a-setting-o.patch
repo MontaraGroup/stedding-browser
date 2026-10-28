@@ -51,8 +51,8 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/browser/ui/stedding/stedding_prefs.h   |   5 +
  .../ui/stedding/stedding_prefs_unittest.cc    |   3 +-
  .../ui/views/commandbar/command_bar_view.cc   |   3 +
- .../commandbar/command_bar_view_unittest.cc   |   6 +
- .../frame/vertical_tab_strip_region_view.cc   |  49 ++-
+ .../commandbar/command_bar_view_unittest.cc   |   8 +-
+ .../frame/vertical_tab_strip_region_view.cc   |  56 +--
  .../browser/ui/views/tabs/common/tab_view.cc  |  23 +-
  .../browser/ui/views/tabs/common/tab_view.h   |   7 +
  .../browser/ui/webui/settings/settings_ui.cc  | 328 ++++++---------
@@ -63,7 +63,7 @@ Removable when: never; to be folded into the patches that own the code.
  chrome/test/stedding/blocker_browsertest.cc   |  26 ++
  .../stedding/settings_spaces_browsertest.cc   |  48 ++-
  .../test/stedding/sidebar_rail_browsertest.cc |  85 ++++
- 23 files changed, 785 insertions(+), 514 deletions(-)
+ 23 files changed, 789 insertions(+), 519 deletions(-)
 
 diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 index c9be2589d2fbc..743958674f75c 100644
@@ -929,9 +929,18 @@ index 502742f77ac2b..ee5c2fd278614 100644
            {stedding::prefs::kSidebarPageFlush,
             u"Page flush against the window"},
 diff --git a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
-index 9c3d0ff35cf87..61e6a6eedba8e 100644
+index 9c3d0ff35cf87..0baaf780b4344 100644
 --- a/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
 +++ b/chrome/browser/ui/views/commandbar/command_bar_view_unittest.cc
+@@ -1107,7 +1107,7 @@ TEST_F(CommandBarViewTest, TheBarStandsOffThePage) {
+       bar->layer()->parent()->children();
+   const auto bar_at = std::ranges::find(stack, bar->layer());
+   const auto shadow_at = std::ranges::find(
+-      stack, bar->shadow_for_testing()->shadow()->layer());
++      stack, bar->shadow_for_testing()->decoration()->layer());
+   ASSERT_NE(stack.end(), bar_at);
+   ASSERT_NE(stack.end(), shadow_at) << "the shadow is not drawn";
+   EXPECT_LT(shadow_at, bar_at) << "the shadow is over the bar";
 @@ -1356,6 +1356,12 @@ TEST_F(CommandBarViewTest, APreferenceRowCyclesItsValue) {
         {u"Mark local development tabs: On",
          u"Mark local development tabs: Off",
@@ -946,7 +955,7 @@ index 9c3d0ff35cf87..61e6a6eedba8e 100644
        {"Never, then 5 minutes, then 30 minutes", u"put tabs to sleep",
         stedding::prefs::kTabsIdleSleepMinutes, nullptr, 3, {0, 5, 30},
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 07f042d4e6e18..a278c661bd86a 100644
+index 07f042d4e6e18..c95a089a5f995 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -918,27 +918,34 @@ VerticalTabStripRegionView::VerticalTabStripRegionView(
@@ -1005,6 +1014,21 @@ index 07f042d4e6e18..a278c661bd86a 100644
      // sidebar Y34, Y36: the sidebar's side, set from Settings, a menu, the
      // command bar or another window, moves this one at once. Read from the
      // original profile: a private window follows the normal ones.
+@@ -2953,11 +2960,10 @@ void VerticalTabStripRegionView::ResumeExpandOnHoverWait() {
+   }
+   expand_wait_held_by_press_ = false;
+   const base::TimeDelta stedding_delay = SteddingHoverDelay();
++  // With no pause set the wait is upstream's click delay, which M157 removed
++  // with its value of zero.
+   expand_on_hover_timer_.Start(
+-      FROM_HERE,
+-      stedding_delay.is_zero()
+-          ? tabs::kVerticalTabsExpandOnHoverClickDelay.Get()
+-          : stedding_delay,
++      FROM_HERE, stedding_delay,
+       base::BindOnce(&VerticalTabStripRegionView::AnimateExpandOnHover,
+                      base::Unretained(this),
+                      /*expand=*/true));
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
 index c9e53319c8a0f..d9d40dc9c5659 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
