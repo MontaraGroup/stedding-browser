@@ -8,6 +8,7 @@ docs here or in the backlog. What each feature does now is its spec under
 
 | Id | Item | Closed by |
 |---|---|---|
+| S-309 | Docs brought up to date and trimmed | Done 2026-10-28: every document checked against the patches and rewritten, the records cut (`docs/PROJECT-LOG.md`, 2026-10-28). |
 | S-304 | A pinned tab in a folder stays listed while it is open (issue 35) | Built 2026-10-28 on the owner's word: a collapsed folder keeps a pin that is awake listed (folders F3, patch 0112). |
 | S-332 | A pinned tab's x removes it, after asking (issue 50) | Released 2026-10-28 in 0.3.0 beta 22: on a pin that is not on screen the x asks before it removes the pin, and on the pin on screen the button is a minus that sleeps it. The same day on main, patch 0110 (pins H29) changed that: a minus on every awake pin, an x once it is asleep. |
 | S-316 | Sidebar row text shifted when a page's colour arrived | Fixed in patch 0105 (`SteddingColorMixerTest.APagesColourLeavesTheRowsTextAlone`); closed 2026-10-28. |
