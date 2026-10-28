@@ -1,0 +1,285 @@
+From a5af2e835d373829db50276aac6e3cf42fb476f9 Mon Sep 17 00:00:00 2001
+From: Yevhen Salitrynskyi <ysalitrynskyi@gmail.com>
+Date: Wed, 28 Oct 2026 00:31:31 -0400
+Subject: [PATCH] fix: prevent accidental sidebar width reset from foreign
+ double clicks
+
+In Chromium Views, window-level click counts track temporal and spatial
+proximity across consecutive mouse presses anywhere in the window. When a
+user clicked on an adjacent view (such as a tab's close button, a folder
+header, or a page gutter) and then clicked near the sidebar resize handle
+within the double-click interval, the handle received OnMousePressed and
+OnMouseReleased with click count 2.
+
+Previously, SidebarResizeHandle did not verify that the first press of the
+double click actually landed on itself, causing accidental clicks across
+adjacent UI elements to trigger reset_.Run() and unexpectedly snap the
+user's customized sidebar width back to the default 352 DIP.
+
+Resolves the issue (matching the pattern used for tabs R14 and folders F4):
+- In OnMousePressed: tracks first_press_at_ and first_press_location_ on
+  click count 1. On click count 2, requires the first press to have landed
+  on this handle within views::GetDoubleClickInterval() + 500ms and within
+  drag threshold before arming reset_on_release_.
+- In OnMouseDragged: disarms reset_on_release_ and clears first_press_at_.
+- In OnMouseReleased: only executes width reset if reset_on_release_ is armed.
+- In ForgetPointer: clears tracking state on pointer exit, capture lost, or
+  visibility change.
+- In OnGestureEvent: applies identical tracking for double taps.
+- Adds 5 unit tests in SidebarResizeHandleTest and updates
+  SidebarFormsTest.TheEdgeResizesAndResetsTheWidth.
+
+Why: accidental double clicks across adjacent elements or tabs closing/moving
+under the cursor caused the sidebar width to reset randomly to default.
+Removable when: never; required for reliable resize handle double-click behavior.
+---
+ .../views/stedding/sidebar_resize_handle.cc   | 61 +++++++++++++++++--
+ .../ui/views/stedding/sidebar_resize_handle.h |  9 +++
+ .../sidebar_resize_handle_unittest.cc         | 59 ++++++++++++++++++
+ .../stedding/sidebar_forms_browsertest.cc     |  9 +++
+ 4 files changed, 134 insertions(+), 4 deletions(-)
+
+diff --git a/chrome/browser/ui/views/stedding/sidebar_resize_handle.cc b/chrome/browser/ui/views/stedding/sidebar_resize_handle.cc
+index fcbeb65..601f22b 100644
+--- a/chrome/browser/ui/views/stedding/sidebar_resize_handle.cc
++++ b/chrome/browser/ui/views/stedding/sidebar_resize_handle.cc
+@@ -17,10 +17,19 @@
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/background.h"
++#include "ui/views/metrics.h"
+ #include "ui/views/view.h"
+ 
+ namespace stedding {
+ 
++namespace {
++
++// How long a click's button may be held between its press and its release: the
++// double-click interval runs from the release.
++constexpr base::TimeDelta kLongestHeldClick = base::Milliseconds(500);
++
++}  // namespace
++
+ SidebarResizeHandle::SidebarResizeHandle(views::ResizeAreaDelegate* delegate,
+                                          ui::ColorId bar_color,
+                                          base::RepeatingClosure reset)
+@@ -71,12 +80,38 @@ bool SidebarResizeHandle::OnMousePressed(const ui::MouseEvent& event) {
+     rested_ = true;
+     rest_timer_.Stop();
+     UpdateBar();
++
++    if (event.IsOnlyLeftMouseButton()) {
++      if (event.GetClickCount() <= 1) {
++        first_press_at_ = event.time_stamp();
++        first_press_location_ = event.location();
++        reset_on_release_ = false;
++      } else if (event.GetClickCount() == 2) {
++        // sidebar Y22, tabs R14, folders F4: a double click resets only when
++        // both presses hit this handle close together in time and space: a
++        // foreign first click from an adjacent element does not count.
++        reset_on_release_ =
++            !first_press_at_.is_null() &&
++            !ExceededDragThreshold(event.location() - first_press_location_) &&
++            (event.time_stamp() - first_press_at_ <=
++             views::GetDoubleClickInterval() + kLongestHeldClick);
++        first_press_at_ = base::TimeTicks();
++      } else {
++        first_press_at_ = base::TimeTicks();
++        reset_on_release_ = false;
++      }
++    } else {
++      first_press_at_ = base::TimeTicks();
++      reset_on_release_ = false;
++    }
+   }
+   return handled;
+ }
+ 
+ bool SidebarResizeHandle::OnMouseDragged(const ui::MouseEvent& event) {
+   const bool handled = views::ResizeArea::OnMouseDragged(event);
++  reset_on_release_ = false;
++  first_press_at_ = base::TimeTicks();
+   UpdateBar();
+   return handled;
+ }
+@@ -85,7 +120,8 @@ void SidebarResizeHandle::OnMouseReleased(const ui::MouseEvent& event) {
+   // sidebar Y22: a left double click whose second press did not drag resets
+   // the width. Read before the base class ends the resize.
+   const bool reset = !is_resizing() && event.IsOnlyLeftMouseButton() &&
+-                     event.GetClickCount() == 2;
++                     reset_on_release_ && event.GetClickCount() == 2;
++  reset_on_release_ = false;
+   views::ResizeArea::OnMouseReleased(event);
+   if (reset) {
+     // The edge moves out from under the pointer: the bar waits for the
+@@ -107,9 +143,23 @@ void SidebarResizeHandle::OnMouseCaptureLost() {
+ void SidebarResizeHandle::OnGestureEvent(ui::GestureEvent* event) {
+   // sidebar Y22: on a touch screen a double tap does what a double click
+   // does. tap_count() is only defined for taps, hence the type check first.
+-  const bool reset = !is_resizing() &&
+-                     event->type() == ui::EventType::kGestureTap &&
+-                     event->details().tap_count() == 2;
++  bool reset = false;
++  if (!is_resizing() && event->type() == ui::EventType::kGestureTap) {
++    if (event->details().tap_count() <= 1) {
++      first_tap_at_ = event->time_stamp();
++      first_tap_location_ = event->location();
++    } else if (event->details().tap_count() == 2) {
++      reset = !first_tap_at_.is_null() &&
++              !ExceededDragThreshold(event->location() - first_tap_location_) &&
++              (event->time_stamp() - first_tap_at_ <=
++               views::GetDoubleClickInterval() + kLongestHeldClick);
++      first_tap_at_ = base::TimeTicks();
++    } else {
++      first_tap_at_ = base::TimeTicks();
++    }
++  } else {
++    first_tap_at_ = base::TimeTicks();
++  }
+   views::ResizeArea::OnGestureEvent(event);
+   if (reset) {
+     ForgetPointer();
+@@ -202,6 +252,9 @@ void SidebarResizeHandle::ForgetPointer() {
+   hovered_ = false;
+   rested_ = false;
+   rest_timer_.Stop();
++  first_press_at_ = base::TimeTicks();
++  reset_on_release_ = false;
++  first_tap_at_ = base::TimeTicks();
+ }
+ 
+ BEGIN_METADATA(SidebarResizeHandle)
+diff --git a/chrome/browser/ui/views/stedding/sidebar_resize_handle.h b/chrome/browser/ui/views/stedding/sidebar_resize_handle.h
+index 5ccf1c4..b8a669c 100644
+--- a/chrome/browser/ui/views/stedding/sidebar_resize_handle.h
++++ b/chrome/browser/ui/views/stedding/sidebar_resize_handle.h
+@@ -11,6 +11,7 @@
+ #include "base/timer/timer.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/color/color_id.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/views/controls/resize_area.h"
+ 
+ namespace gfx {
+@@ -121,6 +122,14 @@ class SidebarResizeHandle : public views::ResizeArea {
+   bool hovered_ = false;
+   bool rested_ = false;
+   base::OneShotTimer rest_timer_;
++
++  // The first press of a double click on this handle, and whether the second
++  // press landed here too (sidebar Y22, tabs R14, folders F4).
++  base::TimeTicks first_press_at_;
++  gfx::Point first_press_location_;
++  bool reset_on_release_ = false;
++  base::TimeTicks first_tap_at_;
++  gfx::Point first_tap_location_;
+ };
+ 
+ }  // namespace stedding
+diff --git a/chrome/browser/ui/views/stedding/sidebar_resize_handle_unittest.cc b/chrome/browser/ui/views/stedding/sidebar_resize_handle_unittest.cc
+index 4871848..1646606 100644
+--- a/chrome/browser/ui/views/stedding/sidebar_resize_handle_unittest.cc
++++ b/chrome/browser/ui/views/stedding/sidebar_resize_handle_unittest.cc
+@@ -22,6 +22,7 @@
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/resize_area_delegate.h"
++#include "ui/views/metrics.h"
+ #include "ui/views/test/views_test_base.h"
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget.h"
+@@ -213,6 +214,56 @@ TEST_F(SidebarResizeHandleTest, ADoubleClickResetsTheWidth) {
+   EXPECT_EQ(1, resets_) << "a triple click";
+ }
+ 
++// A second click whose first press landed elsewhere in the window does not
++// reset the width (sidebar Y22, tabs R14, folders F4).
++TEST_F(SidebarResizeHandleTest,
++       ASecondClickWithoutAFirstPressDoesNotResetTheWidth) {
++  Click(ui::EF_IS_DOUBLE_CLICK);
++  EXPECT_EQ(0, resets_)
++      << "a second click without a first press leaves the width";
++  EXPECT_TRUE(handle_->IsBarShowing()) << "the handle stays hovered and rested";
++
++  // A genuine double click immediately after restores the default width.
++  Click(ui::EF_NONE);
++  Click(ui::EF_IS_DOUBLE_CLICK);
++  EXPECT_EQ(1, resets_);
++}
++
++// The pointer leaving the edge between the two clicks cancels the double
++// click (sidebar Y22).
++TEST_F(SidebarResizeHandleTest,
++       AnExitedPointerBetweenClicksDoesNotResetTheWidth) {
++  Click(ui::EF_NONE);
++  Exit();
++  EXPECT_FALSE(handle_->IsBarShowing());
++  Click(ui::EF_IS_DOUBLE_CLICK);
++  EXPECT_EQ(0, resets_) << "leaving the edge clears the first press";
++}
++
++// A second click that arrives after the double-click interval has expired
++// does not reset the width (sidebar Y22).
++TEST_F(SidebarResizeHandleTest, ADelayedSecondClickDoesNotResetTheWidth) {
++  Click(ui::EF_NONE);
++  Rest(views::GetDoubleClickInterval() + base::Milliseconds(600));
++  Click(ui::EF_IS_DOUBLE_CLICK);
++  EXPECT_EQ(0, resets_) << "too much time between clicks";
++}
++
++// Two clicks farther apart than the drag threshold do not reset the width
++// (sidebar Y22).
++TEST_F(SidebarResizeHandleTest, ADoubleClickTooFarApartDoesNotResetTheWidth) {
++  Click(ui::EF_NONE);
++  handle_->OnMousePressed(
++      MakeMouse(ui::EventType::kMousePressed,
++                ui::EF_LEFT_MOUSE_BUTTON | ui::EF_IS_DOUBLE_CLICK,
++                ui::EF_LEFT_MOUSE_BUTTON, /*dx=*/20));
++  handle_->OnMouseReleased(
++      MakeMouse(ui::EventType::kMouseReleased,
++                ui::EF_LEFT_MOUSE_BUTTON | ui::EF_IS_DOUBLE_CLICK,
++                ui::EF_LEFT_MOUSE_BUTTON, /*dx=*/20));
++  EXPECT_EQ(0, resets_) << "clicks too far apart";
++}
++
+ // A double click whose second press drags stays a resize, as with Chromium's
+ // split-view handle.
+ TEST_F(SidebarResizeHandleTest, ADoubleClickThatDragsIsAResize) {
+@@ -233,6 +284,14 @@ TEST_F(SidebarResizeHandleTest, ADoubleTapResetsTheWidth) {
+   EXPECT_EQ(1, resets_);
+ }
+ 
++// A gesture double tap without a preceding first tap on this handle does not
++// reset the width (sidebar Y22).
++TEST_F(SidebarResizeHandleTest,
++       AGestureDoubleTapWithoutFirstTapDoesNotResetTheWidth) {
++  EXPECT_FALSE(Tap(2)) << "a double tap with no first tap is ignored";
++  EXPECT_EQ(0, resets_);
++}
++
+ // The bar lies in the middle of the stretch the handle reaches over, toward
+ // the page: the card's gutter. Where that stretch is narrower than the bar
+ // (no gutter), the bar runs along the inside of the handle's trailing edge.
+diff --git a/chrome/test/stedding/sidebar_forms_browsertest.cc b/chrome/test/stedding/sidebar_forms_browsertest.cc
+index 72209da..5c30b6d 100644
+--- a/chrome/test/stedding/sidebar_forms_browsertest.cc
++++ b/chrome/test/stedding/sidebar_forms_browsertest.cc
+@@ -643,6 +643,15 @@ IN_PROC_BROWSER_TEST_F(SidebarFormsTest, TheEdgeResizesAndResetsTheWidth) {
+     EXPECT_EQ(kNarrow, region()->width()) << "a single click leaves the width";
+     EXPECT_EQ(kNarrow, controller()->GetUncollapsedWidth());
+ 
++    // An isolated click carrying a double-click count from elsewhere in the
++    // window leaves the width alone (sidebar Y22, tabs R14, folders F4).
++    PressHandle(handle, ui::EF_IS_DOUBLE_CLICK);
++    ReleaseHandle(handle, ui::EF_IS_DOUBLE_CLICK);
++    Settle();
++    EXPECT_EQ(kNarrow, region()->width())
++        << "a second click without a first press leaves the width";
++    EXPECT_EQ(kNarrow, controller()->GetUncollapsedWidth());
++
+     ClickHandle(handle, /*double_click=*/true);
+     Settle();
+     EXPECT_FALSE(controller()->IsCollapsed());
+-- 
+2.54.0 (Apple Git-157)
+
