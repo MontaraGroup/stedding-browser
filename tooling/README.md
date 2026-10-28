@@ -34,7 +34,7 @@ PowerShell.
 | `bootstrap-depot-tools` | Verifies the host toolchain, then installs or updates `depot_tools`. |
 | `sync-chromium` | Materialises the Chromium tree at the pin, outside this repository. Refuses under 150 GB free; `STEDDING_SYNC_MIN_FREE_GB` lowers the floor for a run that has done the arithmetic, never under 100 (HANDOFF trap 44). |
 | `build-chromium` | `gn gen` + `autoninja` for a named configuration. |
-| `fetch-sparkle` | **(macOS)** Puts Sparkle 2.10.0's framework at `third_party/stedding_sparkle/` in the checkout, from its release archive checked against GitHub's digest, without the XPC services; keeps the archive and Sparkle's tools (`sign_update`, `generate_keys`) in `~/Library/Caches/Stedding`. `build-chromium` runs it. `--tools` prints the tools' directory. |
+| `fetch-sparkle` | **(macOS)** Puts Sparkle 2.10.1's framework at `third_party/stedding_sparkle/` in the checkout, from its release archive checked against GitHub's digest, without the XPC services; keeps the archive and Sparkle's tools (`sign_update`, `generate_keys`) in `~/Library/Caches/Stedding`. `build-chromium` runs it. `--tools` prints the tools' directory. |
 | `apply-branding` | Copies `../branding/` assets over the checkout. Not a patch. |
 | `apply-patches` | Replays the patch series onto the pin as commits on `stedding-work`. `--check` answers whether it would apply without touching anything, needs only git (no depot_tools, no Mac, no build), and reports which patches would need a three-way merge. The `series` workflow runs it. |
 | `update-patches` | Turns those commits back into `../patches/`. |

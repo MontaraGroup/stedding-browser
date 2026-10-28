@@ -25,7 +25,7 @@ update the browser opens one thank-you page on stedding.dev.
 
 How it fits together:
 
-- `tooling/fetch-sparkle` puts Sparkle 2.10.0 at `third_party/stedding_sparkle/` in the
+- `tooling/fetch-sparkle` puts Sparkle 2.10.1 at `third_party/stedding_sparkle/` in the
   checkout; `tooling/build-chromium` runs it and sets `stedding_sparkle = true`, and
   `chrome/BUILD.gn` bundles the framework into `Contents/Frameworks`. Chromium's signer signs
   its helpers and the framework before the app (`chrome/installer/mac/signing/parts.py`).
